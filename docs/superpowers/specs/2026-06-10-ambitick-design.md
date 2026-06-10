@@ -37,6 +37,7 @@ Every focus change emits a signal: (app, window title, tab URL, timestamp). Scor
 
 1. **OP tab URL containing a task id** – ≈100% certainty; backbone of the learning loop.
 2. **OP task-priming**: when the user opens a task in OP (active tab URL carrying the task id), that signals probable clock-start; the next window/tab to hold focus for more than X seconds (setting, default 30 s) becomes the candidate *working surface* for that task. Easy confirm: click the menu-bar icon, click the task, then return to the same window/tab for >X seconds. Once confirmed, the surface→task association is maintained as most-likely until the user uses that window/tab immediately following a *different* OP task page, or otherwise assigns a different task to that window/tab.
+   - Time spent in OP itself on pages *without* a task id attributes to the most appropriate task in that project (by ranking); outside any project, to the user's general-purpose tasks (e.g. Planning or Timesheets) as appropriate.
 3. **Learned associations** – per-task weights over (app, title tokens, URL host/path) built from past confirmations and corrections.
 4. **Priors** – status/recency rank, time-of-day.
 
@@ -77,7 +78,7 @@ Regular window. Timeline list of coalesced low-certainty log rows. Click-and-dra
 - Local SQLite journal (GRDB) is the source of truth. OP is a sync target, never the master of tracked time. (SQLite is the engine Apple's own stock apps and Core Data use; GRDB is a thin Swift layer over it, chosen over Core Data to keep Core pure and portable.)
 - Local-only tasks (leisure tracking) live in the same journal and are excluded from push.
 - Sessions at/above a **user-set certainty threshold** auto-push as OP time entries; below it they wait in the review queue. The threshold slider tops out at "never auto-push" (review everything).
-- Time entries: one per work session. Comment auto-population is a setting: on → the comment summarises what was done (dominant apps/documents/pages); off → comments stay empty. Either way, editable in review before push. OP requires an Activity per entry → user-set default activity, with per-task learned override. (Martin's default: TBC at spec review.)
+- Time entries: one per work session. Comment auto-population is a setting: on → the comment summarises what was done (dominant apps/documents/pages); off → comments stay empty. Either way, editable in review before push. OP requires an Activity per entry → the app fetches the instance's activity list at setup; user confirms a default in settings (instance default pre-selected), with per-task learned override.
 - Single OP instance; API key in the macOS Keychain.
 
 ## Learning
