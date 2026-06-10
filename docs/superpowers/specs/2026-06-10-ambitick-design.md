@@ -22,10 +22,12 @@ iOS companion (later, reuses Core untouched): predominantly manual tracking when
 
 Core maintains a full local list of the user's OP work packages, refreshed by API poll. Likelihood ranking combines:
 
-- status (open/in-progress ranked above others)
+- status prior, in configurable rank order (Martin's: Now > Next > Open > Closed)
 - recency of last user-confirmed tracking
 - learned associations (below)
 - time-of-day prior
+
+No separate "Closed but in active use" flag: recency keeps actively-tracked Closed tasks (e.g. Timesheets) ranked high while dormant Closed tasks decay. Closed tasks are never excluded from pick lists.
 
 Ranking exists to make attribution fast and to populate every "pick a task" surface (popover switch list, review assign shortlist, iOS screen) with N most recent + M most likely.
 
@@ -34,7 +36,7 @@ Ranking exists to make attribution fast and to populate every "pick a task" surf
 Every focus change emits a signal: (app, window title, tab URL, timestamp). Scoring sources, strongest first:
 
 1. **OP tab URL containing a task id** – ≈100% certainty; backbone of the learning loop.
-2. **OP task-priming**: when a task is created or updated in OP (detected by API poll), that signals probable clock-start; the next window/tab to hold focus for more than X seconds (setting, default 30 s) becomes the likely target for that task. Once the user confirms, the association is maintained as most-likely until the user works following a *different* OP task.
+2. **OP task-priming**: when the user opens a task in OP (active tab URL carrying the task id), that signals probable clock-start; the next window/tab to hold focus for more than X seconds (setting, default 30 s) becomes the candidate *working surface* for that task. Easy confirm: click the menu-bar icon, click the task, then return to the same window/tab for >X seconds. Once confirmed, the surface→task association is maintained as most-likely until the user uses that window/tab immediately following a *different* OP task page, or otherwise assigns a different task to that window/tab.
 3. **Learned associations** – per-task weights over (app, title tokens, URL host/path) built from past confirmations and corrections.
 4. **Priors** – status/recency rank, time-of-day.
 
@@ -46,33 +48,36 @@ Known surfaces (Martin's): four vibe sessions in Ghostty quarters (window titles
 
 - **Tracking, confident** → icon colour toward the "certain" end.
 - **Tracking, uncertain** → keep attributing to the last certain task; coalesce the activity log (consecutive same app+title merged, minimum segment ~20 s) into a review queue, one row per coalesced window/tab change.
-- **Non-work detected (confident)** → auto-stop the timer. No "should I stop?" prompt – instead a clearly distinct stop-clock alert (visible + optional audible), different from the task-change alert.
+- **Non-work detected (confident)** → by default, auto-stop the timer. No "should I stop?" prompt – instead a clearly distinct stop-clock alert (visible + optional audible), different from the task-change alert. User option: track leisure instead – games/entertainment time attributes to **local-only tasks** that exist in Ambitick but are never pushed to OP.
 - **Stopped** → grey icon.
 
-Certainty is displayed as a **continuous colour gradient** between two user-selectable colours (default red→green; black/white allowed), with grey for stopped. Colour signalling is a user toggle; numeric % display is a separate opt-in toggle.
+Certainty is displayed as a **continuous colour gradient** between two user-selectable colours (default red→green; black/white allowed), with grey for stopped. Selecting two identical colours disables the signalling, so no separate toggle is needed; numeric % display is an opt-in toggle.
 
-Task-switch and timer-stop moments raise a popup listing the most likely tasks for one-click selection, with a single-click/Esc postpone.
+Task-switch and timer-stop moments raise a popup listing "Do not track" at the top, then the most likely tasks, for one-click selection, with a single-click/Esc postpone.
+
+Task-change and stop-clock alerts are also delivered as system notifications with distinct (optional) sounds, so changes remain visible when the menu bar is hidden (fullscreen apps, auto-hidden menu bar).
 
 ## Menu bar UI
 
 - Text: elapsed time on current timer. Refresh 1 Hz for the first minute after a task change (alerts the user to the switch), then once per minute.
 - Optional % suffix (toggle).
-- Click (no hover) opens the popover: current task name + certainty, stop button, switch list (N recent + M most likely, single click), link to the review window.
+- Click opens the popover: current task name + certainty, stop button, switch list (N recent + M most likely, single click), link to the review window.
 
 ## Review window
 
-Regular window. Timeline list of coalesced low-certainty log rows. Click-and-drag (and shift-click) multi-select to group rows belonging to one task, then one-click assign from a most-likely shortlist. Assignments feed the learning store.
+Regular window. Timeline list of coalesced low-certainty log rows. Click-and-drag, shift-click, ⌘-click and the usual macOS multi-selection idioms to group rows belonging to one task, then one-click assign from a most-likely shortlist (with "Do not track" at the top). Assignments feed the learning store.
 
 ## Idle, sleep, calls
 
 - **Idle threshold** derived from the Mac's own display-sleep setting (read via `pmset -g`). When the threshold is hit (or the Mac sleeps), the tracker retro-trims the session to the last keyboard/mouse input. On resume/wake, ask: "work continued, or was the stop time correct?" TODO: user option for a shorter idle threshold.
-- **Calls**: microphone-in-use is the call proxy, for calls taken on the Mac (FaceTime, Continuity, WhatsApp desktop, Meet). Mic active while focus is on a known work surface (e.g. a Meet tab) → keep tracking. Mic active otherwise → treat as call segment (amber). Mic released = end of call → prompt "was that work → which task / discard", postponable. Caller identity is not available to apps. Calls answered on the iPhone are invisible to the Mac and will appear as idle. iPhone-side call detection: parked TODO.
+- **Calls**: microphone-in-use is the call proxy, for calls taken on the Mac (FaceTime, Continuity, WhatsApp desktop, Meet). Mic active while focus is on a known work surface (e.g. a Meet tab) → keep tracking. Mic active otherwise → treat as call segment (uncertain). Mic released = end of call → postponable prompt: a list with "Do not track" at the top, then the most likely tasks. Caller identity is not available to apps. Calls answered on the iPhone are invisible to the Mac and will appear as idle. iPhone-side call detection: parked TODO.
 
 ## OpenProject sync
 
-- Local SQLite journal (GRDB) is the source of truth. OP is a sync target, never the master of tracked time.
+- Local SQLite journal (GRDB) is the source of truth. OP is a sync target, never the master of tracked time. (SQLite is the engine Apple's own stock apps and Core Data use; GRDB is a thin Swift layer over it, chosen over Core Data to keep Core pure and portable.)
+- Local-only tasks (leisure tracking) live in the same journal and are excluded from push.
 - Sessions at/above a **user-set certainty threshold** auto-push as OP time entries; below it they wait in the review queue. The threshold slider tops out at "never auto-push" (review everything).
-- Time entries: one per work session; comment carries the dominant activity context. OP requires an Activity per entry → user-set default activity, with per-task learned override. (Martin's default: TBC at spec review.)
+- Time entries: one per work session. Comment auto-population is a setting: on → the comment summarises what was done (dominant apps/documents/pages); off → comments stay empty. Either way, editable in review before push. OP requires an Activity per entry → user-set default activity, with per-task learned override. (Martin's default: TBC at spec review.)
 - Single OP instance; API key in the macOS Keychain.
 
 ## Learning
