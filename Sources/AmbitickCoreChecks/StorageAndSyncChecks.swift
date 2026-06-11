@@ -154,6 +154,14 @@ func opClientChecks(_ c: Checks) async {
         try expectEq(json["startTime"] as? String, "09:30")
     }
 
+    await c.check("fetchMe returns the key's user") {
+        let transport = MockTransport()
+        transport.responses = [(200, #"{"id": 4, "name": "Martin Currie"}"#)]
+        let name = try await makeClient(transport).fetchMe()
+        try expectEq(name, "Martin Currie")
+        try expect(transport.requests[0].url!.path.hasSuffix("/api/v3/users/me"))
+    }
+
     await c.check("non-2xx throws") {
         let transport = MockTransport()
         transport.responses = [(401, #"{"message": "no"}"#)]

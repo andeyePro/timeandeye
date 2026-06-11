@@ -106,6 +106,14 @@ public final class OPClient {
         return tasks
     }
 
+    /// Who the API key authenticates as — time entries are attributed to this
+    /// user, so surfacing it prevents silent wrong-account logging.
+    public func fetchMe() async throws -> String {
+        struct Me: Decodable { let name: String }
+        let data = try await send(request(path: "api/v3/users/me"))
+        return try decode(Me.self, from: data).name
+    }
+
     // MARK: - Time entry activities
 
     private struct FormResponse: Decodable {

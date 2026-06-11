@@ -79,6 +79,7 @@ public final class AppController: ObservableObject {
     @Published public private(set) var lastPrompt: TrackerPrompt?
     @Published public private(set) var lastError: String?
     @Published public private(set) var journalSummary = ""
+    @Published public private(set) var connectedAs: String?
     @Published public var settings: AmbitickSettings {
         didSet {
             try? settingsStore.save(settings)
@@ -194,6 +195,7 @@ public final class AppController: ObservableObject {
     /// debugging round-trip on 2026-06-11.
     private func rebuildClient() {
         client = nil
+        connectedAs = nil
         let raw = settings.opBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         attributor.instanceHost = URL(string: raw)?.host ?? ""
         guard !raw.isEmpty else {
@@ -389,6 +391,9 @@ public final class AppController: ObservableObject {
             return
         }
         do {
+            if connectedAs == nil {
+                connectedAs = try? await client.fetchMe()
+            }
             taskCache = try await client.fetchTasks()
             if activities.isEmpty {
                 activities = (try? await client.fetchActivities()) ?? []

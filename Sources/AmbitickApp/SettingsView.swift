@@ -27,7 +27,7 @@ struct SettingsView: View {
                 } else {
                     Text(controller.taskCache.isEmpty
                          ? "Not connected yet"
-                         : "Connected – \(controller.taskCache.count) tasks loaded")
+                         : "Connected as \(controller.connectedAs ?? "unknown user") – \(controller.taskCache.count) tasks loaded")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("Default activity",
