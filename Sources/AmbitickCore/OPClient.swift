@@ -1,0 +1,176 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+/// Injection point so checks never hit the network. The app supplies a
+/// URLSession-backed implementation.
+public protocol HTTPTransport: Sendable {
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
+}
+
+public struct OPTimeActivity: Equatable, Codable, Sendable {
+    public var id: Int
+    public var name: String
+    public init(id: Int, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+public enum OPClientError: Error {
+    case httpStatus(Int, String)
+    case malformedResponse(String)
+}
+
+public final class OPClient {
+    private let baseURL: URL
+    private let apiKey: String
+    private let transport: HTTPTransport
+
+    public init(baseURL: URL, apiKey: String, transport: HTTPTransport) {
+        self.baseURL = baseURL
+        self.apiKey = apiKey
+        self.transport = transport
+    }
+
+    public var instanceHost: String { baseURL.host ?? "" }
+
+    // MARK: - Requests
+
+    private func request(path: String, query: [URLQueryItem] = [], method: String = "GET",
+                         body: Data? = nil) -> URLRequest {
+        var components = URLComponents(url: baseURL.appendingPathComponent(path),
+                                       resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { components.queryItems = query }
+        var req = URLRequest(url: components.url!)
+        req.httpMethod = method
+        req.httpBody = body
+        let token = Data("apikey:\(apiKey)".utf8).base64EncodedString()
+        req.setValue("Basic \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return req
+    }
+
+    private func send(_ req: URLRequest) async throws -> Data {
+        let (data, response) = try await transport.send(req)
+        guard (200..<300).contains(response.statusCode) else {
+            throw OPClientError.httpStatus(response.statusCode,
+                                           String(data: data, encoding: .utf8) ?? "")
+        }
+        return data
+    }
+
+    // MARK: - Work packages
+
+    private struct WPPage: Decodable {
+        struct Embedded: Decodable {
+            let elements: [WPElement]
+        }
+        let total: Int
+        let count: Int
+        let _embedded: Embedded
+    }
+
+    private struct WPElement: Decodable {
+        struct Links: Decodable {
+            struct Titled: Decodable { let title: String? }
+            let status: Titled?
+            let project: Titled?
+        }
+        let id: Int
+        let subject: String
+        let _links: Links
+    }
+
+    /// Pages through all work packages visible to the API key.
+    /// NB: OpenProject's `offset` query parameter is a 1-BASED PAGE NUMBER,
+    /// not an element offset.
+    public func fetchTasks(pageSize: Int = 100) async throws -> [WorkTask] {
+        var tasks: [WorkTask] = []
+        var page = 1
+        while true {
+            let data = try await send(request(
+                path: "api/v3/work_packages",
+                query: [URLQueryItem(name: "pageSize", value: String(pageSize)),
+                        URLQueryItem(name: "offset", value: String(page))]))
+            let decoded = try decode(WPPage.self, from: data)
+            tasks += decoded._embedded.elements.map {
+                WorkTask(ref: .op($0.id), subject: $0.subject,
+                         project: $0._links.project?.title,
+                         status: $0._links.status?.title ?? "Unknown")
+            }
+            page += 1
+            if tasks.count >= decoded.total || decoded.count == 0 { break }
+        }
+        return tasks
+    }
+
+    // MARK: - Time entry activities
+
+    private struct FormResponse: Decodable {
+        struct Embedded: Decodable {
+            struct Schema: Decodable {
+                struct Activity: Decodable {
+                    struct Inner: Decodable { let allowedValues: [OPTimeActivity] }
+                    let _embedded: Inner
+                }
+                let activity: Activity
+            }
+            let schema: Schema
+        }
+        let _embedded: Embedded
+    }
+
+    /// Allowed activities come from the time-entry creation form schema.
+    public func fetchActivities() async throws -> [OPTimeActivity] {
+        let data = try await send(request(path: "api/v3/time_entries/form",
+                                          method: "POST", body: Data("{}".utf8)))
+        return try decode(FormResponse.self, from: data)
+            ._embedded.schema.activity._embedded.allowedValues
+    }
+
+    // MARK: - Time entries
+
+    public func createTimeEntry(workPackageID: Int, start: Date, duration: TimeInterval,
+                                activityID: Int, comment: String?) async throws {
+        var payload: [String: Any] = [
+            "hours": Self.iso8601Duration(duration),
+            "spentOn": Self.dayFormatter.string(from: start),
+            "_links": [
+                "workPackage": ["href": "/api/v3/work_packages/\(workPackageID)"],
+                "activity": ["href": "/api/v3/time_entries/activities/\(activityID)"],
+            ],
+        ]
+        if let comment {
+            payload["comment"] = ["raw": comment]
+        }
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        _ = try await send(request(path: "api/v3/time_entries", method: "POST", body: body))
+    }
+
+    // MARK: - Helpers
+
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw OPClientError.malformedResponse(String(describing: error))
+        }
+    }
+
+    static func iso8601Duration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        return "PT\(h)H\(m)M"
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+}

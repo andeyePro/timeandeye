@@ -9,8 +9,15 @@ let suites: [(String, (Checks) -> Void)] = [
     ("Attributor", attributorChecks),
     ("MinuteResolver", minuteResolverChecks),
     ("SessionTracker", sessionTrackerChecks),
+    ("JournalStore[InMemory]", inMemoryJournalChecks),
+    ("AIAssist", aiAssistChecks),
+    ("Settings", settingsChecks),
 ]
-let asyncSuites: [(String, (Checks) async -> Void)] = []
+let asyncSuites: [(String, (Checks) async -> Void)] = [
+    ("OPClient", opClientChecks),
+    ("SyncEngine", syncEngineChecks),
+    ("EndToEnd", endToEndChecks),
+]
 
 var totalPassed = 0
 var totalFailed = 0

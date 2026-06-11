@@ -1,0 +1,366 @@
+import Foundation
+import AmbitickCore
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+// MARK: - JournalStore conformance (plan task 9)
+// Run against any implementation; the GRDB store in the app target reuses this.
+
+func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+
+    func session(_ certainty: Double, task: TaskRef = .op(1), pushed: Bool = false) -> Session {
+        Session(task: task, start: t0, end: t0.addingTimeInterval(600),
+                certainty: certainty, pushedToOP: pushed)
+    }
+
+    c.check("saves and lists sessions") {
+        let s = make()
+        let a = session(0.9)
+        try s.save(a)
+        try expectEq(try s.allSessions(), [a])
+    }
+
+    c.check("push eligibility filters by threshold, pushed and local-only") {
+        let s = make()
+        let eligible = session(0.9)
+        try s.save(eligible)
+        try s.save(session(0.5))                                  // below threshold
+        try s.save(session(0.95, pushed: true))                   // already pushed
+        try s.save(session(0.99, task: .local(UUID())))           // local-only: never pushed
+        try expectEq(try s.sessions(needingPushAtOrAbove: 0.8), [eligible])
+        try expectEq(try s.sessions(needingPushAtOrAbove: 1.01), [])   // the "101%" setting
+    }
+
+    c.check("mark pushed") {
+        let s = make()
+        let a = session(0.9)
+        try s.save(a)
+        try s.markPushed(a.id)
+        try expectEq(try s.sessions(needingPushAtOrAbove: 0.8), [])
+        try expectEq(try s.allSessions().first?.pushedToOP, true)
+    }
+
+    c.check("review segment assignment") {
+        let s = make()
+        let seg1 = ReviewSegment(app: "Mystery", start: t0, end: t0.addingTimeInterval(60))
+        let seg2 = ReviewSegment(app: "Other", start: t0, end: t0.addingTimeInterval(120))
+        try s.save(seg1)
+        try s.save(seg2)
+        try expectEq(try s.pendingReview().count, 2)
+        try s.assign([seg1.id], to: .task(.op(7)))
+        try expectEq(try s.pendingReview().map(\.id), [seg2.id])
+    }
+}
+
+func inMemoryJournalChecks(_ c: Checks) {
+    journalStoreConformanceChecks(c) { InMemoryJournalStore() }
+}
+
+// MARK: - Mock transport for OPClient/SyncEngine/E2E checks
+
+final class MockTransport: HTTPTransport, @unchecked Sendable {
+    var requests: [URLRequest] = []
+    /// Queue of (status, body) responses, consumed in order.
+    var responses: [(Int, String)] = []
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let (status, body) = responses.isEmpty ? (200, "{}") : responses.removeFirst()
+        let response = HTTPURLResponse(url: request.url!, statusCode: status,
+                                       httpVersion: nil, headerFields: nil)!
+        return (Data(body.utf8), response)
+    }
+}
+
+// MARK: - OPClient (plan task 10)
+
+func opClientChecks(_ c: Checks) async {
+    func makeClient(_ transport: MockTransport) -> OPClient {
+        OPClient(baseURL: URL(string: "https://op.example.com")!,
+                 apiKey: "SECRET", transport: transport)
+    }
+
+    await c.check("fetchTasks pages through and parses") {
+        let transport = MockTransport()
+        transport.responses = [
+            (200, """
+            {"total": 3, "count": 2, "_embedded": {"elements": [
+              {"id": 1, "subject": "Ambitick build",
+               "_links": {"status": {"title": "Now"}, "project": {"title": "Ambitick"}}},
+              {"id": 2, "subject": "Timesheets",
+               "_links": {"status": {"title": "Closed"}, "project": {"title": "Admin"}}}
+            ]}}
+            """),
+            (200, """
+            {"total": 3, "count": 1, "_embedded": {"elements": [
+              {"id": 3, "subject": "Investment review",
+               "_links": {"status": {"title": "Next"}, "project": {"title": "Investment"}}}
+            ]}}
+            """),
+        ]
+        let tasks = try await makeClient(transport).fetchTasks(pageSize: 2)
+        try expectEq(tasks.count, 3)
+        try expectEq(tasks[0], WorkTask(ref: .op(1), subject: "Ambitick build",
+                                        project: "Ambitick", status: "Now"))
+        try expectEq(transport.requests.count, 2)
+        try expectEq(transport.requests[0].value(forHTTPHeaderField: "Authorization"),
+                     "Basic " + Data("apikey:SECRET".utf8).base64EncodedString())
+        try expect(transport.requests[1].url!.absoluteString.contains("offset=2"),
+                   "second page must use page number 2")
+    }
+
+    await c.check("fetchActivities via time-entry form") {
+        let transport = MockTransport()
+        transport.responses = [(200, """
+        {"_embedded": {"schema": {"activity": {"_embedded": {"allowedValues": [
+            {"id": 4, "name": "Development"}, {"id": 5, "name": "Management"}
+        ]}}}}}
+        """)]
+        let activities = try await makeClient(transport).fetchActivities()
+        try expectEq(activities, [OPTimeActivity(id: 4, name: "Development"),
+                                  OPTimeActivity(id: 5, name: "Management")])
+        try expectEq(transport.requests[0].httpMethod, "POST")
+        try expect(transport.requests[0].url!.path.hasSuffix("/api/v3/time_entries/form"))
+    }
+
+    await c.check("createTimeEntry body") {
+        let transport = MockTransport()
+        transport.responses = [(201, "{}")]
+        let start = Date(timeIntervalSince1970: 1_750_000_000)   // 2025-06-15 UTC
+        try await makeClient(transport).createTimeEntry(
+            workPackageID: 42, start: start, duration: 5_400,
+            activityID: 4, comment: "Ghostty – Ambitick")
+        let body = try unwrap(transport.requests[0].httpBody)
+        let json = try unwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        try expectEq(json["hours"] as? String, "PT1H30M")
+        try expectEq(json["spentOn"] as? String, "2025-06-15")
+        let links = try unwrap(json["_links"] as? [String: [String: String]])
+        try expectEq(links["workPackage"]?["href"], "/api/v3/work_packages/42")
+        try expectEq(links["activity"]?["href"], "/api/v3/time_entries/activities/4")
+        try expectEq((json["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
+    }
+
+    await c.check("non-2xx throws") {
+        let transport = MockTransport()
+        transport.responses = [(401, #"{"message": "no"}"#)]
+        do {
+            _ = try await makeClient(transport).fetchTasks()
+            throw CheckFailure(description: "expected throw")
+        } catch let OPClientError.httpStatus(code, _) {
+            try expectEq(code, 401)
+        }
+    }
+}
+
+// MARK: - SyncEngine (plan task 11)
+
+func syncEngineChecks(_ c: Checks) async {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+
+    func makeWorld() -> (SyncEngine, InMemoryJournalStore, MockTransport) {
+        let journal = InMemoryJournalStore()
+        let transport = MockTransport()
+        let client = OPClient(baseURL: URL(string: "https://op.example.com")!,
+                              apiKey: "k", transport: transport)
+        return (SyncEngine(journal: journal, client: client), journal, transport)
+    }
+
+    await c.check("pushes eligible and marks") {
+        let (engine, journal, transport) = makeWorld()
+        transport.responses = [(201, "{}")]
+        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(1800),
+                                 certainty: 0.9, comment: "Ghostty – Ambitick"))
+        try journal.save(Session(task: .op(43), start: t0, end: t0.addingTimeInterval(60),
+                                 certainty: 0.4))   // below threshold: stays local
+        let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                   includeComments: true)
+        try expectEq(pushed, 1)
+        try expectEq(transport.requests.count, 1)
+        let body = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
+        try expectEq(body["hours"] as? String, "PT0H30M")
+        try expectEq((body["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [])
+    }
+
+    await c.check("activity override per task; comments excludable") {
+        let (engine, journal, transport) = makeWorld()
+        transport.responses = [(201, "{}")]
+        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                                 certainty: 1, comment: "should not appear"))
+        _ = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                          activityOverrides: [.op(42): 9],
+                                          includeComments: false)
+        let body = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
+        let links = try unwrap(body["_links"] as? [String: [String: String]])
+        try expectEq(links["activity"]?["href"], "/api/v3/time_entries/activities/9")
+        try expectNil(body["comment"])
+    }
+
+    await c.check("failed push leaves session unmarked") {
+        let (engine, journal, transport) = makeWorld()
+        transport.responses = [(500, "{}")]
+        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                                 certainty: 1))
+        let pushed = try? await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                    includeComments: false)
+        try expect(pushed != 1, "push must not report success")
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8).count, 1,
+                     "failed push must remain queued")
+    }
+}
+
+// MARK: - AIAssist (plan task 12)
+
+func aiAssistChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    let segID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+    let tasks = [WorkTask(ref: .op(1), subject: "Ambitick build",
+                          project: "Ambitick", status: "Now")]
+    let segments = [ReviewSegment(id: segID, app: "Chrome", windowTitle: "Spreadsheet xyz",
+                                  start: t0, end: t0.addingTimeInterval(300))]
+
+    c.check("prompt contains tasks, segments and format contract") {
+        let prompt = AIAssist.classificationPrompt(tasks: tasks, segments: segments)
+        try expect(prompt.contains("Ambitick build"))
+        try expect(prompt.contains("#1"))
+        try expect(prompt.contains(segID.uuidString))
+        try expect(prompt.contains("Spreadsheet xyz"))
+        try expect(prompt.contains(#""assignments""#))
+        try expect(prompt.contains("do-not-track"))
+    }
+
+    c.check("parses valid response") {
+        let json = """
+        {"assignments": [
+          {"segment": "\(segID.uuidString)", "task": 1},
+          {"segment": "\(segID.uuidString)", "task": "do-not-track"}
+        ]}
+        """
+        let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID])
+        try expectEq(parsed, [
+            AIAssist.Assignment(segmentID: segID, target: .task(.op(1))),
+            AIAssist.Assignment(segmentID: segID, target: .doNotTrack),
+        ])
+    }
+
+    c.check("rejects unknown segment and garbage") {
+        try expectThrows("unknown segment must throw") {
+            _ = try AIAssist.parseResponse(
+                #"{"assignments": [{"segment": "\#(UUID().uuidString)", "task": 1}]}"#,
+                validSegmentIDs: [segID])
+        }
+        try expectThrows("non-JSON must throw") {
+            _ = try AIAssist.parseResponse("not json", validSegmentIDs: [segID])
+        }
+        try expectThrows("boolean task must throw") {
+            _ = try AIAssist.parseResponse(
+                #"{"assignments": [{"segment": "\#(segID.uuidString)", "task": true}]}"#,
+                validSegmentIDs: [segID])
+        }
+    }
+
+    c.check("tolerates code-fence wrapping") {
+        let json = """
+        ```json
+        {"assignments": [{"segment": "\(segID.uuidString)", "task": 1}]}
+        ```
+        """
+        let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID])
+        try expectEq(parsed.count, 1)
+    }
+}
+
+// MARK: - Settings (plan task 13)
+
+func settingsChecks(_ c: Checks) {
+    c.check("defaults") {
+        let s = AmbitickSettings(opBaseURL: "https://op.example.com")
+        try expectEq(s.certaintyAutoPushThreshold, 0.8)
+        try expectEq(s.statusOrder, ["Now", "Next", "Open", "Closed"])
+        try expectEq(s.recentCount, 5)
+        try expectEq(s.likelyCount, 5)
+        try expect(!s.showPercent)
+        try expect(s.autoComment)
+        try expect(!s.trackLeisureLocally)
+        try expectEq(s.colourLow, "#FF3B30")
+        try expectEq(s.colourHigh, "#34C759")
+    }
+
+    c.check("never-auto-push is representable") {
+        var s = AmbitickSettings(opBaseURL: "https://op.example.com")
+        s.certaintyAutoPushThreshold = 1.01   // the "101%": nothing auto-pushes
+        try expect(s.certaintyAutoPushThreshold > 1.0)
+    }
+
+    c.check("file store round-trip and missing file") {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ambitick-checks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = JSONFileStore<AmbitickSettings>(
+            url: dir.appendingPathComponent("settings.json"))
+        try expectNil(try store.load())
+        var s = AmbitickSettings(opBaseURL: "https://op.example.com")
+        s.defaultActivityID = 4
+        s.activityOverrides[.op(42)] = 9
+        try store.save(s)
+        try expectEq(try store.load(), s)
+    }
+}
+
+// MARK: - End-to-end (plan task 14)
+
+func endToEndChecks(_ c: Checks) async {
+    await c.check("a full tracked stretch reaches OpenProject") {
+        let base = Date(timeIntervalSince1970: 1_750_000_080)   // minute-aligned
+        func t(_ s: TimeInterval) -> Date { base.addingTimeInterval(s) }
+
+        let tasks = [WorkTask(ref: .op(1), subject: "Ambitick build", status: "Now")]
+        let journal = InMemoryJournalStore()
+        let transport = MockTransport()
+        transport.responses = [(201, "{}")]
+        let client = OPClient(baseURL: URL(string: "https://op.example.com")!,
+                              apiKey: "k", transport: transport)
+        let attributor = Attributor(instanceHost: "op.example.com")
+        let tracker = SessionTracker(attributor: attributor,
+                                     config: TrackerConfig()) { tasks }
+        tracker.onSession = { try? journal.save($0) }
+        tracker.onReview = { try? journal.save($0) }
+
+        // 1. open WP 1 in OP -> auto-start at 0.99
+        tracker.handle(.focus(ActivitySignal(
+            app: "Chrome", windowTitle: "WP1",
+            tabURL: "https://op.example.com/work_packages/1", timestamp: t(0))))
+        // 2. switch to Ghostty; user confirms the task via the popover
+        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "Ambitick",
+                                             timestamp: t(20))))
+        tracker.confirm(task: .op(1), at: t(25))
+        // 3. keep working in the same window
+        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "Ambitick",
+                                             timestamp: t(600))))
+        tracker.handle(.input(t(1190)))
+        // 4. stop after 20 min
+        tracker.stop(at: t(1200))
+
+        let sessions = try journal.allSessions()
+        try expectEq(sessions.count, 1)
+        try expectEq(sessions[0].task, .op(1))
+        try expectEq(sessions[0].start, t(0))
+        try expectEq(sessions[0].end, t(1200))
+        try expect(sessions[0].certainty >= 0.95,
+                   "confirm lifts the in-flight span; got \(sessions[0].certainty)")
+
+        // 5. sync pushes exactly one PT0H20M entry
+        let engine = SyncEngine(journal: journal, client: client)
+        let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                   includeComments: true)
+        try expectEq(pushed, 1)
+        let body = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
+        try expectEq(body["hours"] as? String, "PT0H20M")
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [])
+    }
+}
