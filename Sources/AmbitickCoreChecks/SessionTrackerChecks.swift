@@ -141,6 +141,25 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(prompts, [.resumeAfterIdle(stoppedAt: t(50))])
     }
 
+    c.check("brief uncertain patch does not sink session certainty (weighted mean)") {
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 3600   // scripted gaps must not read as idle
+        let (tracker, attributor) = makeTracker(config: config)
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))      // 19 min at 0.95
+        tracker.handle(.focus(sig("Mystery", "???", at: 1140)))        // 1 min uncertain
+        tracker.stop(at: t(1200))
+
+        try expectEq(sessions.count, 1)
+        try expect(sessions[0].certainty >= 0.8,
+                   "weighted certainty must clear the push threshold; got \(sessions[0].certainty)")
+        try expect(sessions[0].certainty < 0.95, "but the uncertain minute must count")
+    }
+
     c.check("OP page auto-starts from stopped (URL and PWA title); primed surface does not") {
         let (tracker, attributor) = makeTracker()
         // URL signal

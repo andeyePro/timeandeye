@@ -78,6 +78,7 @@ public final class AppController: ObservableObject {
     @Published public private(set) var activities: [OPTimeActivity] = []
     @Published public private(set) var lastPrompt: TrackerPrompt?
     @Published public private(set) var lastError: String?
+    @Published public private(set) var journalSummary = ""
     @Published public var settings: AmbitickSettings {
         didSet {
             try? settingsStore.save(settings)
@@ -97,7 +98,6 @@ public final class AppController: ObservableObject {
     private var taskChangedAt = Date()
     private var sessionStartedAt: Date?
     private var currentTarget: Target?
-    private var lastTitleRefresh = Date.distantPast
 
     public static func supportDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -138,6 +138,7 @@ public final class AppController: ObservableObject {
         tracker.onSession = { [weak self] session in
             guard let self else { return }
             try? self.journal.save(session)
+            self.updateJournalSummary()
             Task { await self.syncIfEnabled() }
         }
         tracker.onReview = { [weak self] segment in
@@ -227,29 +228,38 @@ public final class AppController: ObservableObject {
             Task { @MainActor in self?.refreshTitle(force: false) }
         }
         taskRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refreshTasks() }
+            Task { @MainActor in
+                await self?.refreshTasks()
+                await self?.syncIfEnabled()   // retry path for failed/late pushes
+            }
         }
         Task { await refreshTasks() }
         reloadReview()
     }
 
+    /// Change-detection instead of interval gating: a 1 Hz timer gated by
+    /// ">= 1 s since last refresh" skipped alternate ticks (even-seconds bug)
+    /// and froze the text across the minute boundary. Computing every tick
+    /// and assigning only on change gives 1 Hz updates in the first minute
+    /// and per-minute after — by construction, since that is when the string
+    /// changes.
     private func refreshTitle(force: Bool) {
-        let sinceChange = Date().timeIntervalSince(taskChangedAt)
-        let interval = MenuTitle.refreshInterval(sinceTaskChange: sinceChange)
-        guard force || Date().timeIntervalSince(lastTitleRefresh) >= interval else { return }
-        lastTitleRefresh = Date()
+        let newText: String
+        let newColour: NSColor
         switch trackerState {
         case .stopped:
-            menuText = "–"
-            menuColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
-                                          highHex: settings.colourHigh)
+            newText = "–"
+            newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
+                                         highHex: settings.colourHigh)
         case .tracking(_, let certainty):
             let elapsed = Date().timeIntervalSince(sessionStartedAt ?? Date())
-            menuText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
-                                      showPercent: settings.showPercent)
-            menuColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
-                                          highHex: settings.colourHigh)
+            newText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
+                                     showPercent: settings.showPercent)
+            newColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
+                                         highHex: settings.colourHigh)
         }
+        if force || newText != menuText { menuText = newText }
+        if force || !newColour.isEqual(menuColour) { menuColour = newColour }
     }
 
     // MARK: - User actions
@@ -316,6 +326,15 @@ public final class AppController: ObservableObject {
 
     private func reloadReview() {
         pendingReview = (try? journal.pendingReview()) ?? []
+        updateJournalSummary()
+    }
+
+    private func updateJournalSummary() {
+        let all = (try? journal.allSessions()) ?? []
+        let awaiting = (try? journal.sessions(
+            needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
+        let pushed = all.filter(\.pushedToOP).count
+        journalSummary = "\(all.count) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
     }
 
     // MARK: - AI assist (clipboard out, paste back)
@@ -385,6 +404,7 @@ public final class AppController: ObservableObject {
         } catch {
             lastError = "OP push failed: \(error)"
         }
+        updateJournalSummary()
     }
 }
 

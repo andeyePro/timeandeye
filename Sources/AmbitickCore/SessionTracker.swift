@@ -263,9 +263,18 @@ public final class SessionTracker {
         }
         for run in runs {
             guard case .task(let ref) = run.target else { continue }   // doNotTrack time is never a session
-            let certainty = clipped
-                .filter { $0.target == run.target && $0.end > run.start && $0.start < run.end }
-                .map(\.certainty).min() ?? 0
+            // Duration-weighted certainty: a brief uncertain patch must not
+            // sink a long confident session below the push threshold (min()
+            // did exactly that and silently blocked OP pushes).
+            var weighted = 0.0
+            var totalDuration = 0.0
+            for span in clipped where span.target == run.target
+                && span.end > run.start && span.start < run.end {
+                let d = min(span.end, run.end).timeIntervalSince(max(span.start, run.start))
+                weighted += span.certainty * d
+                totalDuration += d
+            }
+            let certainty = totalDuration > 0 ? weighted / totalDuration : 0
             let comment = commentText(for: run, in: clipped)
             onSession(Session(task: ref, start: run.start, end: run.end,
                               certainty: certainty, comment: comment))

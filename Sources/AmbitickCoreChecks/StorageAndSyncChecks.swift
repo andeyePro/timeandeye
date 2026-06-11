@@ -200,6 +200,18 @@ func syncEngineChecks(_ c: Checks) async {
         try expectNil(body["comment"])
     }
 
+    await c.check("sub-minute sessions are cleared without a POST") {
+        let (engine, journal, transport) = makeWorld()
+        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(30),
+                                 certainty: 1))
+        let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                   includeComments: false)
+        try expectEq(pushed, 0)
+        try expectEq(transport.requests.count, 0, "no zero-duration entries in OP")
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [],
+                     "short sessions must not clog the queue")
+    }
+
     await c.check("failed push leaves session unmarked") {
         let (engine, journal, transport) = makeWorld()
         transport.responses = [(500, "{}")]

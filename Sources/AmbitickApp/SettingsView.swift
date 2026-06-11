@@ -49,6 +49,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Auto-comment time entries (apps/docs used)",
                        isOn: $controller.settings.autoComment)
+                Text(controller.journalSummary)
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Menu bar") {

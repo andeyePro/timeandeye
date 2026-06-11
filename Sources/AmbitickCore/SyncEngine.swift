@@ -21,10 +21,17 @@ public final class SyncEngine {
         var pushed = 0
         for session in try journal.sessions(needingPushAtOrAbove: threshold) {
             guard case .op(let wpID) = session.task else { continue }
+            let duration = session.end.timeIntervalSince(session.start)
+            if duration < 60 {
+                // Too short for an OP entry (would round to PT0H0M); mark it
+                // handled so it does not clog the queue forever.
+                try journal.markPushed(session.id)
+                continue
+            }
             try await client.createTimeEntry(
                 workPackageID: wpID,
                 start: session.start,
-                duration: session.end.timeIntervalSince(session.start),
+                duration: duration,
                 activityID: activityOverrides[session.task] ?? defaultActivityID,
                 comment: includeComments ? session.comment : nil)
             try journal.markPushed(session.id)
