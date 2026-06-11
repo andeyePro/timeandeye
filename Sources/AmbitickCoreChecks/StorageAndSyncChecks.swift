@@ -194,6 +194,8 @@ func syncEngineChecks(_ c: Checks) async {
             with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
         try expectEq(body["hours"] as? String, "PT0H30M")
         try expectEq((body["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
+        try expectEq(body["startTime"] as? String, "2025-06-15T15:06:40Z",
+                     "ISO 8601 UTC date-time, not HH:mm")
         try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [])
     }
 

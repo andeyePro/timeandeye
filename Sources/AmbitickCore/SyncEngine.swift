@@ -13,13 +13,10 @@ public final class SyncEngine {
         self.client = client
     }
 
-    /// "HH:mm" in the Mac's local timezone — what OP's calendar views expect.
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        return f
-    }()
+    /// OP's TimeEntry.startTime is an ISO 8601 date-time in UTC (verified
+    /// against the API schema; "HH:mm" gets a 422). OP converts to the
+    /// user's timezone for display.
+    private static let timeFormatter = ISO8601DateFormatter()
 
     /// Returns the number of sessions pushed. Throws on the first failure,
     /// leaving that session and later ones unmarked for retry.
