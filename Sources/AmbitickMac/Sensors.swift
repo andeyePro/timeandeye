@@ -67,6 +67,10 @@ public final class SensorHub {
         onEvent(.input(now.addingTimeInterval(-idleSeconds)))
 
         guard let app = NSWorkspace.shared.frontmostApplication else { return }
+        // Never observe ourselves: opening the popover/review window made
+        // Ambitick the "current surface", so user confirms bound tasks to
+        // Ambitick instead of the window they were working in.
+        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { return }
         let appName = app.localizedName ?? "Unknown"
         let title = focusedWindowTitle(pid: app.processIdentifier)
         let url = chromeLikeBundleIDs.contains(app.bundleIdentifier ?? "")
