@@ -82,6 +82,12 @@ struct PopoverView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            if let error = controller.lastError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(3)
+            }
         }
     }
 

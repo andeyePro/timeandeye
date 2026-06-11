@@ -31,6 +31,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <string>Ambitick reads the active browser tab URL to attribute time to the right task.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Ambitick observes whether the microphone is in use (call detection); it never records audio.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Ambitick talks to your own OpenProject instance, which may be on your local network.</string>
+    <!-- v0.1: user-entered OP URLs may be plain http on a LAN/NAS; without
+         this exception ATS silently blocks every request from a bundled app. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key><true/>
+    </dict>
 </dict>
 </plist>
 PLIST
