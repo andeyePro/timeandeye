@@ -140,6 +140,18 @@ func opClientChecks(_ c: Checks) async {
         try expectEq(links["workPackage"]?["href"], "/api/v3/work_packages/42")
         try expectEq(links["activity"]?["href"], "/api/v3/time_entries/activities/4")
         try expectEq((json["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
+        try expectNil(json["startTime"], "omitted unless requested")
+    }
+
+    await c.check("createTimeEntry carries startTime when given") {
+        let transport = MockTransport()
+        transport.responses = [(201, "{}")]
+        try await makeClient(transport).createTimeEntry(
+            workPackageID: 42, start: Date(timeIntervalSince1970: 1_750_000_000),
+            duration: 600, activityID: nil, comment: nil, startTime: "09:30")
+        let json = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
+        try expectEq(json["startTime"] as? String, "09:30")
     }
 
     await c.check("non-2xx throws") {
@@ -212,6 +224,25 @@ func syncEngineChecks(_ c: Checks) async {
         let links = try unwrap(body["_links"] as? [String: [String: String]])
         try expectNil(links["activity"], "activity link must be omitted when nil")
         try expectEq(links["workPackage"]?["href"], "/api/v3/work_packages/42")
+    }
+
+    await c.check("422 on startTime falls back to plain entries") {
+        let (engine, journal, transport) = makeWorld()
+        transport.responses = [(422, #"{"message": "startTime disabled"}"#), (201, "{}"),
+                               (201, "{}")]
+        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                                 certainty: 1))
+        try journal.save(Session(task: .op(43), start: t0.addingTimeInterval(700),
+                                 end: t0.addingTimeInterval(1400), certainty: 1))
+        let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pushed, 2)
+        try expectEq(transport.requests.count, 3, "one retry, then no more startTime attempts")
+        let retryBody = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[1].httpBody)) as? [String: Any])
+        try expectNil(retryBody["startTime"])
+        let secondEntry = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[2].httpBody)) as? [String: Any])
+        try expectNil(secondEntry["startTime"])
     }
 
     await c.check("sub-minute sessions are cleared without a POST") {

@@ -134,8 +134,11 @@ public final class OPClient {
 
     /// activityID nil = omit the link; OP applies its server-side default.
     /// (Some instances – Martin's included – run without visible activities.)
+    /// startTime ("HH:mm") makes entries appear in OP's calendar views; only
+    /// sent when non-nil because instances can have the feature disabled.
     public func createTimeEntry(workPackageID: Int, start: Date, duration: TimeInterval,
-                                activityID: Int?, comment: String?) async throws {
+                                activityID: Int?, comment: String?,
+                                startTime: String? = nil) async throws {
         var links: [String: [String: String]] = [
             "workPackage": ["href": "/api/v3/work_packages/\(workPackageID)"],
         ]
@@ -147,6 +150,9 @@ public final class OPClient {
             "spentOn": Self.dayFormatter.string(from: start),
             "_links": links,
         ]
+        if let startTime {
+            payload["startTime"] = startTime
+        }
         if let comment {
             payload["comment"] = ["raw": comment]
         }

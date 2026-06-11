@@ -63,6 +63,17 @@ func attributorChecks(_ c: Checks) {
         try expect(result.certainty < 0.6)
     }
 
+    c.check("primed surfaces survive a snapshot round-trip (relaunch persistence)") {
+        let a = Attributor(instanceHost: host)
+        a.confirm(ghostty, task: .op(1))
+        let snapshot = try JSONEncoder().encode(a.primedSurfaces)
+        let b = Attributor(instanceHost: host)
+        b.primedSurfaces = try JSONDecoder().decode([Surface: TaskRef].self, from: snapshot)
+        let result = b.attribute(ghostty, tasks: tasks, now: now)
+        try expectEq(result.best?.target, .task(.op(1)))
+        try expectClose(result.certainty, 0.95)
+    }
+
     c.check("OP page without task id falls back to top-ranked task") {
         let a = Attributor(instanceHost: host)
         let sig = ActivitySignal(app: "Chrome", windowTitle: "Overview",

@@ -6,11 +6,20 @@ import Foundation
 public final class SyncEngine {
     private let journal: any JournalStore
     private let client: OPClient
+    private var startTimesSupported = true
 
     public init(journal: any JournalStore, client: OPClient) {
         self.journal = journal
         self.client = client
     }
+
+    /// "HH:mm" in the Mac's local timezone — what OP's calendar views expect.
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
 
     /// Returns the number of sessions pushed. Throws on the first failure,
     /// leaving that session and later ones unmarked for retry.
@@ -28,12 +37,22 @@ public final class SyncEngine {
                 try journal.markPushed(session.id)
                 continue
             }
-            try await client.createTimeEntry(
-                workPackageID: wpID,
-                start: session.start,
-                duration: duration,
-                activityID: activityOverrides[session.task] ?? defaultActivityID,
-                comment: includeComments ? session.comment : nil)
+            let activity = activityOverrides[session.task] ?? defaultActivityID
+            let comment = includeComments ? session.comment : nil
+            do {
+                try await client.createTimeEntry(
+                    workPackageID: wpID, start: session.start, duration: duration,
+                    activityID: activity, comment: comment,
+                    startTime: startTimesSupported
+                        ? Self.timeFormatter.string(from: session.start) : nil)
+            } catch OPClientError.httpStatus(422, _) where startTimesSupported {
+                // Instance has start/end-time tracking disabled: retry plain
+                // and stop sending start times this run.
+                startTimesSupported = false
+                try await client.createTimeEntry(
+                    workPackageID: wpID, start: session.start, duration: duration,
+                    activityID: activity, comment: comment, startTime: nil)
+            }
             try journal.markPushed(session.id)
             pushed += 1
         }

@@ -92,6 +92,7 @@ public final class AppController: ObservableObject {
     private let sensors = SensorHub()
     private let settingsStore: JSONFileStore<AmbitickSettings>
     private let learningStore: JSONFileStore<LearningStore>
+    private let primedStore: JSONFileStore<[Surface: TaskRef]>
     private var client: OPClient?
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
@@ -109,6 +110,7 @@ public final class AppController: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         settingsStore = JSONFileStore<AmbitickSettings>(url: dir.appendingPathComponent("settings.json"))
         learningStore = JSONFileStore<LearningStore>(url: dir.appendingPathComponent("learning.json"))
+        primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
         let loadedSettings = (try? settingsStore.load().flatMap { $0 })
             ?? AmbitickSettings(opBaseURL: "")
         settings = loadedSettings
@@ -120,6 +122,9 @@ public final class AppController: ObservableObject {
         attributor = Attributor(instanceHost: host,
                                 learning: learning,
                                 ranker: TaskRanker(config: RankingConfig(statusOrder: loadedSettings.statusOrder)))
+        if let primed = (try? primedStore.load()).flatMap({ $0 }) {
+            attributor.primedSurfaces = primed
+        }
 
         let config = TrackerConfig(
             minSegmentSeconds: loadedSettings.minSegmentSeconds,
@@ -301,8 +306,13 @@ public final class AppController: ObservableObject {
         if let i = taskCache.firstIndex(where: { $0.ref == task.ref }) {
             taskCache[i].lastConfirmedAt = Date()
         }
-        try? learningStore.save(attributor.learning)
+        persistAssociations()
         lastPrompt = nil
+    }
+
+    private func persistAssociations() {
+        try? learningStore.save(attributor.learning)
+        try? primedStore.save(attributor.primedSurfaces)
     }
 
     public func userStopped() {
@@ -319,7 +329,7 @@ public final class AppController: ObservableObject {
             let signal = ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
                                         tabURL: segment.tabURL, timestamp: segment.start)
             attributor.assign(signal, target: target)
-            try? learningStore.save(attributor.learning)
+            persistAssociations()
         }
         reloadReview()
     }

@@ -30,7 +30,10 @@ public final class Attributor {
 
     private var lastOpenedOPTask: TaskRef?
     private var pendingPrime: (surface: Surface, task: TaskRef)?
-    private var primedSurfaces: [Surface: TaskRef] = [:]
+    /// Public so the app can persist and restore it across launches —
+    /// losing primed associations on relaunch dropped session certainty
+    /// below the push threshold (found 2026-06-11).
+    public var primedSurfaces: [Surface: TaskRef] = [:]
 
     public init(instanceHost: String, learning: LearningStore = LearningStore(),
                 ranker: TaskRanker = TaskRanker()) {
