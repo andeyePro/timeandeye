@@ -17,6 +17,13 @@ func opURLParserChecks(_ c: Checks) {
         try expectNil(OPURLParser.taskID(in: "https://op.example.com/work_packages/new", instanceHost: host))
         try expectNil(OPURLParser.taskID(in: "not a url", instanceHost: host))
     }
+
+    c.check("extracts id from PWA-style titles") {
+        try expectEq(OPURLParser.taskID(inTitle: "#223 Ambitick | OpenProject"), 223)
+        try expectEq(OPURLParser.taskID(inTitle: "Ambitick (#223) - IT | OpenProject"), 223)
+        try expectNil(OPURLParser.taskID(inTitle: "My page | OpenProject"))
+        try expectNil(OPURLParser.taskID(inTitle: "Fix bug #42 · GitHub"), "needs OpenProject in title")
+    }
 }
 
 // MARK: - LearningStore (plan task 4)

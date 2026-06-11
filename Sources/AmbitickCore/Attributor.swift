@@ -45,6 +45,15 @@ public final class Attributor {
             let c = Candidate(target: .task(.op(id)), score: 0.99)
             return Attribution(best: c, ranked: [c])
         }
+        // No URL (e.g. OP as a Chrome PWA): the WP id may be in the window
+        // title — or in the app name, which PWAs set to the page title.
+        for text in [signal.windowTitle, signal.app].compactMap({ $0 }) {
+            if let id = OPURLParser.taskID(inTitle: text) {
+                lastOpenedOPTask = .op(id)
+                let c = Candidate(target: .task(.op(id)), score: 0.97)
+                return Attribution(best: c, ranked: [c])
+            }
+        }
         let surface = Surface(signal: signal)
         var ranked = scored(signal, tasks: tasks, now: now)
         if let pending = pendingPrime, pending.surface == surface {
@@ -62,6 +71,10 @@ public final class Attributor {
     public func noteDwell(_ signal: ActivitySignal) {
         if let url = signal.tabURL, OPURLParser.taskID(in: url, instanceHost: instanceHost) != nil {
             return
+        }
+        for text in [signal.windowTitle, signal.app].compactMap({ $0 })
+        where OPURLParser.taskID(inTitle: text) != nil {
+            return   // an OP page itself never becomes a primed working surface
         }
         guard let task = lastOpenedOPTask else { return }
         lastOpenedOPTask = nil

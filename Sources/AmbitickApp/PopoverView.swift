@@ -76,7 +76,9 @@ struct PopoverView: View {
                     }
                 }
             }
-            .frame(maxHeight: 240)
+            // Explicit height: an unconstrained ScrollView collapses to one
+            // row inside the MenuBarExtra popover.
+            .frame(height: min(CGFloat(max(all.count, 1)) * 26, 240))
             if controller.taskCache.isEmpty {
                 Text("No tasks yet – set OP URL + API key in Settings")
                     .font(.caption2)

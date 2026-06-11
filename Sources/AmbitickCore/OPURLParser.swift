@@ -10,4 +10,13 @@ public enum OPURLParser {
               let id = Int(parts[i + 1]) else { return nil }
         return id
     }
+
+    /// Fallback for surfaces with no readable URL (OP opened as a Chrome
+    /// app/PWA): work-package pages put "#<id>" in the document title, which
+    /// PWAs surface as window title or even application name.
+    public static func taskID(inTitle title: String) -> Int? {
+        guard title.contains("OpenProject") else { return nil }
+        guard let range = title.range(of: "#[0-9]+", options: .regularExpression) else { return nil }
+        return Int(title[range].dropFirst())
+    }
 }
