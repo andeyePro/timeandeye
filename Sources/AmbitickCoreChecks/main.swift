@@ -6,6 +6,8 @@ let suites: [(String, (Checks) -> Void)] = [
     ("OPURLParser", opURLParserChecks),
     ("LearningStore", learningStoreChecks),
     ("TaskRanker", taskRankerChecks),
+    ("Attributor", attributorChecks),
+    ("MinuteResolver", minuteResolverChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = []
 
