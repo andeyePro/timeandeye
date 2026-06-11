@@ -155,6 +155,7 @@ public final class AppController: ObservableObject {
         }
         tracker.onState = { [weak self] state in
             guard let self else { return }
+            DebugLog.write("state -> \(state)")
             self.trackerState = state
             if case .tracking(let target, _) = state {
                 // The visible clock is per-task: a switch restarts it (the
@@ -172,6 +173,9 @@ public final class AppController: ObservableObject {
                                 sound: "Basso")
             }
             self.refreshTitle(force: true)
+        }
+        tracker.onDebug = { message in
+            DebugLog.write(message)
         }
         tracker.onPrompt = { [weak self] prompt in
             guard let self else { return }
@@ -229,8 +233,13 @@ public final class AppController: ObservableObject {
         Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
         sensors.onEvent = { [weak self] event in
+            switch event {
+            case .input: break   // 2 s ticks would drown the log
+            default: DebugLog.write("sensor \(event)")
+            }
             self?.tracker.handle(event)
         }
+        DebugLog.write("startUp: AX trusted=\(sensors.accessibilityTrusted) grace=\(settings.switchGraceSeconds)s")
         sensors.start()
         Notifier.requestAuthorization()
         titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -413,11 +422,12 @@ public final class AppController: ObservableObject {
         guard let client else { return }
         let engine = SyncEngine(journal: journal, client: client)
         do {
-            _ = try await engine.pushEligible(
+            let pushed = try await engine.pushEligible(
                 threshold: settings.certaintyAutoPushThreshold,
                 defaultActivityID: settings.defaultActivityID,   // nil = OP's default
                 activityOverrides: settings.activityOverrides,
                 includeComments: settings.autoComment)
+            if pushed > 0 { DebugLog.write("pushed \(pushed) entries to OP") }
             if !engine.startTimesSupported {
                 lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
             }
@@ -430,6 +440,29 @@ public final class AppController: ObservableObject {
 
 /// Notifications when running as a real .app bundle; silent no-op otherwise
 /// (UNUserNotificationCenter requires a bundle identifier).
+/// Diagnostic event log at a world-readable path so remote debugging over the
+/// scoped SSH user works (the agent cannot read Martin's home). Window titles
+/// appear in it; delete the file to clear, toggle by removing write access.
+enum DebugLog {
+    static let path = "/Users/Shared/ambitick-debug.log"
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    static func write(_ message: String) {
+        let line = "\(formatter.string(from: Date())) \(message)\n"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            FileManager.default.createFile(atPath: path, contents: Data(line.utf8))
+        }
+    }
+}
+
 enum Notifier {
     /// Wired to AmbitickSettings.systemNotifications; sounds still play when off.
     static var enabled = true

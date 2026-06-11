@@ -50,6 +50,9 @@ public final class SessionTracker {
     public var onReview: (ReviewSegment) -> Void = { _ in }
     public var onState: (TrackerState) -> Void = { _ in }
     public var onPrompt: (TrackerPrompt) -> Void = { _ in }
+    /// Diagnostic narration of decisions (attribution best, pending switches,
+    /// commits, auto-starts). Wired to the app's debug log.
+    public var onDebug: (String) -> Void = { _ in }
 
     private let attributor: Attributor
     private let config: TrackerConfig
@@ -138,6 +141,7 @@ public final class SessionTracker {
         let attribution = attributor.attribute(signal, tasks: tasks(), now: now)
         currentSignal = signal
         currentStart = now
+        onDebug("focus \(signal.app)|\(signal.windowTitle ?? "-") -> best \(String(describing: attribution.best)) state \(state)")
 
         switch state {
         case .stopped:
@@ -178,6 +182,7 @@ public final class SessionTracker {
                          from: currentTarget, at: now)
         } else if pendingSwitch?.target != best.target {
             pendingSwitch = (best.target, best.score, now)
+            onDebug("pending switch -> \(best.target) score \(best.score) since \(now)")
         }
         // A matching pending switch commits via evaluatePendingSwitch (input
         // ticks), so staying put on the new surface still commits after grace.
@@ -186,8 +191,10 @@ public final class SessionTracker {
     /// Driven by every input tick — a pending switch must commit even when no
     /// further focus change ever arrives (the user just stays in the window).
     private func evaluatePendingSwitch(at date: Date) {
-        guard let pending = pendingSwitch, case .tracking(let current, _) = state,
-              date.timeIntervalSince(pending.since) >= config.switchGraceSeconds else { return }
+        guard let pending = pendingSwitch, case .tracking(let current, _) = state else { return }
+        let held = date.timeIntervalSince(pending.since)
+        guard held >= config.switchGraceSeconds else { return }
+        onDebug("commit pending switch -> \(pending.target) after \(Int(held))s")
         commitSwitch(to: pending.target, score: pending.score, since: pending.since,
                      from: current, at: date)
     }

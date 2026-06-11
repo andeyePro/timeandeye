@@ -15,10 +15,11 @@ func fail(_ message: String) -> Never {
     exit(1)
 }
 
-guard CommandLine.arguments.count == 3,
+guard CommandLine.arguments.count >= 3,
       let baseURL = URL(string: CommandLine.arguments[1]) else {
-    fail("usage: AmbitickIntegration <base-url> <api-key-file>")
+    fail("usage: AmbitickIntegration <base-url> <api-key-file> [keep]")
 }
+let keepEntries = CommandLine.arguments.contains("keep")
 let keyFile = CommandLine.arguments[2]
 guard let rawKey = try? String(contentsOfFile: keyFile, encoding: .utf8) else {
     fail("cannot read key file \(keyFile)")
@@ -147,8 +148,8 @@ func run() async throws {
     var verified = false
     for entry in entries {
         defer {
-            // 6. Always clean up every scratch entry.
-            if let id = entry["id"] as? Int {
+            // 6. Clean up scratch entries (unless asked to keep for inspection).
+            if !keepEntries, let id = entry["id"] as? Int {
                 Task { _ = try? await api("DELETE", "api/v3/time_entries/\(id)") }
             }
         }

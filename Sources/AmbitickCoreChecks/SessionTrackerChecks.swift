@@ -269,6 +269,31 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.state, .stopped, "manual stop must be respected")
     }
 
+    c.check("Martin's scenario: review-assigned surfaces, switch via typing") {
+        // Both Ghostty windows primed via the REVIEW path (assign, not confirm),
+        // tracking starts by auto-resume, then move to the other window and
+        // type: sensor-style input events with slightly lagging dates.
+        let (tracker, attributor) = makeTracker()
+        attributor.assign(sig("Ghostty", "Ambitick", at: 0), target: .task(.op(1)))
+        attributor.assign(sig("Ghostty", "scratch", at: 0), target: .task(.op(2)))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        guard case .tracking(.task(.op(1)), let c1) = tracker.state, c1 >= 0.9 else {
+            throw CheckFailure(description: "assign must prime like confirm, got \(tracker.state)")
+        }
+        tracker.handle(.focus(sig("Ghostty", "scratch", at: 60)))   // move to scratch
+        // typing: input dates lag ~1s behind wall clock, every 2s
+        var clock: TimeInterval = 62
+        while clock < 100 {
+            tracker.handle(.input(t(clock - 1)))
+            clock += 2
+        }
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "typing in scratch must commit the switch, got \(tracker.state)")
+        }
+    }
+
     c.check("call end prompts with call segments") {
         let (tracker, _) = makeTracker()
         var prompts: [TrackerPrompt] = []
