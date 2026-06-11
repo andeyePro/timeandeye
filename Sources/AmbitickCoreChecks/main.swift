@@ -8,6 +8,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("TaskRanker", taskRankerChecks),
     ("Attributor", attributorChecks),
     ("MinuteResolver", minuteResolverChecks),
+    ("SessionTracker", sessionTrackerChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = []
 
