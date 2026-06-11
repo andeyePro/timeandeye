@@ -96,6 +96,7 @@ public final class AppController: ObservableObject {
     private var taskRefreshTimer: Timer?
     private var taskChangedAt = Date()
     private var sessionStartedAt: Date?
+    private var currentTarget: Target?
     private var lastTitleRefresh = Date.distantPast
 
     public static func supportDirectory() -> URL {
@@ -147,11 +148,18 @@ public final class AppController: ObservableObject {
         tracker.onState = { [weak self] state in
             guard let self else { return }
             self.trackerState = state
-            self.taskChangedAt = Date()
-            if case .tracking = state {
-                if self.sessionStartedAt == nil { self.sessionStartedAt = Date() }
+            if case .tracking(let target, _) = state {
+                // The visible clock is per-task: a switch restarts it (the
+                // closed time is already journalled as its own session).
+                if target != self.currentTarget {
+                    self.currentTarget = target
+                    self.sessionStartedAt = Date()
+                    self.taskChangedAt = Date()
+                }
             } else {
+                self.currentTarget = nil
                 self.sessionStartedAt = nil
+                self.taskChangedAt = Date()
                 Notifier.notify(title: "Timer stopped", body: "Ambitick stopped the clock.",
                                 sound: "Basso")
             }

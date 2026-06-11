@@ -9,6 +9,7 @@ struct ReviewView: View {
     @State private var selection = Set<UUID>()
     @State private var aiResponse = ""
     @State private var aiStatus = ""
+    @State private var filter = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -42,14 +43,30 @@ struct ReviewView: View {
     }
 
     private var assignBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("Assign \(selection.count):").font(.caption)
+                TextField("type to filter tasks", text: $filter)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                    .frame(width: 180)
                 Button("Do not track") { assign(.doNotTrack) }
-                ForEach(controller.fullPickList(), id: \.ref) { task in
-                    Button(task.subject) { assign(.task(task.ref)) }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(filteredTasks(), id: \.ref) { task in
+                        Button(task.subject) { assign(.task(task.ref)) }
+                    }
                 }
             }
+        }
+    }
+
+    private func filteredTasks() -> [WorkTask] {
+        controller.fullPickList().filter {
+            filter.isEmpty
+                || $0.subject.localizedCaseInsensitiveContains(filter)
+                || ($0.project?.localizedCaseInsensitiveContains(filter) ?? false)
         }
     }
 
