@@ -9,8 +9,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "AmbitickCore"),
+        // macOS-only layer: SQLite journal, Keychain, sensors, app controller.
+        .target(name: "AmbitickMac", dependencies: ["AmbitickCore"]),
+        // The menu-bar app itself (wrapped into Ambitick.app by scripts/make-app.sh).
+        .executableTarget(name: "AmbitickApp", dependencies: ["AmbitickCore", "AmbitickMac"]),
         // Check harness instead of a test target: the build Mac has Command
         // Line Tools only (no XCTest / Swift Testing). Run: swift run AmbitickCoreChecks
-        .executableTarget(name: "AmbitickCoreChecks", dependencies: ["AmbitickCore"]),
+        .executableTarget(name: "AmbitickCoreChecks",
+                          dependencies: ["AmbitickCore", "AmbitickMac"]),
     ]
 )

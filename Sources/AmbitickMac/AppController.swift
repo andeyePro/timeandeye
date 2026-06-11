@@ -1,0 +1,351 @@
+import Foundation
+import AppKit
+import UserNotifications
+import AmbitickCore
+
+/// Pure title/cadence logic, kept out of the controller so it is checkable.
+public enum MenuTitle {
+    /// 1 Hz for the first minute after a task change, then once per minute.
+    public static func refreshInterval(sinceTaskChange: TimeInterval) -> TimeInterval {
+        sinceTaskChange < 60 ? 1 : 60
+    }
+
+    public static func text(elapsed: TimeInterval, certainty: Double?,
+                            showPercent: Bool) -> String {
+        let total = Int(elapsed.rounded())
+        let body: String
+        if total < 3600 {
+            body = String(format: "%d:%02d", total / 60, total % 60)
+        } else {
+            body = String(format: "%dh %02dm", total / 3600, (total % 3600) / 60)
+        }
+        if showPercent, let certainty {
+            return "\(body) \(Int((certainty * 100).rounded()))%"
+        }
+        return body
+    }
+
+    /// Linear blend between the user's two gradient colours; grey when stopped.
+    public static func colour(certainty: Double?, lowHex: String, highHex: String) -> NSColor {
+        guard let certainty else { return .systemGray }
+        let low = NSColor(hex: lowHex) ?? .systemRed
+        let high = NSColor(hex: highHex) ?? .systemGreen
+        let f = CGFloat(min(max(certainty, 0), 1))
+        return NSColor(
+            red: low.redComponent + (high.redComponent - low.redComponent) * f,
+            green: low.greenComponent + (high.greenComponent - low.greenComponent) * f,
+            blue: low.blueComponent + (high.blueComponent - low.blueComponent) * f,
+            alpha: 1)
+    }
+}
+
+public extension NSColor {
+    convenience init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(red: CGFloat((v >> 16) & 0xFF) / 255,
+                  green: CGFloat((v >> 8) & 0xFF) / 255,
+                  blue: CGFloat(v & 0xFF) / 255, alpha: 1)
+    }
+}
+
+/// URLSession-backed transport for the real OP instance.
+public struct URLSessionTransport: HTTPTransport {
+    public init() {}
+    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        return (data, http)
+    }
+}
+
+/// Owns the whole pipeline: sensors -> tracker -> journal -> sync, plus the
+/// published state the SwiftUI layer renders.
+@MainActor
+public final class AppController: ObservableObject {
+    @Published public private(set) var trackerState: TrackerState = .stopped
+    @Published public private(set) var menuText = "–"
+    @Published public private(set) var menuColour = NSColor.systemGray
+    @Published public private(set) var taskCache: [WorkTask] = []
+    @Published public private(set) var pendingReview: [ReviewSegment] = []
+    @Published public private(set) var activities: [OPTimeActivity] = []
+    @Published public private(set) var lastPrompt: TrackerPrompt?
+    @Published public private(set) var lastError: String?
+    @Published public var settings: AmbitickSettings {
+        didSet { try? settingsStore.save(settings) }
+    }
+
+    public let journal: any JournalStore
+    private let attributor: Attributor
+    private var tracker: SessionTracker!
+    private let sensors = SensorHub()
+    private let settingsStore: JSONFileStore<AmbitickSettings>
+    private let learningStore: JSONFileStore<LearningStore>
+    private var client: OPClient?
+    private var titleTimer: Timer?
+    private var taskChangedAt = Date()
+    private var sessionStartedAt: Date?
+    private var lastTitleRefresh = Date.distantPast
+
+    public static func supportDirectory() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Ambitick")
+    }
+
+    public init() {
+        let dir = Self.supportDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        settingsStore = JSONFileStore<AmbitickSettings>(url: dir.appendingPathComponent("settings.json"))
+        learningStore = JSONFileStore<LearningStore>(url: dir.appendingPathComponent("learning.json"))
+        let loadedSettings = (try? settingsStore.load().flatMap { $0 })
+            ?? AmbitickSettings(opBaseURL: "")
+        settings = loadedSettings
+        journal = (try? SQLiteJournalStore(path: dir.appendingPathComponent("journal.sqlite").path))
+            ?? InMemoryJournalStore()
+
+        let host = URL(string: loadedSettings.opBaseURL)?.host ?? ""
+        let learning = (try? learningStore.load().flatMap { $0 }) ?? LearningStore()
+        attributor = Attributor(instanceHost: host,
+                                learning: learning,
+                                ranker: TaskRanker(config: RankingConfig(statusOrder: loadedSettings.statusOrder)))
+
+        let config = TrackerConfig(
+            minSegmentSeconds: loadedSettings.minSegmentSeconds,
+            primeDwellSeconds: loadedSettings.primeDwellSeconds,
+            idleThresholdSeconds: PowerSettings.displaySleepSeconds() ?? 600,
+            nonWorkTracksLocally: loadedSettings.trackLeisureLocally,
+            leisureTask: loadedSettings.trackLeisureLocally ? .local(UUID()) : nil)
+        tracker = SessionTracker(attributor: attributor, config: config) { [weak self] in
+            self?.taskCache ?? []
+        }
+        wireTracker()
+        rebuildClient()
+    }
+
+    private func wireTracker() {
+        tracker.onSession = { [weak self] session in
+            guard let self else { return }
+            try? self.journal.save(session)
+            Task { await self.syncIfEnabled() }
+        }
+        tracker.onReview = { [weak self] segment in
+            guard let self else { return }
+            try? self.journal.save(segment)
+            self.reloadReview()
+        }
+        tracker.onState = { [weak self] state in
+            guard let self else { return }
+            self.trackerState = state
+            self.taskChangedAt = Date()
+            if case .tracking = state {
+                if self.sessionStartedAt == nil { self.sessionStartedAt = Date() }
+            } else {
+                self.sessionStartedAt = nil
+                Notifier.notify(title: "Timer stopped", body: "Ambitick stopped the clock.",
+                                sound: "Basso")
+            }
+            self.refreshTitle(force: true)
+        }
+        tracker.onPrompt = { [weak self] prompt in
+            guard let self else { return }
+            self.lastPrompt = prompt
+            switch prompt {
+            case .taskChanged(let target):
+                Notifier.notify(title: "Task changed",
+                                body: self.name(of: target), sound: "Tink")
+            case .resumeAfterIdle:
+                Notifier.notify(title: "Welcome back",
+                                body: "Did work continue, or was the stop time correct?",
+                                sound: "Tink")
+            case .callEnded:
+                Notifier.notify(title: "Call ended",
+                                body: "Assign the call, or choose Do not track.",
+                                sound: "Tink")
+            }
+        }
+    }
+
+    private func rebuildClient() {
+        guard let url = URL(string: settings.opBaseURL), url.host != nil,
+              let key = KeychainStore.loadAPIKey(account: settings.opBaseURL) else {
+            client = nil
+            return
+        }
+        client = OPClient(baseURL: url, apiKey: key, transport: URLSessionTransport())
+    }
+
+    // MARK: - Lifecycle
+
+    public func startUp() {
+        sensors.requestPermissions()
+        sensors.onEvent = { [weak self] event in
+            self?.tracker.handle(event)
+        }
+        sensors.start()
+        Notifier.requestAuthorization()
+        titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshTitle(force: false) }
+        }
+        Task { await refreshTasks() }
+        reloadReview()
+    }
+
+    private func refreshTitle(force: Bool) {
+        let sinceChange = Date().timeIntervalSince(taskChangedAt)
+        let interval = MenuTitle.refreshInterval(sinceTaskChange: sinceChange)
+        guard force || Date().timeIntervalSince(lastTitleRefresh) >= interval else { return }
+        lastTitleRefresh = Date()
+        switch trackerState {
+        case .stopped:
+            menuText = "–"
+            menuColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
+                                          highHex: settings.colourHigh)
+        case .tracking(_, let certainty):
+            let elapsed = Date().timeIntervalSince(sessionStartedAt ?? Date())
+            menuText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
+                                      showPercent: settings.showPercent)
+            menuColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
+                                          highHex: settings.colourHigh)
+        }
+    }
+
+    // MARK: - User actions
+
+    public func currentTaskName() -> String {
+        if case .tracking(let target, _) = trackerState { return name(of: target) }
+        return "Not tracking"
+    }
+
+    public func name(of target: Target) -> String {
+        switch target {
+        case .doNotTrack: return "Do not track"
+        case .task(let ref):
+            if let t = taskCache.first(where: { $0.ref == ref }) { return t.subject }
+            if case .op(let id) = ref { return "WP #\(id)" }
+            return "Leisure"
+        }
+    }
+
+    public func pickList() -> [WorkTask] {
+        TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder))
+            .pickList(taskCache, at: Date(), recentCount: settings.recentCount,
+                      likelyCount: settings.likelyCount, learning: attributor.learning)
+    }
+
+    public func userPicked(_ task: WorkTask) {
+        tracker.confirm(task: task.ref, at: Date())
+        if let i = taskCache.firstIndex(where: { $0.ref == task.ref }) {
+            taskCache[i].lastConfirmedAt = Date()
+        }
+        try? learningStore.save(attributor.learning)
+        lastPrompt = nil
+    }
+
+    public func userStopped() {
+        tracker.stop(at: Date())
+    }
+
+    public func userPostponed() {
+        lastPrompt = nil
+    }
+
+    public func assignReview(_ ids: [UUID], to target: Target) {
+        try? journal.assign(ids, to: target)
+        if let segment = pendingReview.first(where: { ids.contains($0.id) }) {
+            let signal = ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
+                                        tabURL: segment.tabURL, timestamp: segment.start)
+            attributor.assign(signal, target: target)
+            try? learningStore.save(attributor.learning)
+        }
+        reloadReview()
+    }
+
+    private func reloadReview() {
+        pendingReview = (try? journal.pendingReview()) ?? []
+    }
+
+    // MARK: - AI assist (clipboard out, paste back)
+
+    public func copyAIPrompt() {
+        let prompt = AIAssist.classificationPrompt(tasks: taskCache, segments: pendingReview)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(prompt, forType: .string)
+    }
+
+    public func ingestAIResponse(_ raw: String) -> String {
+        do {
+            let assignments = try AIAssist.parseResponse(
+                raw, validSegmentIDs: Set(pendingReview.map(\.id)))
+            for a in assignments {
+                assignReview([a.segmentID], to: a.target)
+            }
+            return "Applied \(assignments.count) assignments."
+        } catch {
+            return "Rejected: \(error)"
+        }
+    }
+
+    // MARK: - OP
+
+    public func saveAPIKey(_ key: String) {
+        try? KeychainStore.saveAPIKey(key, account: settings.opBaseURL)
+        rebuildClient()
+        Task { await refreshTasks() }
+    }
+
+    public func refreshTasks() async {
+        guard let client else { return }
+        do {
+            taskCache = try await client.fetchTasks()
+            if activities.isEmpty {
+                activities = (try? await client.fetchActivities()) ?? []
+                if settings.defaultActivityID == nil {
+                    settings.defaultActivityID = activities.first?.id
+                }
+            }
+            lastError = nil
+        } catch {
+            lastError = "OP fetch failed: \(error)"
+        }
+    }
+
+    public func syncIfEnabled() async {
+        guard let client, let activity = settings.defaultActivityID else { return }
+        let engine = SyncEngine(journal: journal, client: client)
+        do {
+            _ = try await engine.pushEligible(
+                threshold: settings.certaintyAutoPushThreshold,
+                defaultActivityID: activity,
+                activityOverrides: settings.activityOverrides,
+                includeComments: settings.autoComment)
+        } catch {
+            lastError = "OP push failed: \(error)"
+        }
+    }
+}
+
+/// Notifications when running as a real .app bundle; silent no-op otherwise
+/// (UNUserNotificationCenter requires a bundle identifier).
+enum Notifier {
+    static var available: Bool { Bundle.main.bundleIdentifier != nil }
+
+    static func requestAuthorization() {
+        guard available else { return }
+        UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    static func notify(title: String, body: String, sound: String) {
+        guard available else { NSSound(named: sound)?.play(); return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(sound + ".aiff"))
+        let request = UNNotificationRequest(identifier: UUID().uuidString,
+                                            content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+}
