@@ -249,6 +249,26 @@ func sessionTrackerChecks(_ c: Checks) {
         try expect(prompts.contains { $0 == .taskChanged(to: .task(.op(2))) })
     }
 
+    c.check("idle stop resumes from a confident surface; manual stop does not") {
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 600
+        let (tracker, attributor) = makeTracker(config: config)
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.input(t(40)))
+        tracker.handle(.input(t(700)))   // idle stop, trimmed to t(40)
+        try expectEq(tracker.state, .stopped)
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 710)))
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "primed surface must resume after idle stop, got \(tracker.state)")
+        }
+        tracker.stop(at: t(720))         // manual
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 730)))
+        try expectEq(tracker.state, .stopped, "manual stop must be respected")
+    }
+
     c.check("call end prompts with call segments") {
         let (tracker, _) = makeTracker()
         var prompts: [TrackerPrompt] = []

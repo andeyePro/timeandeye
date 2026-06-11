@@ -64,6 +64,9 @@ public final class SessionTracker {
     private var callSegments: [ReviewSegment] = []
     private var idleStoppedAt: Date?
     private var pendingSwitch: (target: Target, score: Double, since: Date)?
+    /// Manual Stop is respected (only a near-certain OP signal restarts);
+    /// idle/auto stops may resume from any confident surface.
+    private var stoppedManually = false
 
     public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
@@ -80,8 +83,9 @@ public final class SessionTracker {
         state = .tracking(.task(task), certainty: 1.0)
     }
 
-    public func stop(at date: Date) {
+    public func stop(at date: Date, manual: Bool = true) {
         pendingSwitch = nil
+        stoppedManually = manual
         endCurrentSpan(at: date)
         flushSessions(asOf: date)
         state = .stopped
@@ -137,10 +141,11 @@ public final class SessionTracker {
 
         switch state {
         case .stopped:
-            // Auto-start only on a direct OP-task-page signal: URL match (0.99)
-            // or title match (0.97). Primed surfaces (0.95) deliberately stay
-            // below this gate so a manual Stop is respected.
-            if let best = attribution.best, best.score >= 0.96,
+            // After a MANUAL stop only a direct OP-task-page signal (URL 0.99
+            // / title 0.97) restarts. After idle/auto stops, any confident
+            // surface (primed >= 0.95) resumes the clock too.
+            let gate = stoppedManually ? 0.96 : 0.9
+            if let best = attribution.best, best.score >= gate,
                case .task(let task) = best.target {
                 lastInput = now
                 state = .tracking(.task(task), certainty: best.score)
@@ -204,7 +209,7 @@ public final class SessionTracker {
             } else {
                 currentSignal = nil
                 currentStart = nil
-                stop(at: now)
+                stop(at: now, manual: false)   // auto-stop: work surfaces may resume
             }
         } else {
             state = .tracking(target, certainty: score)
@@ -275,6 +280,7 @@ public final class SessionTracker {
         }
         flushSessions(asOf: date)
         state = .stopped
+        stoppedManually = false   // idle stop: confident surfaces may resume
         idleStoppedAt = date
         if promptNow { promptResumeIfIdleStopped() }
     }

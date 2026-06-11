@@ -19,3 +19,15 @@
   Verified on Mac over scoped SSH (`ambitick` standard user). UI smoke testing
   deliberately deferred to Martin (README checklist): no GUI session available
   to the build user.
+
+## 2026-06-11 (day-2 fixes)
+
+- [x] **Live-fire fixes + real-OP integration runner** — switch-grace buffer
+  (brief window excursions merge; commits via input ticks), per-task clock,
+  s/m/h+m menu format, persistent primed associations, weighted session
+  certainty, optional activity, ISO-8601 startTime (verified stored by OP),
+  stable signing identity (TCC grants survive rebuilds), legacy notification
+  API (process-abort fix), auto-resume after idle, loud connection/push
+  diagnostics, popover/review type-to-filter, AmbitickIntegration headless
+  end-to-end against live OP as the Claude test account. 69 unit checks +
+  INTEGRATION PASS.

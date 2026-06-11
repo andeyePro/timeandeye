@@ -65,6 +65,9 @@ public final class SensorHub {
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
         onEvent(.input(now.addingTimeInterval(-idleSeconds)))
+        // After a real idle gap, re-emit the current surface even if unchanged
+        // so the tracker can auto-resume when the user returns to it.
+        if idleSeconds > 60 { lastSurfaceKey = nil; return }
 
         guard let app = NSWorkspace.shared.frontmostApplication else { return }
         // Never observe ourselves: opening the popover/review window made

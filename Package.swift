@@ -17,5 +17,9 @@ let package = Package(
         // Line Tools only (no XCTest / Swift Testing). Run: swift run AmbitickCoreChecks
         .executableTarget(name: "AmbitickCoreChecks",
                           dependencies: ["AmbitickCore", "AmbitickMac"]),
+        // Headless end-to-end against a REAL OpenProject as a test user:
+        // swift run AmbitickIntegration <base-url> <key-file>
+        .executableTarget(name: "AmbitickIntegration",
+                          dependencies: ["AmbitickCore", "AmbitickMac"]),
     ]
 )

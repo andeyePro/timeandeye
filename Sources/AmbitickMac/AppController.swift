@@ -1,6 +1,5 @@
 import Foundation
 import AppKit
-import UserNotifications
 import AmbitickCore
 
 /// Pure title/cadence logic, kept out of the controller so it is checkable.
@@ -432,27 +431,25 @@ public final class AppController: ObservableObject {
 /// Notifications when running as a real .app bundle; silent no-op otherwise
 /// (UNUserNotificationCenter requires a bundle identifier).
 enum Notifier {
-    /// Wired to AmbitickSettings.systemNotifications: kill-switch because
-    /// UNUserNotificationCenter can abort the whole process when the bundle's
-    /// code identity churns (ad-hoc rebuild era); sounds still play when off.
+    /// Wired to AmbitickSettings.systemNotifications; sounds still play when off.
     static var enabled = true
 
     static var available: Bool { enabled && Bundle.main.bundleIdentifier != nil }
 
     static func requestAuthorization() {
-        guard available else { return }
-        UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        // Legacy NSUserNotification needs no authorization.
     }
 
+    /// Deliberately the LEGACY notification API: UNUserNotificationCenter
+    /// aborts the whole process when the bundle's code identity is out of
+    /// step with the notification service (the crash-on-stop bug). The
+    /// deprecated API has no such failure mode.
     static func notify(title: String, body: String, sound: String) {
         guard available else { NSSound(named: sound)?.play(); return }
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = UNNotificationSound(named: UNNotificationSoundName(sound + ".aiff"))
-        let request = UNNotificationRequest(identifier: UUID().uuidString,
-                                            content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        let notification = NSUserNotification()
+        notification.title = title
+        notification.informativeText = body
+        notification.soundName = sound
+        NSUserNotificationCenter.default.deliver(notification)
     }
 }
