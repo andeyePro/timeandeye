@@ -200,6 +200,20 @@ func syncEngineChecks(_ c: Checks) async {
         try expectNil(body["comment"])
     }
 
+    await c.check("no default activity: POST goes out without an activity link") {
+        let (engine, journal, transport) = makeWorld()
+        transport.responses = [(201, "{}")]
+        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                                 certainty: 1))
+        let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pushed, 1)
+        let body = try unwrap(try JSONSerialization.jsonObject(
+            with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
+        let links = try unwrap(body["_links"] as? [String: [String: String]])
+        try expectNil(links["activity"], "activity link must be omitted when nil")
+        try expectEq(links["workPackage"]?["href"], "/api/v3/work_packages/42")
+    }
+
     await c.check("sub-minute sessions are cleared without a POST") {
         let (engine, journal, transport) = makeWorld()
         try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(30),

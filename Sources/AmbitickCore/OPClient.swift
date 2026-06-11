@@ -132,15 +132,20 @@ public final class OPClient {
 
     // MARK: - Time entries
 
+    /// activityID nil = omit the link; OP applies its server-side default.
+    /// (Some instances – Martin's included – run without visible activities.)
     public func createTimeEntry(workPackageID: Int, start: Date, duration: TimeInterval,
-                                activityID: Int, comment: String?) async throws {
+                                activityID: Int?, comment: String?) async throws {
+        var links: [String: [String: String]] = [
+            "workPackage": ["href": "/api/v3/work_packages/\(workPackageID)"],
+        ]
+        if let activityID {
+            links["activity"] = ["href": "/api/v3/time_entries/activities/\(activityID)"]
+        }
         var payload: [String: Any] = [
             "hours": Self.iso8601Duration(duration),
             "spentOn": Self.dayFormatter.string(from: start),
-            "_links": [
-                "workPackage": ["href": "/api/v3/work_packages/\(workPackageID)"],
-                "activity": ["href": "/api/v3/time_entries/activities/\(activityID)"],
-            ],
+            "_links": links,
         ]
         if let comment {
             payload["comment"] = ["raw": comment]

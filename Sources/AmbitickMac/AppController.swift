@@ -393,12 +393,12 @@ public final class AppController: ObservableObject {
     }
 
     public func syncIfEnabled() async {
-        guard let client, let activity = settings.defaultActivityID else { return }
+        guard let client else { return }
         let engine = SyncEngine(journal: journal, client: client)
         do {
             _ = try await engine.pushEligible(
                 threshold: settings.certaintyAutoPushThreshold,
-                defaultActivityID: activity,
+                defaultActivityID: settings.defaultActivityID,   // nil = OP's default
                 activityOverrides: settings.activityOverrides,
                 includeComments: settings.autoComment)
         } catch {

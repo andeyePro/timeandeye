@@ -15,7 +15,7 @@ public final class SyncEngine {
     /// Returns the number of sessions pushed. Throws on the first failure,
     /// leaving that session and later ones unmarked for retry.
     @discardableResult
-    public func pushEligible(threshold: Double, defaultActivityID: Int,
+    public func pushEligible(threshold: Double, defaultActivityID: Int? = nil,
                              activityOverrides: [TaskRef: Int] = [:],
                              includeComments: Bool) async throws -> Int {
         var pushed = 0
