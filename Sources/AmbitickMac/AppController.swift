@@ -172,16 +172,34 @@ public final class AppController: ObservableObject {
         }
     }
 
+    /// Every dead-end here reports WHY via lastError — silent guards cost a
+    /// debugging round-trip on 2026-06-11.
     private func rebuildClient() {
-        // Keep attribution in sync with the configured instance, even when the
-        // URL changes mid-session (no relaunch needed).
-        attributor.instanceHost = URL(string: settings.opBaseURL)?.host ?? ""
-        guard let url = URL(string: settings.opBaseURL), url.host != nil,
-              let key = KeychainStore.loadAPIKey(account: settings.opBaseURL) else {
-            client = nil
+        client = nil
+        let raw = settings.opBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        attributor.instanceHost = URL(string: raw)?.host ?? ""
+        guard !raw.isEmpty else {
+            lastError = nil   // unconfigured is not an error
+            return
+        }
+        guard let url = URL(string: raw), let scheme = url.scheme,
+              ["http", "https"].contains(scheme), url.host != nil else {
+            lastError = "OP URL must start with http:// or https:// and include a host"
+            return
+        }
+        let key: String?
+        do {
+            key = try KeychainStore.loadAPIKey()
+        } catch {
+            lastError = "Cannot read API key – \(error). Re-enter and Save."
+            return
+        }
+        guard let key else {
+            lastError = "No API key stored yet – enter it below and Save"
             return
         }
         client = OPClient(baseURL: url, apiKey: key, transport: URLSessionTransport())
+        lastError = nil
     }
 
     // MARK: - Lifecycle
@@ -312,13 +330,23 @@ public final class AppController: ObservableObject {
     // MARK: - OP
 
     public func saveAPIKey(_ key: String) {
-        try? KeychainStore.saveAPIKey(key, account: settings.opBaseURL)
+        do {
+            try KeychainStore.saveAPIKey(key)
+        } catch {
+            lastError = "API key save failed – \(error)"
+            return
+        }
         rebuildClient()
         Task { await refreshTasks() }
     }
 
     public func refreshTasks() async {
-        guard let client else { return }
+        guard let client else {
+            if lastError == nil, !settings.opBaseURL.isEmpty {
+                lastError = "Not connected – check OP URL and API key in Settings"
+            }
+            return
+        }
         do {
             taskCache = try await client.fetchTasks()
             if activities.isEmpty {

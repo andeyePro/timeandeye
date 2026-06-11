@@ -22,8 +22,14 @@ struct SettingsView: View {
                     .disabled(apiKey.isEmpty || controller.settings.opBaseURL.isEmpty)
                     if keySaved { Text("Saved to Keychain").font(.caption).foregroundStyle(.secondary) }
                 }
-                Text("\(controller.taskCache.count) tasks loaded")
-                    .font(.caption).foregroundStyle(.secondary)
+                if let error = controller.lastError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                } else {
+                    Text(controller.taskCache.isEmpty
+                         ? "Not connected yet"
+                         : "Connected – \(controller.taskCache.count) tasks loaded")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Picker("Default activity",
                        selection: Binding(
                         get: { controller.settings.defaultActivityID ?? -1 },
@@ -62,9 +68,6 @@ struct SettingsView: View {
                         value: $controller.settings.likelyCount, in: 1...15)
             }
 
-            if let error = controller.lastError {
-                Text(error).font(.caption).foregroundStyle(.red)
-            }
         }
         .formStyle(.grouped)
         .padding(8)
