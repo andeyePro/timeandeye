@@ -132,7 +132,8 @@ public final class AppController: ObservableObject {
             primeDwellSeconds: loadedSettings.primeDwellSeconds,
             idleThresholdSeconds: PowerSettings.displaySleepSeconds() ?? 600,
             nonWorkTracksLocally: loadedSettings.trackLeisureLocally,
-            leisureTask: loadedSettings.trackLeisureLocally ? .local(UUID()) : nil)
+            leisureTask: loadedSettings.trackLeisureLocally ? .local(UUID()) : nil,
+            switchGraceSeconds: loadedSettings.switchGraceSeconds)
         tracker = SessionTracker(attributor: attributor, config: config) { [weak self] in
             self?.taskCache ?? []
         }
@@ -416,6 +417,9 @@ public final class AppController: ObservableObject {
                 defaultActivityID: settings.defaultActivityID,   // nil = OP's default
                 activityOverrides: settings.activityOverrides,
                 includeComments: settings.autoComment)
+            if !engine.startTimesSupported {
+                lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
+            }
         } catch {
             lastError = "OP push failed: \(error)"
         }

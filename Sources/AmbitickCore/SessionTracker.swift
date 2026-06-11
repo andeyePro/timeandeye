@@ -7,19 +7,25 @@ public struct TrackerConfig: Equatable, Sendable {
     public var uncertainBelow: Double
     public var nonWorkTracksLocally: Bool
     public var leisureTask: TaskRef?
+    /// A detected task switch only commits after the new target has held
+    /// focus this long; briefer excursions merge back into the current task.
+    /// Direct OP-page signals and manual picks bypass the grace.
+    public var switchGraceSeconds: TimeInterval
 
     public init(minSegmentSeconds: TimeInterval = 20,
                 primeDwellSeconds: TimeInterval = 30,
                 idleThresholdSeconds: TimeInterval = 600,
                 uncertainBelow: Double = 0.6,
                 nonWorkTracksLocally: Bool = false,
-                leisureTask: TaskRef? = nil) {
+                leisureTask: TaskRef? = nil,
+                switchGraceSeconds: TimeInterval = 30) {
         self.minSegmentSeconds = minSegmentSeconds
         self.primeDwellSeconds = primeDwellSeconds
         self.idleThresholdSeconds = idleThresholdSeconds
         self.uncertainBelow = uncertainBelow
         self.nonWorkTracksLocally = nonWorkTracksLocally
         self.leisureTask = leisureTask
+        self.switchGraceSeconds = switchGraceSeconds
     }
 }
 
@@ -57,6 +63,7 @@ public final class SessionTracker {
     private var micActiveSince: Date?
     private var callSegments: [ReviewSegment] = []
     private var idleStoppedAt: Date?
+    private var pendingSwitch: (target: Target, since: Date)?
 
     public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
@@ -74,6 +81,7 @@ public final class SessionTracker {
     }
 
     public func stop(at date: Date) {
+        pendingSwitch = nil
         endCurrentSpan(at: date)
         flushSessions(asOf: date)
         state = .stopped
@@ -83,6 +91,7 @@ public final class SessionTracker {
     /// This is the UI's confirm entry point: it teaches the attributor AND
     /// lifts the in-flight span to confirmed certainty.
     public func confirm(task: TaskRef, at date: Date) {
+        pendingSwitch = nil
         if let signal = currentSignal {
             attributor.confirm(signal, task: task)
         }
@@ -141,24 +150,55 @@ public final class SessionTracker {
                 state = .tracking(currentTarget, certainty: 0)
                 return
             }
-            if best.target == .doNotTrack, best.score >= config.uncertainBelow {
-                if config.nonWorkTracksLocally, let leisure = config.leisureTask {
-                    if currentTarget != .task(leisure) {
-                        state = .tracking(.task(leisure), certainty: best.score)
-                        onPrompt(.taskChanged(to: .task(leisure)))
-                    }
-                } else {
-                    currentSignal = nil
-                    currentStart = nil
-                    stop(at: now)
-                }
+            if best.score >= config.uncertainBelow, best.target != currentTarget {
+                handleConfidentSwitch(to: best, from: currentTarget, at: now)
             } else if best.score >= config.uncertainBelow {
-                if best.target != currentTarget { onPrompt(.taskChanged(to: best.target)) }
+                pendingSwitch = nil   // back on the current task: excursion merged
                 state = .tracking(best.target, certainty: best.score)
             } else {
                 // Uncertain: stick with the last certain target, flag it.
                 state = .tracking(currentTarget, certainty: best.score)
             }
+        }
+    }
+
+    /// Switch-buffer: humans rarely land directly on the right window, so a
+    /// confident switch only commits after holding `switchGraceSeconds`;
+    /// direct OP-page signals (>= 0.96) commit immediately.
+    private func handleConfidentSwitch(to best: Candidate, from currentTarget: Target,
+                                       at now: Date) {
+        let direct = best.score >= 0.96
+        if !direct {
+            if let pending = pendingSwitch, pending.target == best.target {
+                guard now.timeIntervalSince(pending.since) >= config.switchGraceSeconds else {
+                    return   // still within grace: keep tracking the current task
+                }
+            } else {
+                pendingSwitch = (best.target, now)
+                return
+            }
+        }
+        let switchStart = (direct ? nil : pendingSwitch?.since) ?? now
+        pendingSwitch = nil
+        // Re-tag the grace-period spans: that time belonged to the new target.
+        for i in spans.indices where spans[i].start >= switchStart {
+            spans[i].target = best.target
+            spans[i].certainty = best.score
+        }
+        if best.target == .doNotTrack {
+            if config.nonWorkTracksLocally, let leisure = config.leisureTask {
+                if currentTarget != .task(leisure) {
+                    state = .tracking(.task(leisure), certainty: best.score)
+                    onPrompt(.taskChanged(to: .task(leisure)))
+                }
+            } else {
+                currentSignal = nil
+                currentStart = nil
+                stop(at: now)
+            }
+        } else {
+            state = .tracking(best.target, certainty: best.score)
+            onPrompt(.taskChanged(to: best.target))
         }
     }
 
@@ -215,6 +255,7 @@ public final class SessionTracker {
     }
 
     private func idleStop(asOf date: Date, promptNow: Bool) {
+        pendingSwitch = nil
         guard case .tracking = state else { return }
         if let start = currentStart, date > start {
             endCurrentSpan(at: date)

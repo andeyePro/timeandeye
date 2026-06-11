@@ -43,6 +43,50 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force -s - "$APP"
+# Stable signing identity: ad-hoc signing changes the app's identity every
+# build, which silently invalidates TCC grants (Accessibility, Automation)
+# each time. A persistent self-signed cert keeps grants across rebuilds.
+IDENTITY="Ambitick Dev"
+KC="$HOME/ambitick-dev.keychain-db"
+KCPASS="ambitick-build"
+ensure_identity() {
+    security list-keychains -d user | grep -q "$KC" || {
+        security create-keychain -p "$KCPASS" "$KC" 2>/dev/null || true
+        security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+    }
+    security unlock-keychain -p "$KCPASS" "$KC"
+    security set-keychain-settings "$KC"   # no auto-lock
+    if ! security find-identity -v -p codesigning "$KC" | grep -q "$IDENTITY"; then
+        TMP=$(mktemp -d)
+        cat > "$TMP/ext.cnf" <<'CNF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = Ambitick Dev
+[ext]
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+basicConstraints = critical,CA:false
+CNF
+        openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
+            -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/ext.cnf" 2>/dev/null
+        openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
+            -out "$TMP/dev.p12" -passout pass:"$KCPASS" -name "$IDENTITY" 2>/dev/null
+        security import "$TMP/dev.p12" -k "$KC" -P "$KCPASS" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPASS" "$KC" >/dev/null 2>&1
+        rm -rf "$TMP"
+    fi
+}
+
+if ensure_identity 2>/dev/null && security find-identity -v -p codesigning "$KC" | grep -q "$IDENTITY"; then
+    codesign --force -s "$IDENTITY" --keychain "$KC" "$APP" \
+        || codesign --force -s - "$APP"
+else
+    echo "warning: stable identity unavailable, falling back to ad-hoc (TCC grants will not survive rebuilds)"
+    codesign --force -s - "$APP"
+fi
+
 echo "Built $APP"
-echo "First run: right-click -> Open (ad-hoc signed), then grant Accessibility."
+echo "First run: right-click -> Open, then grant Accessibility (once - grants now survive rebuilds)."

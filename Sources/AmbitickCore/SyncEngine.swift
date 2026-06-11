@@ -6,7 +6,7 @@ import Foundation
 public final class SyncEngine {
     private let journal: any JournalStore
     private let client: OPClient
-    private var startTimesSupported = true
+    public private(set) var startTimesSupported = true
 
     public init(journal: any JournalStore, client: OPClient) {
         self.journal = journal

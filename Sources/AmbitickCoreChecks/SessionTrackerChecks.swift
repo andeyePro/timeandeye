@@ -32,7 +32,7 @@ func sessionTrackerChecks(_ c: Checks) {
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 50)))   // op(1) dominates min 0
-        tracker.handle(.focus(sig("Ghostty", "Investment", at: 70)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 90)))   // > grace: switch commits
         tracker.stop(at: t(130))
 
         try expectEq(sessions.count, 2)
@@ -83,6 +83,8 @@ func sessionTrackerChecks(_ c: Checks) {
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
         tracker.handle(.focus(sig("Steam", "Library", at: 30)))
+        try expect(states.last != .stopped, "non-work within grace must not stop yet")
+        tracker.handle(.focus(sig("Steam", "Library", at: 70)))   // grace elapsed
         try expectEq(states.last, .stopped)
     }
 
@@ -98,6 +100,7 @@ func sessionTrackerChecks(_ c: Checks) {
 
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Steam", "Library", at: 30)))
+        tracker.handle(.focus(sig("Steam", "Library", at: 70)))   // grace elapsed
         guard case .tracking(.task(leisure), _) = tracker.state else {
             throw CheckFailure(description: "expected tracking leisure task, got \(tracker.state)")
         }
@@ -180,6 +183,49 @@ func sessionTrackerChecks(_ c: Checks) {
         attributor.confirm(sig("Ghostty", "Ambitick", at: 30), task: .op(1))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 40)))
         try expectEq(tracker.state, .stopped, "manual stop must be respected")
+    }
+
+    c.check("brief excursion to another task's window merges back (switch buffer)") {
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        var prompts: [TrackerPrompt] = []
+        tracker.onSession = { sessions.append($0) }
+        tracker.onPrompt = { prompts.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // 10 s excursion
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))    // back within grace
+        tracker.stop(at: t(180))
+
+        try expectEq(sessions.count, 1, "excursion must merge, not split")
+        try expectEq(sessions[0].task, .op(1))
+        try expectEq(sessions[0].start, t(0))
+        try expectEq(sessions[0].end, t(180))
+        try expect(!prompts.contains { if case .taskChanged = $0 { return true }; return false },
+                   "no task-changed prompt for a merged excursion")
+    }
+
+    c.check("sustained switch commits and grace-period time goes to the new task") {
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 120)))  // pending
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 160)))  // commits (40 s)
+        tracker.stop(at: t(300))
+
+        try expectEq(sessions.count, 2)
+        try expectEq(sessions[0].task, .op(1))
+        try expectEq(sessions[1].task, .op(2))
+        try expectEq(sessions[1].start, t(120), "grace-period minutes belong to the new task")
+        try expectEq(sessions[1].end, t(300))
     }
 
     c.check("call end prompts with call segments") {
