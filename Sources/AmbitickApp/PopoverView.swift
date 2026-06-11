@@ -64,27 +64,42 @@ struct PopoverView: View {
             Text("Switch to")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            ForEach(controller.pickList(), id: \.ref) { task in
-                Button {
-                    controller.userPicked(task)
-                } label: {
-                    HStack {
-                        Text(task.subject).lineLimit(1)
-                        Spacer()
-                        Text(task.status)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+            let top = controller.pickList()
+            let all = controller.fullPickList()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(all.enumerated()), id: \.element.ref) { index, task in
+                        if index == top.count, index > 0 {
+                            Divider()   // recent+likely above, the long tail below
+                        }
+                        taskRow(task)
                     }
                 }
-                .buttonStyle(.plain)
-                .padding(.vertical, 2)
             }
+            .frame(maxHeight: 240)
             if controller.taskCache.isEmpty {
                 Text("No tasks yet – set OP URL + API key in Settings")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func taskRow(_ task: WorkTask) -> some View {
+        Button {
+            controller.userPicked(task)
+        } label: {
+            HStack {
+                Text(task.subject).lineLimit(1)
+                Spacer()
+                Text(task.status)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 2)
     }
 
     private var footer: some View {

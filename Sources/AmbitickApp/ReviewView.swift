@@ -46,7 +46,7 @@ struct ReviewView: View {
             HStack {
                 Text("Assign \(selection.count):").font(.caption)
                 Button("Do not track") { assign(.doNotTrack) }
-                ForEach(controller.pickList(), id: \.ref) { task in
+                ForEach(controller.fullPickList(), id: \.ref) { task in
                     Button(task.subject) { assign(.task(task.ref)) }
                 }
             }

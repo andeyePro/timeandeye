@@ -22,6 +22,8 @@ struct SettingsView: View {
                     .disabled(apiKey.isEmpty || controller.settings.opBaseURL.isEmpty)
                     if keySaved { Text("Saved to Keychain").font(.caption).foregroundStyle(.secondary) }
                 }
+                Text("\(controller.taskCache.count) tasks loaded")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Default activity",
                        selection: Binding(
                         get: { controller.settings.defaultActivityID ?? -1 },

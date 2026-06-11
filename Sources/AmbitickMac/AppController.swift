@@ -75,7 +75,10 @@ public final class AppController: ObservableObject {
     @Published public private(set) var lastPrompt: TrackerPrompt?
     @Published public private(set) var lastError: String?
     @Published public var settings: AmbitickSettings {
-        didSet { try? settingsStore.save(settings) }
+        didSet {
+            try? settingsStore.save(settings)
+            if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
+        }
     }
 
     public let journal: any JournalStore
@@ -86,6 +89,7 @@ public final class AppController: ObservableObject {
     private let learningStore: JSONFileStore<LearningStore>
     private var client: OPClient?
     private var titleTimer: Timer?
+    private var taskRefreshTimer: Timer?
     private var taskChangedAt = Date()
     private var sessionStartedAt: Date?
     private var lastTitleRefresh = Date.distantPast
@@ -169,6 +173,9 @@ public final class AppController: ObservableObject {
     }
 
     private func rebuildClient() {
+        // Keep attribution in sync with the configured instance, even when the
+        // URL changes mid-session (no relaunch needed).
+        attributor.instanceHost = URL(string: settings.opBaseURL)?.host ?? ""
         guard let url = URL(string: settings.opBaseURL), url.host != nil,
               let key = KeychainStore.loadAPIKey(account: settings.opBaseURL) else {
             client = nil
@@ -188,6 +195,9 @@ public final class AppController: ObservableObject {
         Notifier.requestAuthorization()
         titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshTitle(force: false) }
+        }
+        taskRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.refreshTasks() }
         }
         Task { await refreshTasks() }
         reloadReview()
@@ -233,6 +243,17 @@ public final class AppController: ObservableObject {
         TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder))
             .pickList(taskCache, at: Date(), recentCount: settings.recentCount,
                       likelyCount: settings.likelyCount, learning: attributor.learning)
+    }
+
+    /// Pick list first (N recent + M likely), then every remaining task in
+    /// ranked order — every list is scrollable to the full task set.
+    public func fullPickList() -> [WorkTask] {
+        let ranker = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder))
+        let top = pickList()
+        let topRefs = Set(top.map(\.ref))
+        let rest = ranker.ranked(taskCache.filter { !topRefs.contains($0.ref) },
+                                 at: Date(), learning: attributor.learning)
+        return top + rest
     }
 
     public func userPicked(_ task: WorkTask) {

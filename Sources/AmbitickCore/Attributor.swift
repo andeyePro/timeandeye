@@ -23,7 +23,8 @@ public struct Attribution: Equatable, Sendable {
 /// Source strength order (spec): OP task URL > primed surface > pending prime
 /// > learned associations + priors.
 public final class Attributor {
-    public let instanceHost: String
+    /// Mutable so the app can apply a changed OP URL without a relaunch.
+    public var instanceHost: String
     public private(set) var learning: LearningStore
     private let ranker: TaskRanker
 
