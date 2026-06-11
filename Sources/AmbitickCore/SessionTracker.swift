@@ -127,8 +127,10 @@ public final class SessionTracker {
 
         switch state {
         case .stopped:
-            // Auto-start only on the unambiguous OP-task-page signal.
-            if let best = attribution.best, best.score >= 0.99,
+            // Auto-start only on a direct OP-task-page signal: URL match (0.99)
+            // or title match (0.97). Primed surfaces (0.95) deliberately stay
+            // below this gate so a manual Stop is respected.
+            if let best = attribution.best, best.score >= 0.96,
                case .task(let task) = best.target {
                 lastInput = now
                 state = .tracking(.task(task), certainty: best.score)

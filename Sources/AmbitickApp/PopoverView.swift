@@ -5,6 +5,7 @@ import AmbitickMac
 struct PopoverView: View {
     @ObservedObject var controller: AppController
     @Environment(\.openWindow) private var openWindow
+    @State private var filter = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -61,15 +62,26 @@ struct PopoverView: View {
 
     private var switchList: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Switch to")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Switch to")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                TextField("filter", text: $filter)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                    .frame(width: 120)
+            }
             let top = controller.pickList()
-            let all = controller.fullPickList()
+            let all = controller.fullPickList().filter {
+                filter.isEmpty
+                    || $0.subject.localizedCaseInsensitiveContains(filter)
+                    || ($0.project?.localizedCaseInsensitiveContains(filter) ?? false)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(all.enumerated()), id: \.element.ref) { index, task in
-                        if index == top.count, index > 0 {
+                        if filter.isEmpty, index == top.count, index > 0 {
                             Divider()   // recent+likely above, the long tail below
                         }
                         taskRow(task)

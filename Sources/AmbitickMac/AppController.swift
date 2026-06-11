@@ -10,12 +10,16 @@ public enum MenuTitle {
         sinceTaskChange < 60 ? 1 : 60
     }
 
+    /// Seconds only under a minute, whole minutes under an hour, then h+m —
+    /// per-second precision is noise once the first minute has passed.
     public static func text(elapsed: TimeInterval, certainty: Double?,
                             showPercent: Bool) -> String {
         let total = Int(elapsed.rounded())
         let body: String
-        if total < 3600 {
-            body = String(format: "%d:%02d", total / 60, total % 60)
+        if total < 60 {
+            body = "\(total)s"
+        } else if total < 3600 {
+            body = "\(total / 60)m"
         } else {
             body = String(format: "%dh %02dm", total / 3600, (total % 3600) / 60)
         }

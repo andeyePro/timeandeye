@@ -141,6 +141,28 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(prompts, [.resumeAfterIdle(stoppedAt: t(50))])
     }
 
+    c.check("OP page auto-starts from stopped (URL and PWA title); primed surface does not") {
+        let (tracker, attributor) = makeTracker()
+        // URL signal
+        tracker.handle(.focus(sig("Chrome", "WP", at: 0,
+                                  url: "https://op.example.com/work_packages/1")))
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "URL signal must auto-start, got \(tracker.state)")
+        }
+        tracker.stop(at: t(10))
+        // PWA title signal (id lives in the app name)
+        tracker.handle(.focus(ActivitySignal(app: "#2: Investment | OpenProject",
+                                             timestamp: t(20))))
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "title signal must auto-start, got \(tracker.state)")
+        }
+        tracker.stop(at: t(30))
+        // primed surface must NOT restart a stopped timer
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 30), task: .op(1))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 40)))
+        try expectEq(tracker.state, .stopped, "manual stop must be respected")
+    }
+
     c.check("call end prompts with call segments") {
         let (tracker, _) = makeTracker()
         var prompts: [TrackerPrompt] = []

@@ -57,6 +57,9 @@ public final class SensorHub {
     // MARK: - Polling
 
     private func poll() {
+        // Re-check live: the user may grant Accessibility while we run, and a
+        // launch-time cache held window titles at nil for a whole session.
+        if !accessibilityTrusted { accessibilityTrusted = AXIsProcessTrusted() }
         let now = Date()
         // Input recency: CGEventSource needs no permission.
         let idleSeconds = CGEventSource.secondsSinceLastEventType(

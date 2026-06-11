@@ -19,10 +19,10 @@ func menuTitleChecks(_ c: Checks) {
     }
 
     c.check("title formatting") {
-        try expectEq(MenuTitle.text(elapsed: 47, certainty: nil, showPercent: false), "0:47")
-        try expectEq(MenuTitle.text(elapsed: 905, certainty: nil, showPercent: false), "15:05")
+        try expectEq(MenuTitle.text(elapsed: 47, certainty: nil, showPercent: false), "47s")
+        try expectEq(MenuTitle.text(elapsed: 402, certainty: nil, showPercent: false), "6m")
         try expectEq(MenuTitle.text(elapsed: 5_400, certainty: nil, showPercent: false), "1h 30m")
-        try expectEq(MenuTitle.text(elapsed: 60, certainty: 0.87, showPercent: true), "1:00 87%")
+        try expectEq(MenuTitle.text(elapsed: 60, certainty: 0.87, showPercent: true), "1m 87%")
     }
 
     c.check("colour gradient and hex parsing") {
