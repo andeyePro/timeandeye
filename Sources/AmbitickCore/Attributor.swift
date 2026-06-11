@@ -112,10 +112,13 @@ public final class Attributor {
         let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets)
         let priors = tasks.map { ranker.score($0, at: now, learning: learning) }
         let maxPrior = max(priors.max() ?? 1, 0.001)
-        // On an OP page without a task id, trust the ranking outright (spec:
-        // "most appropriate task by ranking"); elsewhere priors only nudge.
-        let onOPHost = signal.tabURL.flatMap(URL.init(string:))?.host == instanceHost
-        let priorWeight = onOPHost ? 0.65 : 0.2
+        // On an OP PROJECT page without a task id, trust the ranking outright
+        // (spec: "most appropriate task in that project"); other OP pages
+        // (My time tracking, admin, ...) must not hijack attribution.
+        let opURL = signal.tabURL.flatMap(URL.init(string:))
+        let onOPProjectPage = opURL?.host == instanceHost
+            && opURL?.path.contains("/projects/") == true
+        let priorWeight = onOPProjectPage ? 0.65 : 0.2
         var out: [Candidate] = []
         for (task, prior) in zip(tasks, priors) {
             let l = learned[.task(task.ref)] ?? 0

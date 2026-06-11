@@ -67,6 +67,7 @@ public final class SessionTracker {
     private var callSegments: [ReviewSegment] = []
     private var idleStoppedAt: Date?
     private var pendingSwitch: (target: Target, score: Double, since: Date)?
+    private var pendingNotify: (target: Target, since: Date)?
     /// Manual Stop is respected (only a near-certain OP signal restarts);
     /// idle/auto stops may resume from any confident surface.
     private var stoppedManually = false
@@ -88,6 +89,7 @@ public final class SessionTracker {
 
     public func stop(at date: Date, manual: Bool = true) {
         pendingSwitch = nil
+        pendingNotify = nil
         stoppedManually = manual
         endCurrentSpan(at: date)
         flushSessions(asOf: date)
@@ -99,6 +101,7 @@ public final class SessionTracker {
     /// lifts the in-flight span to confirmed certainty.
     public func confirm(task: TaskRef, at date: Date) {
         pendingSwitch = nil
+        pendingNotify = nil
         if let signal = currentSignal {
             attributor.confirm(signal, task: task)
         }
@@ -172,41 +175,44 @@ public final class SessionTracker {
         }
     }
 
-    /// Switch-buffer: humans rarely land directly on the right window, so a
-    /// confident switch only commits after holding `switchGraceSeconds`;
-    /// direct OP-page signals (>= 0.96) commit immediately.
+    /// Task switches are INSTANT — the visible clock follows the window the
+    /// user is in (Martin's model: even momentary changes must show). The
+    /// grace period survives only for (a) non-work auto-stop and (b) damping
+    /// taskChanged notifications. Record merging is the dominant-minute
+    /// ledger's job, not the state machine's.
     private func handleConfidentSwitch(to best: Candidate, from currentTarget: Target,
                                        at now: Date) {
-        if best.score >= 0.96 {
-            commitSwitch(to: best.target, score: best.score, since: now,
-                         from: currentTarget, at: now)
-        } else if pendingSwitch?.target != best.target {
-            pendingSwitch = (best.target, best.score, now)
-            onDebug("pending switch -> \(best.target) score \(best.score) since \(now)")
+        if best.target == .doNotTrack {
+            if pendingSwitch?.target != best.target {
+                pendingSwitch = (best.target, best.score, now)
+                onDebug("pending non-work stop since \(now)")
+            }
+            return
         }
-        // A matching pending switch commits via evaluatePendingSwitch (input
-        // ticks), so staying put on the new surface still commits after grace.
+        commitSwitch(to: best.target, score: best.score, since: now,
+                     from: currentTarget, at: now)
     }
 
-    /// Driven by every input tick — a pending switch must commit even when no
-    /// further focus change ever arrives (the user just stays in the window).
+    /// Driven by every input tick: commits a pending non-work stop and fires
+    /// the damped task-changed notification once a switch has held.
     private func evaluatePendingSwitch(at date: Date) {
-        guard let pending = pendingSwitch, case .tracking(let current, _) = state else { return }
-        let held = date.timeIntervalSince(pending.since)
-        guard held >= config.switchGraceSeconds else { return }
-        onDebug("commit pending switch -> \(pending.target) after \(Int(held))s")
-        commitSwitch(to: pending.target, score: pending.score, since: pending.since,
-                     from: current, at: date)
+        if let pending = pendingSwitch, case .tracking(let current, _) = state,
+           date.timeIntervalSince(pending.since) >= config.switchGraceSeconds {
+            onDebug("commit pending non-work stop after \(Int(date.timeIntervalSince(pending.since)))s")
+            commitSwitch(to: pending.target, score: pending.score, since: pending.since,
+                         from: current, at: date)
+        }
+        if let notify = pendingNotify, case .tracking(let current, _) = state,
+           current == notify.target,
+           date.timeIntervalSince(notify.since) >= config.switchGraceSeconds {
+            pendingNotify = nil
+            onPrompt(.taskChanged(to: notify.target))
+        }
     }
 
     private func commitSwitch(to target: Target, score: Double, since: Date,
                               from currentTarget: Target, at now: Date) {
         pendingSwitch = nil
-        // Re-tag the grace-period spans: that time belonged to the new target.
-        for i in spans.indices where spans[i].start >= since {
-            spans[i].target = target
-            spans[i].certainty = score
-        }
         if target == .doNotTrack {
             if config.nonWorkTracksLocally, let leisure = config.leisureTask {
                 if currentTarget != .task(leisure) {
@@ -218,10 +224,13 @@ public final class SessionTracker {
                 currentStart = nil
                 stop(at: now, manual: false)   // auto-stop: work surfaces may resume
             }
-        } else {
-            state = .tracking(target, certainty: score)
-            onPrompt(.taskChanged(to: target))
+            return
         }
+        state = .tracking(target, certainty: score)
+        pendingNotify = (target, now)   // notification fires after grace, switch is instant
+        // Completed task-runs flush now so OP entries appear within minutes of
+        // a switch instead of waiting for Stop/idle.
+        flushSessions(asOf: now, emitTrailingRun: false)
     }
 
     private func handleMic(active: Bool, at date: Date) {
@@ -278,6 +287,7 @@ public final class SessionTracker {
 
     private func idleStop(asOf date: Date, promptNow: Bool) {
         pendingSwitch = nil
+        pendingNotify = nil
         guard case .tracking = state else { return }
         if let start = currentStart, date > start {
             endCurrentSpan(at: date)
@@ -299,7 +309,10 @@ public final class SessionTracker {
     }
 
     /// Resolve accumulated spans into dominant-minute sessions and emit them.
-    private func flushSessions(asOf date: Date) {
+    /// emitTrailingRun=false (mid-tracking flush at a task switch) holds back
+    /// the final run and keeps its spans, so an ongoing task never gets its
+    /// record fragmented by the flush itself.
+    private func flushSessions(asOf date: Date, emitTrailingRun: Bool = true) {
         flushPendingReview()
         let clipped = spans.compactMap { span -> FocusSpan? in
             guard span.start < date else { return nil }
@@ -323,6 +336,15 @@ public final class SessionTracker {
                 runs[runs.count - 1] = last
             } else {
                 runs.append((minute.target, mStart, mEnd))
+            }
+        }
+        if !emitTrailingRun, let trailing = runs.last {
+            runs.removeLast()
+            spans = clipped.compactMap { span in
+                guard span.end > trailing.start else { return nil }
+                var s = span
+                s.start = max(s.start, trailing.start)
+                return s
             }
         }
         for run in runs {

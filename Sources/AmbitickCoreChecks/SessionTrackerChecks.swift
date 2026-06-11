@@ -228,7 +228,7 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[1].end, t(300))
     }
 
-    c.check("pending switch commits on input ticks when the user stays put") {
+    c.check("switch is instant; task-changed notification damps until held") {
         let (tracker, attributor) = makeTracker()
         var prompts: [TrackerPrompt] = []
         tracker.onPrompt = { prompts.append($0) }
@@ -237,16 +237,17 @@ func sessionTrackerChecks(_ c: Checks) {
 
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
-        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // pending switch
-        tracker.handle(.input(t(110)))                                  // within grace
-        guard case .tracking(.task(.op(1)), _) = tracker.state else {
-            throw CheckFailure(description: "must still track op(1) within grace, got \(tracker.state)")
-        }
-        tracker.handle(.input(t(140)))                                  // grace elapsed
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
-            throw CheckFailure(description: "input tick must commit the switch, got \(tracker.state)")
+            throw CheckFailure(description: "switch must be instant, got \(tracker.state)")
         }
-        try expect(prompts.contains { $0 == .taskChanged(to: .task(.op(2))) })
+        try expect(!prompts.contains { $0 == .taskChanged(to: .task(.op(2))) },
+                   "notification must not fire at the moment of switch")
+        tracker.handle(.input(t(110)))   // within grace: still quiet
+        try expect(!prompts.contains { $0 == .taskChanged(to: .task(.op(2))) })
+        tracker.handle(.input(t(140)))   // held past grace: fires once
+        try expect(prompts.contains { $0 == .taskChanged(to: .task(.op(2))) },
+                   "notification fires once the switch has held")
     }
 
     c.check("idle stop resumes from a confident surface; manual stop does not") {
@@ -283,14 +284,12 @@ func sessionTrackerChecks(_ c: Checks) {
             throw CheckFailure(description: "assign must prime like confirm, got \(tracker.state)")
         }
         tracker.handle(.focus(sig("Ghostty", "scratch", at: 60)))   // move to scratch
-        // typing: input dates lag ~1s behind wall clock, every 2s
-        var clock: TimeInterval = 62
-        while clock < 100 {
-            tracker.handle(.input(t(clock - 1)))
-            clock += 2
-        }
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
-            throw CheckFailure(description: "typing in scratch must commit the switch, got \(tracker.state)")
+            throw CheckFailure(description: "moving to scratch must switch instantly, got \(tracker.state)")
+        }
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 70)))  // and straight back
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "returning must switch back instantly, got \(tracker.state)")
         }
     }
 

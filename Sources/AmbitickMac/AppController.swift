@@ -98,8 +98,12 @@ public final class AppController: ObservableObject {
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
     private var taskChangedAt = Date()
-    private var sessionStartedAt: Date?
     private var currentTarget: Target?
+    /// Per-task visible clocks: a momentary switch shows the new task's
+    /// accumulated time immediately, and returning restores the old clock.
+    /// Cleared when tracking stops.
+    private var bankedElapsed: [Target: TimeInterval] = [:]
+    private var targetSince: Date?
 
     public static func supportDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -157,18 +161,23 @@ public final class AppController: ObservableObject {
             guard let self else { return }
             DebugLog.write("state -> \(state)")
             self.trackerState = state
+            let now = Date()
             if case .tracking(let target, _) = state {
-                // The visible clock is per-task: a switch restarts it (the
-                // closed time is already journalled as its own session).
                 if target != self.currentTarget {
+                    // Bank the outgoing task's elapsed; resume the incoming
+                    // task's clock from its banked value.
+                    if let old = self.currentTarget, let since = self.targetSince {
+                        self.bankedElapsed[old, default: 0] += now.timeIntervalSince(since)
+                    }
                     self.currentTarget = target
-                    self.sessionStartedAt = Date()
-                    self.taskChangedAt = Date()
+                    self.targetSince = now
+                    self.taskChangedAt = now
                 }
             } else {
                 self.currentTarget = nil
-                self.sessionStartedAt = nil
-                self.taskChangedAt = Date()
+                self.targetSince = nil
+                self.bankedElapsed.removeAll()
+                self.taskChangedAt = now
                 Notifier.notify(title: "Timer stopped", body: "Ambitick stopped the clock.",
                                 sound: "Basso")
             }
@@ -269,8 +278,9 @@ public final class AppController: ObservableObject {
             newText = "–"
             newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
-        case .tracking(_, let certainty):
-            let elapsed = Date().timeIntervalSince(sessionStartedAt ?? Date())
+        case .tracking(let target, let certainty):
+            let running = targetSince.map { Date().timeIntervalSince($0) } ?? 0
+            let elapsed = bankedElapsed[target, default: 0] + running
             newText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
                                      showPercent: settings.showPercent)
             newColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
