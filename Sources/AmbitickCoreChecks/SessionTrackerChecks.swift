@@ -228,6 +228,27 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[1].end, t(300))
     }
 
+    c.check("pending switch commits on input ticks when the user stays put") {
+        let (tracker, attributor) = makeTracker()
+        var prompts: [TrackerPrompt] = []
+        tracker.onPrompt = { prompts.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // pending switch
+        tracker.handle(.input(t(110)))                                  // within grace
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "must still track op(1) within grace, got \(tracker.state)")
+        }
+        tracker.handle(.input(t(140)))                                  // grace elapsed
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "input tick must commit the switch, got \(tracker.state)")
+        }
+        try expect(prompts.contains { $0 == .taskChanged(to: .task(.op(2))) })
+    }
+
     c.check("call end prompts with call segments") {
         let (tracker, _) = makeTracker()
         var prompts: [TrackerPrompt] = []

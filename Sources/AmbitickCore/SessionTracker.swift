@@ -63,7 +63,7 @@ public final class SessionTracker {
     private var micActiveSince: Date?
     private var callSegments: [ReviewSegment] = []
     private var idleStoppedAt: Date?
-    private var pendingSwitch: (target: Target, since: Date)?
+    private var pendingSwitch: (target: Target, score: Double, since: Date)?
 
     public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
@@ -115,6 +115,7 @@ public final class SessionTracker {
     // MARK: - Event handling
 
     private func handleInput(_ date: Date) {
+        evaluatePendingSwitch(at: date)
         defer { lastInput = max(lastInput ?? date, date) }
         guard case .tracking = state, let last = lastInput,
               date.timeIntervalSince(last) > config.idleThresholdSeconds else { return }
@@ -167,28 +168,37 @@ public final class SessionTracker {
     /// direct OP-page signals (>= 0.96) commit immediately.
     private func handleConfidentSwitch(to best: Candidate, from currentTarget: Target,
                                        at now: Date) {
-        let direct = best.score >= 0.96
-        if !direct {
-            if let pending = pendingSwitch, pending.target == best.target {
-                guard now.timeIntervalSince(pending.since) >= config.switchGraceSeconds else {
-                    return   // still within grace: keep tracking the current task
-                }
-            } else {
-                pendingSwitch = (best.target, now)
-                return
-            }
+        if best.score >= 0.96 {
+            commitSwitch(to: best.target, score: best.score, since: now,
+                         from: currentTarget, at: now)
+        } else if pendingSwitch?.target != best.target {
+            pendingSwitch = (best.target, best.score, now)
         }
-        let switchStart = (direct ? nil : pendingSwitch?.since) ?? now
+        // A matching pending switch commits via evaluatePendingSwitch (input
+        // ticks), so staying put on the new surface still commits after grace.
+    }
+
+    /// Driven by every input tick — a pending switch must commit even when no
+    /// further focus change ever arrives (the user just stays in the window).
+    private func evaluatePendingSwitch(at date: Date) {
+        guard let pending = pendingSwitch, case .tracking(let current, _) = state,
+              date.timeIntervalSince(pending.since) >= config.switchGraceSeconds else { return }
+        commitSwitch(to: pending.target, score: pending.score, since: pending.since,
+                     from: current, at: date)
+    }
+
+    private func commitSwitch(to target: Target, score: Double, since: Date,
+                              from currentTarget: Target, at now: Date) {
         pendingSwitch = nil
         // Re-tag the grace-period spans: that time belonged to the new target.
-        for i in spans.indices where spans[i].start >= switchStart {
-            spans[i].target = best.target
-            spans[i].certainty = best.score
+        for i in spans.indices where spans[i].start >= since {
+            spans[i].target = target
+            spans[i].certainty = score
         }
-        if best.target == .doNotTrack {
+        if target == .doNotTrack {
             if config.nonWorkTracksLocally, let leisure = config.leisureTask {
                 if currentTarget != .task(leisure) {
-                    state = .tracking(.task(leisure), certainty: best.score)
+                    state = .tracking(.task(leisure), certainty: score)
                     onPrompt(.taskChanged(to: .task(leisure)))
                 }
             } else {
@@ -197,8 +207,8 @@ public final class SessionTracker {
                 stop(at: now)
             }
         } else {
-            state = .tracking(best.target, certainty: best.score)
-            onPrompt(.taskChanged(to: best.target))
+            state = .tracking(target, certainty: score)
+            onPrompt(.taskChanged(to: target))
         }
     }
 
