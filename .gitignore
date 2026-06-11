@@ -5,3 +5,6 @@
 # delete this entire block (won't be re-added once removed).
 .claude/settings.local.json
 # <<< vibe-managed <<<
+
+# local-only
+.DS_Store
