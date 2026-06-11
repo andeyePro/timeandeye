@@ -3,6 +3,9 @@ import Foundation
 // Suites register here as they are implemented (plan task order).
 let suites: [(String, (Checks) -> Void)] = [
     ("Models", modelsChecks),
+    ("OPURLParser", opURLParserChecks),
+    ("LearningStore", learningStoreChecks),
+    ("TaskRanker", taskRankerChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = []
 

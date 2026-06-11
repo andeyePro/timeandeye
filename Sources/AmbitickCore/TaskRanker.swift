@@ -1,0 +1,62 @@
+import Foundation
+
+public struct RankingConfig: Codable, Equatable, Sendable {
+    public var statusOrder: [String]
+    public var recencyHalfLifeDays: Double
+
+    public init(statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
+                recencyHalfLifeDays: Double = 7) {
+        self.statusOrder = statusOrder
+        self.recencyHalfLifeDays = recencyHalfLifeDays
+    }
+}
+
+public struct TaskRanker: Sendable {
+    public var config: RankingConfig
+
+    public init(config: RankingConfig = RankingConfig()) {
+        self.config = config
+    }
+
+    /// Status prior + exponentially-decayed recency + time-of-day affinity.
+    /// Recency carries double weight so an actively-tracked Closed task
+    /// (e.g. Timesheets) outranks dormant Open tasks.
+    public func score(_ task: WorkTask, at now: Date, learning: LearningStore? = nil,
+                      calendar: Calendar = Calendar(identifier: .gregorian)) -> Double {
+        var statusScore = 0.0
+        if let idx = config.statusOrder.firstIndex(of: task.status) {
+            statusScore = Double(config.statusOrder.count - idx) / Double(config.statusOrder.count)
+        }
+        var recencyScore = 0.0
+        if let last = task.lastConfirmedAt {
+            let days = max(now.timeIntervalSince(last), 0) / 86_400
+            recencyScore = pow(0.5, days / config.recencyHalfLifeDays)
+        }
+        var todScore = 0.0
+        if let learning {
+            todScore = learning.hourAffinity(for: .task(task.ref),
+                                             hour: calendar.component(.hour, from: now))
+        }
+        return statusScore + 2 * recencyScore + todScore
+    }
+
+    public func ranked(_ tasks: [WorkTask], at now: Date,
+                       learning: LearningStore? = nil) -> [WorkTask] {
+        tasks.sorted { score($0, at: now, learning: learning) > score($1, at: now, learning: learning) }
+    }
+
+    /// Every "pick a task" surface: N most recently confirmed, then M most
+    /// likely of the rest. No duplicates.
+    public func pickList(_ tasks: [WorkTask], at now: Date, recentCount: Int,
+                         likelyCount: Int, learning: LearningStore? = nil) -> [WorkTask] {
+        let recent = tasks
+            .compactMap { t in t.lastConfirmedAt.map { (t, $0) } }
+            .sorted { $0.1 > $1.1 }
+            .prefix(recentCount)
+            .map(\.0)
+        let taken = Set(recent.map(\.ref))
+        let likely = ranked(tasks.filter { !taken.contains($0.ref) }, at: now, learning: learning)
+            .prefix(likelyCount)
+        return recent + Array(likely)
+    }
+}
