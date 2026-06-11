@@ -80,9 +80,12 @@ CNF
     fi
 }
 
-if ensure_identity 2>/dev/null && security find-identity -v -p codesigning "$KC" | grep -q "$IDENTITY"; then
-    codesign --force -s "$IDENTITY" --keychain "$KC" "$APP" \
-        || codesign --force -s - "$APP"
+# Sign by hash: duplicate same-named identities make name-signing ambiguous.
+ensure_identity 2>/dev/null || true
+ID_HASH=$(security find-identity -v -p codesigning "$KC" 2>/dev/null \
+    | awk -v id="$IDENTITY" '$0 ~ id {print $2; exit}')
+if [ -n "$ID_HASH" ] && codesign --force -s "$ID_HASH" --keychain "$KC" "$APP"; then
+    echo "Signed with stable identity $ID_HASH"
 else
     echo "warning: stable identity unavailable, falling back to ad-hoc (TCC grants will not survive rebuilds)"
     codesign --force -s - "$APP"

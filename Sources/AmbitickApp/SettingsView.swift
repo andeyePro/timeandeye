@@ -66,6 +66,8 @@ struct SettingsView: View {
                         value: $controller.settings.switchGraceSeconds, in: 0...120, step: 5)
                 Text("A new window must hold focus this long before the task switches; briefer visits merge into the current task. (Restart to apply.)")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("System notifications (sounds still play when off)",
+                       isOn: $controller.settings.systemNotifications)
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
                 Stepper("Recent tasks shown: \(controller.settings.recentCount)",

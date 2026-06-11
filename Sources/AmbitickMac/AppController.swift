@@ -83,6 +83,7 @@ public final class AppController: ObservableObject {
     @Published public var settings: AmbitickSettings {
         didSet {
             try? settingsStore.save(settings)
+            Notifier.enabled = settings.systemNotifications
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
         }
     }
@@ -226,6 +227,7 @@ public final class AppController: ObservableObject {
     // MARK: - Lifecycle
 
     public func startUp() {
+        Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
         sensors.onEvent = { [weak self] event in
             self?.tracker.handle(event)
@@ -430,7 +432,12 @@ public final class AppController: ObservableObject {
 /// Notifications when running as a real .app bundle; silent no-op otherwise
 /// (UNUserNotificationCenter requires a bundle identifier).
 enum Notifier {
-    static var available: Bool { Bundle.main.bundleIdentifier != nil }
+    /// Wired to AmbitickSettings.systemNotifications: kill-switch because
+    /// UNUserNotificationCenter can abort the whole process when the bundle's
+    /// code identity churns (ad-hoc rebuild era); sounds still play when off.
+    static var enabled = true
+
+    static var available: Bool { enabled && Bundle.main.bundleIdentifier != nil }
 
     static func requestAuthorization() {
         guard available else { return }

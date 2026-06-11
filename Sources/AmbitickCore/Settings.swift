@@ -19,6 +19,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var primeDwellSeconds: Double
     public var minSegmentSeconds: Double
     public var switchGraceSeconds: Double
+    public var systemNotifications: Bool
 
     public init(opBaseURL: String,
                 recentCount: Int = 5,
@@ -34,7 +35,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
                 primeDwellSeconds: Double = 30,
                 minSegmentSeconds: Double = 20,
-                switchGraceSeconds: Double = 30) {
+                switchGraceSeconds: Double = 30,
+                systemNotifications: Bool = true) {
         self.opBaseURL = opBaseURL
         self.recentCount = recentCount
         self.likelyCount = likelyCount
@@ -50,6 +52,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.primeDwellSeconds = primeDwellSeconds
         self.minSegmentSeconds = minSegmentSeconds
         self.switchGraceSeconds = switchGraceSeconds
+        self.systemNotifications = systemNotifications
     }
 
     /// Tolerant decoding: new fields fall back to their defaults instead of
@@ -72,6 +75,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         primeDwellSeconds = try c.decodeIfPresent(Double.self, forKey: .primeDwellSeconds) ?? defaults.primeDwellSeconds
         minSegmentSeconds = try c.decodeIfPresent(Double.self, forKey: .minSegmentSeconds) ?? defaults.minSegmentSeconds
         switchGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .switchGraceSeconds) ?? defaults.switchGraceSeconds
+        systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
     }
 }
 
