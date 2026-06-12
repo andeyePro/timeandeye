@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-12
+
+- [x] **Timeline, Time Spent, local tasks (the `timeline` branch)** - Full
+  interactive timeline (viewport bar, block-framing, draw/gap-fill/edge-drag
+  editing with snapping and neighbour-trim, OP write-back via stored entry
+  ids, window-detail strip with connectors, live-slice start edit), Time
+  Spent donut (project>task>app hover rings, pin, legend), local non-OP task
+  system with Settings UI and leisure routing, per-task colours, span
+  recording with 30-day retention, crash traps to the debug log, self-drawn
+  notification banners, per-task banked clocks with flash-visit limbo.
+  81 checks + live-OP integration green throughout.
+
 ## 2026-06-11
 
 - [x] **Ambitick v0.1 pre-alpha (overnight build)** — Full first implementation

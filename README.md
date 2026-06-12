@@ -41,6 +41,28 @@ swift run AmbitickCoreChecks   # expect: TOTAL: N passed, 0 failed
    never auto-push, review everything), menu-bar colours (identical colours
    disable the signalling), certainty %, leisure tracking.
 
+## The three views
+
+- **Popover** (menu-bar dot): current task, per-task clock, certainty, note
+  bubble (becomes the OP comment), stop/resume, filterable switch list.
+- **Timeline** (popover → timeline icon): a horizontal bar of the day's
+  tracked slices, coloured per task, opening framed on the current work
+  block. Two-finger scroll pans, pinch zooms. Drag on empty space to draw a
+  new slice (snaps to neighbours); click a gap to fill it; hover a slice edge
+  and drag the handle (dragging over a neighbour eats into it). Click a slice
+  to edit start/end/duration/comment/colour or delete - edits write back to
+  OpenProject. The strip below shows the windows inside the selected slice.
+- **Time Spent** (popover → pie icon): donut of projects for a period
+  (default today). Hover a wedge for the task ring, hover a task for the app
+  ring; click pins; the legend drills the same way.
+
+## Local (non-OpenProject) tasks
+
+Settings → "Local tasks": create tasks like Chess or Family admin that are
+tracked, timelined and charted exactly like work tasks but never leave the
+machine. Mark one "leisure" and enable "Track leisure" to have confident
+non-work time land there instead of stopping the clock.
+
 ## Morning smoke checklist (v0.1)
 
 - [ ] App appears in menu bar; dot is grey while stopped
