@@ -185,6 +185,16 @@ struct TimelineView: View {
         ZStack(alignment: .topLeading) {
             Rectangle().fill(Color.black.opacity(0.06))
             gridLines(width: width)
+            if isNewEditing, editing != nil {
+                let px0 = xFor(editStart, width: width)
+                let px1 = xFor(editEnd, width: width)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.accentColor.opacity(0.35))
+                    .overlay(RoundedRectangle(cornerRadius: 3)
+                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+                    .frame(width: max(px1 - px0, 2), height: 44)
+                    .position(x: (px0 + px1) / 2, y: 56)
+            }
             if let draft = drawDraft {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Color.accentColor.opacity(0.4))
@@ -339,10 +349,10 @@ struct TimelineView: View {
     private enum Edge { case leading, trailing }
 
     private func handle(_ session: Session, edge: Edge) -> some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.85))
-            .frame(width: 5, height: 28)
-            .cornerRadius(2)
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.primary.opacity(0.65))
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.white, lineWidth: 1))
+            .frame(width: 6, height: 30)
             .padding(2)
             .contentShape(Rectangle().inset(by: -4))
             .gesture(DragGesture(coordinateSpace: .named("timeline"))
@@ -552,8 +562,7 @@ struct TimelineView: View {
 
     private func attemptSave(_ session: Session) {
         let overlapping = sessions.filter {
-            $0.id != session.id && $0.id != AppController.liveSessionID
-                && $0.end > editStart && $0.start < editEnd
+            $0.id != session.id && $0.end > editStart && $0.start < editEnd
         }
         if overlapping.isEmpty || !conflicts.isEmpty {
             var edited = session
@@ -562,10 +571,16 @@ struct TimelineView: View {
             edited.end = max(editEnd, editStart.addingTimeInterval(60))
             edited.comment = editComment.isEmpty ? nil : editComment
             let isNew = isNewEditing
+            let liveOverlap = overlapping.first { $0.id == AppController.liveSessionID }
             Task {
+                if let live = liveOverlap, edited.end > live.start, edited.end < Date() {
+                    // The live clock cannot overlap recorded history: its
+                    // start moves to the edited slice's end.
+                    controller.adjustLiveStart(to: edited.end)
+                }
                 for trim in TimelineMath.trims(for: edited.start, edited.end,
                                                excluding: edited.id,
-                                               in: overlapping) {
+                                               in: overlapping.filter { $0.id != AppController.liveSessionID }) {
                     if trim.delete {
                         await controller.deleteTimelineSession(trim.session)
                     } else {
@@ -588,7 +603,9 @@ struct TimelineView: View {
     private var conflictProposal: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(conflicts) { conflict in
-                Text("Overlaps \(controller.name(of: .task(conflict.task))) \(slot(conflict)) — saving will trim it to avoid the overlap.")
+                Text(conflict.id == AppController.liveSessionID
+                     ? "Overlaps the LIVE clock — saving moves its start to \(editEnd.formatted(date: .omitted, time: .shortened))."
+                     : "Overlaps \(controller.name(of: .task(conflict.task))) \(slot(conflict)) — saving will trim it to avoid the overlap.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }

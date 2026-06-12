@@ -4,13 +4,18 @@ import AmbitickMac
 
 /// Time Spent: donut of projects for a period (default today). Hovering a
 /// wedge extends an arc ring outside it with the task breakdown; hovering a
-/// task arc extends the app-level ring. Clicking pins the expansion until you
-/// click again or elsewhere. Legend rows pin too.
+/// task arc extends the app-level ring. Clicking pins (click another segment
+/// to move the pin, empty space to clear). The pie scales with the window.
+/// Labels that do not fit their segment are hidden — the centre readout and
+/// the ✕-marked legend row identify the hovered segment instead.
+/// "OpenProject only" hides local/personal time; with it off, non-OP wedges
+/// are drawn desaturated with a dashed outline (and "local" in the legend).
 struct SpentView: View {
     @ObservedObject var controller: AppController
     @State private var period: Period = .today
     @State private var hover: Selection = .none
     @State private var pinned: Selection = .none
+    @State private var opOnly = false
     @State private var refreshTick = 0
 
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
@@ -42,7 +47,6 @@ struct SpentView: View {
         }
     }
 
-    /// What's highlighted: nothing, a project wedge, or a task arc within one.
     enum Selection: Equatable {
         case none
         case project(Int)
@@ -57,14 +61,19 @@ struct SpentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                Toggle("OpenProject only", isOn: $opOnly)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
                 Spacer()
                 Text(totalText).font(.caption).foregroundStyle(.secondary)
             }
             HStack(alignment: .top, spacing: 16) {
-                pie
+                GeometryReader { geo in
+                    pie(in: geo.size)
+                }
                 legend
+                    .frame(width: 250)
             }
-            Spacer(minLength: 0)
         }
         .padding(12)
         .onReceive(timer) { _ in refreshTick += 1 }
@@ -75,22 +84,32 @@ struct SpentView: View {
     private var nodes: [TimeAggregator.Node] {
         _ = refreshTick
         let (from, to) = period.range
-        return controller.spentNodes(from: from, to: to)
+        let all = controller.spentNodes(from: from, to: to)
+        let filtered = opOnly ? all.filter { !isLocalProject($0) } : all
+        // OP work first, then local/personal — the pie reads as two groups.
+        return filtered.sorted { a, b in
+            if isLocalProject(a) != isLocalProject(b) { return !isLocalProject(a) }
+            return a.seconds > b.seconds
+        }
+    }
+
+    private func isLocalProject(_ node: TimeAggregator.Node) -> Bool {
+        !node.children.isEmpty && node.children.allSatisfy { child in
+            if case .local = child.ref { return true }
+            return false
+        }
     }
 
     private var totalSeconds: TimeInterval {
         nodes.reduce(0) { $0 + $1.seconds }
     }
 
-    private var totalText: String {
-        "total: \(hm(totalSeconds))"
-    }
+    private var totalText: String { "total: \(hm(totalSeconds))" }
 
     private func hm(_ seconds: TimeInterval) -> String {
         MenuTitle.text(elapsed: seconds, certainty: nil, showPercent: false)
     }
 
-    /// Angular layout: (startAngle, endAngle) per node, from 12 o'clock.
     private func angles(for children: [TimeAggregator.Node], total: TimeInterval,
                         within range: (Double, Double)? = nil) -> [(Double, Double)] {
         let (lo, hi) = range ?? (-90, 270)
@@ -105,115 +124,132 @@ struct SpentView: View {
 
     private var active: Selection { pinned == .none ? hover : pinned }
 
+    // MARK: - Geometry (scales with the window)
+
+    private struct Metrics {
+        let r1: CGFloat
+        let hole: CGFloat
+        let gap: CGFloat
+        let ringWidth: CGFloat
+
+        init(side: CGFloat) {
+            r1 = side * 0.30
+            hole = side * 0.10
+            gap = max(side * 0.012, 3)
+            ringWidth = side * 0.085
+        }
+
+        var outerMost: CGFloat { r1 + gap * 2 + ringWidth * 2 }
+    }
+
     // MARK: - Pie
 
-    private let r1: CGFloat = 105        // project wedges
-    private let hole: CGFloat = 36
-    private let ringGap: CGFloat = 5
-    private let ringWidth: CGFloat = 30
-
-    private var pie: some View {
+    private func pie(in size: CGSize) -> some View {
+        let side = min(size.width, size.height)
+        let m = Metrics(side: side)
         let projectAngles = angles(for: nodes, total: totalSeconds)
-        let side = (r1 + ringGap * 2 + ringWidth * 2 + 12) * 2
-        return Canvas { context, size in
-            let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-            // Level 1: project wedges.
+        return Canvas { context, canvasSize in
+            let centre = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             for (i, node) in nodes.enumerated() {
                 let (a0, a1) = projectAngles[i]
-                let highlighted = isHighlighted(project: i)
+                let highlighted = activeProjectIndex() == i
+                let local = isLocalProject(node)
                 var path = Path()
                 path.move(to: centre)
-                path.addArc(center: centre, radius: highlighted ? r1 + 3 : r1,
+                path.addArc(center: centre, radius: highlighted ? m.r1 + 3 : m.r1,
                             startAngle: .degrees(a0), endAngle: .degrees(a1),
                             clockwise: false)
                 path.closeSubpath()
                 context.fill(path, with: .color(colour(project: node, index: i)
-                    .opacity(highlighted ? 1 : 0.88)))
-                if a1 - a0 > 14 {
-                    let mid = Angle.degrees((a0 + a1) / 2).radians
-                    let lp = CGPoint(x: centre.x + cos(mid) * r1 * 0.66,
-                                     y: centre.y + sin(mid) * r1 * 0.66)
-                    context.draw(Text(node.label).font(.system(size: 9).bold())
-                        .foregroundStyle(.black.opacity(0.75)), at: lp)
+                    .opacity(highlighted ? 1 : (local ? 0.55 : 0.88))))
+                if local {
+                    context.stroke(path, with: .color(.white.opacity(0.9)),
+                                   style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 }
+                drawLabelIfFits(context, node.label, centre: centre,
+                                radius: m.r1 * 0.66, a0: a0, a1: a1,
+                                depth: m.r1 - m.hole, bold: true)
             }
-            // Donut hole + centre label.
             var holePath = Path()
-            holePath.addArc(center: centre, radius: hole, startAngle: .degrees(0),
+            holePath.addArc(center: centre, radius: m.hole, startAngle: .degrees(0),
                             endAngle: .degrees(360), clockwise: false)
             context.fill(holePath, with: .color(Color(nsColor: .windowBackgroundColor)))
             drawCentreLabel(context, centre)
 
-            // Level 2 ring for the active project.
-            if case let projectIndex = activeProjectIndex(), let pi = projectIndex,
-               pi < nodes.count {
+            if let pi = activeProjectIndex(), pi < nodes.count {
                 let (p0, p1) = projectAngles[pi]
+                let local = isLocalProject(nodes[pi])
                 let tasks = nodes[pi].children
-                let taskAngles = angles(for: tasks, total: nodes[pi].seconds,
-                                        within: (p0, p1))
+                let taskAngles = angles(for: tasks, total: nodes[pi].seconds, within: (p0, p1))
                 for (j, task) in tasks.enumerated() {
                     let (a0, a1) = taskAngles[j]
                     let highlighted = active == .task(pi, j)
-                    ring(context, centre: centre, inner: r1 + ringGap,
-                         outer: r1 + ringGap + ringWidth + (highlighted ? 3 : 0),
+                    let outer = m.r1 + m.gap + m.ringWidth + (highlighted ? 3 : 0)
+                    ring(context, centre: centre, inner: m.r1 + m.gap, outer: outer,
                          from: a0, to: a1,
-                         colour: taskColour(task).opacity(highlighted ? 1 : 0.85))
-                    if a1 - a0 > 10 {
-                        let mid = Angle.degrees((a0 + a1) / 2).radians
-                        let r = r1 + ringGap + ringWidth / 2
-                        context.draw(Text(shortLabel(task.label))
-                            .font(.system(size: 8))
-                            .foregroundStyle(.black.opacity(0.75)),
-                            at: CGPoint(x: centre.x + cos(mid) * r,
-                                        y: centre.y + sin(mid) * r))
-                    }
+                         colour: taskColour(task)
+                            .opacity(highlighted ? 1 : (local ? 0.55 : 0.85)),
+                         dashed: local)
+                    drawLabelIfFits(context, task.label, centre: centre,
+                                    radius: m.r1 + m.gap + m.ringWidth / 2,
+                                    a0: a0, a1: a1, depth: m.ringWidth, bold: false)
                 }
-                // Level 3 ring: apps inside the active task.
                 if case .task(pi, let tj) = active, tj < tasks.count,
                    !tasks[tj].children.isEmpty {
                     let (t0, t1) = taskAngles[tj]
                     let apps = tasks[tj].children
-                    let appAngles = angles(for: apps, total: tasks[tj].seconds,
-                                           within: (t0, t1))
+                    let appAngles = angles(for: apps, total: tasks[tj].seconds, within: (t0, t1))
                     for (k, app) in apps.enumerated() {
                         let (a0, a1) = appAngles[k]
                         ring(context, centre: centre,
-                             inner: r1 + ringGap * 2 + ringWidth,
-                             outer: r1 + ringGap * 2 + ringWidth * 2,
+                             inner: m.r1 + m.gap * 2 + m.ringWidth,
+                             outer: m.r1 + m.gap * 2 + m.ringWidth * 2,
                              from: a0, to: a1,
                              colour: taskColour(tasks[tj])
-                                .opacity(0.35 + 0.5 * Double(k % 2 == 0 ? 1 : 0.55)))
-                        if a1 - a0 > 12 {
-                            let mid = Angle.degrees((a0 + a1) / 2).radians
-                            let r = r1 + ringGap * 2 + ringWidth * 1.5
-                            context.draw(Text(shortLabel(app.label))
-                                .font(.system(size: 8))
-                                .foregroundStyle(.black.opacity(0.7)),
-                                at: CGPoint(x: centre.x + cos(mid) * r,
-                                            y: centre.y + sin(mid) * r))
-                        }
+                                .opacity(k % 2 == 0 ? 0.8 : 0.5),
+                             dashed: false)
+                        drawLabelIfFits(context, app.label, centre: centre,
+                                        radius: m.r1 + m.gap * 2 + m.ringWidth * 1.5,
+                                        a0: a0, a1: a1, depth: m.ringWidth, bold: false)
                     }
                 }
             }
         }
-        .frame(width: side, height: side)
         .onContinuousHover { phase in
             switch phase {
             case .active(let location):
-                hover = hitTest(location, size: CGSize(width: side, height: side))
+                hover = hitTest(location, size: size, metrics: m)
             case .ended:
                 hover = .none
             }
         }
         .onTapGesture {
-            // Click pins; clicking another segment moves the pin; clicking
-            // pinned segment or empty space unpins.
             if hover == .none || hover == pinned {
                 pinned = .none
             } else {
                 pinned = hover
             }
         }
+    }
+
+    /// A label draws only when its rendered size fits the segment (chord
+    /// across, ring depth down). Hidden labels are covered by the centre
+    /// readout and the ✕-marked legend row.
+    private func drawLabelIfFits(_ context: GraphicsContext, _ label: String,
+                                 centre: CGPoint, radius: CGFloat,
+                                 a0: Double, a1: Double, depth: CGFloat, bold: Bool) {
+        let sweepRadians = (a1 - a0) * .pi / 180
+        guard sweepRadians > 0.02 else { return }
+        let available = 2 * radius * sin(min(sweepRadians, .pi) / 2) * 0.92
+        let text = Text(label)
+            .font(.system(size: bold ? 10 : 9, weight: bold ? .bold : .regular))
+            .foregroundStyle(.black.opacity(0.78))
+        let resolved = context.resolve(text)
+        let measured = resolved.measure(in: CGSize(width: 600, height: 40))
+        guard measured.width <= available, measured.height <= depth else { return }
+        let mid = Angle.degrees((a0 + a1) / 2).radians
+        context.draw(resolved, at: CGPoint(x: centre.x + cos(mid) * radius,
+                                           y: centre.y + sin(mid) * radius))
     }
 
     private func drawCentreLabel(_ context: GraphicsContext, _ centre: CGPoint) {
@@ -231,11 +267,12 @@ struct SpentView: View {
         }
         let pct = totalSeconds > 0 ? Int((seconds / totalSeconds * 100).rounded()) : 0
         context.draw(Text("\(shortLabel(title))\n\(hm(seconds)) · \(pct)%")
-            .font(.system(size: 9)), at: centre)
+            .font(.system(size: 10)), at: centre)
     }
 
     private func ring(_ context: GraphicsContext, centre: CGPoint, inner: CGFloat,
-                      outer: CGFloat, from a0: Double, to a1: Double, colour: Color) {
+                      outer: CGFloat, from a0: Double, to a1: Double,
+                      colour: Color, dashed: Bool) {
         var path = Path()
         path.addArc(center: centre, radius: outer, startAngle: .degrees(a0),
                     endAngle: .degrees(a1), clockwise: false)
@@ -243,37 +280,42 @@ struct SpentView: View {
                     endAngle: .degrees(a0), clockwise: true)
         path.closeSubpath()
         context.fill(path, with: .color(colour))
+        if dashed {
+            context.stroke(path, with: .color(.white.opacity(0.9)),
+                           style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
     }
 
-    // MARK: - Hit testing
+    // MARK: - Hit testing (contiguous bands: no dead zone between rings, so
+    // travelling wedge -> task arc -> app arc never collapses the expansion)
 
-    private func hitTest(_ point: CGPoint, size: CGSize) -> Selection {
+    private func hitTest(_ point: CGPoint, size: CGSize, metrics m: Metrics) -> Selection {
         let centre = CGPoint(x: size.width / 2, y: size.height / 2)
         let dx = point.x - centre.x
         let dy = point.y - centre.y
         let r = sqrt(dx * dx + dy * dy)
-        var angle = atan2(dy, dx) * 180 / .pi          // -180...180, 0 = 3 o'clock
-        if angle < -90 { angle += 360 }                 // match the -90...270 layout
+        var angle = atan2(dy, dx) * 180 / .pi
+        if angle < -90 { angle += 360 }
         let projectAngles = angles(for: nodes, total: totalSeconds)
 
-        if r >= hole, r <= r1 + 3 {
+        if r <= m.r1 + 3 {
             for (i, (a0, a1)) in projectAngles.enumerated() where angle >= a0 && angle < a1 {
                 return .project(i)
             }
+            return .none
         }
-        if let pi = activeProjectIndex(), pi < nodes.count,
-           r > r1 + ringGap, r <= r1 + ringGap + ringWidth + 3 {
-            let (p0, p1) = projectAngles[pi]
+        guard let pi = activeProjectIndex(), pi < nodes.count else { return .none }
+        let (p0, p1) = projectAngles[pi]
+        if r <= m.r1 + m.gap + m.ringWidth + 3 {
             let taskAngles = angles(for: nodes[pi].children, total: nodes[pi].seconds,
                                     within: (p0, p1))
             for (j, (a0, a1)) in taskAngles.enumerated() where angle >= a0 && angle < a1 {
                 return .task(pi, j)
             }
-            return .project(pi)   // in the ring band but outside arcs: keep expansion
+            return .project(pi)        // ring band, off-arc: keep the expansion
         }
-        if case .task(let pi, _) = active,
-           r > r1 + ringGap * 2 + ringWidth, r <= r1 + ringGap * 2 + ringWidth * 2 {
-            return active          // hovering the app ring keeps it open
+        if r <= m.outerMost + 3 {
+            return active              // app band keeps whatever is open
         }
         return .none
     }
@@ -286,17 +328,13 @@ struct SpentView: View {
         }
     }
 
-    private func isHighlighted(project index: Int) -> Bool {
-        activeProjectIndex() == index
-    }
-
     // MARK: - Colours / labels
 
     private func colour(project node: TimeAggregator.Node, index: Int) -> Color {
         if let firstTask = node.children.first, let ref = firstTask.ref {
             return Color(nsColor: controller.colour(for: ref))
         }
-        return Color(hue: Double(index) * 0.13.truncatingRemainder(dividingBy: 1),
+        return Color(hue: (Double(index) * 0.13).truncatingRemainder(dividingBy: 1),
                      saturation: 0.5, brightness: 0.85)
     }
 
@@ -308,50 +346,76 @@ struct SpentView: View {
     }
 
     private func shortLabel(_ label: String) -> String {
-        label.count > 18 ? String(label.prefix(17)) + "…" : label
+        label.count > 22 ? String(label.prefix(21)) + "…" : label
     }
 
-    // MARK: - Legend
+    // MARK: - Legend (the "key": active row gets the ✕ badge)
+
+    private func swatch(_ colour: Color, marked: Bool, local: Bool, size: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(colour.opacity(local ? 0.55 : 1))
+            .overlay {
+                if local {
+                    RoundedRectangle(cornerRadius: 2)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: size, height: size)
+            .overlay {
+                if marked {
+                    Image(systemName: "xmark")
+                        .font(.system(size: size * 0.7, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+            }
+    }
 
     private var legend: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
-                Button {
-                    pinned = pinned == .project(i) ? .none : .project(i)
-                } label: {
-                    HStack(spacing: 6) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(colour(project: node, index: i))
-                            .frame(width: 10, height: 10)
-                        Text(node.label).lineLimit(1)
-                        Spacer()
-                        Text(hm(node.seconds)).foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                if activeProjectIndex() == i {
-                    ForEach(Array(node.children.enumerated()), id: \.offset) { j, task in
+        ScrollView {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
+                    let local = isLocalProject(node)
+                    Button {
+                        pinned = pinned == .project(i) ? .none : .project(i)
+                    } label: {
                         HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(taskColour(task))
-                                .frame(width: 8, height: 8)
-                            Text(task.label).lineLimit(1)
+                            swatch(colour(project: node, index: i),
+                                   marked: activeProjectIndex() == i, local: local, size: 11)
+                            Text(node.label).lineLimit(1)
+                            if local {
+                                Text("local").font(.system(size: 8))
+                                    .padding(.horizontal, 3)
+                                    .background(.quaternary, in: Capsule())
+                            }
                             Spacer()
-                            Text(hm(task.seconds)).foregroundStyle(.secondary)
+                            Text(hm(node.seconds)).foregroundStyle(.secondary)
                         }
-                        .font(.caption2)
-                        .padding(.leading, 14)
-                        .background(active == .task(i, j) ? Color.accentColor.opacity(0.1) : .clear)
+                        .font(.caption)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if activeProjectIndex() == i {
+                        ForEach(Array(node.children.enumerated()), id: \.offset) { j, task in
+                            HStack(spacing: 6) {
+                                swatch(taskColour(task), marked: active == .task(i, j),
+                                       local: local, size: 9)
+                                Text(task.label).lineLimit(1)
+                                Spacer()
+                                Text(hm(task.seconds)).foregroundStyle(.secondary)
+                            }
+                            .font(.caption2)
+                            .padding(.leading, 14)
+                            .background(active == .task(i, j)
+                                ? Color.accentColor.opacity(0.12) : .clear)
+                        }
                     }
                 }
-            }
-            if nodes.isEmpty {
-                Text("nothing tracked in this period")
-                    .font(.caption).foregroundStyle(.secondary)
+                if nodes.isEmpty {
+                    Text("nothing tracked in this period")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
-        .frame(minWidth: 220, alignment: .leading)
     }
 }

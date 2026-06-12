@@ -166,11 +166,21 @@ public final class AppController: ObservableObject {
     public func addLocalTask(name: String, isLeisure: Bool) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        settings.localTasks.append(LocalTaskDef(name: trimmed, isLeisure: isLeisure))
+        let def = LocalTaskDef(name: trimmed, isLeisure: isLeisure)
+        settings.localTasks.append(def)
         mergeLocalTasksIntoCache()
+        registerUndo("add local task \(trimmed)") { [weak self] in
+            self?.removeLocalTask(def.id, undoable: false)
+        }
     }
 
-    public func removeLocalTask(_ id: UUID) {
+    public func removeLocalTask(_ id: UUID, undoable: Bool = true) {
+        if undoable, let def = settings.localTasks.first(where: { $0.id == id }) {
+            registerUndo("remove local task \(def.name)") { [weak self] in
+                self?.settings.localTasks.append(def)
+                self?.mergeLocalTasksIntoCache()
+            }
+        }
         settings.localTasks.removeAll { $0.id == id }
         taskCache.removeAll { $0.ref == .local(id) }
     }
@@ -300,6 +310,7 @@ public final class AppController: ObservableObject {
 
     public func startUp() {
         installCrashTraps()
+        installUndoKey()
         Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
         sensors.onEvent = { [weak self] event in
@@ -341,10 +352,14 @@ public final class AppController: ObservableObject {
                                          highHex: settings.colourHigh)
         case .tracking(let target, let certainty):
             let running = targetSince.map { Date().timeIntervalSince($0) } ?? 0
-            // A visit that survives the grace becomes solid and absorbs any
-            // flash-through seconds accumulated in limbo.
+            // A visit that survives the grace becomes solid: it absorbs any
+            // flash-through seconds AND ends every other task's session — the
+            // clock shows the current contiguous session, not a daily total
+            // (a real stint elsewhere means returning starts at 0s; only
+            // flashes preserve the running clock).
             if !visitSolid, running >= settings.switchGraceSeconds {
                 visitSolid = true
+                bankedElapsed = bankedElapsed.filter { $0.key == target }
                 bankedElapsed[target, default: 0] += limbo
                 limbo = 0
             }
@@ -416,7 +431,19 @@ public final class AppController: ObservableObject {
         lastPrompt = nil
     }
 
-    public func assignReview(_ ids: [UUID], to target: Target) {
+    public func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
+        if undoable {
+            let learningSnapshot = attributor.learning
+            let primedSnapshot = attributor.primedSurfaces
+            registerUndo("assign \(ids.count) review rows") { [weak self] in
+                guard let self else { return }
+                try? self.journal.assign(ids, to: nil)
+                self.attributor.replaceLearning(learningSnapshot)
+                self.attributor.primedSurfaces = primedSnapshot
+                self.persistAssociations()
+                self.reloadReview()
+            }
+        }
         try? journal.assign(ids, to: target)
         if let segment = pendingReview.first(where: { ids.contains($0.id) }) {
             let signal = ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
@@ -438,6 +465,39 @@ public final class AppController: ObservableObject {
             needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
         let pushed = all.filter(\.pushedToOP).count
         journalSummary = "\(all.count) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
+    }
+
+    // MARK: - Undo
+
+    /// Infinite, session-bounded undo of data edits (timeline, review,
+    /// local tasks, colours). ⌘Z anywhere in the app.
+    private var undoStack: [(label: String, inverse: () async -> Void)] = []
+    @Published public private(set) var undoCount = 0
+
+    private func registerUndo(_ label: String, inverse: @escaping () async -> Void) {
+        undoStack.append((label, inverse))
+        undoCount = undoStack.count
+    }
+
+    public func undo() {
+        guard let last = undoStack.popLast() else {
+            NSSound(named: "Funk")?.play()
+            return
+        }
+        undoCount = undoStack.count
+        Notifier.notify(title: "Undo", body: last.label, sound: "Pop")
+        Task { await last.inverse() }
+    }
+
+    private func installUndoKey() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.modifierFlags.contains(.command),
+               event.charactersIgnoringModifiers == "z" {
+                self?.undo()
+                return nil
+            }
+            return event
+        }
     }
 
     // MARK: - Timeline
@@ -478,6 +538,10 @@ public final class AppController: ObservableObject {
     }
 
     public func setColour(_ colour: NSColor, for ref: TaskRef) {
+        let previous = settings.taskColours[ref.storageKey]
+        registerUndo("colour change") { [weak self] in
+            self?.settings.taskColours[ref.storageKey] = previous
+        }
         let rgb = colour.usingColorSpace(.sRGB) ?? colour
         let hex = String(format: "#%02X%02X%02X",
                          Int(rgb.redComponent * 255),
@@ -531,12 +595,23 @@ public final class AppController: ObservableObject {
     /// A brand-new manual slice (drawn or gap-filled on the timeline).
     public func createTimelineSession(_ session: Session) async {
         try? journal.save(session)
+        registerUndo("create \(name(of: .task(session.task)))") { [weak self] in
+            guard let self else { return }
+            let saved = (try? self.journal.allSessions())?.first { $0.id == session.id }
+            await self.deleteTimelineSession(saved ?? session, undoable: false)
+        }
         updateJournalSummary()
         await syncIfEnabled()
     }
 
     /// Persist a timeline edit; PATCH the OP entry when one exists.
-    public func applyTimelineEdit(_ session: Session) async {
+    public func applyTimelineEdit(_ session: Session, undoable: Bool = true) async {
+        if undoable,
+           let previous = (try? journal.allSessions())?.first(where: { $0.id == session.id }) {
+            registerUndo("edit \(name(of: .task(previous.task)))") { [weak self] in
+                await self?.applyTimelineEdit(previous, undoable: false)
+            }
+        }
         var session = session
         // A sub-minute session was marked handled without an OP entry; if an
         // edit grows it to pushable size it must re-enter the push queue.
@@ -562,7 +637,18 @@ public final class AppController: ObservableObject {
         updateJournalSummary()
     }
 
-    public func deleteTimelineSession(_ session: Session) async {
+    public func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
+        if undoable {
+            var restore = session
+            restore.opTimeEntryID = nil
+            restore.pushedToOP = false   // re-push on restore
+            registerUndo("delete \(name(of: .task(session.task)))") { [weak self] in
+                guard let self else { return }
+                try? self.journal.save(restore)
+                self.updateJournalSummary()
+                await self.syncIfEnabled()
+            }
+        }
         try? journal.deleteSession(session.id)
         if let entryID = session.opTimeEntryID, let client {
             try? await client.deleteTimeEntry(id: entryID)
@@ -570,7 +656,20 @@ public final class AppController: ObservableObject {
         updateJournalSummary()
     }
 
-    public func reassignTimelineSessions(_ sessions: [Session], to task: TaskRef) async {
+    public func reassignTimelineSessions(_ sessions: [Session], to task: TaskRef,
+                                          undoable: Bool = true) async {
+        if undoable {
+            let originals = sessions.filter { $0.id != Self.liveSessionID }
+            registerUndo("reassign \(originals.count) slices") { [weak self] in
+                guard let self else { return }
+                // restore each to its original task
+                for original in originals {
+                    await self.reassignTimelineSessions(
+                        (try? self.journal.allSessions())?.filter { $0.id == original.id } ?? [],
+                        to: original.task, undoable: false)
+                }
+            }
+        }
         for var session in sessions where session.id != Self.liveSessionID {
             // Re-creating under the new task is simpler and more reliable than
             // PATCHing the work-package link.

@@ -222,7 +222,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func assign(_ segmentIDs: [UUID], to target: Target) throws {
+    public func assign(_ segmentIDs: [UUID], to target: Target?) throws {
         for id in segmentIDs {
             var segments: [ReviewSegment] = []
             try query("SELECT json FROM review_segments WHERE id = ?",

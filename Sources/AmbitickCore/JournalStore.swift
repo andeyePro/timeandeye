@@ -18,7 +18,8 @@ public protocol JournalStore {
     func save(_ segment: ReviewSegment) throws
     /// Unassigned review segments, oldest first.
     func pendingReview() throws -> [ReviewSegment]
-    func assign(_ segmentIDs: [UUID], to target: Target) throws
+    /// nil target = return the segments to the pending queue (undo).
+    func assign(_ segmentIDs: [UUID], to target: Target?) throws
 
     /// Window-level activity detail for the timeline's zoom strip.
     func save(_ span: FocusSpan) throws
@@ -82,7 +83,7 @@ public final class InMemoryJournalStore: JournalStore {
         segments.filter { $0.assigned == nil }.sorted { $0.start < $1.start }
     }
 
-    public func assign(_ segmentIDs: [UUID], to target: Target) throws {
+    public func assign(_ segmentIDs: [UUID], to target: Target?) throws {
         let ids = Set(segmentIDs)
         for i in segments.indices where ids.contains(segments[i].id) {
             segments[i].assigned = target
