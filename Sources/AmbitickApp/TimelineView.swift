@@ -311,6 +311,7 @@ struct TimelineView: View {
             }
             .onTapGesture {
                 if NSEvent.modifierFlags.contains(.command) {
+                    guard !isLive else { return }   // the live slice cannot be batch-edited
                     if selection.contains(session.id) { selection.remove(session.id) }
                     else { selection.insert(session.id) }
                     editing = nil

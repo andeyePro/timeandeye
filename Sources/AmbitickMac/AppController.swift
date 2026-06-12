@@ -526,6 +526,13 @@ public final class AppController: ObservableObject {
 
     /// Persist a timeline edit; PATCH the OP entry when one exists.
     public func applyTimelineEdit(_ session: Session) async {
+        var session = session
+        // A sub-minute session was marked handled without an OP entry; if an
+        // edit grows it to pushable size it must re-enter the push queue.
+        if session.pushedToOP, session.opTimeEntryID == nil,
+           session.end.timeIntervalSince(session.start) >= 60 {
+            session.pushedToOP = false
+        }
         try? journal.update(session)
         if case .op(let wpID) = session.task, let entryID = session.opTimeEntryID,
            let client {
@@ -553,7 +560,7 @@ public final class AppController: ObservableObject {
     }
 
     public func reassignTimelineSessions(_ sessions: [Session], to task: TaskRef) async {
-        for var session in sessions {
+        for var session in sessions where session.id != Self.liveSessionID {
             // Re-creating under the new task is simpler and more reliable than
             // PATCHing the work-package link.
             if let entryID = session.opTimeEntryID, let client {

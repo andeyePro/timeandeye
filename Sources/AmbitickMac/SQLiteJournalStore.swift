@@ -42,6 +42,9 @@ public final class SQLiteJournalStore: JournalStore {
         );
         CREATE INDEX IF NOT EXISTS spans_start ON spans(start);
         """)
+        // Span detail is for recent-history inspection, not an archive:
+        // keep 30 days so the table cannot grow without bound.
+        try exec("DELETE FROM spans WHERE start < \(Date().addingTimeInterval(-30 * 86_400).timeIntervalSince1970)")
     }
 
     deinit {
