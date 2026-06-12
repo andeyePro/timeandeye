@@ -15,3 +15,7 @@
 - [ ] iPhone-side call detection
 - [ ] Auto-comment as debugging aid is OFF by default now; revisit whether
   window summaries have any user value (Martin: prefers manual note only)
+- [ ] Timeline phase 2: draw-to-create slices (drag + snapping), edge-drag
+  handles that eat into neighbours, gap-click creates a gap-filling slice,
+  connected zoom strip (lines from slice edges to detail strip), user-editable
+  task colours, edit start time of the CURRENTLY tracked session
