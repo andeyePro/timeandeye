@@ -213,6 +213,9 @@ public final class AppController: ObservableObject {
         tracker.onDebug = { message in
             DebugLog.write(message)
         }
+        tracker.onSpanClosed = { [weak self] span in
+            try? self?.journal.save(span)
+        }
         tracker.onPrompt = { [weak self] prompt in
             guard let self else { return }
             self.lastPrompt = prompt
@@ -266,6 +269,7 @@ public final class AppController: ObservableObject {
     // MARK: - Lifecycle
 
     public func startUp() {
+        installCrashTraps()
         Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
         sensors.onEvent = { [weak self] event in
@@ -406,6 +410,83 @@ public final class AppController: ObservableObject {
         journalSummary = "\(all.count) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
     }
 
+    // MARK: - Timeline
+
+    /// Sessions overlapping the given day (0 = today, -1 = yesterday, ...),
+    /// plus a synthetic live slice for the current visit when tracking.
+    public func timelineSessions(dayOffset: Int) -> [Session] {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: calendar.date(byAdding: .day, value: dayOffset,
+                                                              to: Date()) ?? Date())
+        let dayEnd = dayStart.addingTimeInterval(86_400)
+        var list = (try? journal.sessions(from: dayStart, to: dayEnd)) ?? []
+        if dayOffset == 0, case .tracking(.task(let ref), let certainty) = trackerState,
+           let since = targetSince {
+            list.append(Session(id: Self.liveSessionID, task: ref, start: since,
+                                end: Date(), certainty: certainty))
+        }
+        return list
+    }
+
+    public static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
+
+    public func timelineSpans(for session: Session) -> [FocusSpan] {
+        (try? journal.spans(from: session.start, to: session.end)) ?? []
+    }
+
+    /// Stable per-task colour (until user-editable colours land).
+    public func colour(for ref: TaskRef) -> NSColor {
+        var hash: UInt64 = 5381
+        for byte in String(describing: ref).utf8 {
+            hash = hash &* 33 &+ UInt64(byte)
+        }
+        let hue = CGFloat(hash % 360) / 360
+        return NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1)
+    }
+
+    /// Persist a timeline edit; PATCH the OP entry when one exists.
+    public func applyTimelineEdit(_ session: Session) async {
+        try? journal.update(session)
+        if case .op(let wpID) = session.task, let entryID = session.opTimeEntryID,
+           let client {
+            do {
+                try await client.updateTimeEntry(
+                    id: entryID, workPackageID: wpID, start: session.start,
+                    duration: session.end.timeIntervalSince(session.start),
+                    activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
+                    comment: session.comment,
+                    startTime: ISO8601DateFormatter().string(from: session.start))
+                DebugLog.write("timeline edit pushed to OP entry \(entryID)")
+            } catch {
+                lastError = "OP update failed: \(error)"
+            }
+        }
+        updateJournalSummary()
+    }
+
+    public func deleteTimelineSession(_ session: Session) async {
+        try? journal.deleteSession(session.id)
+        if let entryID = session.opTimeEntryID, let client {
+            try? await client.deleteTimeEntry(id: entryID)
+        }
+        updateJournalSummary()
+    }
+
+    public func reassignTimelineSessions(_ sessions: [Session], to task: TaskRef) async {
+        for var session in sessions {
+            // Re-creating under the new task is simpler and more reliable than
+            // PATCHing the work-package link.
+            if let entryID = session.opTimeEntryID, let client {
+                try? await client.deleteTimeEntry(id: entryID)
+            }
+            session.task = task
+            session.opTimeEntryID = nil
+            session.pushedToOP = false
+            try? journal.update(session)
+        }
+        await syncIfEnabled()
+    }
+
     // MARK: - AI assist (clipboard out, paste back)
 
     public func copyAIPrompt() {
@@ -487,6 +568,23 @@ public final class AppController: ObservableObject {
 
 /// Notifications when running as a real .app bundle; silent no-op otherwise
 /// (UNUserNotificationCenter requires a bundle identifier).
+/// Last-words crash logging: the app has died "for no apparent reason" more
+/// than once; these traps write the cause into the debug log before dying.
+/// (Not strictly async-signal-safe — best-effort forensics, not correctness.)
+func installCrashTraps() {
+    NSSetUncaughtExceptionHandler { exception in
+        DebugLog.write("CRASH NSException \(exception.name.rawValue): \(exception.reason ?? "?")\n"
+            + exception.callStackSymbols.prefix(10).joined(separator: "\n"))
+    }
+    for sig in [SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGTRAP, SIGFPE] {
+        signal(sig) { s in
+            DebugLog.write("CRASH signal \(s)\n"
+                + Thread.callStackSymbols.prefix(10).joined(separator: "\n"))
+            exit(128 + s)
+        }
+    }
+}
+
 /// Diagnostic event log at a world-readable path so remote debugging over the
 /// scoped SSH user works (the agent cannot read Martin's home). Window titles
 /// appear in it; delete the file to clear, toggle by removing write access.

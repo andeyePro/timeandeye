@@ -33,13 +33,46 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.sessions(needingPushAtOrAbove: 1.01), [])   // the "101%" setting
     }
 
-    c.check("mark pushed") {
+    c.check("mark pushed records the OP entry id") {
         let s = make()
         let a = session(0.9)
         try s.save(a)
-        try s.markPushed(a.id)
+        try s.markPushed(a.id, opTimeEntryID: 977)
         try expectEq(try s.sessions(needingPushAtOrAbove: 0.8), [])
         try expectEq(try s.allSessions().first?.pushedToOP, true)
+        try expectEq(try s.allSessions().first?.opTimeEntryID, 977)
+    }
+
+    c.check("update, delete, day query") {
+        let s = make()
+        var a = session(0.9)
+        let b = session(0.7, task: .op(2))
+        try s.save(a)
+        try s.save(b)
+        a.end = a.end.addingTimeInterval(600)
+        a.comment = "edited"
+        try s.update(a)
+        try expectEq(try s.allSessions().first { $0.id == a.id }?.comment, "edited")
+        try s.deleteSession(b.id)
+        try expectEq(try s.allSessions().count, 1)
+        let day = try s.sessions(from: t0.addingTimeInterval(-3600),
+                                 to: t0.addingTimeInterval(3600))
+        try expectEq(day.map(\.id), [a.id])
+        try expectEq(try s.sessions(from: t0.addingTimeInterval(90_000),
+                                    to: t0.addingTimeInterval(100_000)).count, 0)
+    }
+
+    c.check("spans round-trip with range query") {
+        let s = make()
+        let signal = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: t0)
+        let span = FocusSpan(target: .task(.op(1)), certainty: 0.95, signal: signal,
+                             start: t0, end: t0.addingTimeInterval(120))
+        try s.save(span)
+        let hits = try s.spans(from: t0.addingTimeInterval(-10), to: t0.addingTimeInterval(10))
+        try expectEq(hits.count, 1)
+        try expectEq(hits.first?.signal.windowTitle, "Ambitick")
+        try expectEq(try s.spans(from: t0.addingTimeInterval(500),
+                                 to: t0.addingTimeInterval(600)).count, 0)
     }
 
     c.check("review segment assignment") {
@@ -141,6 +174,23 @@ func opClientChecks(_ c: Checks) async {
         try expectEq(links["activity"]?["href"], "/api/v3/time_entries/activities/4")
         try expectEq((json["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
         try expectNil(json["startTime"], "omitted unless requested")
+    }
+
+    await c.check("createTimeEntry returns the new id; update PATCHes; delete DELETEs") {
+        let transport = MockTransport()
+        transport.responses = [(201, #"{"_type":"TimeEntry","id":977}"#), (200, "{}"), (204, "")]
+        let client = makeClient(transport)
+        let id = try await client.createTimeEntry(
+            workPackageID: 42, start: Date(timeIntervalSince1970: 1_750_000_000),
+            duration: 600, activityID: nil, comment: nil)
+        try expectEq(id, 977)
+        try await client.updateTimeEntry(id: 977, workPackageID: 42,
+                                         start: Date(timeIntervalSince1970: 1_750_000_000),
+                                         duration: 1200, activityID: nil, comment: "edited")
+        try expectEq(transport.requests[1].httpMethod, "PATCH")
+        try expect(transport.requests[1].url!.path.hasSuffix("/time_entries/977"))
+        try await client.deleteTimeEntry(id: 977)
+        try expectEq(transport.requests[2].httpMethod, "DELETE")
     }
 
     await c.check("createTimeEntry carries startTime when given") {

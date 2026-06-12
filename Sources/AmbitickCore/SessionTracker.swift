@@ -53,6 +53,8 @@ public final class SessionTracker {
     /// Diagnostic narration of decisions (attribution best, pending switches,
     /// commits, auto-starts). Wired to the app's debug log.
     public var onDebug: (String) -> Void = { _ in }
+    /// Every closed focus span, for the timeline's window-level detail strip.
+    public var onSpanClosed: (FocusSpan) -> Void = { _ in }
 
     private let attributor: Attributor
     private let config: TrackerConfig
@@ -256,8 +258,10 @@ public final class SessionTracker {
         defer { currentSignal = nil; currentStart = nil }
         guard let signal = currentSignal, let start = currentStart, end > start,
               case .tracking(let target, let certainty) = state else { return }
-        spans.append(FocusSpan(target: target, certainty: certainty, signal: signal,
-                               start: start, end: end))
+        let span = FocusSpan(target: target, certainty: certainty, signal: signal,
+                             start: start, end: end)
+        spans.append(span)
+        onSpanClosed(span)
         if certainty < config.uncertainBelow {
             queueReview(signal: signal, start: start, end: end)
         } else {

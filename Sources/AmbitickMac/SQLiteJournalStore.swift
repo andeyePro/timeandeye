@@ -35,6 +35,12 @@ public final class SQLiteJournalStore: JournalStore {
             assigned INTEGER NOT NULL,
             json TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS spans (
+            start REAL NOT NULL,
+            end REAL NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS spans_start ON spans(start);
         """)
     }
 
@@ -115,7 +121,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func markPushed(_ id: UUID) throws {
+    public func markPushed(_ id: UUID, opTimeEntryID: Int?) throws {
         var sessions: [Session] = []
         try query("SELECT json FROM sessions WHERE id = ?",
                   bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
@@ -123,7 +129,64 @@ public final class SQLiteJournalStore: JournalStore {
         }
         guard var session = sessions.first else { return }
         session.pushedToOP = true
+        session.opTimeEntryID = opTimeEntryID
         try save(session)
+    }
+
+    public func sessions(from: Date, to: Date) throws -> [Session] {
+        var out: [Session] = []
+        try query("SELECT json FROM sessions WHERE start < ? ORDER BY start",
+                  bind: { sqlite3_bind_double($0, 1, to.timeIntervalSince1970) }) { stmt in
+            out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
+        }
+        return out.filter { $0.end > from }
+    }
+
+    public func update(_ session: Session) throws {
+        try save(session)   // INSERT OR REPLACE keyed by id
+    }
+
+    public func deleteSession(_ id: UUID) throws {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "DELETE FROM sessions WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, id.uuidString, -1, Self.transient)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    public func save(_ span: FocusSpan) throws {
+        guard let json = try? encoder.encode(span),
+              let jsonString = String(data: json, encoding: .utf8) else {
+            throw StoreError.encode
+        }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "INSERT INTO spans (start, end, json) VALUES (?,?,?)",
+                                 -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, span.start.timeIntervalSince1970)
+        sqlite3_bind_double(stmt, 2, span.end.timeIntervalSince1970)
+        sqlite3_bind_text(stmt, 3, jsonString, -1, Self.transient)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        }
+    }
+
+    public func spans(from: Date, to: Date) throws -> [FocusSpan] {
+        var out: [FocusSpan] = []
+        try query("SELECT json FROM spans WHERE end > ? AND start < ? ORDER BY start",
+                  bind: {
+                      sqlite3_bind_double($0, 1, from.timeIntervalSince1970)
+                      sqlite3_bind_double($0, 2, to.timeIntervalSince1970)
+                  }) { stmt in
+            out.append(try self.decoder.decode(FocusSpan.self, from: self.jsonColumn(stmt, 0)))
+        }
+        return out
     }
 
     // MARK: - Review segments

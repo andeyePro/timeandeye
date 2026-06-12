@@ -22,6 +22,11 @@ struct AmbitickApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Ambitick Timeline", id: "timeline") {
+            TimelineView(controller: controller)
+        }
+        .defaultSize(width: 980, height: 420)
+
         Window("Ambitick Review", id: "review") {
             ReviewView(controller: controller)
         }

@@ -147,11 +147,38 @@ public final class OPClient {
 
     /// activityID nil = omit the link; OP applies its server-side default.
     /// (Some instances – Martin's included – run without visible activities.)
-    /// startTime ("HH:mm") makes entries appear in OP's calendar views; only
+    /// startTime (ISO 8601 UTC) places the entry in OP's calendar views; only
     /// sent when non-nil because instances can have the feature disabled.
+    /// Returns the created entry's id so timeline edits can PATCH it later.
+    @discardableResult
     public func createTimeEntry(workPackageID: Int, start: Date, duration: TimeInterval,
                                 activityID: Int?, comment: String?,
-                                startTime: String? = nil) async throws {
+                                startTime: String? = nil) async throws -> Int? {
+        let body = try Self.timeEntryPayload(workPackageID: workPackageID, start: start,
+                                             duration: duration, activityID: activityID,
+                                             comment: comment, startTime: startTime)
+        let data = try await send(request(path: "api/v3/time_entries", method: "POST", body: body))
+        struct Created: Decodable { let id: Int? }
+        return (try? JSONDecoder().decode(Created.self, from: data))?.id
+    }
+
+    /// Timeline edits: rewrite an existing entry in place.
+    public func updateTimeEntry(id: Int, workPackageID: Int, start: Date,
+                                duration: TimeInterval, activityID: Int?,
+                                comment: String?, startTime: String? = nil) async throws {
+        let body = try Self.timeEntryPayload(workPackageID: workPackageID, start: start,
+                                             duration: duration, activityID: activityID,
+                                             comment: comment, startTime: startTime)
+        _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "PATCH", body: body))
+    }
+
+    public func deleteTimeEntry(id: Int) async throws {
+        _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "DELETE"))
+    }
+
+    private static func timeEntryPayload(workPackageID: Int, start: Date,
+                                         duration: TimeInterval, activityID: Int?,
+                                         comment: String?, startTime: String?) throws -> Data {
         var links: [String: [String: String]] = [
             "workPackage": ["href": "/api/v3/work_packages/\(workPackageID)"],
         ]
@@ -159,8 +186,8 @@ public final class OPClient {
             links["activity"] = ["href": "/api/v3/time_entries/activities/\(activityID)"]
         }
         var payload: [String: Any] = [
-            "hours": Self.iso8601Duration(duration),
-            "spentOn": Self.dayFormatter.string(from: start),
+            "hours": iso8601Duration(duration),
+            "spentOn": dayFormatter.string(from: start),
             "_links": links,
         ]
         if let startTime {
@@ -169,8 +196,7 @@ public final class OPClient {
         if let comment {
             payload["comment"] = ["raw": comment]
         }
-        let body = try JSONSerialization.data(withJSONObject: payload)
-        _ = try await send(request(path: "api/v3/time_entries", method: "POST", body: body))
+        return try JSONSerialization.data(withJSONObject: payload)
     }
 
     // MARK: - Helpers

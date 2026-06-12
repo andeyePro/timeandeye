@@ -32,13 +32,14 @@ public final class SyncEngine {
             if duration < 60 {
                 // Too short for an OP entry (would round to PT0H0M); mark it
                 // handled so it does not clog the queue forever.
-                try journal.markPushed(session.id)
+                try journal.markPushed(session.id, opTimeEntryID: nil)
                 continue
             }
             let activity = activityOverrides[session.task] ?? defaultActivityID
             let comment = includeComments ? session.comment : nil
+            var entryID: Int?
             do {
-                try await client.createTimeEntry(
+                entryID = try await client.createTimeEntry(
                     workPackageID: wpID, start: session.start, duration: duration,
                     activityID: activity, comment: comment,
                     startTime: startTimesSupported
@@ -48,11 +49,11 @@ public final class SyncEngine {
                 // entry? (Overlap validation, feature off, ...)
                 onDebug("422 with startTime, retrying without. body: \(body.prefix(300))")
                 startTimesSupported = false
-                try await client.createTimeEntry(
+                entryID = try await client.createTimeEntry(
                     workPackageID: wpID, start: session.start, duration: duration,
                     activityID: activity, comment: comment, startTime: nil)
             }
-            try journal.markPushed(session.id)
+            try journal.markPushed(session.id, opTimeEntryID: entryID)
             pushed += 1
         }
         return pushed

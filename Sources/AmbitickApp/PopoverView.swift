@@ -141,6 +141,13 @@ struct PopoverView: View {
     private var footer: some View {
         HStack(spacing: 14) {
             Button {
+                openWindow(id: "timeline")
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "calendar.day.timeline.left")
+            }
+            .help("Timeline – today's tracked time")
+            Button {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)
             } label: {

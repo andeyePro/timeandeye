@@ -91,7 +91,9 @@ public struct Surface: Hashable, Codable, Sendable {
 }
 
 /// A contiguous stretch of focus on one surface, attributed to one target.
-public struct FocusSpan: Equatable, Sendable {
+/// Codable: spans persist to the journal so the timeline's zoom strip can
+/// show window-level detail.
+public struct FocusSpan: Equatable, Codable, Sendable {
     public var target: Target
     public var certainty: Double
     public var signal: ActivitySignal
@@ -117,9 +119,13 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
     public var certainty: Double
     public var pushedToOP: Bool
     public var comment: String?
+    /// The OP time entry this session became, so timeline edits can PATCH
+    /// (or delete) the remote entry. Optional decodes as nil for old rows.
+    public var opTimeEntryID: Int?
 
     public init(id: UUID = UUID(), task: TaskRef, start: Date, end: Date,
-                certainty: Double, pushedToOP: Bool = false, comment: String? = nil) {
+                certainty: Double, pushedToOP: Bool = false, comment: String? = nil,
+                opTimeEntryID: Int? = nil) {
         self.id = id
         self.task = task
         self.start = start
@@ -127,6 +133,7 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
         self.certainty = certainty
         self.pushedToOP = pushedToOP
         self.comment = comment
+        self.opTimeEntryID = opTimeEntryID
     }
 }
 
