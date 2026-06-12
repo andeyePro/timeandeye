@@ -6,6 +6,7 @@ import Foundation
 public final class SyncEngine {
     private let journal: any JournalStore
     private let client: OPClient
+    public var onDebug: (String) -> Void = { _ in }
     public private(set) var startTimesSupported = true
 
     public init(journal: any JournalStore, client: OPClient) {
@@ -42,9 +43,10 @@ public final class SyncEngine {
                     activityID: activity, comment: comment,
                     startTime: startTimesSupported
                         ? Self.timeFormatter.string(from: session.start) : nil)
-            } catch OPClientError.httpStatus(422, _) where startTimesSupported {
-                // Instance has start/end-time tracking disabled: retry plain
-                // and stop sending start times this run.
+            } catch OPClientError.httpStatus(422, let body) where startTimesSupported {
+                // Diagnose, don't just survive: WHY did OP refuse the timed
+                // entry? (Overlap validation, feature off, ...)
+                onDebug("422 with startTime, retrying without. body: \(body.prefix(300))")
                 startTimesSupported = false
                 try await client.createTimeEntry(
                     workPackageID: wpID, start: session.start, duration: duration,

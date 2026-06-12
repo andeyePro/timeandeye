@@ -31,7 +31,23 @@ struct PopoverView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Stop") { controller.userStopped() }
+                    Button {
+                        controller.userStopped()
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop tracking")
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "bubble.left")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                    TextField("what are you doing? (becomes the OP comment)",
+                              text: $controller.manualNote)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
                 }
             } else {
                 Text("Not tracking")
@@ -123,18 +139,31 @@ struct PopoverView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Button("Review (\(controller.pendingReview.count))") {
+        HStack(spacing: 14) {
+            Button {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Label("\(controller.pendingReview.count)", systemImage: "tray.full")
             }
+            .help("Review queue")
             Spacer()
-            Button("Settings") {
+            Button {
                 openWindow(id: "settings")
                 NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "gearshape")
             }
-            Button("Quit") { NSApp.terminate(nil) }
+            .help("Settings")
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Image(systemName: "xmark.circle")
+            }
+            .help("Quit Ambitick")
         }
-        .font(.caption)
+        .buttonStyle(.plain)
+        .font(.body)
+        .foregroundStyle(.secondary)
     }
 }

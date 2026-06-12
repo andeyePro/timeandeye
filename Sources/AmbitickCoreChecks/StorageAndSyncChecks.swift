@@ -351,7 +351,7 @@ func settingsChecks(_ c: Checks) {
         try expectEq(s.recentCount, 5)
         try expectEq(s.likelyCount, 5)
         try expect(!s.showPercent)
-        try expect(s.autoComment)
+        try expect(!s.autoComment, "auto comments are opt-in (Martin: window details are noise)")
         try expect(!s.trackLeisureLocally)
         try expectEq(s.colourLow, "#FF3B30")
         try expectEq(s.colourHigh, "#34C759")

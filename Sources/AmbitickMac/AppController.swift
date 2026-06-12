@@ -79,6 +79,9 @@ public final class AppController: ObservableObject {
     @Published public private(set) var lastError: String?
     @Published public private(set) var journalSummary = ""
     @Published public private(set) var connectedAs: String?
+    /// The speech-bubble note: replaces the auto comment on sessions closing
+    /// while it is set; cleared when tracking stops.
+    @Published public var manualNote = ""
     @Published public var settings: AmbitickSettings {
         didSet {
             try? settingsStore.save(settings)
@@ -101,9 +104,13 @@ public final class AppController: ObservableObject {
     private var currentTarget: Target?
     /// Per-task visible clocks: a momentary switch shows the new task's
     /// accumulated time immediately, and returning restores the old clock.
-    /// Cleared when tracking stops.
+    /// Flash visits (< switch grace) don't credit the flashed task — their
+    /// seconds go to `limbo` and merge into the next task that holds focus
+    /// solidly, matching the dominant-minute ledger. Cleared on stop.
     private var bankedElapsed: [Target: TimeInterval] = [:]
     private var targetSince: Date?
+    private var visitSolid = false
+    private var limbo: TimeInterval = 0
 
     public static func supportDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -148,7 +155,18 @@ public final class AppController: ObservableObject {
     private func wireTracker() {
         tracker.onSession = { [weak self] session in
             guard let self else { return }
-            try? self.journal.save(session)
+            var s = session
+            if !self.manualNote.isEmpty {
+                s.comment = self.manualNote   // the speech-bubble note wins
+            } else if !self.settings.autoComment {
+                s.comment = nil
+            }
+            try? self.journal.save(s)
+            // Tracked time counts as recency: the task you just worked on
+            // belongs at the top of every pick list.
+            if let i = self.taskCache.firstIndex(where: { $0.ref == s.task }) {
+                self.taskCache[i].lastConfirmedAt = s.end
+            }
             self.updateJournalSummary()
             Task { await self.syncIfEnabled() }
         }
@@ -164,19 +182,28 @@ public final class AppController: ObservableObject {
             let now = Date()
             if case .tracking(let target, _) = state {
                 if target != self.currentTarget {
-                    // Bank the outgoing task's elapsed; resume the incoming
-                    // task's clock from its banked value.
+                    // Bank the outgoing visit — to the task if it was a solid
+                    // stay, to limbo if it was a flash-through.
                     if let old = self.currentTarget, let since = self.targetSince {
-                        self.bankedElapsed[old, default: 0] += now.timeIntervalSince(since)
+                        let visit = now.timeIntervalSince(since)
+                        if self.visitSolid || visit >= self.settings.switchGraceSeconds {
+                            self.bankedElapsed[old, default: 0] += visit
+                        } else {
+                            self.limbo += visit
+                        }
                     }
                     self.currentTarget = target
                     self.targetSince = now
+                    self.visitSolid = false
                     self.taskChangedAt = now
                 }
             } else {
                 self.currentTarget = nil
                 self.targetSince = nil
+                self.visitSolid = false
+                self.limbo = 0
                 self.bankedElapsed.removeAll()
+                self.manualNote = ""
                 self.taskChangedAt = now
                 Notifier.notify(title: "Timer stopped", body: "Ambitick stopped the clock.",
                                 sound: "Basso")
@@ -280,6 +307,13 @@ public final class AppController: ObservableObject {
                                          highHex: settings.colourHigh)
         case .tracking(let target, let certainty):
             let running = targetSince.map { Date().timeIntervalSince($0) } ?? 0
+            // A visit that survives the grace becomes solid and absorbs any
+            // flash-through seconds accumulated in limbo.
+            if !visitSolid, running >= settings.switchGraceSeconds {
+                visitSolid = true
+                bankedElapsed[target, default: 0] += limbo
+                limbo = 0
+            }
             let elapsed = bankedElapsed[target, default: 0] + running
             newText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
                                      showPercent: settings.showPercent)
@@ -308,7 +342,8 @@ public final class AppController: ObservableObject {
     }
 
     public func pickList() -> [WorkTask] {
-        TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder))
+        TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
+                                         currentUser: connectedAs))
             .pickList(taskCache, at: Date(), recentCount: settings.recentCount,
                       likelyCount: settings.likelyCount, learning: attributor.learning)
     }
@@ -316,7 +351,8 @@ public final class AppController: ObservableObject {
     /// Pick list first (N recent + M likely), then every remaining task in
     /// ranked order — every list is scrollable to the full task set.
     public func fullPickList() -> [WorkTask] {
-        let ranker = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder))
+        let ranker = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
+                                                      currentUser: connectedAs))
         let top = pickList()
         let topRefs = Set(top.map(\.ref))
         let rest = ranker.ranked(taskCache.filter { !topRefs.contains($0.ref) },
@@ -431,6 +467,7 @@ public final class AppController: ObservableObject {
     public func syncIfEnabled() async {
         guard let client else { return }
         let engine = SyncEngine(journal: journal, client: client)
+        engine.onDebug = { DebugLog.write("sync: \($0)") }
         do {
             let pushed = try await engine.pushEligible(
                 threshold: settings.certaintyAutoPushThreshold,
@@ -473,26 +510,69 @@ enum DebugLog {
     }
 }
 
+/// Self-drawn floating banner. Deliberately NO system notification API:
+/// UNUserNotificationCenter aborts the process on code-identity churn and
+/// NSUserNotification is dead on modern macOS (never displayed, crashed on
+/// delivery) — both bitten us. A floating panel needs no permissions and
+/// cannot take the app down.
 enum Notifier {
     /// Wired to AmbitickSettings.systemNotifications; sounds still play when off.
     static var enabled = true
+    private static var panel: NSPanel?
+    private static var dismissTask: DispatchWorkItem?
 
-    static var available: Bool { enabled && Bundle.main.bundleIdentifier != nil }
+    static func requestAuthorization() {}
 
-    static func requestAuthorization() {
-        // Legacy NSUserNotification needs no authorization.
+    static func notify(title: String, body: String, sound: String) {
+        DispatchQueue.main.async {
+            NSSound(named: sound)?.play()
+            guard enabled else { return }
+            showBanner("\(title) — \(body)")
+        }
     }
 
-    /// Deliberately the LEGACY notification API: UNUserNotificationCenter
-    /// aborts the whole process when the bundle's code identity is out of
-    /// step with the notification service (the crash-on-stop bug). The
-    /// deprecated API has no such failure mode.
-    static func notify(title: String, body: String, sound: String) {
-        guard available else { NSSound(named: sound)?.play(); return }
-        let notification = NSUserNotification()
-        notification.title = title
-        notification.informativeText = body
-        notification.soundName = sound
-        NSUserNotificationCenter.default.deliver(notification)
+    private static func showBanner(_ text: String) {
+        dismissTask?.cancel()
+        panel?.close()
+
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .labelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.sizeToFit()
+
+        let padding: CGFloat = 14
+        let width = min(label.frame.width + padding * 2, 420)
+        let height = label.frame.height + padding * 1.2
+        guard let screen = NSScreen.main else { return }
+        let rect = NSRect(x: screen.visibleFrame.maxX - width - 16,
+                          y: screen.visibleFrame.maxY - height - 12,
+                          width: width, height: height)
+
+        let p = NSPanel(contentRect: rect, styleMask: [.nonactivatingPanel, .borderless],
+                        backing: .buffered, defer: false)
+        p.level = .statusBar
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = true
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.isReleasedWhenClosed = false
+
+        let background = NSVisualEffectView(frame: NSRect(origin: .zero,
+                                                          size: rect.size))
+        background.material = .hudWindow
+        background.state = .active
+        background.wantsLayer = true
+        background.layer?.cornerRadius = 10
+        label.frame.origin = NSPoint(x: padding, y: (height - label.frame.height) / 2)
+        label.frame.size.width = width - padding * 2
+        background.addSubview(label)
+        p.contentView = background
+        p.orderFrontRegardless()
+        panel = p
+
+        let task = DispatchWorkItem { panel?.close(); panel = nil }
+        dismissTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5, execute: task)
     }
 }

@@ -105,6 +105,21 @@ func taskRankerChecks(_ c: Checks) {
         try expectEq(ranker.ranked([dormant, timesheets], at: now).first?.subject, "Timesheets")
     }
 
+    c.check("tasks assigned to others sink until tracked") {
+        let mine = TaskRanker(config: RankingConfig(currentUser: "Martin Currie"))
+        let othersNow = WorkTask(ref: .op(1), subject: "claudes", status: "Now",
+                                 assignee: "Claude AI")
+        let myOpen = WorkTask(ref: .op(2), subject: "mine", status: "Open",
+                              assignee: "Martin Currie")
+        let unassigned = WorkTask(ref: .op(3), subject: "nobody", status: "Open")
+        try expectEq(mine.ranked([othersNow, myOpen, unassigned], at: now).map(\.subject),
+                     ["mine", "nobody", "claudes"])
+        // once the user tracks it, it ranks normally again
+        let tracked = WorkTask(ref: .op(1), subject: "claudes", status: "Now",
+                               lastConfirmedAt: now, assignee: "Claude AI")
+        try expectEq(mine.ranked([tracked, myOpen], at: now).first?.subject, "claudes")
+    }
+
     c.check("pick list is recent then likely, no duplicates") {
         let tasks = [
             task(1, "recent1", "Open", confirmedDaysAgo: 0.1),

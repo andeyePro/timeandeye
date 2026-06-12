@@ -23,6 +23,7 @@ public struct WorkTask: Equatable, Codable, Sendable {
     public var project: String?
     public var status: String
     public var lastConfirmedAt: Date?
+    public var assignee: String?
 
     public var isLocalOnly: Bool {
         if case .local = ref { return true }
@@ -30,12 +31,13 @@ public struct WorkTask: Equatable, Codable, Sendable {
     }
 
     public init(ref: TaskRef, subject: String, project: String? = nil,
-                status: String, lastConfirmedAt: Date? = nil) {
+                status: String, lastConfirmedAt: Date? = nil, assignee: String? = nil) {
         self.ref = ref
         self.subject = subject
         self.project = project
         self.status = status
         self.lastConfirmedAt = lastConfirmedAt
+        self.assignee = assignee
     }
 }
 

@@ -77,15 +77,17 @@ public final class OPClient {
             struct Titled: Decodable { let title: String? }
             let status: Titled?
             let project: Titled?
+            let assignee: Titled?
         }
         let id: Int
         let subject: String
         let _links: Links
     }
 
-    /// Pages through all work packages visible to the API key.
-    /// NB: OpenProject's `offset` query parameter is a 1-BASED PAGE NUMBER,
-    /// not an element offset.
+    /// Pages through ALL work packages visible to the API key — including
+    /// closed ones (the API defaults to open-only, which hid actively-used
+    /// Closed tasks like Timesheets). NB: OpenProject's `offset` query
+    /// parameter is a 1-BASED PAGE NUMBER, not an element offset.
     public func fetchTasks(pageSize: Int = 100) async throws -> [WorkTask] {
         var tasks: [WorkTask] = []
         var page = 1
@@ -93,12 +95,15 @@ public final class OPClient {
             let data = try await send(request(
                 path: "api/v3/work_packages",
                 query: [URLQueryItem(name: "pageSize", value: String(pageSize)),
-                        URLQueryItem(name: "offset", value: String(page))]))
+                        URLQueryItem(name: "offset", value: String(page)),
+                        URLQueryItem(name: "filters",
+                                     value: #"[{"status":{"operator":"*","values":[]}}]"#)]))
             let decoded = try decode(WPPage.self, from: data)
             tasks += decoded._embedded.elements.map {
                 WorkTask(ref: .op($0.id), subject: $0.subject,
                          project: $0._links.project?.title,
-                         status: $0._links.status?.title ?? "Unknown")
+                         status: $0._links.status?.title ?? "Unknown",
+                         assignee: $0._links.assignee?.title)
             }
             page += 1
             if tasks.count >= decoded.total || decoded.count == 0 { break }
@@ -185,10 +190,13 @@ public final class OPClient {
         return "PT\(h)H\(m)M"
     }
 
+    /// LOCAL day, not UTC: OP validates spentOn against startTime rendered in
+    /// the user's profile timezone, so a UTC day 422s for an hour after local
+    /// midnight (BST) and the entry silently lost its start time.
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = .current
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()

@@ -3,11 +3,16 @@ import Foundation
 public struct RankingConfig: Codable, Equatable, Sendable {
     public var statusOrder: [String]
     public var recencyHalfLifeDays: Double
+    /// The local user's display name: tasks assigned to OTHERS sink to the
+    /// bottom of every list until the user actually tracks time on them.
+    public var currentUser: String?
 
     public init(statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
-                recencyHalfLifeDays: Double = 7) {
+                recencyHalfLifeDays: Double = 7,
+                currentUser: String? = nil) {
         self.statusOrder = statusOrder
         self.recencyHalfLifeDays = recencyHalfLifeDays
+        self.currentUser = currentUser
     }
 }
 
@@ -37,7 +42,12 @@ public struct TaskRanker: Sendable {
             todScore = learning.hourAffinity(for: .task(task.ref),
                                              hour: calendar.component(.hour, from: now))
         }
-        return statusScore + 2 * recencyScore + todScore
+        var score = statusScore + 2 * recencyScore + todScore
+        if let assignee = task.assignee, let me = config.currentUser,
+           assignee != me, task.lastConfirmedAt == nil {
+            score -= 10   // someone else's task: bottom of the list until tracked
+        }
+        return score
     }
 
     public func ranked(_ tasks: [WorkTask], at now: Date,

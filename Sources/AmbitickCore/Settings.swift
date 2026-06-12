@@ -30,7 +30,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 showPercent: Bool = false,
                 defaultActivityID: Int? = nil,
                 activityOverrides: [TaskRef: Int] = [:],
-                autoComment: Bool = true,
+                autoComment: Bool = false,
                 trackLeisureLocally: Bool = false,
                 statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
                 primeDwellSeconds: Double = 30,

@@ -90,6 +90,21 @@ func run() async throws {
     guard let wpID = scratchID else { fail("could not find or create scratch WP") }
     print("scratch WP: #\(wpID)")
 
+    // Pre-clean: leftovers from aborted runs must not pollute verification.
+    func scratchEntriesPre() async throws -> [[String: Any]] {
+        let list = try await api("GET", "api/v3/time_entries?pageSize=100")
+        let all = ((list["_embedded"] as? [String: Any])?["elements"] as? [[String: Any]]) ?? []
+        return all.filter {
+            let href = (($0["_links"] as? [String: Any])?["workPackage"] as? [String: Any])?["href"] as? String
+            return href?.hasSuffix("/work_packages/\(wpID)") == true
+        }
+    }
+    for stale in try await scratchEntriesPre() {
+        if let id = stale["id"] as? Int {
+            _ = try? await api("DELETE", "api/v3/time_entries/\(id)")
+        }
+    }
+
     // 3. Replay a tracked stretch through the real pipeline.
     let host = baseURL.host ?? ""
     let attributor = Attributor(instanceHost: host)
@@ -126,6 +141,7 @@ func run() async throws {
     // 4. Real push.
     let client = OPClient(baseURL: baseURL, apiKey: apiKey, transport: URLSessionTransport())
     let engine = SyncEngine(journal: journal, client: client)
+    engine.onDebug = { print("SYNC DEBUG: \($0)") }
     let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: true)
     guard pushed == 1 else { fail("expected 1 pushed entry, got \(pushed)") }
     guard engine.startTimesSupported else { fail("instance rejected startTime") }
