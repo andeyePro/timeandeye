@@ -138,18 +138,48 @@ public final class AppController: ObservableObject {
             attributor.primedSurfaces = primed
         }
 
+        let leisure = loadedSettings.localTasks.first(where: \.isLeisure)
+            .map { TaskRef.local($0.id) }
         let config = TrackerConfig(
             minSegmentSeconds: loadedSettings.minSegmentSeconds,
             primeDwellSeconds: loadedSettings.primeDwellSeconds,
             idleThresholdSeconds: PowerSettings.displaySleepSeconds() ?? 600,
-            nonWorkTracksLocally: loadedSettings.trackLeisureLocally,
-            leisureTask: loadedSettings.trackLeisureLocally ? .local(UUID()) : nil,
+            nonWorkTracksLocally: loadedSettings.trackLeisureLocally && leisure != nil,
+            leisureTask: leisure,
             switchGraceSeconds: loadedSettings.switchGraceSeconds)
         tracker = SessionTracker(attributor: attributor, config: config) { [weak self] in
             self?.taskCache ?? []
         }
         wireTracker()
         rebuildClient()
+        taskCache = localWorkTasks()   // locals exist before OP ever connects
+    }
+
+    /// User-defined non-OP tasks rendered as first-class tasks.
+    private func localWorkTasks() -> [WorkTask] {
+        settings.localTasks.map {
+            WorkTask(ref: .local($0.id), subject: $0.name, project: "Personal",
+                     status: $0.isLeisure ? "Leisure" : "Open")
+        }
+    }
+
+    public func addLocalTask(name: String, isLeisure: Bool) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        settings.localTasks.append(LocalTaskDef(name: trimmed, isLeisure: isLeisure))
+        mergeLocalTasksIntoCache()
+    }
+
+    public func removeLocalTask(_ id: UUID) {
+        settings.localTasks.removeAll { $0.id == id }
+        taskCache.removeAll { $0.ref == .local(id) }
+    }
+
+    private func mergeLocalTasksIntoCache() {
+        let known = Set(taskCache.map(\.ref))
+        for task in localWorkTasks() where !known.contains(task.ref) {
+            taskCache.append(task)
+        }
     }
 
     private func wireTracker() {
@@ -434,14 +464,64 @@ public final class AppController: ObservableObject {
         (try? journal.spans(from: session.start, to: session.end)) ?? []
     }
 
-    /// Stable per-task colour (until user-editable colours land).
+    /// Per-task colour: user override first, stable hash otherwise.
     public func colour(for ref: TaskRef) -> NSColor {
+        if let hex = settings.taskColours[ref.storageKey], let c = NSColor(hex: hex) {
+            return c
+        }
         var hash: UInt64 = 5381
         for byte in String(describing: ref).utf8 {
             hash = hash &* 33 &+ UInt64(byte)
         }
         let hue = CGFloat(hash % 360) / 360
         return NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1)
+    }
+
+    public func setColour(_ colour: NSColor, for ref: TaskRef) {
+        let rgb = colour.usingColorSpace(.sRGB) ?? colour
+        let hex = String(format: "#%02X%02X%02X",
+                         Int(rgb.redComponent * 255),
+                         Int(rgb.greenComponent * 255),
+                         Int(rgb.blueComponent * 255))
+        settings.taskColours[ref.storageKey] = hex
+    }
+
+    /// Time Spent hierarchy for the pie: project -> task -> app, including
+    /// the live session when the range covers now.
+    public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
+        var sessions = (try? journal.sessions(from: from, to: to)) ?? []
+        if case .tracking(.task(let ref), let certainty) = trackerState,
+           let since = targetSince, since < to, Date() > from {
+            sessions.append(Session(id: Self.liveSessionID, task: ref,
+                                    start: max(since, from), end: min(Date(), to),
+                                    certainty: certainty))
+        }
+        let spans = (try? journal.spans(from: from, to: to)) ?? []
+        return TimeAggregator.byProject(sessions: sessions, tasks: taskCache, spans: spans)
+    }
+
+    /// Timeline edit of the live slice's start.
+    public func adjustLiveStart(to date: Date) {
+        let clamped = min(date, Date())
+        tracker.adjustCurrentStart(to: clamped)
+        targetSince = clamped
+        refreshTitle(force: true)
+    }
+
+    /// The most recently tracked task today — the obvious resume candidate.
+    public func lastTrackedTask() -> WorkTask? {
+        let dayStart = Calendar.current.startOfDay(for: Date())
+        guard let last = (try? journal.sessions(from: dayStart, to: Date()))?.last else {
+            return nil
+        }
+        return taskCache.first { $0.ref == last.task }
+    }
+
+    /// A brand-new manual slice (drawn or gap-filled on the timeline).
+    public func createTimelineSession(_ session: Session) async {
+        try? journal.save(session)
+        updateJournalSummary()
+        await syncIfEnabled()
     }
 
     /// Persist a timeline edit; PATCH the OP entry when one exists.
@@ -532,7 +612,21 @@ public final class AppController: ObservableObject {
             if connectedAs == nil {
                 connectedAs = try? await client.fetchMe()
             }
-            taskCache = try await client.fetchTasks()
+            // Carry recency over the refresh: lastConfirmedAt lives only in
+            // the cache and a wholesale replace was silently dropping it.
+            let recency = Dictionary(uniqueKeysWithValues:
+                taskCache.compactMap { task in task.lastConfirmedAt.map { (task.ref, $0) } })
+            var fetched = try await client.fetchTasks()
+            for i in fetched.indices {
+                if let last = recency[fetched[i].ref] {
+                    fetched[i].lastConfirmedAt = max(fetched[i].lastConfirmedAt ?? .distantPast, last)
+                }
+            }
+            taskCache = fetched + localWorkTasks().map { local in
+                var task = local
+                task.lastConfirmedAt = recency[local.ref]
+                return task
+            }
             if activities.isEmpty {
                 activities = (try? await client.fetchActivities()) ?? []
                 if settings.defaultActivityID == nil {

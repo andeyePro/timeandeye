@@ -9,6 +9,8 @@ let suites: [(String, (Checks) -> Void)] = [
     ("Attributor", attributorChecks),
     ("MinuteResolver", minuteResolverChecks),
     ("SessionTracker", sessionTrackerChecks),
+    ("TimelineMath", timelineMathChecks),
+    ("TimeAggregator", timeAggregatorChecks),
     ("JournalStore[InMemory]", inMemoryJournalChecks),
     ("JournalStore[SQLite]", sqliteJournalChecks),
     ("MenuTitle", menuTitleChecks),

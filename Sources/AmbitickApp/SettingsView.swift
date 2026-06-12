@@ -6,6 +6,8 @@ struct SettingsView: View {
     @ObservedObject var controller: AppController
     @State private var apiKey = ""
     @State private var keySaved = false
+    @State private var newLocalName = ""
+    @State private var newLocalLeisure = false
 
     var body: some View {
         Form {
@@ -61,6 +63,39 @@ struct SettingsView: View {
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
             }
 
+            Section("Local tasks (never sent to OpenProject)") {
+                ForEach(controller.settings.localTasks) { task in
+                    HStack {
+                        ColorPicker("", selection: Binding(
+                            get: { Color(nsColor: controller.colour(for: .local(task.id))) },
+                            set: { controller.setColour(NSColor($0), for: .local(task.id)) }))
+                            .labelsHidden()
+                            .frame(width: 28)
+                        Text(task.name)
+                        if task.isLeisure {
+                            Text("leisure").font(.caption2).foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                                .background(.quaternary, in: Capsule())
+                        }
+                        Spacer()
+                        Button {
+                            controller.removeLocalTask(task.id)
+                        } label: { Image(systemName: "trash") }
+                            .buttonStyle(.plain)
+                    }
+                }
+                HStack {
+                    TextField("new local task (e.g. Chess, Family admin)", text: $newLocalName)
+                        .onSubmit(addLocal)
+                    Toggle("leisure", isOn: $newLocalLeisure).toggleStyle(.checkbox)
+                    Button { addLocal() } label: { Image(systemName: "plus.circle.fill") }
+                        .buttonStyle(.plain)
+                        .disabled(newLocalName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                Text("Leisure tasks catch confident non-work time when \"Track leisure\" is on; all local tasks appear in every pick list, the timeline and Time Spent.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Behaviour") {
                 Stepper("Switch buffer: \(Int(controller.settings.switchGraceSeconds))s",
                         value: $controller.settings.switchGraceSeconds, in: 0...120, step: 5)
@@ -79,5 +114,11 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(8)
+    }
+
+    private func addLocal() {
+        controller.addLocalTask(name: newLocalName, isLeisure: newLocalLeisure)
+        newLocalName = ""
+        newLocalLeisure = false
     }
 }

@@ -50,9 +50,24 @@ struct PopoverView: View {
                         .font(.caption)
                 }
             } else {
-                Text("Not tracking")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack {
+                    Text("Not tracking")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let last = controller.lastTrackedTask() {
+                        Button {
+                            controller.userPicked(last)
+                        } label: {
+                            Label("Resume \(last.subject)", systemImage: "play.circle.fill")
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                        .help("Restart the clock on the last tracked task")
+                    }
+                }
             }
         }
     }
@@ -147,6 +162,13 @@ struct PopoverView: View {
                 Image(systemName: "calendar.day.timeline.left")
             }
             .help("Timeline – today's tracked time")
+            Button {
+                openWindow(id: "spent")
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "chart.pie")
+            }
+            .help("Time Spent – period breakdown")
             Button {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)

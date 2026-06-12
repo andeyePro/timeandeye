@@ -1,5 +1,29 @@
 import Foundation
 
+/// A user-defined non-OpenProject task (leisure, life admin, ...): tracked,
+/// timelined and charted like any other task, never pushed to OP.
+public struct LocalTaskDef: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var isLeisure: Bool
+
+    public init(id: UUID = UUID(), name: String, isLeisure: Bool = false) {
+        self.id = id
+        self.name = name
+        self.isLeisure = isLeisure
+    }
+}
+
+public extension TaskRef {
+    /// Stable string key for settings maps (colours etc.).
+    var storageKey: String {
+        switch self {
+        case .op(let id): return "op:\(id)"
+        case .local(let uuid): return "local:\(uuid.uuidString)"
+        }
+    }
+}
+
 /// All user-tunable knobs. The OP API key is NOT here – it lives in the
 /// macOS Keychain. Persist via JSONFileStore.
 public struct AmbitickSettings: Codable, Equatable, Sendable {
@@ -20,6 +44,10 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var minSegmentSeconds: Double
     public var switchGraceSeconds: Double
     public var systemNotifications: Bool
+    /// Non-OP tasks (leisure etc.), fully tracked locally.
+    public var localTasks: [LocalTaskDef]
+    /// User colour overrides per task (TaskRef.storageKey -> hex).
+    public var taskColours: [String: String]
 
     public init(opBaseURL: String,
                 recentCount: Int = 5,
@@ -36,7 +64,9 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 primeDwellSeconds: Double = 30,
                 minSegmentSeconds: Double = 20,
                 switchGraceSeconds: Double = 30,
-                systemNotifications: Bool = true) {
+                systemNotifications: Bool = true,
+                localTasks: [LocalTaskDef] = [],
+                taskColours: [String: String] = [:]) {
         self.opBaseURL = opBaseURL
         self.recentCount = recentCount
         self.likelyCount = likelyCount
@@ -53,6 +83,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.minSegmentSeconds = minSegmentSeconds
         self.switchGraceSeconds = switchGraceSeconds
         self.systemNotifications = systemNotifications
+        self.localTasks = localTasks
+        self.taskColours = taskColours
     }
 
     /// Tolerant decoding: new fields fall back to their defaults instead of
@@ -76,6 +108,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         minSegmentSeconds = try c.decodeIfPresent(Double.self, forKey: .minSegmentSeconds) ?? defaults.minSegmentSeconds
         switchGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .switchGraceSeconds) ?? defaults.switchGraceSeconds
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
+        localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
+        taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours
     }
 }
 

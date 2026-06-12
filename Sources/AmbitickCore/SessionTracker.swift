@@ -98,6 +98,13 @@ public final class SessionTracker {
         state = .stopped
     }
 
+    /// Timeline edit of the live slice: move the current visit's start.
+    /// Clamped so it cannot overlap the previous closed span.
+    public func adjustCurrentStart(to date: Date) {
+        guard case .tracking = state, currentStart != nil else { return }
+        currentStart = max(date, spans.last?.end ?? date)
+    }
+
     /// User picked a task (popover/prompt) for the surface currently in focus.
     /// This is the UI's confirm entry point: it teaches the attributor AND
     /// lifts the in-flight span to confirmed certainty.
