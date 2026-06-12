@@ -104,11 +104,7 @@ struct PopoverView: View {
                     .frame(width: 120)
             }
             let top = controller.pickList()
-            let all = controller.fullPickList().filter {
-                filter.isEmpty
-                    || $0.subject.localizedCaseInsensitiveContains(filter)
-                    || ($0.project?.localizedCaseInsensitiveContains(filter) ?? false)
-            }
+            let all = controller.searchTasks(filter)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(all.enumerated()), id: \.element.ref) { index, task in
@@ -143,7 +139,10 @@ struct PopoverView: View {
             HStack {
                 Text(task.subject).lineLimit(1)
                 Spacer()
-                Text(task.status)
+                Text(task.project.map { "\($0) · " } ?? "" )
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                + Text(task.status)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

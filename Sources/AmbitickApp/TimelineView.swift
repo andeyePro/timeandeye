@@ -414,11 +414,7 @@ struct TimelineView: View {
     }
 
     private func filteredTasks() -> [WorkTask] {
-        controller.fullPickList().filter {
-            filter.isEmpty
-                || $0.subject.localizedCaseInsensitiveContains(filter)
-                || ($0.project?.localizedCaseInsensitiveContains(filter) ?? false)
-        }
+        controller.searchTasks(filter)
     }
 
     // MARK: - Editor

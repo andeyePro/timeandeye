@@ -10,6 +10,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("MinuteResolver", minuteResolverChecks),
     ("SessionTracker", sessionTrackerChecks),
     ("TimelineMath", timelineMathChecks),
+    ("FuzzyMatch", fuzzyMatchChecks),
     ("TimeAggregator", timeAggregatorChecks),
     ("JournalStore[InMemory]", inMemoryJournalChecks),
     ("JournalStore[SQLite]", sqliteJournalChecks),

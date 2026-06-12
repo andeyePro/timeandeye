@@ -81,6 +81,34 @@ func learningStoreChecks(_ c: Checks) {
     }
 }
 
+// MARK: - FuzzyMatch
+
+func fuzzyMatchChecks(_ c: Checks) {
+    func task(_ subject: String, project: String? = nil) -> WorkTask {
+        WorkTask(ref: .op(subject.count), subject: subject, project: project, status: "Open")
+    }
+
+    c.check("substring beats subsequence; prefix beats both") {
+        let tasks = [task("andeye email triage"), task("Timesheets"),
+                     task("Time entry models"), task("Investment")]
+        let hits = FuzzyMatch.filter(tasks, query: "tim")
+        try expectEq(hits.first?.subject, "Timesheets", "prefix match ranks first")
+        try expect(hits.contains { $0.subject == "Time entry models" })
+        try expect(!hits.contains { $0.subject == "Investment" })
+    }
+
+    c.check("subsequence catches abbreviations and project names") {
+        let tasks = [task("andeye email triage"), task("Blobs", project: "andeye Ltd")]
+        try expect(FuzzyMatch.filter(tasks, query: "aeml").first?.subject == "andeye email triage")
+        try expect(FuzzyMatch.filter(tasks, query: "ltd").contains { $0.subject == "Blobs" })
+    }
+
+    c.check("empty query passes everything through unchanged") {
+        let tasks = [task("a"), task("b")]
+        try expectEq(FuzzyMatch.filter(tasks, query: "  ").map(\.subject), ["a", "b"])
+    }
+}
+
 // MARK: - TaskRanker (plan task 5)
 
 func taskRankerChecks(_ c: Checks) {

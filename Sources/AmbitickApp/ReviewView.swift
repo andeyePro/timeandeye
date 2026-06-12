@@ -63,11 +63,7 @@ struct ReviewView: View {
     }
 
     private func filteredTasks() -> [WorkTask] {
-        controller.fullPickList().filter {
-            filter.isEmpty
-                || $0.subject.localizedCaseInsensitiveContains(filter)
-                || ($0.project?.localizedCaseInsensitiveContains(filter) ?? false)
-        }
+        controller.searchTasks(filter)
     }
 
     private var aiSection: some View {

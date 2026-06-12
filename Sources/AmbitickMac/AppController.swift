@@ -486,10 +486,21 @@ public final class AppController: ObservableObject {
         settings.taskColours[ref.storageKey] = hex
     }
 
+    /// Forgiving search over the full ranked task list.
+    public func searchTasks(_ query: String) -> [WorkTask] {
+        FuzzyMatch.filter(fullPickList(), query: query)
+    }
+
     /// Time Spent hierarchy for the pie: project -> task -> app, including
-    /// the live session when the range covers now.
+    /// the live session when the range covers now. Sessions crossing the
+    /// range boundary are clipped so totals never double-count across days.
     public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
-        var sessions = (try? journal.sessions(from: from, to: to)) ?? []
+        var sessions = ((try? journal.sessions(from: from, to: to)) ?? []).map { s -> Session in
+            var c = s
+            c.start = max(s.start, from)
+            c.end = min(s.end, to)
+            return c
+        }
         if case .tracking(.task(let ref), let certainty) = trackerState,
            let since = targetSince, since < to, Date() > from {
             sessions.append(Session(id: Self.liveSessionID, task: ref,
