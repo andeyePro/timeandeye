@@ -36,6 +36,7 @@ struct TimelineView: View {
     @State private var barWidth: CGFloat = 900
     @State private var selectedSpanIdx = Set<Int>()
     @State private var stripPxPerSec: CGFloat = 2
+    @State private var stripPinchBase: CGFloat?
     @State private var scrollMonitor: Any?
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -651,6 +652,13 @@ struct TimelineView: View {
                     .anchorPreference(key: RectKey.self, value: .bounds) { ["strip": $0] }
                 }
                 .frame(height: 30)
+                .gesture(MagnificationGesture()
+                    .onChanged { value in
+                        if stripPinchBase == nil { stripPinchBase = stripPxPerSec }
+                        stripPxPerSec = min(max((stripPinchBase ?? stripPxPerSec)
+                            * CGFloat(value), 0.2), 40)
+                    }
+                    .onEnded { _ in stripPinchBase = nil })
             }
 
             if !selectedSpanIdx.isEmpty {
