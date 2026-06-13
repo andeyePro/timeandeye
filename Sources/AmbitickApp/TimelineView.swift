@@ -32,10 +32,10 @@ struct TimelineView: View {
     @State private var refreshTick = 0
     @State private var pinchBaseSpan: TimeInterval?
     @State private var drawDraft: (start: Date, end: Date)?
-    @State private var edgeDrag: (id: UUID, start: Date, end: Date)?
     @State private var edgeOrigin: (start: Date, end: Date)?
     @State private var barWidth: CGFloat = 900
-    @State private var selectedSpanDetail: String?
+    @State private var selectedSpanIdx = Set<Int>()
+    @State private var stripPxPerSec: CGFloat = 2
     @State private var scrollMonitor: Any?
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -55,12 +55,12 @@ struct TimelineView: View {
             if let session = editing {
                 editor(session)
                 detailStrip(session)
-            }
-            if let detail = selectedSpanDetail {
-                Text(detail)
-                    .font(.system(.caption, design: .monospaced))
-                    .padding(6)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                if let detail = singleSpanDetail(session) {
+                    Text(detail)
+                        .font(.system(.caption, design: .monospaced))
+                        .padding(6)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                }
             }
             Spacer(minLength: 0)
         }
@@ -83,9 +83,14 @@ struct TimelineView: View {
     private var sessions: [Session] {
         _ = refreshTick
         var list = controller.timelineSessions(dayOffset: dayOffset)
-        if let drag = edgeDrag, let i = list.firstIndex(where: { $0.id == drag.id }) {
-            list[i].start = drag.start
-            list[i].end = drag.end
+        // While editing an existing slice, the bar reflects the editor's live
+        // values — so a handle drag (which updates editStart/editEnd) moves the
+        // slice AND the numbers below in lock-step, and Save commits exactly
+        // what is shown.
+        if let editing, !isNewEditing,
+           let i = list.firstIndex(where: { $0.id == editing.id }) {
+            list[i].start = editStart
+            list[i].end = editEnd
         }
         return list
     }
@@ -116,7 +121,7 @@ struct TimelineView: View {
         dayOffset += delta
         editing = nil
         selection = []
-        selectedSpanDetail = nil
+        selectedSpanIdx = []
         DispatchQueue.main.async { zoomToLatestBlock() }
     }
 
@@ -247,7 +252,7 @@ struct TimelineView: View {
         guard editing == nil, selection.isEmpty else {
             editing = nil
             selection = []
-            selectedSpanDetail = nil
+            selectedSpanIdx = []
             return
         }
         let point = dateFor(location.x, width: width)
@@ -363,53 +368,28 @@ struct TimelineView: View {
             }
             .highPriorityGesture(DragGesture(minimumDistance: 1, coordinateSpace: .named("timeline"))
                 .onChanged { value in
-                    // Capture the ORIGINAL bounds once: translation is
-                    // cumulative from the gesture start, and the slice itself
-                    // re-renders mid-drag (edgeDrag feeds back into `sessions`),
-                    // so reading session.start each tick compounded — the edge
-                    // "flew off". Anchor to the pre-drag origin instead.
-                    if edgeOrigin == nil { edgeOrigin = (session.start, session.end) }
-                    let origin = edgeOrigin ?? (session.start, session.end)
+                    // Drive the editor's live values directly so the slice, the
+                    // numbers below and the eventual Save all agree. Anchor to
+                    // the bounds captured at gesture start (translation is
+                    // cumulative; reading the moving slice would compound).
+                    if edgeOrigin == nil { edgeOrigin = (editStart, editEnd) }
+                    let origin = edgeOrigin ?? (editStart, editEnd)
                     let dt = TimeInterval(value.translation.width / barWidth) * viewSpan
-                    var start = origin.start
-                    var end = origin.end
                     if edge == .leading {
-                        start = TimelineMath.snap(origin.start.addingTimeInterval(dt),
+                        var s = TimelineMath.snap(origin.start.addingTimeInterval(dt),
                                                   to: sessions, excluding: session.id,
                                                   tolerance: snapTolerance)
-                        start = min(start, end.addingTimeInterval(-60))
+                        s = min(s, editEnd.addingTimeInterval(-60))
+                        editStart = s
                     } else {
-                        end = TimelineMath.snap(origin.end.addingTimeInterval(dt),
-                                                to: sessions, excluding: session.id,
-                                                tolerance: snapTolerance)
-                        end = max(end, start.addingTimeInterval(60))
+                        var e = TimelineMath.snap(origin.end.addingTimeInterval(dt),
+                                                  to: sessions, excluding: session.id,
+                                                  tolerance: snapTolerance)
+                        e = max(e, editStart.addingTimeInterval(60))
+                        editEnd = e
                     }
-                    edgeDrag = (session.id, start, end)
                 }
-                .onEnded { _ in
-                    edgeOrigin = nil
-                    guard let drag = edgeDrag else { return }
-                    edgeDrag = nil
-                    var edited = session
-                    edited.start = drag.start
-                    edited.end = drag.end
-                    let base = controller.timelineSessions(dayOffset: dayOffset)
-                        .filter { $0.id != AppController.liveSessionID }
-                    let trims = TimelineMath.trims(for: drag.start, drag.end,
-                                                   excluding: session.id, in: base)
-                    Task {
-                        await controller.undoGroup("resize \(controller.name(of: .task(edited.task)))") {
-                            for trim in trims {
-                                if trim.delete {
-                                    await controller.deleteTimelineSession(trim.session)
-                                } else {
-                                    await controller.applyTimelineEdit(trim.session)
-                                }
-                            }
-                            await controller.applyTimelineEdit(edited)
-                        }
-                    }
-                })
+                .onEnded { _ in edgeOrigin = nil })
     }
 
     private func slot(_ session: Session) -> String {
@@ -458,7 +438,7 @@ struct TimelineView: View {
         editComment = session.comment ?? ""
         editTask = session.task
         conflicts = []
-        selectedSpanDetail = nil
+        selectedSpanIdx = []
     }
 
     private var durationBinding: Binding<Date> {
@@ -642,37 +622,108 @@ struct TimelineView: View {
 
     private func detailStrip(_ session: Session) -> some View {
         let spans = controller.timelineSpans(for: session)
-        let total = max(session.end.timeIntervalSince(session.start), 1)
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Windows during this slice").font(.caption).foregroundStyle(.secondary)
-            GeometryReader { geo in
-                HStack(spacing: 1) {
-                    ForEach(Array(spans.enumerated()), id: \.offset) { _, span in
-                        let fraction = span.end.timeIntervalSince(span.start) / total
-                        let label = [span.signal.app, span.signal.windowTitle]
-                            .compactMap { $0 }.joined(separator: " – ")
-                        Rectangle()
-                            .fill(Color(nsColor: controller.colour(for: session.task))
-                                .opacity(span.certainty >= 0.6 ? 0.8 : 0.35))
-                            .overlay {
-                                if fraction * geo.size.width > 50 {
-                                    Text(label).font(.system(size: 9)).lineLimit(1)
-                                        .foregroundStyle(.black.opacity(0.8))
-                                }
-                            }
-                            .frame(width: max(fraction * geo.size.width, 2))
-                            .help(label)
-                            .onTapGesture { selectedSpanDetail = detailText(span) }
+            HStack {
+                Text("Windows during this slice").font(.caption).foregroundStyle(.secondary)
+                if !spans.isEmpty {
+                    Text("· tap to select, then reassign").font(.caption2).foregroundStyle(.tertiary)
+                    Spacer()
+                    Button { stripPxPerSec = max(stripPxPerSec / 1.6, 0.2) } label: {
+                        Image(systemName: "minus.magnifyingglass")
                     }
-                    if spans.isEmpty {
-                        Text("no span detail recorded for this period")
-                            .font(.caption2).foregroundStyle(.tertiary)
+                    Button { stripPxPerSec = min(stripPxPerSec * 1.6, 40) } label: {
+                        Image(systemName: "plus.magnifyingglass")
                     }
                 }
             }
-            .frame(height: 26)
-            .anchorPreference(key: RectKey.self, value: .bounds) { ["strip": $0] }
+            .buttonStyle(.plain)
+
+            if spans.isEmpty {
+                Text("no window detail recorded for this period")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 1) {
+                        ForEach(Array(spans.enumerated()), id: \.offset) { idx, span in
+                            spanChip(span, index: idx, task: session.task)
+                        }
+                    }
+                    .anchorPreference(key: RectKey.self, value: .bounds) { ["strip": $0] }
+                }
+                .frame(height: 30)
+            }
+
+            if !selectedSpanIdx.isEmpty {
+                spanReassignBar(session, spans: spans)
+            }
         }
+    }
+
+    private func spanChip(_ span: FocusSpan, index: Int, task: TaskRef) -> some View {
+        let secs = span.end.timeIntervalSince(span.start)
+        let label = [span.signal.app, span.signal.windowTitle].compactMap { $0 }
+            .joined(separator: " – ")
+        let selected = selectedSpanIdx.contains(index)
+        return Rectangle()
+            .fill(Color(nsColor: controller.colour(for: task))
+                .opacity(span.certainty >= 0.6 ? 0.8 : 0.35))
+            .overlay {
+                if secs * stripPxPerSec > 44 {
+                    Text(label).font(.system(size: 9)).lineLimit(1).padding(.horizontal, 3)
+                        .foregroundStyle(labelColour(for: task))
+                }
+            }
+            .overlay(Rectangle().stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
+            .frame(width: max(secs * stripPxPerSec, 3), height: 28)
+            .help("\(label)\n\(secs < 60 ? "\(Int(secs))s" : "\(Int(secs/60))m")  ·  \(span.start.formatted(date: .omitted, time: .standard))")
+            .onTapGesture {
+                if selectedSpanIdx.contains(index) { selectedSpanIdx.remove(index) }
+                else { selectedSpanIdx.insert(index) }
+            }
+    }
+
+    private func spanReassignBar(_ session: Session, spans: [FocusSpan]) -> some View {
+        let ranges = selectedSpanIdx.sorted().compactMap { i -> (start: Date, end: Date)? in
+            i < spans.count ? (spans[i].start, spans[i].end) : nil
+        }
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text("Move \(selectedSpanIdx.count) window\(selectedSpanIdx.count == 1 ? "" : "s") to →")
+                    .font(.caption)
+                TextField("filter tasks", text: $filter)
+                    .textFieldStyle(.roundedBorder).font(.caption).frame(width: 150)
+                Button { selectedSpanIdx = [] } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(filteredTasks(), id: \.ref) { task in
+                        Button {
+                            Task { await controller.splitAndReassign(session, ranges: ranges,
+                                                                     to: task.ref) }
+                            selectedSpanIdx = []
+                            editing = nil
+                        } label: {
+                            HStack(spacing: 3) {
+                                if task.isLocalOnly { Image(systemName: "house").font(.system(size: 8)) }
+                                Text(task.subject)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(6)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Full detail for exactly-one selected window (the "all the data you hold
+    /// on that tracking" view), shown beneath the strip.
+    private func singleSpanDetail(_ session: Session) -> String? {
+        guard selectedSpanIdx.count == 1, let i = selectedSpanIdx.first else { return nil }
+        let spans = controller.timelineSpans(for: session)
+        guard i < spans.count else { return nil }
+        return detailText(spans[i])
     }
 
     private func detailText(_ span: FocusSpan) -> String {

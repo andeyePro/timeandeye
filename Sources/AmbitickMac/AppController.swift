@@ -747,6 +747,10 @@ public final class AppController: ObservableObject {
         return perApp.max { $0.value < $1.value }?.key
     }
 
+    /// One-line feedback for the Spent view (also forces a refresh since it
+    /// is @Published — the pie reads the journal, which the reassign changed).
+    @Published public private(set) var actionNote: String?
+
     /// Reassign, within a period, every session whose dominant app is
     /// `appLabel` to `target` — the precise fix for "app X is filing under the
     /// wrong task" (e.g. Games time logged under Ambitick). Teaches the
@@ -754,8 +758,25 @@ public final class AppController: ObservableObject {
     public func reassignSpentApp(_ appLabel: String, from: Date, to: Date,
                                  to target: TaskRef) async {
         let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
-            .filter { dominantApp(of: $0) == appLabel }
+            .filter { $0.task != target && dominantApp(of: $0) == appLabel }
         await reassignTimelineSessions(sessions, to: target)
+        actionNote = sessions.isEmpty
+            ? "No \(appLabel) time found to move (only sessions with recorded windows can be matched)"
+            : "Moved \(sessions.count) \(appLabel) session\(sessions.count == 1 ? "" : "s") → \(name(of: .task(target)))"
+    }
+
+    /// Split a slice: the given time ranges (selected windows in the detail
+    /// strip) move to `target`, the rest stays. One undo step.
+    public func splitAndReassign(_ session: Session,
+                                 ranges: [(start: Date, end: Date)],
+                                 to target: TaskRef) async {
+        let pieces = TimelineMath.split(session, reassign: ranges, to: target)
+        guard pieces.count > 1 || pieces.first?.task != session.task else { return }
+        await undoGroup("split \(name(of: .task(session.task)))") {
+            await deleteTimelineSession(session)
+            for piece in pieces { await createTimelineSession(piece) }
+        }
+        for piece in pieces where piece.task == target { teachAssociation(for: piece) }
     }
 
     /// Reassign a whole task's period sessions to another task.
@@ -764,6 +785,9 @@ public final class AppController: ObservableObject {
         let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
             .filter { $0.task == ref }
         await reassignTimelineSessions(sessions, to: target)
+        actionNote = sessions.isEmpty
+            ? "No time found to move"
+            : "Moved \(sessions.count) session\(sessions.count == 1 ? "" : "s") → \(name(of: .task(target)))"
     }
 
     // MARK: - AI assist (clipboard out, paste back)

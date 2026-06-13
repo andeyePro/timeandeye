@@ -41,6 +41,23 @@ func timelineMathChecks(_ c: Checks) {
         try expect(insideTrim.delete, "fully swallowed must delete")
     }
 
+    c.check("split moves selected ranges to target, keeps the rest") {
+        let s = session(from: 0, to: 600, task: 1)        // 10 min on task 1
+        let pieces = TimelineMath.split(s, reassign: [(t(120), t(300))], to: .op(2))
+        try expectEq(pieces.count, 3)
+        try expectEq(pieces.map(\.task), [.op(1), .op(2), .op(1)])
+        try expectEq(pieces[0].start, t(0)); try expectEq(pieces[0].end, t(120))
+        try expectEq(pieces[1].start, t(120)); try expectEq(pieces[1].end, t(300))
+        try expectEq(pieces[2].start, t(300)); try expectEq(pieces[2].end, t(600))
+    }
+
+    c.check("split with a leading range yields two pieces") {
+        let s = session(from: 0, to: 600, task: 1)
+        let pieces = TimelineMath.split(s, reassign: [(t(0), t(240))], to: .op(2))
+        try expectEq(pieces.map(\.task), [.op(2), .op(1)])
+        try expectEq(pieces[0].end, t(240))
+    }
+
     c.check("latest block walks back over <1h gaps") {
         let morning = session(from: 0, to: 1800)
         let later1 = session(from: 20_000, to: 21_000)

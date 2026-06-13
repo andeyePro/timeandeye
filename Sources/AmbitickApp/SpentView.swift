@@ -70,6 +70,9 @@ struct SpentView: View {
                 Spacer()
                 Text(totalText).font(.caption).foregroundStyle(.secondary)
             }
+            if let note = controller.actionNote {
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
             reassignBar
             HStack(alignment: .top, spacing: 16) {
                 GeometryReader { geo in

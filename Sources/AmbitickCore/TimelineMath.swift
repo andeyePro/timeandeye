@@ -70,6 +70,54 @@ public enum TimelineMath {
         return out
     }
 
+    /// Split a session: time inside any `reassign` range becomes `target`,
+    /// the rest stays on the session's task. Returns the replacement pieces
+    /// (new ids, ≥ minPiece each — shorter fragments merge into the previous
+    /// piece). Pure, so it is unit-checkable.
+    public static func split(_ session: Session, reassign ranges: [(start: Date, end: Date)],
+                             to target: TaskRef, minPiece: TimeInterval = 60) -> [Session] {
+        // Clip + merge the reassign ranges within the session.
+        let clipped = ranges
+            .map { (max($0.start, session.start), min($0.end, session.end)) }
+            .filter { $0.1 > $0.0 }
+            .sorted { $0.0 < $1.0 }
+        guard !clipped.isEmpty else { return [session] }
+        var merged: [(Date, Date)] = []
+        for r in clipped {
+            if let last = merged.last, r.0 <= last.1 {
+                merged[merged.count - 1].1 = max(last.1, r.1)
+            } else {
+                merged.append(r)
+            }
+        }
+        // Walk boundaries, tagging each segment target vs original.
+        var bounds: [Date] = [session.start]
+        for (s, e) in merged { bounds.append(s); bounds.append(e) }
+        bounds.append(session.end)
+        bounds = Array(Set(bounds)).sorted()
+        var pieces: [Session] = []
+        for i in 0..<(bounds.count - 1) {
+            let s = bounds[i], e = bounds[i + 1]
+            guard e > s else { continue }
+            let mid = s.addingTimeInterval(e.timeIntervalSince(s) / 2)
+            let inReassign = merged.contains { $0.0 <= mid && mid < $0.1 }
+            let task = inReassign ? target : session.task
+            if var last = pieces.last, last.task == task {
+                last.end = e
+                pieces[pieces.count - 1] = last
+            } else if let last = pieces.last,
+                      e.timeIntervalSince(s) < minPiece {
+                // tiny fragment: absorb into the previous piece's time
+                pieces[pieces.count - 1].end = e
+                _ = last
+            } else {
+                pieces.append(Session(task: task, start: s, end: e,
+                                      certainty: session.certainty, comment: session.comment))
+            }
+        }
+        return pieces.isEmpty ? [session] : pieces
+    }
+
     /// The most recent block of sessions separated by gaps < maxGap.
     public static func latestBlock(in sessions: [Session],
                                    maxGap: TimeInterval = 3600) -> (start: Date, end: Date)? {
