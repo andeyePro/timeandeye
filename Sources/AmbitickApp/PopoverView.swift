@@ -6,6 +6,7 @@ struct PopoverView: View {
     @ObservedObject var controller: AppController
     @Environment(\.openWindow) private var openWindow
     @State private var filter = ""
+    @State private var note = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -18,6 +19,12 @@ struct PopoverView: View {
         }
         .padding(12)
         .frame(width: 300)
+        // Edit a LOCAL copy and push to the controller without republishing
+        // (a @Published binding would rebuild the popover each keystroke and
+        // steal focus). Re-sync when tracking state changes (the controller
+        // clears the note on task-switch/stop).
+        .onChange(of: note) { _, new in controller.manualNote = new }
+        .onChange(of: controller.trackerState) { _, _ in note = controller.manualNote }
     }
 
     private var header: some View {
@@ -44,9 +51,8 @@ struct PopoverView: View {
                     Image(systemName: "bubble.left")
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    TextField("what are you doing? (becomes the OP comment)",
-                              text: $controller.manualNote)
-                        .textFieldStyle(.plain)
+                    TextField("what are you doing? (becomes the OP comment)", text: $note)
+                        .textFieldStyle(.roundedBorder)
                         .font(.caption)
                 }
             } else {

@@ -89,7 +89,10 @@ public final class AppController: ObservableObject {
     @Published public private(set) var connectedAs: String?
     /// The speech-bubble note: replaces the auto comment on sessions closing
     /// while it is set; cleared when tracking stops.
-    @Published public var manualNote = ""
+    /// The speech-bubble note. NOT @Published: binding a TextField to a
+    /// published var rebuilds the whole popover on every keystroke and steals
+    /// focus ("can't type"). The popover edits a local copy and pushes here.
+    public var manualNote = ""
     @Published public var settings: AmbitickSettings {
         didSet {
             try? settingsStore.save(settings)
@@ -245,6 +248,10 @@ public final class AppController: ObservableObject {
                     self.targetSince = now
                     self.visitSolid = false
                     self.taskChangedAt = now
+                    // The note describes the task just left (already attached
+                    // to its flushed session above); clear it so it doesn't
+                    // bleed onto the new task.
+                    self.manualNote = ""
                 }
             } else {
                 self.currentTarget = nil
