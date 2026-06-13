@@ -637,6 +637,19 @@ public final class AppController: ObservableObject {
             }
         }
         var session = session
+        let previous = (try? journal.allSessions())?.first(where: { $0.id == session.id })
+        // Task changed (e.g. a mis-filed slice reassigned in the editor): the
+        // old OP entry belongs to the old work package — delete it, drop the
+        // id, and let sync recreate under the new task. Also teach the
+        // attributor so the same surface stops mis-filing in future.
+        if let previous, previous.task != session.task {
+            if let oldEntry = previous.opTimeEntryID, let client {
+                try? await client.deleteTimeEntry(id: oldEntry)
+            }
+            session.opTimeEntryID = nil
+            session.pushedToOP = false
+            teachAssociation(for: session)
+        }
         // A sub-minute session was marked handled without an OP entry; if an
         // edit grows it to pushable size it must re-enter the push queue.
         if session.pushedToOP, session.opTimeEntryID == nil,
@@ -657,8 +670,22 @@ public final class AppController: ObservableObject {
             } catch {
                 lastError = "OP update failed: \(error)"
             }
+        } else if previous?.task != session.task {
+            await syncIfEnabled()   // reassigned: push under the new task
         }
         updateJournalSummary()
+    }
+
+    /// Teach the attributor the dominant surface→task association inside a
+    /// reassigned session, so future time on that window stops mis-filing.
+    private func teachAssociation(for session: Session) {
+        let spans = (try? journal.spans(from: session.start, to: session.end)) ?? []
+        guard let dominant = spans.max(by: {
+            $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
+        }) else { return }
+        attributor.assign(dominant.signal, target: .task(session.task))
+        try? learningStore.save(attributor.learning)
+        try? primedStore.save(attributor.primedSurfaces)
     }
 
     public func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
@@ -704,8 +731,39 @@ public final class AppController: ObservableObject {
             session.opTimeEntryID = nil
             session.pushedToOP = false
             try? journal.update(session)
+            teachAssociation(for: session)   // stop the same window mis-filing again
         }
         await syncIfEnabled()
+    }
+
+    /// Dominant application of a session, from its window spans.
+    private func dominantApp(of session: Session) -> String? {
+        let spans = (try? journal.spans(from: session.start, to: session.end)) ?? []
+        var perApp: [String: TimeInterval] = [:]
+        for s in spans where s.end > session.start && s.start < session.end {
+            perApp[s.signal.app, default: 0] +=
+                min(s.end, session.end).timeIntervalSince(max(s.start, session.start))
+        }
+        return perApp.max { $0.value < $1.value }?.key
+    }
+
+    /// Reassign, within a period, every session whose dominant app is
+    /// `appLabel` to `target` — the precise fix for "app X is filing under the
+    /// wrong task" (e.g. Games time logged under Ambitick). Teaches the
+    /// attributor so it stops recurring.
+    public func reassignSpentApp(_ appLabel: String, from: Date, to: Date,
+                                 to target: TaskRef) async {
+        let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { dominantApp(of: $0) == appLabel }
+        await reassignTimelineSessions(sessions, to: target)
+    }
+
+    /// Reassign a whole task's period sessions to another task.
+    public func reassignSpentTask(_ ref: TaskRef, from: Date, to: Date,
+                                  to target: TaskRef) async {
+        let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.task == ref }
+        await reassignTimelineSessions(sessions, to: target)
     }
 
     // MARK: - AI assist (clipboard out, paste back)

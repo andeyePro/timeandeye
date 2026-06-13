@@ -19,3 +19,8 @@
   handles that eat into neighbours, gap-click creates a gap-filling slice,
   connected zoom strip (lines from slice edges to detail strip), user-editable
   task colours, edit start time of the CURRENTLY tracked session
+- [ ] Attribution: a newly-created local task (e.g. Games) isn't auto-associated
+  with its window, so its time files under the previous task until the user
+  reassigns once (reassign now teaches the association, so it self-corrects
+  after the first fix). Consider auto-priming a local task to the frontmost
+  window at creation time.

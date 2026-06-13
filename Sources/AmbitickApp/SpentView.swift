@@ -51,7 +51,10 @@ struct SpentView: View {
         case none
         case project(Int)
         case task(Int, Int)
+        case app(Int, Int, Int)
     }
+
+    @State private var reassignFilter = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -67,6 +70,7 @@ struct SpentView: View {
                 Spacer()
                 Text(totalText).font(.caption).foregroundStyle(.secondary)
             }
+            reassignBar
             HStack(alignment: .top, spacing: 16) {
                 GeometryReader { geo in
                     pie(in: geo.size)
@@ -196,7 +200,7 @@ struct SpentView: View {
                                     a0: a0, a1: a1, orientation: .tangential,
                                     depth: m.ringWidth, bold: false, colour: taskColour(task))
                 }
-                if case .task(pi, let tj) = active, tj < tasks.count,
+                if let tj = activeTaskIndex(), tj < tasks.count,
                    !tasks[tj].children.isEmpty {
                     let (t0, t1) = taskAngles[tj]
                     let apps = tasks[tj].children
@@ -294,6 +298,10 @@ struct SpentView: View {
         case .task(let i, let j) where i < nodes.count && j < nodes[i].children.count:
             let t = nodes[i].children[j]
             (title, seconds) = (t.label, t.seconds)
+        case .app(let i, let j, let k) where i < nodes.count && j < nodes[i].children.count
+            && k < nodes[i].children[j].children.count:
+            let a = nodes[i].children[j].children[k]
+            (title, seconds) = (a.label, a.seconds)
         default:
             (title, seconds) = ("total", totalSeconds)
         }
@@ -346,8 +354,18 @@ struct SpentView: View {
             }
             return .project(pi)        // ring band, off-arc: keep the expansion
         }
-        if r <= m.outerMost + 3 {
-            return active              // app band keeps whatever is open
+        if r <= m.outerMost + 3, let tj = activeTaskIndex(), tj < nodes[pi].children.count {
+            let apps = nodes[pi].children[tj].children
+            guard !apps.isEmpty else { return active }
+            let taskAngles = angles(for: nodes[pi].children, total: nodes[pi].seconds,
+                                    within: (p0, p1))
+            let (t0, t1) = taskAngles[tj]
+            let appTotal = apps.reduce(0.0) { $0 + $1.seconds }
+            let appAngles = angles(for: apps, total: appTotal, within: (t0, t1))
+            for (k, (a0, a1)) in appAngles.enumerated() where angle >= a0 && angle < a1 {
+                return .app(pi, tj, k)
+            }
+            return active
         }
         return .none
     }
@@ -356,11 +374,74 @@ struct SpentView: View {
         switch active {
         case .project(let i): return i
         case .task(let i, _): return i
+        case .app(let i, _, _): return i
         case .none: return nil
         }
     }
 
+    private func activeTaskIndex() -> Int? {
+        switch active {
+        case .task(_, let j): return j
+        case .app(_, let j, _): return j
+        default: return nil
+        }
+    }
+
     // MARK: - Colours / labels
+
+    // MARK: - Reassign (click a pinned task/app → move that time)
+
+    @ViewBuilder private var reassignBar: some View {
+        switch pinned {
+        case .task(let i, let j) where i < nodes.count && j < nodes[i].children.count:
+            let task = nodes[i].children[j]
+            if let ref = task.ref {
+                reassignRow(label: "all \(task.label) (\(hm(task.seconds)))") { target in
+                    let (from, to) = period.range
+                    Task { await controller.reassignSpentTask(ref, from: from, to: to, to: target) }
+                }
+            }
+        case .app(let i, let j, let k) where i < nodes.count && j < nodes[i].children.count
+            && k < nodes[i].children[j].children.count:
+            let app = nodes[i].children[j].children[k]
+            reassignRow(label: "\(app.label) time (\(hm(app.seconds)))") { target in
+                let (from, to) = period.range
+                Task { await controller.reassignSpentApp(app.label, from: from, to: to, to: target) }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func reassignRow(label: String, action: @escaping (TaskRef) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text("Reassign \(label) →").font(.caption)
+                TextField("filter tasks", text: $reassignFilter)
+                    .textFieldStyle(.roundedBorder).font(.caption).frame(width: 150)
+                Button { pinned = .none } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(controller.searchTasks(reassignFilter), id: \.ref) { task in
+                        Button {
+                            action(task.ref)
+                            pinned = .none
+                            reassignFilter = ""
+                        } label: {
+                            HStack(spacing: 3) {
+                                if task.isLocalOnly { Image(systemName: "house").font(.system(size: 8)) }
+                                Text(task.subject)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+    }
 
     private func colour(project node: TimeAggregator.Node, index: Int) -> Color {
         if let firstTask = node.children.first, let ref = firstTask.ref {

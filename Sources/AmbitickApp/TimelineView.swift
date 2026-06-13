@@ -334,14 +334,14 @@ struct TimelineView: View {
             }
     }
 
-    /// Always-on grips at both edges of any slice wide enough to host them
-    /// (hover detection on positioned views proved unreliable, and visible
-    /// grips are more discoverable anyway). Dragging a grip over neighbours
-    /// eats into them on release; shrinking leaves the gap.
+    /// Grips appear only on the slice you've clicked to edit (hover detection
+    /// on positioned views was unreliable; click-to-reveal is the agreed
+    /// alternative). Dragging a grip over neighbours eats into them on
+    /// release; shrinking leaves the gap.
     @ViewBuilder
     private func edgeHandles(_ session: Session, sliceWidth: CGFloat) -> some View {
         let isLive = session.id == AppController.liveSessionID
-        if sliceWidth > 18, !isLive {
+        if editing?.id == session.id, sliceWidth > 14, !isLive {
             HStack(spacing: 0) {
                 handle(session, edge: .leading)
                 Spacer(minLength: 0)
@@ -496,14 +496,14 @@ struct TimelineView: View {
         let isLive = session.id == AppController.liveSessionID
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                if isNewEditing {
-                    taskPicker
-                } else {
+                if isLive {
                     Text(controller.name(of: .task(session.task))).font(.headline)
-                    if isLive {
-                        Text("live").font(.caption2).padding(.horizontal, 4)
-                            .background(.green.opacity(0.3), in: Capsule())
-                    }
+                    Text("live").font(.caption2).padding(.horizontal, 4)
+                        .background(.green.opacity(0.3), in: Capsule())
+                } else {
+                    // Reassign control for every editable slice (not just new
+                    // ones) — clicking a mis-filed slice lets you move it.
+                    taskPicker
                 }
                 Spacer()
                 Button { editing = nil } label: { Image(systemName: "xmark.circle") }
