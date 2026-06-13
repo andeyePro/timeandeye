@@ -33,6 +33,7 @@ struct TimelineView: View {
     @State private var pinchBaseSpan: TimeInterval?
     @State private var drawDraft: (start: Date, end: Date)?
     @State private var edgeDrag: (id: UUID, start: Date, end: Date)?
+    @State private var edgeOrigin: (start: Date, end: Date)?
     @State private var hoveredSlice: UUID?
     @State private var barWidth: CGFloat = 900
     @State private var selectedSpanDetail: String?
@@ -306,13 +307,16 @@ struct TimelineView: View {
                         .font(.system(size: 9))
                         .lineLimit(1)
                         .padding(.leading, 3)
-                        .foregroundStyle(.black.opacity(0.8))
+                        .foregroundStyle(labelColour(for: session.task))
                 }
             }
             .overlay(RoundedRectangle(cornerRadius: 3)
                 .stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
-            .overlay { edgeHandles(session, sliceWidth: w) }
             .frame(width: w, height: 44)
+            // Handles overlaid AFTER the frame so the HStack spans the slice
+            // width (previously sized to nothing → handles only landed on the
+            // last-drawn slice).
+            .overlay { edgeHandles(session, sliceWidth: w) }
             .position(x: x0 + w / 2, y: 56)
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
             .onHover { inside in hoveredSlice = inside ? session.id : nil }
@@ -355,18 +359,25 @@ struct TimelineView: View {
             .frame(width: 6, height: 30)
             .padding(2)
             .contentShape(Rectangle().inset(by: -4))
-            .gesture(DragGesture(coordinateSpace: .named("timeline"))
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .named("timeline"))
                 .onChanged { value in
+                    // Capture the ORIGINAL bounds once: translation is
+                    // cumulative from the gesture start, and the slice itself
+                    // re-renders mid-drag (edgeDrag feeds back into `sessions`),
+                    // so reading session.start each tick compounded — the edge
+                    // "flew off". Anchor to the pre-drag origin instead.
+                    if edgeOrigin == nil { edgeOrigin = (session.start, session.end) }
+                    let origin = edgeOrigin ?? (session.start, session.end)
                     let dt = TimeInterval(value.translation.width / barWidth) * viewSpan
-                    var start = session.start
-                    var end = session.end
+                    var start = origin.start
+                    var end = origin.end
                     if edge == .leading {
-                        start = TimelineMath.snap(session.start.addingTimeInterval(dt),
+                        start = TimelineMath.snap(origin.start.addingTimeInterval(dt),
                                                   to: sessions, excluding: session.id,
                                                   tolerance: snapTolerance)
                         start = min(start, end.addingTimeInterval(-60))
                     } else {
-                        end = TimelineMath.snap(session.end.addingTimeInterval(dt),
+                        end = TimelineMath.snap(origin.end.addingTimeInterval(dt),
                                                 to: sessions, excluding: session.id,
                                                 tolerance: snapTolerance)
                         end = max(end, start.addingTimeInterval(60))
@@ -374,6 +385,7 @@ struct TimelineView: View {
                     edgeDrag = (session.id, start, end)
                 }
                 .onEnded { _ in
+                    edgeOrigin = nil
                     guard let drag = edgeDrag else { return }
                     edgeDrag = nil
                     var edited = session
@@ -384,20 +396,27 @@ struct TimelineView: View {
                     let trims = TimelineMath.trims(for: drag.start, drag.end,
                                                    excluding: session.id, in: base)
                     Task {
-                        for trim in trims {
-                            if trim.delete {
-                                await controller.deleteTimelineSession(trim.session)
-                            } else {
-                                await controller.applyTimelineEdit(trim.session)
+                        await controller.undoGroup("resize \(controller.name(of: .task(edited.task)))") {
+                            for trim in trims {
+                                if trim.delete {
+                                    await controller.deleteTimelineSession(trim.session)
+                                } else {
+                                    await controller.applyTimelineEdit(trim.session)
+                                }
                             }
+                            await controller.applyTimelineEdit(edited)
                         }
-                        await controller.applyTimelineEdit(edited)
                     }
                 })
     }
 
     private func slot(_ session: Session) -> String {
         "\(session.start.formatted(date: .omitted, time: .shortened)) – \(session.end.formatted(date: .omitted, time: .shortened))"
+    }
+
+    /// Black on light fills, white on dark — readable on any task colour.
+    private func labelColour(for ref: TaskRef) -> Color {
+        Color(nsColor: controller.colour(for: ref).readableTextColour)
     }
 
     // MARK: - Reassign
@@ -573,28 +592,31 @@ struct TimelineView: View {
             let isNew = isNewEditing
             let liveOverlap = overlapping.first { $0.id == AppController.liveSessionID }
             Task {
-                if let live = liveOverlap, edited.end > live.start, edited.end < Date() {
-                    // The live clock cannot overlap recorded history: its
-                    // start moves to the edited slice's end.
-                    controller.adjustLiveStart(to: edited.end)
-                }
-                for trim in TimelineMath.trims(for: edited.start, edited.end,
-                                               excluding: edited.id,
-                                               in: overlapping.filter { $0.id != AppController.liveSessionID }) {
-                    if trim.delete {
-                        await controller.deleteTimelineSession(trim.session)
-                    } else {
-                        await controller.applyTimelineEdit(trim.session)
+                await controller.undoGroup("\(isNew ? "create" : "edit") \(controller.name(of: .task(edited.task)))") {
+                    if let live = liveOverlap, edited.end > live.start, edited.end < Date() {
+                        // The live clock cannot overlap recorded history: its
+                        // start moves to the edited slice's end.
+                        controller.adjustLiveStart(to: edited.end)
                     }
-                }
-                if isNew {
-                    await controller.createTimelineSession(edited)
-                } else {
-                    await controller.applyTimelineEdit(edited)
+                    for trim in TimelineMath.trims(for: edited.start, edited.end,
+                                                   excluding: edited.id,
+                                                   in: overlapping.filter { $0.id != AppController.liveSessionID }) {
+                        if trim.delete {
+                            await controller.deleteTimelineSession(trim.session)
+                        } else {
+                            await controller.applyTimelineEdit(trim.session)
+                        }
+                    }
+                    if isNew {
+                        await controller.createTimelineSession(edited)
+                    } else {
+                        await controller.applyTimelineEdit(edited)
+                    }
                 }
             }
             editing = nil
             conflicts = []
+            drawDraft = nil
         } else {
             conflicts = overlapping
         }

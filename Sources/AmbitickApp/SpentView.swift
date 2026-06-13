@@ -168,7 +168,8 @@ struct SpentView: View {
                 }
                 drawLabelIfFits(context, node.label, centre: centre,
                                 radius: m.r1 * 0.66, a0: a0, a1: a1,
-                                depth: m.r1 - m.hole, bold: true)
+                                depth: m.r1 - m.hole, bold: true,
+                                colour: colour(project: node, index: i))
             }
             var holePath = Path()
             holePath.addArc(center: centre, radius: m.hole, startAngle: .degrees(0),
@@ -190,27 +191,29 @@ struct SpentView: View {
                          colour: taskColour(task)
                             .opacity(highlighted ? 1 : (local ? 0.55 : 0.85)),
                          dashed: local)
-                    drawLabelIfFits(context, task.label, centre: centre,
+                    drawCurvedLabel(context, task.label, centre: centre,
                                     radius: m.r1 + m.gap + m.ringWidth / 2,
-                                    a0: a0, a1: a1, depth: m.ringWidth, bold: false)
+                                    a0: a0, a1: a1, colour: taskColour(task))
                 }
                 if case .task(pi, let tj) = active, tj < tasks.count,
                    !tasks[tj].children.isEmpty {
                     let (t0, t1) = taskAngles[tj]
                     let apps = tasks[tj].children
-                    let appAngles = angles(for: apps, total: tasks[tj].seconds, within: (t0, t1))
+                    // Normalise against the apps we know about so a sole app
+                    // (e.g. all Ambitick work in Ghostty) fills 100% of the
+                    // task arc — span coverage is partial, the task total isn't.
+                    let appTotal = apps.reduce(0.0) { $0 + $1.seconds }
+                    let appAngles = angles(for: apps, total: appTotal, within: (t0, t1))
                     for (k, app) in apps.enumerated() {
                         let (a0, a1) = appAngles[k]
+                        let appColour = taskColour(tasks[tj]).opacity(k % 2 == 0 ? 0.85 : 0.55)
                         ring(context, centre: centre,
                              inner: m.r1 + m.gap * 2 + m.ringWidth,
                              outer: m.r1 + m.gap * 2 + m.ringWidth * 2,
-                             from: a0, to: a1,
-                             colour: taskColour(tasks[tj])
-                                .opacity(k % 2 == 0 ? 0.8 : 0.5),
-                             dashed: false)
-                        drawLabelIfFits(context, app.label, centre: centre,
+                             from: a0, to: a1, colour: appColour, dashed: false)
+                        drawCurvedLabel(context, app.label, centre: centre,
                                         radius: m.r1 + m.gap * 2 + m.ringWidth * 1.5,
-                                        a0: a0, a1: a1, depth: m.ringWidth, bold: false)
+                                        a0: a0, a1: a1, colour: taskColour(tasks[tj]))
                     }
                 }
             }
@@ -232,24 +235,73 @@ struct SpentView: View {
         }
     }
 
-    /// A label draws only when its rendered size fits the segment (chord
-    /// across, ring depth down). Hidden labels are covered by the centre
-    /// readout and the ✕-marked legend row.
+    /// Straight label for the central wedges — drawn only when it fits the
+    /// segment (chord across, depth down), in a colour readable on the fill.
     private func drawLabelIfFits(_ context: GraphicsContext, _ label: String,
                                  centre: CGPoint, radius: CGFloat,
-                                 a0: Double, a1: Double, depth: CGFloat, bold: Bool) {
+                                 a0: Double, a1: Double, depth: CGFloat, bold: Bool,
+                                 colour: Color) {
         let sweepRadians = (a1 - a0) * .pi / 180
         guard sweepRadians > 0.02 else { return }
         let available = 2 * radius * sin(min(sweepRadians, .pi) / 2) * 0.92
         let text = Text(label)
             .font(.system(size: bold ? 10 : 9, weight: bold ? .bold : .regular))
-            .foregroundStyle(.black.opacity(0.78))
+            .foregroundStyle(readableText(on: colour))
         let resolved = context.resolve(text)
         let measured = resolved.measure(in: CGSize(width: 600, height: 40))
         guard measured.width <= available, measured.height <= depth else { return }
         let mid = Angle.degrees((a0 + a1) / 2).radians
         context.draw(resolved, at: CGPoint(x: centre.x + cos(mid) * radius,
                                            y: centre.y + sin(mid) * radius))
+    }
+
+    /// Curved label hugging a ring arc: each glyph placed and rotated along
+    /// the arc, hidden when the word can't fit the arc length, flipped on the
+    /// lower half so it reads right-way-up. Colour readable on the fill.
+    private func drawCurvedLabel(_ context: GraphicsContext, _ label: String,
+                                 centre: CGPoint, radius: CGFloat,
+                                 a0: Double, a1: Double, colour: Color) {
+        let sweepRad = (a1 - a0) * .pi / 180
+        guard sweepRad > 0.02, radius > 0 else { return }
+        let chars = Array(label)
+        var widths: [CGFloat] = []
+        var resolved: [GraphicsContext.ResolvedText] = []
+        var total: CGFloat = 0
+        let textColour = readableText(on: colour)
+        for ch in chars {
+            let r = context.resolve(Text(String(ch))
+                .font(.system(size: 9)).foregroundStyle(textColour))
+            let w = r.measure(in: CGSize(width: 50, height: 30)).width
+            widths.append(w)
+            resolved.append(r)
+            total += w
+        }
+        let arcLen = radius * sweepRad
+        guard total <= arcLen * 0.95 else { return }   // doesn't fit → hide
+
+        let midRad = (a0 + a1) / 2 * .pi / 180
+        // Lower half (text would be upside down): flip and reverse.
+        let flip = sin(midRad) > 0
+        let ordered = flip ? Array(zip(resolved, widths).reversed()) : Array(zip(resolved, widths))
+        var lengthCursor = -total / 2
+        for (glyph, w) in ordered {
+            let centreLen = lengthCursor + w / 2
+            let ang = midRad + (flip ? -centreLen : centreLen) / radius
+            let p = CGPoint(x: centre.x + cos(ang) * radius,
+                            y: centre.y + sin(ang) * radius)
+            var ctx = context
+            ctx.translateBy(x: p.x, y: p.y)
+            ctx.rotate(by: .radians(ang + (flip ? -.pi / 2 : .pi / 2)))
+            ctx.draw(glyph, at: .zero)
+            lengthCursor += w
+        }
+    }
+
+    private func readableText(on colour: Color) -> Color {
+        let c = NSColor(colour).usingColorSpace(.sRGB) ?? .black
+        let luminance = 0.299 * c.redComponent + 0.587 * c.greenComponent
+            + 0.114 * c.blueComponent
+        return luminance > 0.6 ? .black : .white
     }
 
     private func drawCentreLabel(_ context: GraphicsContext, _ centre: CGPoint) {

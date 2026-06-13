@@ -43,6 +43,14 @@ public enum MenuTitle {
 }
 
 public extension NSColor {
+    /// Black on light backgrounds, white on dark — by perceived luminance.
+    var readableTextColour: NSColor {
+        let c = usingColorSpace(.sRGB) ?? self
+        let luminance = 0.299 * c.redComponent + 0.587 * c.greenComponent
+            + 0.114 * c.blueComponent
+        return luminance > 0.6 ? .black : .white
+    }
+
     convenience init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.hasPrefix("#") { s.removeFirst() }
@@ -102,15 +110,12 @@ public final class AppController: ObservableObject {
     private var taskRefreshTimer: Timer?
     private var taskChangedAt = Date()
     private var currentTarget: Target?
-    /// Per-task visible clocks: a momentary switch shows the new task's
-    /// accumulated time immediately, and returning restores the old clock.
-    /// Flash visits (< switch grace) don't credit the flashed task — their
-    /// seconds go to `limbo` and merge into the next task that holds focus
-    /// solidly, matching the dominant-minute ledger. Cleared on stop.
+    /// Per-task session accumulators: each task banks its own visited time.
+    /// Returning to a task resumes its clock; a task that holds focus past the
+    /// grace ("takes over") ends every other task's session. Cleared on stop.
     private var bankedElapsed: [Target: TimeInterval] = [:]
     private var targetSince: Date?
     private var visitSolid = false
-    private var limbo: TimeInterval = 0
 
     public static func supportDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -163,15 +168,22 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func addLocalTask(name: String, isLeisure: Bool) {
+    @discardableResult
+    public func addLocalTask(name: String, isLeisure: Bool) -> TaskRef {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        // Reuse an existing local task of the same name instead of duplicating.
+        if let existing = settings.localTasks.first(where: {
+            $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
+            return .local(existing.id)
+        }
         let def = LocalTaskDef(name: trimmed, isLeisure: isLeisure)
         settings.localTasks.append(def)
         mergeLocalTasksIntoCache()
         registerUndo("add local task \(trimmed)") { [weak self] in
             self?.removeLocalTask(def.id, undoable: false)
         }
+        return .local(def.id)
     }
 
     public func removeLocalTask(_ id: UUID, undoable: Bool = true) {
@@ -222,15 +234,12 @@ public final class AppController: ObservableObject {
             let now = Date()
             if case .tracking(let target, _) = state {
                 if target != self.currentTarget {
-                    // Bank the outgoing visit — to the task if it was a solid
-                    // stay, to limbo if it was a flash-through.
+                    // Every visit is credited to its own task's session
+                    // accumulator. A brief excursion does NOT reset the task
+                    // you came from — returning resumes it (Martin: 5s in
+                    // scratch then back to HighgateOS shows HighgateOS's 5s, not 0).
                     if let old = self.currentTarget, let since = self.targetSince {
-                        let visit = now.timeIntervalSince(since)
-                        if self.visitSolid || visit >= self.settings.switchGraceSeconds {
-                            self.bankedElapsed[old, default: 0] += visit
-                        } else {
-                            self.limbo += visit
-                        }
+                        self.bankedElapsed[old, default: 0] += now.timeIntervalSince(since)
                     }
                     self.currentTarget = target
                     self.targetSince = now
@@ -241,7 +250,6 @@ public final class AppController: ObservableObject {
                 self.currentTarget = nil
                 self.targetSince = nil
                 self.visitSolid = false
-                self.limbo = 0
                 self.bankedElapsed.removeAll()
                 self.manualNote = ""
                 self.taskChangedAt = now
@@ -352,16 +360,14 @@ public final class AppController: ObservableObject {
                                          highHex: settings.colourHigh)
         case .tracking(let target, let certainty):
             let running = targetSince.map { Date().timeIntervalSince($0) } ?? 0
-            // A visit that survives the grace becomes solid: it absorbs any
-            // flash-through seconds AND ends every other task's session — the
-            // clock shows the current contiguous session, not a daily total
-            // (a real stint elsewhere means returning starts at 0s; only
-            // flashes preserve the running clock).
+            // When THIS task's current visit survives the grace it has "taken
+            // over": every OTHER task's session is now ended (a real stint
+            // elsewhere starts fresh on return). Brief excursions never reach
+            // here, so they leave the other accumulators intact — the clock
+            // shows the current contiguous session, i.e. what would post to OP.
             if !visitSolid, running >= settings.switchGraceSeconds {
                 visitSolid = true
                 bankedElapsed = bankedElapsed.filter { $0.key == target }
-                bankedElapsed[target, default: 0] += limbo
-                limbo = 0
             }
             let elapsed = bankedElapsed[target, default: 0] + running
             newText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
@@ -473,10 +479,31 @@ public final class AppController: ObservableObject {
     /// local tasks, colours). ⌘Z anywhere in the app.
     private var undoStack: [(label: String, inverse: () async -> Void)] = []
     @Published public private(set) var undoCount = 0
+    private var pendingGroup: [() async -> Void]?
 
     private func registerUndo(_ label: String, inverse: @escaping () async -> Void) {
-        undoStack.append((label, inverse))
-        undoCount = undoStack.count
+        if pendingGroup != nil {
+            pendingGroup?.append(inverse)   // accumulate; the group pushes one entry
+        } else {
+            undoStack.append((label, inverse))
+            undoCount = undoStack.count
+        }
+    }
+
+    /// Bundle every mutation in `body` into ONE undo step (a handle drag that
+    /// overwrites several records, or an overlap save that trims a neighbour
+    /// and moves a slice, undoes in a single ⌘Z). Nestable.
+    public func undoGroup(_ label: String, _ body: () async -> Void) async {
+        let outer = pendingGroup == nil
+        if outer { pendingGroup = [] }
+        await body()
+        if outer, let group = pendingGroup {
+            pendingGroup = nil
+            if !group.isEmpty {
+                undoStack.append((label, { for inverse in group.reversed() { await inverse() } }))
+                undoCount = undoStack.count
+            }
+        }
     }
 
     public func undo() {

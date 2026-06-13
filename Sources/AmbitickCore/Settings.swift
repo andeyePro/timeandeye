@@ -64,7 +64,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 primeDwellSeconds: Double = 30,
                 minSegmentSeconds: Double = 20,
                 switchGraceSeconds: Double = 30,
-                systemNotifications: Bool = true,
+                systemNotifications: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:]) {
         self.opBaseURL = opBaseURL

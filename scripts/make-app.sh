@@ -8,7 +8,7 @@ APP="$OUT/Ambitick.app"
 # Never replace a RUNNING app in place - macOS may kill it mid-execution
 # (the "menu bar icon disappeared" deaths). Stage beside it instead.
 if pgrep -xq Ambitick; then
-    APP="$OUT/Ambitick-new.app"
+    APP="$OUT/Ambitick+.app"
     echo "NOTE: Ambitick is running; building to $APP - quit the old one and rename to swap."
 fi
 

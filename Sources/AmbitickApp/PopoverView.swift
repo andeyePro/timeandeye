@@ -103,21 +103,23 @@ struct PopoverView: View {
                     .font(.caption)
                     .frame(width: 120)
             }
-            let top = controller.pickList()
-            let all = controller.searchTasks(filter)
+            // Default view: just the recent + likely picks (bounded by the
+            // Settings counts). Typing the filter fuzzy-searches every task.
+            let shown = filter.isEmpty ? controller.pickList() : controller.searchTasks(filter)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(all.enumerated()), id: \.element.ref) { index, task in
-                        if filter.isEmpty, index == top.count, index > 0 {
-                            Divider()   // recent+likely above, the long tail below
-                        }
+                    ForEach(shown, id: \.ref) { task in
                         taskRow(task)
                     }
                 }
             }
             // Explicit height: an unconstrained ScrollView collapses to one
             // row inside the MenuBarExtra popover.
-            .frame(height: min(CGFloat(max(all.count, 1)) * 26, 240))
+            .frame(height: min(CGFloat(max(shown.count, 1)) * 26, 240))
+            if filter.isEmpty, !controller.taskCache.isEmpty {
+                Text("type to search all \(controller.taskCache.count) tasks")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
             if controller.taskCache.isEmpty {
                 Text("No tasks yet – set OP URL + API key in Settings")
                     .font(.caption2)
