@@ -34,7 +34,6 @@ struct TimelineView: View {
     @State private var drawDraft: (start: Date, end: Date)?
     @State private var edgeDrag: (id: UUID, start: Date, end: Date)?
     @State private var edgeOrigin: (start: Date, end: Date)?
-    @State private var hoveredSlice: UUID?
     @State private var barWidth: CGFloat = 900
     @State private var selectedSpanDetail: String?
     @State private var scrollMonitor: Any?
@@ -319,7 +318,6 @@ struct TimelineView: View {
             .overlay { edgeHandles(session, sliceWidth: w) }
             .position(x: x0 + w / 2, y: 56)
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
-            .onHover { inside in hoveredSlice = inside ? session.id : nil }
             .anchorPreference(key: RectKey.self, value: .bounds) { anchor in
                 editing?.id == session.id ? ["slice": anchor] : [:]
             }
@@ -336,15 +334,17 @@ struct TimelineView: View {
             }
     }
 
-    /// Hover near an edge → drag handle. Dragging over neighbours eats into
-    /// them on release; shrinking leaves the gap (never edits the neighbour).
+    /// Always-on grips at both edges of any slice wide enough to host them
+    /// (hover detection on positioned views proved unreliable, and visible
+    /// grips are more discoverable anyway). Dragging a grip over neighbours
+    /// eats into them on release; shrinking leaves the gap.
     @ViewBuilder
     private func edgeHandles(_ session: Session, sliceWidth: CGFloat) -> some View {
         let isLive = session.id == AppController.liveSessionID
-        if hoveredSlice == session.id, sliceWidth > 24, !isLive {
-            HStack {
+        if sliceWidth > 18, !isLive {
+            HStack(spacing: 0) {
                 handle(session, edge: .leading)
-                Spacer()
+                Spacer(minLength: 0)
                 handle(session, edge: .trailing)
             }
         }
@@ -354,12 +354,14 @@ struct TimelineView: View {
 
     private func handle(_ session: Session, edge: Edge) -> some View {
         RoundedRectangle(cornerRadius: 2)
-            .fill(Color.primary.opacity(0.65))
-            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.white, lineWidth: 1))
-            .frame(width: 6, height: 30)
-            .padding(2)
-            .contentShape(Rectangle().inset(by: -4))
-            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .named("timeline"))
+            .fill(.white.opacity(0.9))
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(.black.opacity(0.5), lineWidth: 0.5))
+            .frame(width: 5, height: 34)
+            .contentShape(Rectangle().inset(by: -6))   // fat hit target
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .highPriorityGesture(DragGesture(minimumDistance: 1, coordinateSpace: .named("timeline"))
                 .onChanged { value in
                     // Capture the ORIGINAL bounds once: translation is
                     // cumulative from the gesture start, and the slice itself
