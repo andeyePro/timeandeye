@@ -253,8 +253,7 @@ public final class AppController: ObservableObject {
                 self.bankedElapsed.removeAll()
                 self.manualNote = ""
                 self.taskChangedAt = now
-                Notifier.notify(title: "Timer stopped", body: "Ambitick stopped the clock.",
-                                sound: "Basso")
+                Notifier.notify(symbol: "stop.circle", text: "Stopped", sound: "Basso")
             }
             self.refreshTitle(force: true)
         }
@@ -269,15 +268,13 @@ public final class AppController: ObservableObject {
             self.lastPrompt = prompt
             switch prompt {
             case .taskChanged(let target):
-                Notifier.notify(title: "Task changed",
-                                body: self.name(of: target), sound: "Tink")
+                Notifier.notify(symbol: "arrow.right", text: self.name(of: target),
+                                sound: "Tink")
             case .resumeAfterIdle:
-                Notifier.notify(title: "Welcome back",
-                                body: "Did work continue, or was the stop time correct?",
+                Notifier.notify(symbol: "sun.max", text: "Welcome back — work continued?",
                                 sound: "Tink")
             case .callEnded:
-                Notifier.notify(title: "Call ended",
-                                body: "Assign the call, or choose Do not track.",
+                Notifier.notify(symbol: "phone.down", text: "Call ended — assign it?",
                                 sound: "Tink")
             }
         }
@@ -512,7 +509,7 @@ public final class AppController: ObservableObject {
             return
         }
         undoCount = undoStack.count
-        Notifier.notify(title: "Undo", body: last.label, sound: "Pop")
+        Notifier.notify(symbol: "arrow.uturn.backward", text: last.label, sound: "Pop")
         Task { await last.inverse() }
     }
 
@@ -859,17 +856,32 @@ enum Notifier {
 
     static func requestAuthorization() {}
 
-    static func notify(title: String, body: String, sound: String) {
+    /// `symbol` is an SF Symbol name drawn as the leading glyph (the "logo"),
+    /// so a task change reads as "→ Ambitick" rather than the slow-to-read
+    /// "Task changed — Ambitick". Falls back to text only if the symbol is
+    /// unavailable.
+    static func notify(symbol: String?, text: String, sound: String) {
         DispatchQueue.main.async {
             NSSound(named: sound)?.play()
             guard enabled else { return }
-            showBanner("\(title) — \(body)")
+            showBanner(symbol: symbol, text: text)
         }
     }
 
-    private static func showBanner(_ text: String) {
+    /// Back-compat text-only entry point.
+    static func notify(title: String, body: String, sound: String) {
+        notify(symbol: nil, text: "\(title) — \(body)", sound: sound)
+    }
+
+    private static func showBanner(symbol: String?, text: String) {
         dismissTask?.cancel()
-        panel?.close()
+        panel?.orderOut(nil)
+        panel = nil
+        guard let screen = NSScreen.main else { return }
+
+        let padding: CGFloat = 14
+        let iconSize: CGFloat = 17
+        let gap: CGFloat = 8
 
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 13, weight: .medium)
@@ -877,10 +889,20 @@ enum Notifier {
         label.lineBreakMode = .byTruncatingTail
         label.sizeToFit()
 
-        let padding: CGFloat = 14
-        let width = min(label.frame.width + padding * 2, 420)
-        let height = label.frame.height + padding * 1.2
-        guard let screen = NSScreen.main else { return }
+        var iconView: NSImageView?
+        if let symbol,
+           let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
+            image.isTemplate = true
+            let view = NSImageView(image: image)
+            view.contentTintColor = .labelColor
+            view.symbolConfiguration = .init(pointSize: iconSize, weight: .semibold)
+            iconView = view
+        }
+
+        let iconSpace = iconView == nil ? 0 : iconSize + gap
+        let textWidth = min(label.frame.width, 360)
+        let width = padding * 2 + iconSpace + textWidth
+        let height = max(label.frame.height, iconSize) + padding * 1.2
         let rect = NSRect(x: screen.visibleFrame.maxX - width - 16,
                           y: screen.visibleFrame.maxY - height - 12,
                           width: width, height: height)
@@ -894,20 +916,25 @@ enum Notifier {
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.isReleasedWhenClosed = false
 
-        let background = NSVisualEffectView(frame: NSRect(origin: .zero,
-                                                          size: rect.size))
+        let background = NSVisualEffectView(frame: NSRect(origin: .zero, size: rect.size))
         background.material = .hudWindow
         background.state = .active
         background.wantsLayer = true
         background.layer?.cornerRadius = 10
-        label.frame.origin = NSPoint(x: padding, y: (height - label.frame.height) / 2)
-        label.frame.size.width = width - padding * 2
+
+        if let iconView {
+            iconView.frame = NSRect(x: padding, y: (height - iconSize) / 2,
+                                    width: iconSize, height: iconSize)
+            background.addSubview(iconView)
+        }
+        label.frame = NSRect(x: padding + iconSpace, y: (height - label.frame.height) / 2,
+                             width: textWidth, height: label.frame.height)
         background.addSubview(label)
         p.contentView = background
         p.orderFrontRegardless()
         panel = p
 
-        let task = DispatchWorkItem { panel?.close(); panel = nil }
+        let task = DispatchWorkItem { panel?.orderOut(nil); panel = nil }
         dismissTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.5, execute: task)
     }
