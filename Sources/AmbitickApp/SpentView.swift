@@ -265,12 +265,20 @@ struct SpentView: View {
         let measured = resolved.measure(in: CGSize(width: 600, height: 40))
 
         let arc = radius * sweepRad                 // tangential room
-        let along = orientation == .radial ? depth : arc
-        let across = orientation == .radial ? arc : depth
-        guard measured.width <= along * 0.92, measured.height <= across else { return }
+        func fits(_ o: LabelOrientation) -> Bool {
+            let along = o == .radial ? depth : arc
+            let across = o == .radial ? arc : depth
+            return measured.width <= along * 0.92 && measured.height <= across
+        }
+        // Prefer the requested orientation; if a wedge label won't fit
+        // radially, lay it along the arc instead rather than hiding it.
+        let chosen: LabelOrientation
+        if fits(orientation) { chosen = orientation }
+        else if orientation == .radial, fits(.tangential) { chosen = .tangential }
+        else { return }
 
         let midDeg = (a0 + a1) / 2
-        var rotation = orientation == .radial ? midDeg : midDeg + 90
+        var rotation = chosen == .radial ? midDeg : midDeg + 90
         // Keep upright: if the baseline would read right-to-left, spin 180°.
         var norm = rotation.truncatingRemainder(dividingBy: 360)
         if norm < 0 { norm += 360 }

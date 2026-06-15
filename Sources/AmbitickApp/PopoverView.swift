@@ -32,23 +32,13 @@ struct PopoverView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             if case .tracking = controller.trackerState {
-                // Clicking the running task name drops down a list to CHANGE
-                // it — relabels the current session (keeps its time) rather
-                // than switching to a fresh one.
-                Menu {
-                    ForEach(controller.pickList(), id: \.ref) { task in
-                        Button(task.subject) { controller.changeCurrentTask(to: task.ref) }
-                    }
-                    Divider()
-                    Button("Search all tasks…") { changeMode = true }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(controller.currentTaskName()).font(.headline).lineLimit(2)
-                        Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
-                    }
+                // Clicking the running task name flips the list below into
+                // "Change to" mode (relabel the current session).
+                Button { changeMode.toggle() } label: {
+                    Text(controller.currentTaskName()).font(.headline).lineLimit(2)
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                .buttonStyle(.plain)
+                .help("Click to change this task")
             } else {
                 Text(controller.currentTaskName()).font(.headline).lineLimit(2)
             }
@@ -58,11 +48,22 @@ struct PopoverView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button {
-                        controller.userStopped()
-                    } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .foregroundStyle(.red)
+                    Button { changeMode.toggle() } label: {
+                        Image(systemName: changeMode ? "arrow.left.arrow.right" : "pencil")
+                    }
+                    .buttonStyle(.plain)
+                    .help(changeMode ? "Back to Switch to" : "Change the current task")
+                    Button { controller.setAway(!controller.away) } label: {
+                        Image(systemName: controller.away ? "figure.walk.motion" : "figure.walk")
+                            .foregroundStyle(controller.away ? Color.accentColor : .primary)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                    .help(controller.away
+                          ? "I'm back — resume normal tracking"
+                          : "I'm leaving my desk — keep tracking this task (⌘⇧L)")
+                    Button { controller.userStopped() } label: {
+                        Image(systemName: "stop.circle.fill").foregroundStyle(.red)
                     }
                     .buttonStyle(.plain)
                     .help("Stop tracking")
@@ -71,7 +72,7 @@ struct PopoverView: View {
                     Image(systemName: "bubble.left")
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    TextField("note…", text: $note)
+                    TextField("", text: $note)
                         .textFieldStyle(.roundedBorder)
                         .font(.caption)
                         .focused($noteFocused)
@@ -123,7 +124,7 @@ struct PopoverView: View {
     private var switchList: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(changeMode ? "Change to (relabels current)" : "Switch to")
+                Text(changeMode ? "Change to" : "Switch to")
                     .font(.caption)
                     .foregroundStyle(changeMode ? Color.accentColor : .secondary)
                 if changeMode {

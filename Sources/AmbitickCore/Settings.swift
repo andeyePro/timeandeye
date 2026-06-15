@@ -44,6 +44,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var minSegmentSeconds: Double
     public var switchGraceSeconds: Double
     public var systemNotifications: Bool
+    /// Lock the Mac when "I'm leaving my desk" is activated.
+    public var lockOnLeave: Bool
     /// Non-OP tasks (leisure etc.), fully tracked locally.
     public var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
@@ -65,6 +67,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 minSegmentSeconds: Double = 20,
                 switchGraceSeconds: Double = 30,
                 systemNotifications: Bool = true,
+                lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:]) {
         self.opBaseURL = opBaseURL
@@ -83,6 +86,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.minSegmentSeconds = minSegmentSeconds
         self.switchGraceSeconds = switchGraceSeconds
         self.systemNotifications = systemNotifications
+        self.lockOnLeave = lockOnLeave
         self.localTasks = localTasks
         self.taskColours = taskColours
     }
@@ -108,6 +112,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         minSegmentSeconds = try c.decodeIfPresent(Double.self, forKey: .minSegmentSeconds) ?? defaults.minSegmentSeconds
         switchGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .switchGraceSeconds) ?? defaults.switchGraceSeconds
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
+        lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
         localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
         taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours
     }

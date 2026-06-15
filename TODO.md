@@ -24,3 +24,9 @@
   reassigns once (reassign now teaches the association, so it self-corrects
   after the first fix). Consider auto-priming a local task to the frontmost
   window at creation time.
+- [ ] Keyboard-only / mouse-only completeness audit: Enter saves + Esc cancels
+  are wired in the timeline editor; do a full pass so EVERY action has both a
+  keyboard and a mouse route (tab order, list arrow-key nav, popover focus).
+- [ ] True global hotkey for "I'm leaving my desk" (currently ⌘⇧L works when
+  Ambitick/its popover is key; a global RegisterEventHotKey would fire from
+  any app).

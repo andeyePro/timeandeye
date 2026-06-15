@@ -318,6 +318,46 @@ public final class AppController: ObservableObject {
         lastError = nil
     }
 
+    // MARK: - Away ("I'm leaving my desk") and scheduled stop
+
+    @Published public private(set) var away = false
+    private var scheduledStop: Date?
+
+    /// Keep tracking the current task no matter what (idle, app switches,
+    /// sleep) until cleared. Optionally lock the Mac as you leave.
+    public func setAway(_ on: Bool) {
+        guard case .tracking = trackerState else { away = false; tracker.away = false; return }
+        away = on
+        tracker.away = on
+        DebugLog.write("away = \(on)")
+        if on {
+            Notifier.notify(symbol: "figure.walk", text: "Away — still tracking \(currentTaskName())",
+                            sound: "Tink")
+            if settings.lockOnLeave { lockScreen() }
+        } else {
+            Notifier.notify(symbol: "figure.walk.motion", text: "Back — \(currentTaskName())",
+                            sound: "Tink")
+        }
+        refreshTitle(force: true)
+    }
+
+    /// Auto-stop at a future time (the live slice's end dragged forward, e.g.
+    /// a meeting end). nil clears it.
+    public func scheduleStop(at date: Date?) {
+        scheduledStop = date
+        if let date { DebugLog.write("scheduled stop at \(date)") }
+    }
+
+    private func lockScreen() {
+        // Ctrl-Cmd-Q locks the screen on modern macOS; we already hold the
+        // Accessibility right needed to post it.
+        let src = "tell application \"System Events\" to key code 12 using {control down, command down}"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", src]
+        try? process.run()
+    }
+
     // MARK: - Lifecycle
 
     public func startUp() {
@@ -336,7 +376,15 @@ public final class AppController: ObservableObject {
         sensors.start()
         Notifier.requestAuthorization()
         titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshTitle(force: false) }
+            Task { @MainActor in
+                guard let self else { return }
+                if let stop = self.scheduledStop, Date() >= stop {
+                    self.scheduledStop = nil
+                    if self.away { self.setAway(false) }
+                    self.userStopped()
+                }
+                self.refreshTitle(force: false)
+            }
         }
         taskRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -434,6 +482,8 @@ public final class AppController: ObservableObject {
     }
 
     public func userStopped() {
+        if away { away = false; tracker.away = false }
+        scheduledStop = nil
         tracker.stop(at: Date())
     }
 

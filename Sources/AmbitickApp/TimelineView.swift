@@ -67,7 +67,6 @@ struct TimelineView: View {
         }
         .padding(12)
         .coordinateSpace(name: "timeline")
-        .overlayPreferenceValue(RectKey.self) { anchors in connectors(anchors) }
         .onReceive(timer) { _ in refreshTick += 1 }
         .onAppear {
             zoomToLatestBlock()
@@ -324,9 +323,6 @@ struct TimelineView: View {
             .overlay { edgeHandles(session, sliceWidth: w) }
             .position(x: x0 + w / 2, y: 56)
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
-            .anchorPreference(key: RectKey.self, value: .bounds) { anchor in
-                editing?.id == session.id ? ["slice": anchor] : [:]
-            }
             .onTapGesture {
                 if NSEvent.modifierFlags.contains(.command) {
                     guard !isLive else { return }   // the live slice cannot be batch-edited
@@ -346,8 +342,7 @@ struct TimelineView: View {
     /// release; shrinking leaves the gap.
     @ViewBuilder
     private func edgeHandles(_ session: Session, sliceWidth: CGFloat) -> some View {
-        let isLive = session.id == AppController.liveSessionID
-        if editing?.id == session.id, sliceWidth > 14, !isLive {
+        if editing?.id == session.id, sliceWidth > 14 {
             HStack(spacing: 0) {
                 handle(session, edge: .leading)
                 Spacer(minLength: 0)
@@ -488,6 +483,7 @@ struct TimelineView: View {
                 }
                 Spacer()
                 Button { editing = nil } label: { Image(systemName: "xmark.circle") }
+                    .keyboardShortcut(.cancelAction)   // Esc cancels
                     .buttonStyle(.plain)
                 ColorPicker("", selection: Binding(
                     get: { Color(nsColor: controller.colour(for: editTask ?? session.task)) },
@@ -497,13 +493,18 @@ struct TimelineView: View {
             }
             if isLive {
                 HStack(spacing: 16) {
-                    DatePicker("Started", selection: $editStart, displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.field)
-                    Button("Apply") {
-                        controller.adjustLiveStart(to: editStart)
-                        editing = nil
-                    }
-                    Text("end follows the clock").font(.caption).foregroundStyle(.secondary)
+                    DatePicker("Start", selection: $editStart, displayedComponents: .hourAndMinute)
+                    DatePicker("End", selection: $editEnd, displayedComponents: .hourAndMinute)
+                }
+                .datePickerStyle(.field)
+                Text(editEnd > Date().addingTimeInterval(60)
+                     ? "End is in the future → Ambitick will keep tracking and stop then."
+                     : "Drag the start back to claim earlier time; drag the end forward to schedule a stop.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button { saveLive() } label: { Label("Save", systemImage: "checkmark.circle") }
+                        .keyboardShortcut(.defaultAction)
+                    Spacer()
                 }
             } else {
                 HStack(spacing: 16) {
@@ -517,6 +518,7 @@ struct TimelineView: View {
                     Image(systemName: "bubble.left").foregroundStyle(.secondary).font(.caption)
                     TextField("comment (sent to OP)", text: $editComment)
                         .textFieldStyle(.roundedBorder).font(.caption)
+                        .onSubmit { attemptSave(session) }
                 }
                 if !conflicts.isEmpty {
                     conflictProposal
@@ -528,6 +530,7 @@ struct TimelineView: View {
                         Label(isNewEditing ? "Create" : "Save",
                               systemImage: "checkmark.circle")
                     }
+                    .keyboardShortcut(.defaultAction)   // Enter saves
                     if !isNewEditing {
                         Button(role: .destructive) {
                             Task { await controller.deleteTimelineSession(session) }
@@ -544,6 +547,18 @@ struct TimelineView: View {
         }
         .padding(8)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Commit live-slice edits: move the running start back, and/or schedule a
+    /// stop if the end was dragged into the future.
+    private func saveLive() {
+        controller.adjustLiveStart(to: editStart)
+        if editEnd > Date().addingTimeInterval(60) {
+            controller.scheduleStop(at: editEnd)
+        } else {
+            controller.scheduleStop(at: nil)
+        }
+        editing = nil
     }
 
     private var taskPicker: some View {
@@ -625,9 +640,9 @@ struct TimelineView: View {
         let spans = controller.timelineSpans(for: session)
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Windows during this slice").font(.caption).foregroundStyle(.secondary)
+                Text("Windows in \(controller.name(of: .task(session.task))) · \(slot(session))")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if !spans.isEmpty {
-                    Text("· tap to select, then reassign").font(.caption2).foregroundStyle(.tertiary)
                     Spacer()
                     Button { stripPxPerSec = max(stripPxPerSec / 1.6, 0.2) } label: {
                         Image(systemName: "minus.magnifyingglass")
@@ -649,7 +664,6 @@ struct TimelineView: View {
                             spanChip(span, index: idx, task: session.task)
                         }
                     }
-                    .anchorPreference(key: RectKey.self, value: .bounds) { ["strip": $0] }
                 }
                 .frame(height: 30)
                 .gesture(MagnificationGesture()
@@ -741,35 +755,5 @@ struct TimelineView: View {
         attributed: \(controller.name(of: span.target))  certainty \(String(format: "%.0f%%", span.certainty * 100))
         url: \(span.signal.tabURL ?? "-")
         """
-    }
-
-    /// Lines from the selected slice's bottom corners to the strip's top
-    /// corners — the visual statement that the strip is a zoom of the slice.
-    private func connectors(_ anchors: [String: Anchor<CGRect>]) -> some View {
-        GeometryReader { proxy in
-            if editing != nil, let sliceAnchor = anchors["slice"],
-               let stripAnchor = anchors["strip"] {
-                let sliceRect = proxy[sliceAnchor]
-                let stripRect = proxy[stripAnchor]
-                Path { path in
-                    path.move(to: CGPoint(x: sliceRect.minX, y: sliceRect.maxY))
-                    path.addLine(to: CGPoint(x: stripRect.minX, y: stripRect.minY))
-                    path.move(to: CGPoint(x: sliceRect.maxX, y: sliceRect.maxY))
-                    path.addLine(to: CGPoint(x: stripRect.maxX, y: stripRect.minY))
-                }
-                .stroke(Color.accentColor.opacity(0.4),
-                        style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-/// Anchor plumbing for the connector lines.
-struct RectKey: PreferenceKey {
-    static var defaultValue: [String: Anchor<CGRect>] = [:]
-    static func reduce(value: inout [String: Anchor<CGRect>],
-                       nextValue: () -> [String: Anchor<CGRect>]) {
-        value.merge(nextValue()) { $1 }
     }
 }

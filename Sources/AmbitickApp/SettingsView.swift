@@ -103,6 +103,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("System notifications (sounds still play when off)",
                        isOn: $controller.settings.systemNotifications)
+                Toggle("Lock the Mac when I leave my desk (⌘⇧L)",
+                       isOn: $controller.settings.lockOnLeave)
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
                 Stepper("Recent tasks in popover: \(controller.settings.recentCount)",

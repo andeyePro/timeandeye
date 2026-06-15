@@ -140,7 +140,19 @@ public final class SessionTracker {
         }
     }
 
+    /// "I'm leaving my desk": pin the current task and keep tracking it,
+    /// ignoring focus changes, idle, sleep and calls until cleared.
+    public var away = false
+
     public func handle(_ event: SensorEvent) {
+        if away {
+            // Hold the current session open: ignore everything except noting
+            // input time (so returning doesn't immediately idle-stop once away
+            // is cleared). No span is closed, so the whole away stretch stays
+            // on the pinned task.
+            if case .input(let date) = event { lastInput = max(lastInput ?? date, date) }
+            return
+        }
         switch event {
         case .focus(let signal): handleFocus(signal)
         case .input(let date): handleInput(date)
