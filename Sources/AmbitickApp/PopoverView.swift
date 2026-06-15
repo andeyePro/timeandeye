@@ -8,6 +8,7 @@ struct PopoverView: View {
     @State private var filter = ""
     @State private var note = ""
     @State private var changeMode = false
+    @FocusState private var noteFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -73,6 +74,8 @@ struct PopoverView: View {
                     TextField("note…", text: $note)
                         .textFieldStyle(.roundedBorder)
                         .font(.caption)
+                        .focused($noteFocused)
+                        .onSubmit { noteFocused = false }
                         .help("A note for this task's time — becomes the OpenProject comment")
                 }
             } else {
@@ -146,7 +149,10 @@ struct PopoverView: View {
             // Explicit height: an unconstrained ScrollView collapses to one
             // row inside the MenuBarExtra popover.
             .frame(height: min(CGFloat(max(shown.count, 1)) * 26, 240))
-            if filter.isEmpty, !controller.taskCache.isEmpty {
+            if noteFocused {
+                Text("type a comment on your current work, ↵ when done")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            } else if filter.isEmpty, !controller.taskCache.isEmpty {
                 Text("type to search all \(controller.taskCache.count) tasks")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
