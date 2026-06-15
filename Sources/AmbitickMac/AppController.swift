@@ -437,6 +437,29 @@ public final class AppController: ObservableObject {
         tracker.stop(at: Date())
     }
 
+    /// "Change to": relabel the RUNNING session to `ref`, keeping its elapsed
+    /// time (the mis-attributed time moves to the right task, the clock does
+    /// not reset). Distinct from userPicked, which starts a fresh session.
+    public func changeCurrentTask(to ref: TaskRef) {
+        guard case .tracking(let oldTarget, _) = trackerState, .task(ref) != oldTarget else { return }
+        let now = Date()
+        let elapsed = (bankedElapsed[oldTarget] ?? 0)
+            + (targetSince.map { now.timeIntervalSince($0) } ?? 0)
+        let keptNote = manualNote
+        tracker.relabelCurrentSession(to: ref)   // re-tags spans; fires onState
+        // Preserve the displayed clock onto the corrected task and continue.
+        currentTarget = .task(ref)
+        targetSince = now.addingTimeInterval(-elapsed)
+        bankedElapsed = [:]
+        visitSolid = true
+        manualNote = keptNote
+        if let i = taskCache.firstIndex(where: { $0.ref == ref }) {
+            taskCache[i].lastConfirmedAt = now
+        }
+        persistAssociations()
+        refreshTitle(force: true)
+    }
+
     public func userPostponed() {
         lastPrompt = nil
     }

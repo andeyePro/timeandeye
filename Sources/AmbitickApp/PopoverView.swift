@@ -7,6 +7,7 @@ struct PopoverView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var filter = ""
     @State private var note = ""
+    @State private var changeMode = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -29,9 +30,27 @@ struct PopoverView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(controller.currentTaskName())
-                .font(.headline)
-                .lineLimit(2)
+            if case .tracking = controller.trackerState {
+                // Clicking the running task name drops down a list to CHANGE
+                // it — relabels the current session (keeps its time) rather
+                // than switching to a fresh one.
+                Menu {
+                    ForEach(controller.pickList(), id: \.ref) { task in
+                        Button(task.subject) { controller.changeCurrentTask(to: task.ref) }
+                    }
+                    Divider()
+                    Button("Search all tasks…") { changeMode = true }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(controller.currentTaskName()).font(.headline).lineLimit(2)
+                        Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            } else {
+                Text(controller.currentTaskName()).font(.headline).lineLimit(2)
+            }
             if case .tracking(_, let certainty) = controller.trackerState {
                 HStack {
                     Text("\(controller.menuText)  ·  \(Int((certainty * 100).rounded()))% certain")
@@ -51,9 +70,10 @@ struct PopoverView: View {
                     Image(systemName: "bubble.left")
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    TextField("what are you doing? (becomes the OP comment)", text: $note)
+                    TextField("note…", text: $note)
                         .textFieldStyle(.roundedBorder)
                         .font(.caption)
+                        .help("A note for this task's time — becomes the OpenProject comment")
                 }
             } else {
                 HStack {
@@ -100,9 +120,13 @@ struct PopoverView: View {
     private var switchList: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("Switch to")
+                Text(changeMode ? "Change to (relabels current)" : "Switch to")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(changeMode ? Color.accentColor : .secondary)
+                if changeMode {
+                    Button { changeMode = false } label: { Image(systemName: "xmark.circle") }
+                        .buttonStyle(.plain).font(.caption2)
+                }
                 Spacer()
                 TextField("filter", text: $filter)
                     .textFieldStyle(.roundedBorder)
@@ -142,7 +166,13 @@ struct PopoverView: View {
 
     private func taskRow(_ task: WorkTask) -> some View {
         Button {
-            controller.userPicked(task)
+            if changeMode {
+                controller.changeCurrentTask(to: task.ref)
+                changeMode = false
+                filter = ""
+            } else {
+                controller.userPicked(task)
+            }
         } label: {
             HStack {
                 Text(task.subject).lineLimit(1)

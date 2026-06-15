@@ -105,6 +105,25 @@ public final class SessionTracker {
         currentStart = max(date, spans.last?.end ?? date)
     }
 
+    /// Relabel the CURRENT in-flight session to `task`: re-tag every
+    /// accumulated span (so the elapsed time re-attributes, not just the
+    /// future), confirm the association, and hold the clock. Distinct from
+    /// confirm/switch — used by the popover's "Change to" to correct a
+    /// mis-attributed running session without resetting it.
+    public func relabelCurrentSession(to task: TaskRef) {
+        guard case .tracking = state else { return }
+        pendingSwitch = nil
+        pendingNotify = nil
+        for i in spans.indices {
+            spans[i].target = .task(task)
+            spans[i].certainty = 0.95
+        }
+        if let signal = currentSignal {
+            attributor.confirm(signal, task: task)
+        }
+        state = .tracking(.task(task), certainty: 0.95)
+    }
+
     /// User picked a task (popover/prompt) for the surface currently in focus.
     /// This is the UI's confirm entry point: it teaches the attributor AND
     /// lifts the in-flight span to confirmed certainty.
