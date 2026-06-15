@@ -853,6 +853,34 @@ public final class AppController: ObservableObject {
         actionNote = "Moved \(MenuTitle.text(elapsed: movedSeconds, certainty: nil, showPercent: false)) of \(appLabel) → \(name(of: .task(target)))"
     }
 
+    private var coalescing = false
+
+    /// Merge same-task sessions that now butt up against each other (after an
+    /// edit/drag) into one, without losing data. Direct journal+OP cleanup,
+    /// guarded against re-entry.
+    public func coalesceAdjacent(around date: Date) async {
+        guard !coalescing else { return }
+        coalescing = true
+        defer { coalescing = false }
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: date)
+        let dayEnd = dayStart.addingTimeInterval(86_400)
+        let original = (try? journal.sessions(from: dayStart, to: dayEnd)) ?? []
+        let merged = TimelineMath.mergeAdjacent(original)
+        guard merged.count != original.count else { return }
+        let survivors = Set(merged.map(\.id))
+        for o in original where !survivors.contains(o.id) {
+            try? journal.deleteSession(o.id)
+            if let e = o.opTimeEntryID, let client { try? await client.deleteTimeEntry(id: e) }
+        }
+        for m in merged where original.first(where: { $0.id == m.id }) != m {
+            try? journal.update(m)
+        }
+        await syncIfEnabled()
+        updateJournalSummary()
+        DebugLog.write("coalesced \(original.count) → \(merged.count) sessions")
+    }
+
     /// Replace a session with split pieces (delete original + OP entry,
     /// create each piece, teach moved pieces). Caller wraps in an undo group.
     private func replaceSession(_ session: Session, with pieces: [Session]) async {

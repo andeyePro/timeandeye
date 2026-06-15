@@ -118,6 +118,31 @@ public enum TimelineMath {
         return pieces.isEmpty ? [session] : pieces
     }
 
+    /// Merge same-task sessions that butt up against each other (end ≈ start,
+    /// within `tolerance`) into one, losing no data: the survivor spans both,
+    /// keeps the earliest start / latest end, joins comments, takes the lower
+    /// certainty, and is flagged for re-push. Survivor keeps the FIRST id;
+    /// callers delete the absorbed ids. Pure / unit-checkable.
+    public static func mergeAdjacent(_ sessions: [Session],
+                                     tolerance: TimeInterval = 2) -> [Session] {
+        let sorted = sessions.sorted { $0.start < $1.start }
+        var out: [Session] = []
+        for s in sorted {
+            if var last = out.last, last.task == s.task,
+               abs(s.start.timeIntervalSince(last.end)) <= tolerance {
+                last.end = Swift.max(last.end, s.end)
+                let comments = [last.comment, s.comment].compactMap { $0 }.filter { !$0.isEmpty }
+                last.comment = comments.isEmpty ? nil : comments.joined(separator: "; ")
+                last.certainty = Swift.min(last.certainty, s.certainty)
+                last.pushedToOP = false
+                out[out.count - 1] = last
+            } else {
+                out.append(s)
+            }
+        }
+        return out
+    }
+
     /// The most recent block of sessions separated by gaps < maxGap.
     public static func latestBlock(in sessions: [Session],
                                    maxGap: TimeInterval = 3600) -> (start: Date, end: Date)? {

@@ -35,12 +35,14 @@ func sessionTrackerChecks(_ c: Checks) {
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 90)))   // > grace: switch commits
         tracker.stop(at: t(130))
 
+        // Instant switch: the boundary is the actual switch moment (t50),
+        // not a minute-aligned approximation.
         try expectEq(sessions.count, 2)
         try expectEq(sessions[0].task, .op(1))
         try expectEq(sessions[0].start, t(0))
-        try expectEq(sessions[0].end, t(60))
+        try expectEq(sessions[0].end, t(50))
         try expectEq(sessions[1].task, .op(2))
-        try expectEq(sessions[1].start, t(60))
+        try expectEq(sessions[1].start, t(50))
         try expectEq(sessions[1].end, t(130))
     }
 
@@ -185,27 +187,25 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.state, .stopped, "manual stop must be respected")
     }
 
-    c.check("brief excursion to another task's window merges back (switch buffer)") {
+    c.check("instant switch: a genuine excursion is journalled as a real slice") {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
-        var prompts: [TrackerPrompt] = []
         tracker.onSession = { sessions.append($0) }
-        tracker.onPrompt = { prompts.append($0) }
         attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
-        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // 10 s excursion
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))    // back within grace
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // genuine 10s in Investment
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))
         tracker.stop(at: t(180))
 
-        try expectEq(sessions.count, 1, "excursion must merge, not split")
-        try expectEq(sessions[0].task, .op(1))
-        try expectEq(sessions[0].start, t(0))
-        try expectEq(sessions[0].end, t(180))
-        try expect(!prompts.contains { if case .taskChanged = $0 { return true }; return false },
-                   "no task-changed prompt for a merged excursion")
+        // Instant-switch: three real slices. (The visible CLOCK still resumes
+        // op1's time via the controller's per-task banking; tiny adjacent
+        // same-task fragments are tidied by mergeAdjacent.)
+        try expectEq(sessions.map(\.task), [.op(1), .op(2), .op(1)])
+        try expectEq(sessions[1].start, t(100))
+        try expectEq(sessions[1].end, t(110))
     }
 
     c.check("sustained switch commits and grace-period time goes to the new task") {

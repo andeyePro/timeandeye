@@ -58,6 +58,23 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(pieces[0].end, t(240))
     }
 
+    c.check("mergeAdjacent fuses butting same-task slices, keeps data") {
+        let a = Session(task: .op(1), start: t(0), end: t(300), certainty: 0.9, comment: "first")
+        let b = Session(task: .op(1), start: t(300), end: t(600), certainty: 0.7, comment: "second")
+        let c2 = Session(task: .op(2), start: t(600), end: t(900), certainty: 1)
+        let d = Session(task: .op(1), start: t(900), end: t(1200), certainty: 1)
+        let merged = TimelineMath.mergeAdjacent([a, b, c2, d])
+        // a+b fuse; c2 (other task) and d (not adjacent to a/b) stay separate.
+        try expectEq(merged.count, 3)
+        try expectEq(merged[0].id, a.id)            // survivor keeps first id
+        try expectEq(merged[0].start, t(0))
+        try expectEq(merged[0].end, t(600))
+        try expectEq(merged[0].comment, "first; second")
+        try expectClose(merged[0].certainty, 0.7)
+        try expect(!merged[0].pushedToOP)
+        try expectEq(merged.map(\.task), [.op(1), .op(2), .op(1)])
+    }
+
     c.check("latest block walks back over <1h gaps") {
         let morning = session(from: 0, to: 1800)
         let later1 = session(from: 20_000, to: 21_000)

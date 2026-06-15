@@ -266,11 +266,12 @@ public final class SessionTracker {
             }
             return
         }
+        // Flush the finished task BEFORE flipping state, so its spans journal
+        // under the old task (and any pending note attaches). Then start the
+        // new task fresh from `now`.
+        flushSessions(asOf: now)
         state = .tracking(target, certainty: score)
         pendingNotify = (target, now)   // notification fires after grace, switch is instant
-        // Completed task-runs flush now so OP entries appear within minutes of
-        // a switch instead of waiting for Stop/idle.
-        flushSessions(asOf: now, emitTrailingRun: false)
     }
 
     private func handleMic(active: Bool, at date: Date) {
@@ -351,10 +352,13 @@ public final class SessionTracker {
     }
 
     /// Resolve accumulated spans into dominant-minute sessions and emit them.
-    /// emitTrailingRun=false (mid-tracking flush at a task switch) holds back
-    /// the final run and keeps its spans, so an ongoing task never gets its
-    /// record fragmented by the flush itself.
-    private func flushSessions(asOf date: Date, emitTrailingRun: Bool = true) {
+    /// Resolve all accumulated spans into dominant-minute sessions and emit
+    /// them. Always emits everything: the in-flight session's time lives in
+    /// `currentStart`/`currentSignal` (not yet in `spans`), so flushing on a
+    /// switch journals the whole just-finished task with no leftover — holding
+    /// back a "trailing run" used to strand the old task's last chunk and
+    /// leave gaps / lose the slice.
+    private func flushSessions(asOf date: Date) {
         flushPendingReview()
         let clipped = spans.compactMap { span -> FocusSpan? in
             guard span.start < date else { return nil }
@@ -378,15 +382,6 @@ public final class SessionTracker {
                 runs[runs.count - 1] = last
             } else {
                 runs.append((minute.target, mStart, mEnd))
-            }
-        }
-        if !emitTrailingRun, let trailing = runs.last {
-            runs.removeLast()
-            spans = clipped.compactMap { span in
-                guard span.end > trailing.start else { return nil }
-                var s = span
-                s.start = max(s.start, trailing.start)
-                return s
             }
         }
         for run in runs {

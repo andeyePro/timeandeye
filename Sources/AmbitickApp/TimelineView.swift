@@ -15,6 +15,36 @@ import AmbitickMac
 /// - The live slice supports moving its start (applies immediately).
 /// - The detail strip shows the windows inside the selected slice, joined to
 ///   the bar by connector lines; click a chip for everything recorded.
+/// A slice: rounded rect, but the live slice gets a zig-zag right edge to
+/// signal "ongoing" while keeping the task's full colour.
+struct SliceShape: Shape {
+    var zigzag: Bool
+    func path(in rect: CGRect) -> Path {
+        let r: CGFloat = 3
+        guard zigzag else { return Path(roundedRect: rect, cornerRadius: r) }
+        var p = Path()
+        let tooth: CGFloat = 5
+        let xR = rect.maxX - tooth
+        p.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
+        p.addLine(to: CGPoint(x: xR, y: rect.minY))
+        let steps = 5
+        let dy = rect.height / CGFloat(steps)
+        for i in 0..<steps {
+            let y = rect.minY + dy * CGFloat(i)
+            p.addLine(to: CGPoint(x: rect.maxX, y: y + dy / 2))
+            p.addLine(to: CGPoint(x: xR, y: y + dy))
+        }
+        p.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        p.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
+                 startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        p.addArc(center: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r,
+                 startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        p.closeSubpath()
+        return p
+    }
+}
+
 struct TimelineView: View {
     @ObservedObject var controller: AppController
     @State private var dayOffset = 0
@@ -302,9 +332,12 @@ struct TimelineView: View {
         let x1 = xFor(session.end, width: width)
         let w = max(x1 - x0, 3)
         let selected = selection.contains(session.id) || editing?.id == session.id
-        RoundedRectangle(cornerRadius: 3)
-            .fill(Color(nsColor: controller.colour(for: session.task))
-                .opacity(isLive ? 0.55 : 0.9))
+        // Same colour/opacity as the task's other slices; the live one is told
+        // apart by a zig-zag (torn) right edge meaning "ongoing", not by being
+        // dimmer.
+        let shape = SliceShape(zigzag: isLive)
+        shape
+            .fill(Color(nsColor: controller.colour(for: session.task)).opacity(0.9))
             .overlay(alignment: .leading) {
                 if w > 44 {
                     Text(controller.name(of: .task(session.task)))
@@ -314,8 +347,7 @@ struct TimelineView: View {
                         .foregroundStyle(labelColour(for: session.task))
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 3)
-                .stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
+            .overlay(shape.stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
             .frame(width: w, height: 44)
             // Handles overlaid AFTER the frame so the HStack spans the slice
             // width (previously sized to nothing → handles only landed on the
@@ -431,7 +463,9 @@ struct TimelineView: View {
         isNewEditing = isNew
         editStart = session.start
         editEnd = session.end
-        editComment = session.comment ?? ""
+        // The live slice's comment is the in-flight note, not a stored field.
+        editComment = session.id == AppController.liveSessionID
+            ? controller.manualNote : (session.comment ?? "")
         editTask = session.task
         conflicts = []
         selectedSpanIdx = []
@@ -472,14 +506,10 @@ struct TimelineView: View {
         let isLive = session.id == AppController.liveSessionID
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                taskPicker   // filter + change/reassign — for the live slice too
                 if isLive {
-                    Text(controller.name(of: .task(session.task))).font(.headline)
                     Text("live").font(.caption2).padding(.horizontal, 4)
                         .background(.green.opacity(0.3), in: Capsule())
-                } else {
-                    // Reassign control for every editable slice (not just new
-                    // ones) — clicking a mis-filed slice lets you move it.
-                    taskPicker
                 }
                 Spacer()
                 Button { editing = nil } label: { Image(systemName: "xmark.circle") }
@@ -489,59 +519,41 @@ struct TimelineView: View {
                     get: { Color(nsColor: controller.colour(for: editTask ?? session.task)) },
                     set: { controller.setColour(NSColor($0), for: editTask ?? session.task) }))
                     .labelsHidden().frame(width: 28)
-                    .help("Task colour (used everywhere)")
+                    .help("Task colour")
             }
-            if isLive {
-                HStack(spacing: 16) {
-                    DatePicker("Start", selection: $editStart, displayedComponents: .hourAndMinute)
-                    DatePicker("End", selection: $editEnd, displayedComponents: .hourAndMinute)
-                }
-                .datePickerStyle(.field)
-                Text(editEnd > Date().addingTimeInterval(60)
-                     ? "End is in the future → Ambitick will keep tracking and stop then."
-                     : "Drag the start back to claim earlier time; drag the end forward to schedule a stop.")
+            HStack(spacing: 16) {
+                DatePicker("Start", selection: $editStart, displayedComponents: .hourAndMinute)
+                DatePicker("End", selection: $editEnd, displayedComponents: .hourAndMinute)
+                DatePicker("Duration", selection: durationBinding,
+                           displayedComponents: .hourAndMinute)
+            }
+            .datePickerStyle(.field)
+            HStack(spacing: 4) {
+                Image(systemName: "bubble.left").foregroundStyle(.secondary).font(.caption)
+                TextField("comment", text: $editComment)
+                    .textFieldStyle(.roundedBorder).font(.caption)
+                    .onSubmit { commitEditor(session) }
+            }
+            if isLive, editEnd > Date().addingTimeInterval(60) {
+                Text("End is in the future → keeps tracking, then stops then.")
                     .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button { saveLive() } label: { Label("Save", systemImage: "checkmark.circle") }
-                        .keyboardShortcut(.defaultAction)
-                    Spacer()
+            }
+            if !conflicts.isEmpty { conflictProposal }
+            HStack {
+                Button { commitEditor(session) } label: {
+                    Label(isNewEditing ? "Create" : "Save", systemImage: "checkmark.circle")
                 }
-            } else {
-                HStack(spacing: 16) {
-                    DatePicker("Start", selection: $editStart, displayedComponents: .hourAndMinute)
-                    DatePicker("End", selection: $editEnd, displayedComponents: .hourAndMinute)
-                    DatePicker("Duration", selection: durationBinding,
-                               displayedComponents: .hourAndMinute)
+                .keyboardShortcut(.defaultAction)   // Enter saves
+                if !isNewEditing, !isLive {
+                    Button(role: .destructive) {
+                        Task { await controller.deleteTimelineSession(session) }
+                        editing = nil
+                    } label: { Label("Delete", systemImage: "trash") }
                 }
-                .datePickerStyle(.field)
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.left").foregroundStyle(.secondary).font(.caption)
-                    TextField("comment (sent to OP)", text: $editComment)
-                        .textFieldStyle(.roundedBorder).font(.caption)
-                        .onSubmit { attemptSave(session) }
-                }
-                if !conflicts.isEmpty {
-                    conflictProposal
-                }
-                HStack {
-                    Button {
-                        attemptSave(session)
-                    } label: {
-                        Label(isNewEditing ? "Create" : "Save",
-                              systemImage: "checkmark.circle")
-                    }
-                    .keyboardShortcut(.defaultAction)   // Enter saves
-                    if !isNewEditing {
-                        Button(role: .destructive) {
-                            Task { await controller.deleteTimelineSession(session) }
-                            editing = nil
-                        } label: { Label("Delete", systemImage: "trash") }
-                    }
-                    Spacer()
-                    if !isNewEditing {
-                        Text("\(Int((session.certainty * 100).rounded()))% certain · \(session.pushedToOP ? "in OP" : "local")")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                Spacer()
+                if !isNewEditing, !isLive {
+                    Text("\(Int((session.certainty * 100).rounded()))% · \(session.pushedToOP ? "in OP" : "local")")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -549,15 +561,17 @@ struct TimelineView: View {
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    /// Commit live-slice edits: move the running start back, and/or schedule a
-    /// stop if the end was dragged into the future.
-    private func saveLive() {
+    /// Route Save to the right path: live slice vs an existing/new slice.
+    private func commitEditor(_ session: Session) {
+        if session.id == AppController.liveSessionID { saveLive(session) } else { attemptSave(session) }
+    }
+
+    /// Commit live-slice edits: change task / start / comment / scheduled end.
+    private func saveLive(_ session: Session) {
+        if let t = editTask, t != session.task { controller.changeCurrentTask(to: t) }
         controller.adjustLiveStart(to: editStart)
-        if editEnd > Date().addingTimeInterval(60) {
-            controller.scheduleStop(at: editEnd)
-        } else {
-            controller.scheduleStop(at: nil)
-        }
+        controller.manualNote = editComment
+        controller.scheduleStop(at: editEnd > Date().addingTimeInterval(60) ? editEnd : nil)
         editing = nil
     }
 
@@ -611,6 +625,8 @@ struct TimelineView: View {
                         await controller.applyTimelineEdit(edited)
                     }
                 }
+                // Same-task slices now butting up are fused (no data lost).
+                await controller.coalesceAdjacent(around: edited.start)
             }
             editing = nil
             conflicts = []
