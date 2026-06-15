@@ -30,3 +30,5 @@
 - [ ] True global hotkey for "I'm leaving my desk" (currently ⌘⇧L works when
   Ambitick/its popover is key; a global RegisterEventHotKey would fire from
   any app).
+- [ ] Martin to verify: timeline edits write back correctly to OpenProject and
+  no data (windows etc.) is lost across edit/merge/split/reassign.

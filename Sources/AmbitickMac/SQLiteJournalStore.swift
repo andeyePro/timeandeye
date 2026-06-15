@@ -15,6 +15,15 @@ public final class SQLiteJournalStore: JournalStore {
     private var db: OpaquePointer?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    // Serialises ALL access to the one sqlite3 connection. Without this, an
+    // async OP push (SyncEngine isn't @MainActor, so it resumes off-main after
+    // its network await) and the main-actor journal reads hit the connection
+    // concurrently → SIGSEGV (which the crash trap turned into a "quit" on stop).
+    private let lock = NSRecursiveLock()
+    private func locked<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock(); defer { lock.unlock() }
+        return try body()
+    }
 
     public init(path: String) throws {
         if sqlite3_open(path, &db) != SQLITE_OK {
@@ -52,24 +61,28 @@ public final class SQLiteJournalStore: JournalStore {
     }
 
     private func exec(_ sql: String) throws {
-        var err: UnsafeMutablePointer<CChar>?
-        if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK {
-            let message = err.map { String(cString: $0) } ?? "unknown"
-            sqlite3_free(err)
-            throw StoreError.exec(message)
+        try locked {
+            var err: UnsafeMutablePointer<CChar>?
+            if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK {
+                let message = err.map { String(cString: $0) } ?? "unknown"
+                sqlite3_free(err)
+                throw StoreError.exec(message)
+            }
         }
     }
 
     private func query(_ sql: String, bind: (OpaquePointer?) -> Void = { _ in },
                        row: (OpaquePointer?) throws -> Void) throws {
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
-        }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt)
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            try row(stmt)
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            bind(stmt)
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                try row(stmt)
+            }
         }
     }
 
@@ -84,26 +97,28 @@ public final class SQLiteJournalStore: JournalStore {
     // MARK: - Sessions
 
     public func save(_ session: Session) throws {
-        guard let json = try? encoder.encode(session),
-              let jsonString = String(data: json, encoding: .utf8) else {
-            throw StoreError.encode
-        }
-        var isOP = 0
-        if case .op = session.task { isOP = 1 }
-        var stmt: OpaquePointer?
-        let sql = "INSERT OR REPLACE INTO sessions (id, start, certainty, pushed, is_op, json) VALUES (?,?,?,?,?,?)"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
-        }
-        defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, session.id.uuidString, -1, Self.transient)
-        sqlite3_bind_double(stmt, 2, session.start.timeIntervalSince1970)
-        sqlite3_bind_double(stmt, 3, session.certainty)
-        sqlite3_bind_int(stmt, 4, session.pushedToOP ? 1 : 0)
-        sqlite3_bind_int(stmt, 5, Int32(isOP))
-        sqlite3_bind_text(stmt, 6, jsonString, -1, Self.transient)
-        guard sqlite3_step(stmt) == SQLITE_DONE else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        try locked {
+            guard let json = try? encoder.encode(session),
+                  let jsonString = String(data: json, encoding: .utf8) else {
+                throw StoreError.encode
+            }
+            var isOP = 0
+            if case .op = session.task { isOP = 1 }
+            var stmt: OpaquePointer?
+            let sql = "INSERT OR REPLACE INTO sessions (id, start, certainty, pushed, is_op, json) VALUES (?,?,?,?,?,?)"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, session.id.uuidString, -1, Self.transient)
+            sqlite3_bind_double(stmt, 2, session.start.timeIntervalSince1970)
+            sqlite3_bind_double(stmt, 3, session.certainty)
+            sqlite3_bind_int(stmt, 4, session.pushedToOP ? 1 : 0)
+            sqlite3_bind_int(stmt, 5, Int32(isOP))
+            sqlite3_bind_text(stmt, 6, jsonString, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
         }
     }
 
@@ -150,33 +165,37 @@ public final class SQLiteJournalStore: JournalStore {
     }
 
     public func deleteSession(_ id: UUID) throws {
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "DELETE FROM sessions WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
-        }
-        defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, id.uuidString, -1, Self.transient)
-        guard sqlite3_step(stmt) == SQLITE_DONE else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "DELETE FROM sessions WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, id.uuidString, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
         }
     }
 
     public func save(_ span: FocusSpan) throws {
-        guard let json = try? encoder.encode(span),
-              let jsonString = String(data: json, encoding: .utf8) else {
-            throw StoreError.encode
-        }
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "INSERT INTO spans (start, end, json) VALUES (?,?,?)",
-                                 -1, &stmt, nil) == SQLITE_OK else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
-        }
-        defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_double(stmt, 1, span.start.timeIntervalSince1970)
-        sqlite3_bind_double(stmt, 2, span.end.timeIntervalSince1970)
-        sqlite3_bind_text(stmt, 3, jsonString, -1, Self.transient)
-        guard sqlite3_step(stmt) == SQLITE_DONE else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        try locked {
+            guard let json = try? encoder.encode(span),
+                  let jsonString = String(data: json, encoding: .utf8) else {
+                throw StoreError.encode
+            }
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "INSERT INTO spans (start, end, json) VALUES (?,?,?)",
+                                     -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_double(stmt, 1, span.start.timeIntervalSince1970)
+            sqlite3_bind_double(stmt, 2, span.end.timeIntervalSince1970)
+            sqlite3_bind_text(stmt, 3, jsonString, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
         }
     }
 
@@ -195,22 +214,24 @@ public final class SQLiteJournalStore: JournalStore {
     // MARK: - Review segments
 
     public func save(_ segment: ReviewSegment) throws {
-        guard let json = try? encoder.encode(segment),
-              let jsonString = String(data: json, encoding: .utf8) else {
-            throw StoreError.encode
-        }
-        var stmt: OpaquePointer?
-        let sql = "INSERT OR REPLACE INTO review_segments (id, start, assigned, json) VALUES (?,?,?,?)"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
-        }
-        defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, segment.id.uuidString, -1, Self.transient)
-        sqlite3_bind_double(stmt, 2, segment.start.timeIntervalSince1970)
-        sqlite3_bind_int(stmt, 3, segment.assigned == nil ? 0 : 1)
-        sqlite3_bind_text(stmt, 4, jsonString, -1, Self.transient)
-        guard sqlite3_step(stmt) == SQLITE_DONE else {
-            throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+        try locked {
+            guard let json = try? encoder.encode(segment),
+                  let jsonString = String(data: json, encoding: .utf8) else {
+                throw StoreError.encode
+            }
+            var stmt: OpaquePointer?
+            let sql = "INSERT OR REPLACE INTO review_segments (id, start, assigned, json) VALUES (?,?,?,?)"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, segment.id.uuidString, -1, Self.transient)
+            sqlite3_bind_double(stmt, 2, segment.start.timeIntervalSince1970)
+            sqlite3_bind_int(stmt, 3, segment.assigned == nil ? 0 : 1)
+            sqlite3_bind_text(stmt, 4, jsonString, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
         }
     }
 

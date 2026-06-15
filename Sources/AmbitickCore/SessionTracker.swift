@@ -68,7 +68,13 @@ public final class SessionTracker {
     private var micActiveSince: Date?
     private var callSegments: [ReviewSegment] = []
     private var idleStoppedAt: Date?
-    private var pendingSwitch: (target: Target, score: Double, since: Date)?
+    /// A confident switch is provisional during the grace window: the DISPLAY
+    /// (trackerState) follows the new task instantly, but the journal slice
+    /// only commits if the new task is held past grace. `from` is the task the
+    /// open slice still belongs to; a return to it within grace reverts (the
+    /// excursion becomes windows in that slice). doNotTrack uses this too, to
+    /// damp non-work auto-stop.
+    private var pendingSwitch: (target: Target, from: Target, since: Date, score: Double)?
     private var pendingNotify: (target: Target, since: Date)?
     /// Manual Stop is respected (only a near-certain OP signal restarts);
     /// idle/auto stops may resume from any confident surface.
@@ -198,49 +204,97 @@ public final class SessionTracker {
                 state = .tracking(.task(task), certainty: best.score)
                 onPrompt(.taskChanged(to: .task(task)))
             }
-        case .tracking(let currentTarget, _):
+        case .tracking(let displayTarget, _):
             guard let best = attribution.best else {
-                state = .tracking(currentTarget, certainty: 0)
+                state = .tracking(displayTarget, certainty: 0)
                 return
             }
-            if best.score >= config.uncertainBelow, best.target != currentTarget {
-                handleConfidentSwitch(to: best, from: currentTarget, at: now)
+            if let p = pendingSwitch, p.target != .doNotTrack {
+                // We're provisionally showing p.target; the open slice is p.from.
+                if best.target == p.from {
+                    revertPendingSwitch()                 // returned within grace
+                } else if best.target == p.target {
+                    state = .tracking(p.target, certainty: best.score)   // hold pending
+                } else if best.score >= config.uncertainBelow {
+                    commitPendingSwitch(at: now)          // a third task: lock in p.target…
+                    handleConfidentSwitch(to: best, from: p.target, at: now)  // …then pend new
+                } else {
+                    state = .tracking(p.target, certainty: best.score)   // uncertain, hold
+                }
+            } else if best.score >= config.uncertainBelow, best.target != displayTarget {
+                handleConfidentSwitch(to: best, from: displayTarget, at: now)
             } else if best.score >= config.uncertainBelow {
-                pendingSwitch = nil   // back on the current task: excursion merged
                 state = .tracking(best.target, certainty: best.score)
             } else {
                 // Uncertain: stick with the last certain target, flag it.
-                state = .tracking(currentTarget, certainty: best.score)
+                state = .tracking(displayTarget, certainty: best.score)
             }
         }
     }
 
-    /// Task switches are INSTANT — the visible clock follows the window the
-    /// user is in (Martin's model: even momentary changes must show). The
-    /// grace period survives only for (a) non-work auto-stop and (b) damping
-    /// taskChanged notifications. Record merging is the dominant-minute
-    /// ledger's job, not the state machine's.
-    private func handleConfidentSwitch(to best: Candidate, from currentTarget: Target,
+    /// A confident switch: the display follows instantly, but the journal slice
+    /// is held provisional through the grace window. A direct OP-page signal
+    /// (>= 0.96) is deliberate and commits at once.
+    private func handleConfidentSwitch(to best: Candidate, from committed: Target,
                                        at now: Date) {
         if best.target == .doNotTrack {
             if pendingSwitch?.target != best.target {
-                pendingSwitch = (best.target, best.score, now)
+                pendingSwitch = (best.target, committed, now, best.score)
                 onDebug("pending non-work stop since \(now)")
             }
             return
         }
-        commitSwitch(to: best.target, score: best.score, since: now,
-                     from: currentTarget, at: now)
+        if best.score >= 0.96 {
+            commitSwitch(to: best.target, score: best.score, at: now)   // deliberate
+            return
+        }
+        pendingSwitch = (best.target, committed, now, best.score)
+        pendingNotify = (best.target, now)
+        state = .tracking(best.target, certainty: best.score)   // instant display
+        onDebug("pending switch \(committed) -> \(best.target) since \(now)")
     }
 
-    /// Driven by every input tick: commits a pending non-work stop and fires
-    /// the damped task-changed notification once a switch has held.
+    /// Grace elapsed with the new task still held: commit it. Flush the old
+    /// task's slice up to the switch moment; the held spans continue as the new
+    /// task's slice.
+    private func commitPendingSwitch(at date: Date) {
+        guard let p = pendingSwitch, p.target != .doNotTrack else { return }
+        let signal = currentSignal
+        endCurrentSpan(at: date)                 // close the in-flight (new-task) span
+        let held = spans.filter { $0.start >= p.since }
+        spans = spans.filter { $0.start < p.since }
+        flushSessions(asOf: p.since)             // old task's slice, ending at the switch
+        spans = held                             // new task's spans carry on
+        currentSignal = signal                   // resume accumulating the new task
+        currentStart = date
+        pendingSwitch = nil
+        onDebug("committed switch -> \(p.target) after grace")
+    }
+
+    /// Returned to the prior task within grace: the excursion was not a real
+    /// switch. Re-tag its spans to the prior task (they become windows in that
+    /// slice) and restore the display.
+    private func revertPendingSwitch() {
+        guard let p = pendingSwitch else { return }
+        for i in spans.indices where spans[i].start >= p.since {
+            spans[i].target = p.from
+        }
+        pendingSwitch = nil
+        pendingNotify = nil
+        if case .task = p.from { state = .tracking(p.from, certainty: 0.95) }
+        onDebug("reverted excursion -> \(p.from) (kept as windows)")
+    }
+
+    /// Driven by every input tick: commits a held switch / non-work stop and
+    /// fires the damped task-changed notification once a switch has held.
     private func evaluatePendingSwitch(at date: Date) {
-        if let pending = pendingSwitch, case .tracking(let current, _) = state,
+        if let pending = pendingSwitch, case .tracking = state,
            date.timeIntervalSince(pending.since) >= config.switchGraceSeconds {
-            onDebug("commit pending non-work stop after \(Int(date.timeIntervalSince(pending.since)))s")
-            commitSwitch(to: pending.target, score: pending.score, since: pending.since,
-                         from: current, at: date)
+            if pending.target == .doNotTrack {
+                commitSwitch(to: .doNotTrack, score: pending.score, at: date)
+            } else {
+                commitPendingSwitch(at: date)
+            }
         }
         if let notify = pendingNotify, case .tracking(let current, _) = state,
            current == notify.target,
@@ -250,12 +304,15 @@ public final class SessionTracker {
         }
     }
 
-    private func commitSwitch(to target: Target, score: Double, since: Date,
-                              from currentTarget: Target, at now: Date) {
+    /// Commit a switch immediately (deliberate OP-page signal, or a grace-held
+    /// doNotTrack stop): flush the finished task, then flip state.
+    private func commitSwitch(to target: Target, score: Double, at now: Date) {
+        let current: Target? = { if case .tracking(let t, _) = state { return t }; return nil }()
         pendingSwitch = nil
         if target == .doNotTrack {
             if config.nonWorkTracksLocally, let leisure = config.leisureTask {
-                if currentTarget != .task(leisure) {
+                if current != .task(leisure) {
+                    flushSessions(asOf: now)
                     state = .tracking(.task(leisure), certainty: score)
                     onPrompt(.taskChanged(to: .task(leisure)))
                 }
@@ -266,12 +323,9 @@ public final class SessionTracker {
             }
             return
         }
-        // Flush the finished task BEFORE flipping state, so its spans journal
-        // under the old task (and any pending note attaches). Then start the
-        // new task fresh from `now`.
         flushSessions(asOf: now)
         state = .tracking(target, certainty: score)
-        pendingNotify = (target, now)   // notification fires after grace, switch is instant
+        pendingNotify = (target, now)
     }
 
     private func handleMic(active: Bool, at date: Date) {

@@ -41,17 +41,43 @@ swift run AmbitickCoreChecks   # expect: TOTAL: N passed, 0 failed
    never auto-push, review everything), menu-bar colours (identical colours
    disable the signalling), certainty %, leisure tracking.
 
+## Nomenclature
+
+Ambitick records time in a small hierarchy — these are the words used in the
+UI, this README, and the code:
+
+- **Slice** — one contiguous stretch of time tracked to a single task. A slice
+  becomes one OpenProject **time entry**. (Synonyms you might think of —
+  "task track", "time track" — all mean *slice*.)
+- **Block** — a run of consecutive slices separated by gaps of no more than
+  one hour. The timeline opens framed on the latest block.
+- **Window** — the within-slice detail: which application/window was actually
+  active for each part of a slice, or that the time was drawn/edited by the
+  user, or entered via a secondary app (e.g. a future iOS companion). Windows
+  are shown in the strip beneath a selected slice and can be peeled out to a
+  different task.
+
+A brief hop to another window (shorter than the **switch buffer**, Settings →
+Behaviour, default 30 s) does *not* start a new slice — it stays a window
+inside the current slice. The menu-bar clock always shows what *would* be
+recorded if nothing else changed: it follows the window you're in instantly,
+but if you return to the previous slice's window before the buffer elapses it
+reverts, and that hop is kept as a window in the slice you came back to.
+
 ## The three views
 
 - **Popover** (menu-bar dot): current task, per-task clock, certainty, note
   bubble (becomes the OP comment), stop/resume, filterable switch list.
 - **Timeline** (popover → timeline icon): a horizontal bar of the day's
-  tracked slices, coloured per task, opening framed on the current work
-  block. Two-finger scroll pans, pinch zooms. Drag on empty space to draw a
-  new slice (snaps to neighbours); click a gap to fill it; hover a slice edge
-  and drag the handle (dragging over a neighbour eats into it). Click a slice
-  to edit start/end/duration/comment/colour or delete - edits write back to
-  OpenProject. The strip below shows the windows inside the selected slice.
+  slices, coloured per task, opening framed on the current block. Two-finger
+  scroll pans, pinch zooms. Drag on empty space to draw a new slice (snaps to
+  neighbours); click a gap to fill it; click a slice to edit it, then drag its
+  edge handles (dragging over a neighbour eats into it). Edit
+  task/start/end/duration/comment/colour or delete — Enter saves, Esc cancels;
+  edits write back to OpenProject. Two same-task slices brought to butt up
+  against each other merge losslessly. The live slice shows the task colour
+  with a zig-zag end; its windows are in the strip below, where you can select
+  windows and reassign them to another task (splitting the slice).
 - **Time Spent** (popover → pie icon): donut of projects for a period
   (default today). Hover a wedge for the task ring, hover a task for the app
   ring; click pins; the legend drills the same way.

@@ -187,7 +187,7 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.state, .stopped, "manual stop must be respected")
     }
 
-    c.check("instant switch: a genuine excursion is journalled as a real slice") {
+    c.check("sub-grace excursion stays in the prior slice (not a separate one)") {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
@@ -196,16 +196,37 @@ func sessionTrackerChecks(_ c: Checks) {
 
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
-        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // genuine 10s in Investment
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // 10s excursion (< grace)
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))    // back within grace → revert
         tracker.stop(at: t(180))
 
-        // Instant-switch: three real slices. (The visible CLOCK still resumes
-        // op1's time via the controller's per-task banking; tiny adjacent
-        // same-task fragments are tidied by mergeAdjacent.)
-        try expectEq(sessions.map(\.task), [.op(1), .op(2), .op(1)])
-        try expectEq(sessions[1].start, t(100))
-        try expectEq(sessions[1].end, t(110))
+        // One op(1) slice spanning the whole stretch — the Investment dip is a
+        // window inside it, recorded as op(1) (what the menu bar promised once
+        // we returned before grace).
+        try expectEq(sessions.count, 1)
+        try expectEq(sessions[0].task, .op(1))
+        try expectEq(sessions[0].start, t(0))
+        try expectEq(sessions[0].end, t(180))
+    }
+
+    c.check("display follows the window instantly even while the switch is provisional") {
+        let (tracker, attributor) = makeTracker()
+        var states: [TrackerState] = []
+        tracker.onState = { states.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional
+        // The menu bar shows op(2) immediately (what would be recorded if held)…
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "display should follow to op(2), got \(tracker.state)")
+        }
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))     // …back before grace
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "display should revert to op(1), got \(tracker.state)")
+        }
     }
 
     c.check("sustained switch commits and grace-period time goes to the new task") {
