@@ -260,6 +260,7 @@ public final class AppController: ObservableObject {
                 self.bankedElapsed.removeAll()
                 self.manualNote = ""
                 self.taskChangedAt = now
+                self.clearCheckpoint()   // nothing in flight to recover
                 Notifier.notify(symbol: "stop.circle", text: "Stopped", sound: "Basso")
             }
             self.refreshTitle(force: true)
@@ -363,6 +364,11 @@ public final class AppController: ObservableObject {
     public func startUp() {
         installCrashTraps()
         installUndoKey()
+        promoteStaleCheckpoint()   // recover any session a crash/quit left mid-flight
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.checkpointLive()
+        }
         Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
         sensors.onEvent = { [weak self] event in
@@ -388,6 +394,7 @@ public final class AppController: ObservableObject {
         }
         taskRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
+                self?.checkpointLive()        // crash-safety: persist the in-flight session
                 await self?.refreshTasks()
                 await self?.syncIfEnabled()   // retry path for failed/late pushes
             }
@@ -429,6 +436,37 @@ public final class AppController: ObservableObject {
         }
         if force || newText != menuText { menuText = newText }
         if force || !newColour.isEqual(menuColour) { menuColour = newColour }
+    }
+
+    // MARK: - Crash-safe recording
+
+    /// A fixed-id provisional row mirroring the in-flight session, rewritten
+    /// every minute and on quit. Never pushed to OP (pushedToOP=true sentinel).
+    /// If a crash leaves it behind, startUp promotes it to a real slice — so
+    /// tracked time survives even an unclean exit.
+    static let liveCheckpointID = UUID(uuidString: "00000000-0000-0000-0000-0000C0FFEE00")!
+
+    public func checkpointLive() {
+        guard case .tracking(.task(let ref), let certainty) = trackerState,
+              let since = targetSince else { return }
+        try? journal.update(Session(id: Self.liveCheckpointID, task: ref, start: since,
+                                    end: Date(), certainty: certainty, pushedToOP: true))
+    }
+
+    private func clearCheckpoint() {
+        try? journal.deleteSession(Self.liveCheckpointID)
+    }
+
+    private func promoteStaleCheckpoint() {
+        guard let stale = (try? journal.allSessions())?.first(where: { $0.id == Self.liveCheckpointID }),
+              stale.end.timeIntervalSince(stale.start) >= 60 else {
+            clearCheckpoint(); return
+        }
+        // Recover crash-lost time as a real, pushable slice.
+        try? journal.save(Session(task: stale.task, start: stale.start, end: stale.end,
+                                  certainty: stale.certainty, comment: "recovered after restart"))
+        clearCheckpoint()
+        DebugLog.write("recovered crash-lost session \(stale.start)..\(stale.end)")
     }
 
     // MARK: - User actions
@@ -679,11 +717,34 @@ public final class AppController: ObservableObject {
         return TimeAggregator.byProject(sessions: sessions, tasks: taskCache, spans: spans)
     }
 
-    /// Timeline edit of the live slice's start.
+    /// Timeline edit of the live slice's start. If dragged back to reach a
+    /// prior same-task slice, that slice is folded in (deleted, its time and
+    /// comment absorbed) so the result is one continuous ongoing slice.
     public func adjustLiveStart(to date: Date) {
-        let clamped = min(date, Date())
-        tracker.adjustCurrentStart(to: clamped)
-        targetSince = clamped
+        guard case .tracking(.task(let ref), _) = trackerState else { return }
+        var newStart = min(date, Date())
+        let dayStart = Calendar.current.startOfDay(for: newStart)
+        let priorSlices = ((try? journal.sessions(from: dayStart, to: Date())) ?? [])
+            .filter { $0.task == ref && $0.id != Self.liveSessionID
+                      && $0.start < (targetSince ?? Date())
+                      && $0.end >= newStart.addingTimeInterval(-2) }
+            .sorted { $0.start > $1.start }
+        var foldedNote: String?
+        for s in priorSlices {
+            newStart = Swift.min(newStart, s.start)
+            if let c = s.comment, !c.isEmpty { foldedNote = [foldedNote, c].compactMap { $0 }.joined(separator: "; ") }
+            try? journal.deleteSession(s.id)
+            if let e = s.opTimeEntryID, let client { Task { try? await client.deleteTimeEntry(id: e) } }
+        }
+        if !priorSlices.isEmpty {
+            tracker.backdateSessionStart(to: newStart)
+            if let n = foldedNote, manualNote.isEmpty { manualNote = n }
+        } else {
+            tracker.adjustCurrentStart(to: newStart)
+        }
+        targetSince = newStart
+        bankedElapsed = [:]
+        updateJournalSummary()
         refreshTitle(force: true)
     }
 

@@ -111,6 +111,20 @@ public final class SessionTracker {
         currentStart = max(date, spans.last?.end ?? date)
     }
 
+    /// Extend the in-flight session to start at `date` (earlier than it began),
+    /// claiming the gap for the current task — used when the user drags the
+    /// live slice back to fold in a prior same-task slice. A synthetic span
+    /// covers the gap so the flush spans the whole stretch; the real window
+    /// detail still comes from the journal's span table.
+    public func backdateSessionStart(to date: Date) {
+        guard case .tracking(let target, let cert) = state else { return }
+        let earliest = (spans.map(\.start) + [currentStart].compactMap { $0 }).min() ?? date
+        guard date < earliest else { return }
+        let signal = currentSignal ?? ActivitySignal(app: "(extended)", timestamp: date)
+        spans.insert(FocusSpan(target: target, certainty: max(cert, 0.95),
+                               signal: signal, start: date, end: earliest), at: 0)
+    }
+
     /// Relabel the CURRENT in-flight session to `task`: re-tag every
     /// accumulated span (so the elapsed time re-attributes, not just the
     /// future), confirm the association, and hold the clock. Distinct from
