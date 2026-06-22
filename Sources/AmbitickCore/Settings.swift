@@ -6,11 +6,23 @@ public struct LocalTaskDef: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var name: String
     public var isLeisure: Bool
+    /// Local "project" this task groups under in Time Spent (parity with OP's
+    /// project → task hierarchy). Optional so older saved settings still decode;
+    /// nil/empty is treated as "Personal".
+    public var project: String?
 
-    public init(id: UUID = UUID(), name: String, isLeisure: Bool = false) {
+    public init(id: UUID = UUID(), name: String, isLeisure: Bool = false,
+                project: String? = nil) {
         self.id = id
         self.name = name
         self.isLeisure = isLeisure
+        self.project = project
+    }
+
+    /// The project name to display/group under (never empty).
+    public var projectName: String {
+        let p = (project ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return p.isEmpty ? "Personal" : p
     }
 }
 
@@ -38,11 +50,26 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var defaultActivityID: Int?
     public var activityOverrides: [TaskRef: Int]
     public var autoComment: Bool
+    /// Attach the manual note to the tracked-time entry (the time-entry comment).
+    public var commentToTrackedTime: Bool
+    /// Also post the manual note to the task's activity feed, where it is far
+    /// easier to find than buried on a single time entry.
+    public var commentToTask: Bool
     public var trackLeisureLocally: Bool
     public var statusOrder: [String]
     public var primeDwellSeconds: Double
     public var minSegmentSeconds: Double
     public var switchGraceSeconds: Double
+    public var sleepGraceSeconds: Double
+    /// How long after an idle stop the one-tap "count the gap as <task>" offer
+    /// stays available (the gap defaults to a break if untouched).
+    public var idleBackfillWindowSeconds: Double
+    /// First N characters of the tracked task name shown in the menu bar; 0 = off.
+    public var menuTaskChars: Int
+    /// Saved per-task window layouts (keyed by TaskRef.storageKey) + the most
+    /// recent capture, for "Open workspace" (launch & arrange the task's apps).
+    public var taskLayouts: [String: [WindowFrame]]
+    public var lastLayout: [WindowFrame]
     public var systemNotifications: Bool
     /// Lock the Mac when "I'm leaving my desk" is activated.
     public var lockOnLeave: Bool
@@ -61,11 +88,18 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 defaultActivityID: Int? = nil,
                 activityOverrides: [TaskRef: Int] = [:],
                 autoComment: Bool = false,
+                commentToTrackedTime: Bool = true,
+                commentToTask: Bool = true,
                 trackLeisureLocally: Bool = false,
                 statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
                 primeDwellSeconds: Double = 30,
                 minSegmentSeconds: Double = 20,
                 switchGraceSeconds: Double = 30,
+                sleepGraceSeconds: Double = 60,
+                idleBackfillWindowSeconds: Double = 18 * 3600,
+                menuTaskChars: Int = 5,
+                taskLayouts: [String: [WindowFrame]] = [:],
+                lastLayout: [WindowFrame] = [],
                 systemNotifications: Bool = true,
                 lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
@@ -80,11 +114,18 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.defaultActivityID = defaultActivityID
         self.activityOverrides = activityOverrides
         self.autoComment = autoComment
+        self.commentToTrackedTime = commentToTrackedTime
+        self.commentToTask = commentToTask
         self.trackLeisureLocally = trackLeisureLocally
         self.statusOrder = statusOrder
         self.primeDwellSeconds = primeDwellSeconds
         self.minSegmentSeconds = minSegmentSeconds
         self.switchGraceSeconds = switchGraceSeconds
+        self.sleepGraceSeconds = sleepGraceSeconds
+        self.idleBackfillWindowSeconds = idleBackfillWindowSeconds
+        self.menuTaskChars = menuTaskChars
+        self.taskLayouts = taskLayouts
+        self.lastLayout = lastLayout
         self.systemNotifications = systemNotifications
         self.lockOnLeave = lockOnLeave
         self.localTasks = localTasks
@@ -106,11 +147,18 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         defaultActivityID = try c.decodeIfPresent(Int.self, forKey: .defaultActivityID) ?? defaults.defaultActivityID
         activityOverrides = try c.decodeIfPresent([TaskRef: Int].self, forKey: .activityOverrides) ?? defaults.activityOverrides
         autoComment = try c.decodeIfPresent(Bool.self, forKey: .autoComment) ?? defaults.autoComment
+        commentToTrackedTime = try c.decodeIfPresent(Bool.self, forKey: .commentToTrackedTime) ?? defaults.commentToTrackedTime
+        commentToTask = try c.decodeIfPresent(Bool.self, forKey: .commentToTask) ?? defaults.commentToTask
         trackLeisureLocally = try c.decodeIfPresent(Bool.self, forKey: .trackLeisureLocally) ?? defaults.trackLeisureLocally
         statusOrder = try c.decodeIfPresent([String].self, forKey: .statusOrder) ?? defaults.statusOrder
         primeDwellSeconds = try c.decodeIfPresent(Double.self, forKey: .primeDwellSeconds) ?? defaults.primeDwellSeconds
         minSegmentSeconds = try c.decodeIfPresent(Double.self, forKey: .minSegmentSeconds) ?? defaults.minSegmentSeconds
         switchGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .switchGraceSeconds) ?? defaults.switchGraceSeconds
+        sleepGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .sleepGraceSeconds) ?? defaults.sleepGraceSeconds
+        idleBackfillWindowSeconds = try c.decodeIfPresent(Double.self, forKey: .idleBackfillWindowSeconds) ?? defaults.idleBackfillWindowSeconds
+        menuTaskChars = try c.decodeIfPresent(Int.self, forKey: .menuTaskChars) ?? defaults.menuTaskChars
+        taskLayouts = try c.decodeIfPresent([String: [WindowFrame]].self, forKey: .taskLayouts) ?? defaults.taskLayouts
+        lastLayout = try c.decodeIfPresent([WindowFrame].self, forKey: .lastLayout) ?? defaults.lastLayout
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
         lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
         localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks

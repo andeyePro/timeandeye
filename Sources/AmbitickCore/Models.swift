@@ -65,6 +65,42 @@ public enum SensorEvent: Equatable, Sendable {
     case willSleep(Date)
     case didWake(Date)
     case microphone(active: Bool, at: Date)
+    case screenLocked(Date)
+    case screenUnlocked(Date)
+}
+
+/// One app's window placement, captured for a task's "workspace" layout so it
+/// can be relaunched and re-arranged on demand. Platform-agnostic (Core) so it
+/// persists in settings; the macOS layer does the actual capture/restore.
+public struct WindowFrame: Codable, Equatable, Sendable {
+    public var bundleID: String
+    public var x: Double
+    public var y: Double
+    public var w: Double
+    public var h: Double
+    /// Best-effort window title at capture time, used to match a specific window
+    /// back to its frame on restore when an app has several. Often empty (the
+    /// title needs the screen-recording grant to read), so restore also falls
+    /// back to capture order. Optional for back-compat with layouts saved before
+    /// this field existed.
+    public var title: String
+
+    public init(bundleID: String, x: Double, y: Double, w: Double, h: Double,
+                title: String = "") {
+        self.bundleID = bundleID
+        self.x = x; self.y = y; self.w = w; self.h = h
+        self.title = title
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bundleID = try c.decode(String.self, forKey: .bundleID)
+        x = try c.decode(Double.self, forKey: .x)
+        y = try c.decode(Double.self, forKey: .y)
+        w = try c.decode(Double.self, forKey: .w)
+        h = try c.decode(Double.self, forKey: .h)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+    }
 }
 
 /// The stable identity of a window/tab for priming and learning:

@@ -28,6 +28,17 @@ public enum MenuTitle {
         return body
     }
 
+    /// Optional task tag after the time in the menu bar: the first `chars` of
+    /// the task name, so a glance reads "21m Ambit" rather than just "21m".
+    /// No ellipsis — the truncation is implicit and it saves a character.
+    /// Empty name or chars <= 0 leaves the body alone.
+    public static func withTaskName(_ name: String?, chars: Int, body: String) -> String {
+        guard let name, chars > 0 else { return body }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return body }
+        return "\(body) \(String(trimmed.prefix(chars)))"
+    }
+
     /// Linear blend between the user's two gradient colours; grey when stopped.
     public static func colour(certainty: Double?, lowHex: String, highHex: String) -> NSColor {
         guard let certainty else { return .systemGray }
@@ -73,6 +84,13 @@ public struct URLSessionTransport: HTTPTransport {
     }
 }
 
+/// An idle/away stretch that defaulted to untracked, offered for one-tap claim.
+public struct IdleGap: Equatable, Sendable {
+    public var task: TaskRef
+    public var from: Date
+    public var to: Date
+}
+
 /// Owns the whole pipeline: sensors -> tracker -> journal -> sync, plus the
 /// published state the SwiftUI layer renders.
 @MainActor
@@ -84,6 +102,10 @@ public final class AppController: ObservableObject {
     @Published public private(set) var pendingReview: [ReviewSegment] = []
     @Published public private(set) var activities: [OPTimeActivity] = []
     @Published public private(set) var lastPrompt: TrackerPrompt?
+    /// An idle stretch that defaulted to "break" (untracked). A single tap in
+    /// the popover claims it as the task you were on — no timeline needed. It
+    /// survives auto-resume and stays offered for `idleBackfillWindowSeconds`.
+    @Published public private(set) var pendingGap: IdleGap?
     @Published public private(set) var lastError: String?
     @Published public private(set) var journalSummary = ""
     @Published public private(set) var connectedAs: String?
@@ -98,6 +120,10 @@ public final class AppController: ObservableObject {
             try? settingsStore.save(settings)
             Notifier.enabled = settings.systemNotifications
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
+            // Local-task edits (rename / project / leisure / add / remove) flow
+            // straight into the live cache so every list, the timeline and the
+            // pie reflect them at once.
+            if oldValue.localTasks != settings.localTasks { mergeLocalTasksIntoCache() }
         }
     }
 
@@ -154,7 +180,8 @@ public final class AppController: ObservableObject {
             idleThresholdSeconds: PowerSettings.displaySleepSeconds() ?? 600,
             nonWorkTracksLocally: loadedSettings.trackLeisureLocally && leisure != nil,
             leisureTask: leisure,
-            switchGraceSeconds: loadedSettings.switchGraceSeconds)
+            switchGraceSeconds: loadedSettings.switchGraceSeconds,
+            sleepGraceSeconds: loadedSettings.sleepGraceSeconds)
         tracker = SessionTracker(attributor: attributor, config: config) { [weak self] in
             self?.taskCache ?? []
         }
@@ -166,13 +193,13 @@ public final class AppController: ObservableObject {
     /// User-defined non-OP tasks rendered as first-class tasks.
     private func localWorkTasks() -> [WorkTask] {
         settings.localTasks.map {
-            WorkTask(ref: .local($0.id), subject: $0.name, project: "Personal",
+            WorkTask(ref: .local($0.id), subject: $0.name, project: $0.projectName,
                      status: $0.isLeisure ? "Leisure" : "Open")
         }
     }
 
     @discardableResult
-    public func addLocalTask(name: String, isLeisure: Bool) -> TaskRef {
+    public func addLocalTask(name: String, isLeisure: Bool, project: String? = nil) -> TaskRef {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Reuse an existing local task of the same name instead of duplicating.
         if let existing = settings.localTasks.first(where: {
@@ -180,13 +207,36 @@ public final class AppController: ObservableObject {
         }) {
             return .local(existing.id)
         }
-        let def = LocalTaskDef(name: trimmed, isLeisure: isLeisure)
+        let def = LocalTaskDef(name: trimmed, isLeisure: isLeisure, project: project)
         settings.localTasks.append(def)
         mergeLocalTasksIntoCache()
         registerUndo("add local task \(trimmed)") { [weak self] in
             self?.removeLocalTask(def.id, undoable: false)
         }
         return .local(def.id)
+    }
+
+    /// Edit an existing local task in place (name / project / leisure). Keeps
+    /// its id, so its history, colour and learned associations all carry over —
+    /// only the display + grouping change (the local-task analogue of renaming
+    /// a work package in OpenProject).
+    public func updateLocalTask(_ id: UUID, name: String? = nil, project: String? = nil,
+                                isLeisure: Bool? = nil) {
+        guard let i = settings.localTasks.firstIndex(where: { $0.id == id }) else { return }
+        if let name { settings.localTasks[i].name = name }
+        if let project { settings.localTasks[i].project = project }
+        if let isLeisure { settings.localTasks[i].isLeisure = isLeisure }
+        mergeLocalTasksIntoCache()
+    }
+
+    /// Distinct local project names already in use, for offering as quick picks
+    /// in the editor (free text is still allowed).
+    public func localProjectNames() -> [String] {
+        var seen: [String] = []
+        for def in settings.localTasks where !seen.contains(def.projectName) {
+            seen.append(def.projectName)
+        }
+        return seen
     }
 
     public func removeLocalTask(_ id: UUID, undoable: Bool = true) {
@@ -200,9 +250,17 @@ public final class AppController: ObservableObject {
         taskCache.removeAll { $0.ref == .local(id) }
     }
 
+    /// Rebuild the local-task entries in the cache from settings so renames,
+    /// project changes and removals all show through immediately — preserving
+    /// each local task's recency (lastConfirmedAt lives only in the cache).
     private func mergeLocalTasksIntoCache() {
-        let known = Set(taskCache.map(\.ref))
-        for task in localWorkTasks() where !known.contains(task.ref) {
+        var recency: [TaskRef: Date] = [:]
+        for t in taskCache {
+            if case .local = t.ref, let last = t.lastConfirmedAt { recency[t.ref] = last }
+        }
+        taskCache.removeAll { if case .local = $0.ref { return true }; return false }
+        for var task in localWorkTasks() {
+            task.lastConfirmedAt = recency[task.ref]
             taskCache.append(task)
         }
     }
@@ -211,19 +269,44 @@ public final class AppController: ObservableObject {
         tracker.onSession = { [weak self] session in
             guard let self else { return }
             var s = session
-            if !self.manualNote.isEmpty {
-                s.comment = self.manualNote   // the speech-bubble note wins
-            } else if !self.settings.autoComment {
-                s.comment = nil
+            // Consume the speech-bubble note HERE, when the slice it belongs to
+            // is actually journalled — not on the display switch — so it
+            // survives transient excursions and lands on the slice it was
+            // written for, even when the slice commits after the grace delay.
+            let note = self.manualNote
+            // Route the note per the two toggles: 'comment to tracked time'
+            // attaches it to the time entry (s.comment, pushed to OP); 'comment
+            // to task' also posts it to the task's activity feed, where it is
+            // far easier to find. The auto window-list comment is the fallback
+            // for the time entry only when no manual note was written.
+            s.comment = CommentRouting.timeEntryComment(
+                note: note, autoCommentText: s.comment,
+                autoCommentEnabled: self.settings.autoComment,
+                toTrackedTime: self.settings.commentToTrackedTime)
+            let taskNote = CommentRouting.taskComment(note: note,
+                                                      toTask: self.settings.commentToTask)
+            if !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                self.manualNote = ""
             }
             try? self.journal.save(s)
+            if let taskNote, case .op(let wpID) = s.task {
+                Task { await self.postTaskComment(wpID: wpID, note: taskNote) }
+            }
             // Tracked time counts as recency: the task you just worked on
             // belongs at the top of every pick list.
             if let i = self.taskCache.firstIndex(where: { $0.ref == s.task }) {
                 self.taskCache[i].lastConfirmedAt = s.end
             }
             self.updateJournalSummary()
-            Task { await self.syncIfEnabled() }
+            // Fold the freshly-journalled slice into an adjacent same-task
+            // neighbour, so live-created slices auto-merge exactly the way
+            // drag-edited ones already do — one slice, one OP entry. A manual
+            // Stop→Start leaves a real untracked gap, so it stays discrete;
+            // a contiguous continue/revert/claim folds into the prior slice.
+            Task {
+                await self.coalesceAdjacent(around: s.start)
+                await self.syncIfEnabled()
+            }
         }
         tracker.onReview = { [weak self] segment in
             guard let self else { return }
@@ -248,10 +331,11 @@ public final class AppController: ObservableObject {
                     self.targetSince = now
                     self.visitSolid = false
                     self.taskChangedAt = now
-                    // The note describes the task just left (already attached
-                    // to its flushed session above); clear it so it doesn't
-                    // bleed onto the new task.
-                    self.manualNote = ""
+                    // NB: the note is NOT cleared here. A display switch (incl.
+                    // a sub-grace excursion that reverts) used to wipe the note
+                    // before the slice it belonged to was flushed, losing it.
+                    // The note is now consumed at flush time (onSession) and on
+                    // stop, so it follows its slice correctly.
                 }
             } else {
                 self.currentTarget = nil
@@ -278,9 +362,17 @@ public final class AppController: ObservableObject {
             case .taskChanged(let target):
                 Notifier.notify(symbol: "arrow.right", text: self.name(of: target),
                                 sound: "Tink")
-            case .resumeAfterIdle:
-                Notifier.notify(symbol: "sun.max", text: "Welcome back — work continued?",
-                                sound: "Tink")
+            case .resumeAfterIdle(let stoppedAt):
+                // The gap defaults to a break (nothing recorded); offer a
+                // one-tap claim onto the task we were on, in case it was work.
+                if let last = self.lastTrackedTask() {
+                    self.pendingGap = IdleGap(task: last.ref, from: stoppedAt, to: Date())
+                    Notifier.notify(symbol: "sun.max",
+                                    text: "Back — tap to count the gap as \(last.subject)",
+                                    sound: "Tink")
+                } else {
+                    Notifier.notify(symbol: "sun.max", text: "Welcome back", sound: "Tink")
+                }
             case .callEnded:
                 Notifier.notify(symbol: "phone.down", text: "Call ended — assign it?",
                                 sound: "Tink")
@@ -429,8 +521,11 @@ public final class AppController: ObservableObject {
                 bankedElapsed = bankedElapsed.filter { $0.key == target }
             }
             let elapsed = bankedElapsed[target, default: 0] + running
-            newText = MenuTitle.text(elapsed: elapsed, certainty: certainty,
-                                     showPercent: settings.showPercent)
+            let body = MenuTitle.text(elapsed: elapsed, certainty: certainty,
+                                      showPercent: settings.showPercent)
+            // menuTaskChars == 0 → withTaskName returns the body unchanged (off).
+            newText = MenuTitle.withTaskName(name(of: target), chars: settings.menuTaskChars,
+                                             body: body)
             newColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
         }
@@ -528,8 +623,16 @@ public final class AppController: ObservableObject {
     /// "Change to": relabel the RUNNING session to `ref`, keeping its elapsed
     /// time (the mis-attributed time moves to the right task, the clock does
     /// not reset). Distinct from userPicked, which starts a fresh session.
-    public func changeCurrentTask(to ref: TaskRef) {
+    public func changeCurrentTask(to ref: TaskRef, undoable: Bool = true) {
         guard case .tracking(let oldTarget, _) = trackerState, .task(ref) != oldTarget else { return }
+        // Make the popover relabel reversible: ⌘Z relabels back to the task it
+        // was on (the inverse is itself a change, marked non-undoable so it
+        // doesn't stack endlessly).
+        if undoable, case .task(let oldRef) = oldTarget {
+            registerUndo("change to \(name(of: oldTarget))") { [weak self] in
+                self?.changeCurrentTask(to: oldRef, undoable: false)
+            }
+        }
         let now = Date()
         let elapsed = (bankedElapsed[oldTarget] ?? 0)
             + (targetSince.map { now.timeIntervalSince($0) } ?? 0)
@@ -550,6 +653,87 @@ public final class AppController: ObservableObject {
 
     public func userPostponed() {
         lastPrompt = nil
+    }
+
+    /// Turn the live (ongoing) slice into a real, editable timeline slice ending
+    /// now, while continuing to track the same task from now — so the live track
+    /// can be edited without stopping it. Returns the just-journalled slice.
+    @discardableResult
+    public func commitLiveSlice() -> Session? {
+        guard case .tracking(.task(let ref), _) = trackerState else { return nil }
+        let now = Date()
+        let from = tracker.liveSliceStart ?? targetSince ?? now
+        tracker.commitLive(at: now)
+        // Keep the displayed clock continuous: the committed time is now banked,
+        // the fresh run starts at `now`.
+        targetSince = now
+        bankedElapsed = [.task(ref): now.timeIntervalSince(from)]
+        visitSolid = true
+        updateJournalSummary()
+        refreshTitle(force: true)
+        let dayStart = Calendar.current.startOfDay(for: now)
+        return ((try? journal.sessions(from: dayStart, to: now)) ?? [])
+            .filter { $0.task == ref && $0.id != Self.liveCheckpointID }
+            .max(by: { $0.end < $1.end })
+    }
+
+    // MARK: - Per-task workspaces (window layouts)
+
+    /// Save the current on-screen window arrangement as `ref`'s workspace.
+    public func saveLayout(for ref: TaskRef) {
+        let layout = WorkspaceLayout.capture()
+        guard !layout.isEmpty else { actionNote = "No windows to save"; return }
+        settings.taskLayouts[ref.storageKey] = layout
+        settings.lastLayout = layout
+        actionNote = "Saved \(layout.count)-window layout to \(name(of: .task(ref)))"
+    }
+
+    public func hasLayout(for ref: TaskRef) -> Bool {
+        settings.taskLayouts[ref.storageKey]?.isEmpty == false
+    }
+
+    /// Start tracking `ref` (if not already) and arrange its workspace on the
+    /// current desktop — its saved layout, else the most recent one. The
+    /// right-click / ⌥-click entry point. (Auto-populating a *newly opened*
+    /// desktop waits on Space detection; this is the manual trigger.)
+    public func openWorkspace(for ref: TaskRef) {
+        if currentTarget != .task(ref), let task = taskCache.first(where: { $0.ref == ref }) {
+            userPicked(task)
+        }
+        let layout = settings.taskLayouts[ref.storageKey] ?? settings.lastLayout
+        guard !layout.isEmpty else { actionNote = "No saved layout yet — use \u{201C}Save current layout\u{201D}"; return }
+        WorkspaceLayout.apply(layout)
+    }
+
+    /// One-tap: the idle gap WAS work — record it on its task, keeping the
+    /// window detail that was captured around it. Zero taps leaves it a break.
+    public func claimIdleGap() {
+        guard let g = pendingGap else { return }
+        pendingGap = nil
+        Task {
+            await createTimelineSession(Session(task: g.task, start: g.from, end: g.to,
+                                                certainty: 0.95, comment: "worked through idle gap"))
+            // Continue, don't split: merge the claimed gap into the prior
+            // same-task slice it butts up against, so "continue when away"
+            // yields one continuous slice / one OP entry.
+            await coalesceAdjacent(around: g.from)
+        }
+    }
+
+    public func dismissIdleGap() { pendingGap = nil }
+
+    /// Post a note to the task's activity feed (OP work-package comment), so
+    /// 'comment to task' notes are findable on the task itself. With no backend
+    /// attached this is a no-op today; standalone storage lands with the
+    /// backend-seam refactor (a local timestamped comment list).
+    private func postTaskComment(wpID: Int, note: String) async {
+        guard let client else { return }
+        do {
+            try await client.addWorkPackageComment(id: wpID, text: note)
+            DebugLog.write("posted task comment to WP #\(wpID)")
+        } catch {
+            lastError = "OP task comment failed: \(error)"
+        }
     }
 
     public func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
@@ -581,7 +765,7 @@ public final class AppController: ObservableObject {
     }
 
     private func updateJournalSummary() {
-        let all = (try? journal.allSessions()) ?? []
+        let all = ((try? journal.allSessions()) ?? []).filter { $0.id != Self.liveCheckpointID }
         let awaiting = (try? journal.sessions(
             needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
         let pushed = all.filter(\.pushedToOP).count
@@ -651,10 +835,17 @@ public final class AppController: ObservableObject {
         let dayStart = calendar.startOfDay(for: calendar.date(byAdding: .day, value: dayOffset,
                                                               to: Date()) ?? Date())
         let dayEnd = dayStart.addingTimeInterval(86_400)
-        var list = (try? journal.sessions(from: dayStart, to: dayEnd)) ?? []
-        if dayOffset == 0, case .tracking(.task(let ref), let certainty) = trackerState,
-           let since = targetSince {
-            list.append(Session(id: Self.liveSessionID, task: ref, start: since,
+        // The live checkpoint row is internal crash-recovery state, not a
+        // user-facing slice — never draw it on the timeline.
+        var list = ((try? journal.sessions(from: dayStart, to: dayEnd)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        if dayOffset == 0, case .tracking(.task(let ref), let certainty) = trackerState {
+            // Start from the tracker's true continuous-slice start, not the
+            // per-visit targetSince: a sub-grace excursion resets targetSince
+            // but the time is still one unflushed slice, so anchoring to
+            // targetSince drew the live bar short and left a phantom gap.
+            let start = tracker.liveSliceStart ?? targetSince ?? Date()
+            list.append(Session(id: Self.liveSessionID, task: ref, start: start,
                                 end: Date(), certainty: certainty))
         }
         return list
@@ -701,14 +892,16 @@ public final class AppController: ObservableObject {
     /// the live session when the range covers now. Sessions crossing the
     /// range boundary are clipped so totals never double-count across days.
     public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
-        var sessions = ((try? journal.sessions(from: from, to: to)) ?? []).map { s -> Session in
-            var c = s
-            c.start = max(s.start, from)
-            c.end = min(s.end, to)
-            return c
-        }
+        var sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }   // internal recovery row
+            .map { s -> Session in
+                var c = s
+                c.start = max(s.start, from)
+                c.end = min(s.end, to)
+                return c
+            }
         if case .tracking(.task(let ref), let certainty) = trackerState,
-           let since = targetSince, since < to, Date() > from {
+           let since = tracker.liveSliceStart ?? targetSince, since < to, Date() > from {
             sessions.append(Session(id: Self.liveSessionID, task: ref,
                                     start: max(since, from), end: min(Date(), to),
                                     certainty: certainty))
@@ -717,33 +910,60 @@ public final class AppController: ObservableObject {
         return TimeAggregator.byProject(sessions: sessions, tasks: taskCache, spans: spans)
     }
 
-    /// Timeline edit of the live slice's start. If dragged back to reach a
-    /// prior same-task slice, that slice is folded in (deleted, its time and
-    /// comment absorbed) so the result is one continuous ongoing slice.
-    public func adjustLiveStart(to date: Date) {
-        guard case .tracking(.task(let ref), _) = trackerState else { return }
-        var newStart = min(date, Date())
+    /// Different-task slices the live start would cross if dragged to
+    /// `newStart` — what an absorb would trim/delete. The timeline shows these
+    /// as a warning before the second Save confirms.
+    public func liveStartConflicts(newStart: Date) -> [Session] {
+        guard case .tracking(.task(let ref), _) = trackerState else { return [] }
+        let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
+        guard newStart < liveStart else { return [] }
         let dayStart = Calendar.current.startOfDay(for: newStart)
-        let priorSlices = ((try? journal.sessions(from: dayStart, to: Date())) ?? [])
-            .filter { $0.task == ref && $0.id != Self.liveSessionID
-                      && $0.start < (targetSince ?? Date())
-                      && $0.end >= newStart.addingTimeInterval(-2) }
-            .sorted { $0.start > $1.start }
-        var foldedNote: String?
-        for s in priorSlices {
-            newStart = Swift.min(newStart, s.start)
-            if let c = s.comment, !c.isEmpty { foldedNote = [foldedNote, c].compactMap { $0 }.joined(separator: "; ") }
-            try? journal.deleteSession(s.id)
-            if let e = s.opTimeEntryID, let client { Task { try? await client.deleteTimeEntry(id: e) } }
+        return ((try? journal.sessions(from: dayStart, to: liveStart)) ?? [])
+            .filter { $0.id != Self.liveSessionID && $0.id != Self.liveCheckpointID
+                      && $0.task != ref && $0.end > newStart && $0.start < liveStart }
+            .sorted { $0.start < $1.start }
+    }
+
+    /// Timeline edit of the live slice's start. Dragging it back behaves like
+    /// dragging any slice's edge: same-task slices it reaches fold in (deleted,
+    /// their time and comment absorbed into the one ongoing slice), and — when
+    /// `absorbOtherTasks` is set (the timeline confirms via a warning first) —
+    /// other-task slices it crosses are trimmed/deleted through the very same
+    /// TimelineMath.trims path a normal edge drag uses. One undo step.
+    public func adjustLiveStart(to date: Date, absorbOtherTasks: Bool = false) async {
+        guard case .tracking(.task(let ref), _) = trackerState else { return }
+        let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
+        let dayStart = Calendar.current.startOfDay(for: min(date, Date()))
+        let context = ((try? journal.sessions(from: dayStart, to: Date())) ?? [])
+            .filter { $0.id != Self.liveSessionID && $0.id != Self.liveCheckpointID }
+
+        let sameTask = context.filter {
+            $0.task == ref && $0.start < liveStart
+                && $0.end >= min(date, Date()).addingTimeInterval(-2)
         }
-        if !priorSlices.isEmpty {
-            tracker.backdateSessionStart(to: newStart)
-            if let n = foldedNote, manualNote.isEmpty { manualNote = n }
-        } else {
-            tracker.adjustCurrentStart(to: newStart)
+        let newStart = ([min(date, Date())] + sameTask.map(\.start)).min() ?? min(date, Date())
+        let foldedNote = sameTask
+            .compactMap { ($0.comment?.isEmpty == false) ? $0.comment : nil }
+            .joined(separator: "; ")
+        let otherTrims = absorbOtherTasks
+            ? TimelineMath.trims(for: newStart, liveStart, in: context.filter { $0.task != ref })
+            : []
+
+        await undoGroup("extend \(name(of: .task(ref)))") {
+            for s in sameTask { await deleteTimelineSession(s) }
+            for trim in otherTrims {
+                if trim.delete { await deleteTimelineSession(trim.session) }
+                else { await applyTimelineEdit(trim.session) }
+            }
+            if !sameTask.isEmpty || !otherTrims.isEmpty {
+                tracker.backdateSessionStart(to: newStart)
+                if !foldedNote.isEmpty, manualNote.isEmpty { manualNote = foldedNote }
+            } else {
+                tracker.adjustCurrentStart(to: newStart)
+            }
+            targetSince = newStart
+            bankedElapsed = [:]
         }
-        targetSince = newStart
-        bankedElapsed = [:]
         updateJournalSummary()
         refreshTitle(force: true)
     }
@@ -751,10 +971,28 @@ public final class AppController: ObservableObject {
     /// The most recently tracked task today — the obvious resume candidate.
     public func lastTrackedTask() -> WorkTask? {
         let dayStart = Calendar.current.startOfDay(for: Date())
-        guard let last = (try? journal.sessions(from: dayStart, to: Date()))?.last else {
+        guard let last = ((try? journal.sessions(from: dayStart, to: Date())) ?? [])
+            .filter({ $0.id != Self.liveCheckpointID }).last else {
             return nil
         }
         return taskCache.first { $0.ref == last.task }
+    }
+
+    /// The task to "revert" to: the last closed slice's task, but only when it
+    /// differs from what we're tracking now (otherwise there is nothing to
+    /// undo). Drives the popover's one-click "← <prev>" when a switch was wrong.
+    public func revertTargetTask() -> WorkTask? {
+        guard case .tracking(let current, _) = trackerState else { return nil }
+        guard let last = lastTrackedTask(), .task(last.ref) != current else { return nil }
+        return last
+    }
+
+    /// "That switch was wrong": fold the current (mis-attributed) running slice
+    /// back onto the previous task, keeping the clock — no reset. Same machinery
+    /// as the popover's "Change to".
+    public func revertToLastTask() {
+        guard let target = revertTargetTask() else { return }
+        changeCurrentTask(to: target.ref)
     }
 
     /// A brand-new manual slice (drawn or gap-filled on the timeline).
@@ -827,6 +1065,21 @@ public final class AppController: ObservableObject {
         attributor.assign(dominant.signal, target: .task(session.task))
         try? learningStore.save(attributor.learning)
         try? primedStore.save(attributor.primedSurfaces)
+    }
+
+    /// "Don't track this": drop the slice's tracked time (and any OP entry) but
+    /// keep its window detail, and teach the attributor its dominant surface is
+    /// non-work so similar time stops auto-tracking. Undo restores the slice.
+    /// Used to undo e.g. an away stretch you didn't actually work.
+    public func markSessionDoNotTrack(_ session: Session) async {
+        let spans = (try? journal.spans(from: session.start, to: session.end)) ?? []
+        if let dominant = spans.max(by: {
+            $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
+        }) {
+            attributor.assign(dominant.signal, target: .doNotTrack)
+            persistAssociations()
+        }
+        await deleteTimelineSession(session)
     }
 
     public func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
@@ -926,7 +1179,8 @@ public final class AppController: ObservableObject {
         let cal = Calendar.current
         let dayStart = cal.startOfDay(for: date)
         let dayEnd = dayStart.addingTimeInterval(86_400)
-        let original = (try? journal.sessions(from: dayStart, to: dayEnd)) ?? []
+        let original = ((try? journal.sessions(from: dayStart, to: dayEnd)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }   // never fold the crash-safety row
         let merged = TimelineMath.mergeAdjacent(original)
         guard merged.count != original.count else { return }
         let survivors = Set(merged.map(\.id))
@@ -935,7 +1189,31 @@ public final class AppController: ObservableObject {
             if let e = o.opTimeEntryID, let client { try? await client.deleteTimeEntry(id: e) }
         }
         for m in merged where original.first(where: { $0.id == m.id }) != m {
-            try? journal.update(m)
+            var survivor = m
+            // The survivor keeps the earliest slice's id (and OP entry). If that
+            // entry already exists on OP, rewrite it IN PLACE to the merged
+            // extent — `pushEligible` only ever *creates*, so a re-push would
+            // duplicate the log. Patch + mark handled; leave only never-pushed
+            // survivors for sync to create fresh.
+            if case .op(let wpID) = survivor.task, let entryID = survivor.opTimeEntryID,
+               let client {
+                do {
+                    try await client.updateTimeEntry(
+                        id: entryID, workPackageID: wpID, start: survivor.start,
+                        duration: survivor.end.timeIntervalSince(survivor.start),
+                        activityID: settings.activityOverrides[survivor.task] ?? settings.defaultActivityID,
+                        comment: survivor.comment,
+                        startTime: ISO8601DateFormatter().string(from: survivor.start))
+                    survivor.pushedToOP = true   // updated in place; don't re-create
+                    DebugLog.write("coalesce patched OP entry \(entryID)")
+                } catch {
+                    // Keep it handled rather than risk a duplicate; the stale
+                    // entry can be re-synced by a later edit.
+                    survivor.pushedToOP = true
+                    lastError = "OP merge-update failed: \(error)"
+                }
+            }
+            try? journal.update(survivor)
         }
         await syncIfEnabled()
         updateJournalSummary()

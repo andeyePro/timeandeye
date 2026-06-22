@@ -15,6 +15,7 @@ public final class SensorHub {
     private var pollTimer: Timer?
     private var lastSurfaceKey: String?
     private var micMonitor: MicMonitor?
+    private var screenLocked = false
 
     public init() {}
 
@@ -35,6 +36,21 @@ public final class SensorHub {
         workspace.addObserver(forName: NSWorkspace.didWakeNotification,
                               object: nil, queue: .main) { [weak self] _ in
             self?.onEvent(.didWake(Date()))
+        }
+
+        // Screen lock/unlock: while locked, the frontmost window is not really
+        // in use, so we suppress window detail (and tell Core to close the open
+        // span). These are the documented loginwindow distributed notifications.
+        let distributed = DistributedNotificationCenter.default()
+        distributed.addObserver(forName: .init("com.apple.screenIsLocked"),
+                                object: nil, queue: .main) { [weak self] _ in
+            self?.screenLocked = true
+            self?.onEvent(.screenLocked(Date()))
+        }
+        distributed.addObserver(forName: .init("com.apple.screenIsUnlocked"),
+                                object: nil, queue: .main) { [weak self] _ in
+            self?.screenLocked = false
+            self?.onEvent(.screenUnlocked(Date()))
         }
 
         micMonitor = MicMonitor { [weak self] active in
@@ -65,6 +81,9 @@ public final class SensorHub {
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
         onEvent(.input(now.addingTimeInterval(-idleSeconds)))
+        // Locked: don't sample the frontmost window at all (no window detail
+        // should accrue while the Mac is locked).
+        if screenLocked { lastSurfaceKey = nil; return }
         // After a real idle gap, re-emit the current surface even if unchanged
         // so the tracker can auto-resume when the user returns to it.
         if idleSeconds > 60 { lastSurfaceKey = nil; return }

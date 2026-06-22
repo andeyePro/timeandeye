@@ -30,7 +30,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key><string>Ambitick</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleVersion</key><string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSAppleEventsUsageDescription</key>
@@ -48,6 +48,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+# Stamp the build time into CFBundleVersion so the running app can show exactly
+# which build it is (Settings → About). Must run before signing.
+BUILD_STAMP="$(date '+%Y-%m-%d %H:%M')"
+/usr/bin/sed -i '' "s/BUILD_STAMP/$BUILD_STAMP/" "$APP/Contents/Info.plist"
 
 # Stable signing identity: ad-hoc signing changes the app's identity every
 # build, which silently invalidates TCC grants (Accessibility, Automation)

@@ -146,6 +146,52 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(prompts, [.resumeAfterIdle(stoppedAt: t(50))])
     }
 
+    c.check("sleep within grace continues; longer sleep stops as of sleep") {
+        let (tracker, attributor) = makeTracker()   // default sleepGrace = 60 s
+        var sessions: [Session] = []
+        var prompts: [TrackerPrompt] = []
+        tracker.onSession = { sessions.append($0) }
+        tracker.onPrompt = { prompts.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.input(t(50)))
+        tracker.handle(.willSleep(t(60)))
+        tracker.handle(.didWake(t(100)))    // 40 s < grace: keep tracking
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "wake within grace must continue, got \(tracker.state)")
+        }
+        try expect(sessions.isEmpty, "a within-grace sleep flushes nothing")
+        try expect(prompts.isEmpty, "a within-grace sleep prompts nothing")
+
+        tracker.handle(.input(t(120)))
+        tracker.handle(.willSleep(t(130)))
+        tracker.handle(.didWake(t(400)))    // 270 s > grace: stop as of last activity
+        try expectEq(tracker.state, .stopped)
+        try expectEq(sessions.last?.end, t(120), "long sleep stops as of last activity")
+        try expect(prompts.contains { $0 == .resumeAfterIdle(stoppedAt: t(120)) },
+                   "long sleep prompts to resume")
+    }
+
+    c.check("locked screen records no window detail") {
+        let (tracker, attributor) = makeTracker()
+        var spans: [FocusSpan] = []
+        tracker.onSpanClosed = { spans.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))   // opens a span
+        tracker.handle(.screenLocked(t(30)))                        // closes it at 30
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 60)))  // ignored while locked
+        tracker.handle(.screenUnlocked(t(90)))
+        tracker.stop(at: t(120))
+
+        try expect(!spans.isEmpty, "the pre-lock span should still be recorded")
+        try expect(spans.allSatisfy { $0.end <= t(30) },
+                   "no window span may cover the locked 30..90 stretch")
+    }
+
     c.check("brief uncertain patch does not sink session certainty (weighted mean)") {
         var config = TrackerConfig()
         config.idleThresholdSeconds = 3600   // scripted gaps must not read as idle
@@ -165,26 +211,26 @@ func sessionTrackerChecks(_ c: Checks) {
         try expect(sessions[0].certainty < 0.95, "but the uncertain minute must count")
     }
 
-    c.check("OP page auto-starts from stopped (URL and PWA title); primed surface does not") {
-        let (tracker, attributor) = makeTracker()
-        // URL signal
+    c.check("OP page auto-starts after a non-manual stop; manual stop is fully sticky") {
+        let (tracker, _) = makeTracker()
+        // URL signal from the initial (non-manual) stopped state → auto-starts
         tracker.handle(.focus(sig("Chrome", "WP", at: 0,
                                   url: "https://op.example.com/work_packages/1")))
         guard case .tracking(.task(.op(1)), _) = tracker.state else {
             throw CheckFailure(description: "URL signal must auto-start, got \(tracker.state)")
         }
-        tracker.stop(at: t(10))
-        // PWA title signal (id lives in the app name)
+        tracker.stop(at: t(10), manual: false)   // idle/auto stop
+        // PWA title signal (id lives in the app name) auto-starts after idle stop
         tracker.handle(.focus(ActivitySignal(app: "#2: Investment | OpenProject",
                                              timestamp: t(20))))
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
             throw CheckFailure(description: "title signal must auto-start, got \(tracker.state)")
         }
-        tracker.stop(at: t(30))
-        // primed surface must NOT restart a stopped timer
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 30), task: .op(1))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 40)))
-        try expectEq(tracker.state, .stopped, "manual stop must be respected")
+        tracker.stop(at: t(30))   // MANUAL → sticky
+        // After a manual stop, NOT EVEN a direct OP-page signal restarts it.
+        tracker.handle(.focus(sig("Chrome", "WP", at: 40,
+                                  url: "https://op.example.com/work_packages/1")))
+        try expectEq(tracker.state, .stopped, "manual stop must be fully sticky")
     }
 
     c.check("sub-grace excursion stays in the prior slice (not a separate one)") {

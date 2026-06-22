@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-06-22
+
+- [x] **Slices auto-merge; manual Stop→Start is the only discrete boundary** —
+  `coalesceAdjacent` now runs at the flush sink (`onSession`) and after the
+  idle-gap claim, so "continue when you were away", "revert to last task" and
+  every other live-created slice fold into the adjacent same-task slice — one
+  slice, one OP entry — instead of fragmenting. Adjacency uses the existing 2s
+  tolerance, so a real untracked gap (a manual Stop then Start) stays two
+  slices: the sole intentional break, e.g. for different comments.
+- [x] **OP duplicate-on-merge fixed (was latent on the drag path too)** — a
+  merged survivor kept the earlier slice's `opTimeEntryID` but was flagged for
+  re-push, and `pushEligible` only ever *creates*, so each merge would spawn a
+  second time entry. `coalesceAdjacent` now PATCHes the survivor's existing OP
+  entry in place and marks it handled; auto-merge also skips the live
+  crash-checkpoint row.
+- [x] **Comment toggles: 'to tracked time' and 'to task'** — two independent
+  settings (both default on). 'To tracked time' keeps the note on the time
+  entry; 'to task' also posts it to the task's OP activity feed (new
+  `OPClient.addWorkPackageComment`), where it is findable. Both off hides the
+  note field. Routing is a pure, unit-checked `CommentRouting` helper. 98
+  checks green; full SwiftUI build clean.
+
 ## 2026-06-12
 
 - [x] **Timeline, Time Spent, local tasks (the `timeline` branch)** - Full

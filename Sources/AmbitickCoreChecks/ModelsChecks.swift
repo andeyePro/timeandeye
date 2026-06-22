@@ -29,4 +29,16 @@ func modelsChecks(_ c: Checks) {
         let back = try JSONDecoder().decode(Session.self, from: JSONEncoder().encode(s))
         try expectEq(back, s)
     }
+
+    c.check("window frame round-trips and decodes legacy (no title)") {
+        let f = WindowFrame(bundleID: "com.apple.Safari", x: 10, y: 20, w: 800, h: 600,
+                            title: "Inbox – Gmail")
+        let back = try JSONDecoder().decode(WindowFrame.self, from: JSONEncoder().encode(f))
+        try expectEq(back, f)
+        // A layout saved before `title` existed must still decode (title -> "").
+        let legacy = #"{"bundleID":"com.apple.Notes","x":1,"y":2,"w":3,"h":4}"#
+        let old = try JSONDecoder().decode(WindowFrame.self, from: Data(legacy.utf8))
+        try expectEq(old.title, "")
+        try expectEq(old.bundleID, "com.apple.Notes")
+    }
 }

@@ -15,39 +15,60 @@ public enum KeychainStore {
         }
     }
 
-    public static func saveAPIKey(_ key: String) throws {
-        let query: [String: Any] = [
+    /// We prefer the data-protection keychain: unlike the legacy file keychain,
+    /// it has NO per-application "allow / always allow" trust prompt, so a
+    /// self-signed app (whose cert macOS can't anchor) stops being challenged
+    /// for the password on every rebuild. We fall back to the legacy keychain
+    /// only if the data-protection store is unavailable (errSecMissingEntitlement),
+    /// so access can never break — at worst it behaves as before.
+    private static func base(dataProtection: Bool) -> [String: Any] {
+        var q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(query as CFDictionary)
-        var attributes = query
-        attributes[kSecValueData as String] = Data(key.utf8)
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        guard status == errSecSuccess else { throw KeychainError(status: status) }
+        if dataProtection { q[kSecUseDataProtectionKeychain as String] = true }
+        return q
     }
 
-    /// nil = absent; throws when the Keychain refuses access (e.g. the item
-    /// belongs to a previous ad-hoc-signed build and access was denied).
-    public static func loadAPIKey() throws -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        switch status {
-        case errSecSuccess:
-            guard let data = result as? Data else { return nil }
-            return String(data: data, encoding: .utf8)
-        case errSecItemNotFound:
-            return nil
-        default:
+    public static func saveAPIKey(_ key: String) throws {
+        for dataProtection in [true, false] {
+            let q = base(dataProtection: dataProtection)
+            SecItemDelete(q as CFDictionary)
+            var attributes = q
+            attributes[kSecValueData as String] = Data(key.utf8)
+            attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            let status = SecItemAdd(attributes as CFDictionary, nil)
+            if status == errSecSuccess { return }
+            if status == errSecMissingEntitlement, dataProtection { continue }   // legacy fallback
             throw KeychainError(status: status)
         }
+    }
+
+    /// nil = absent. Reads the data-protection store first, then the legacy
+    /// store (so a key saved by an older build is still found — re-save it once
+    /// to migrate it and silence the prompt for good).
+    public static func loadAPIKey() throws -> String? {
+        for dataProtection in [true, false] {
+            var query = base(dataProtection: dataProtection)
+            query[kSecReturnData as String] = true
+            query[kSecMatchLimit as String] = kSecMatchLimitOne
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            switch status {
+            case errSecSuccess:
+                let value = (result as? Data).flatMap { String(data: $0, encoding: .utf8) }
+                // Found in the legacy store → copy it into the no-prompt
+                // data-protection store so the next launch reads it there and
+                // never challenges for the password again. Best-effort.
+                if !dataProtection, let value { try? saveAPIKey(value) }
+                return value
+            case errSecItemNotFound, errSecMissingEntitlement:
+                continue   // try the other store
+            default:
+                throw KeychainError(status: status)
+            }
+        }
+        return nil
     }
 }

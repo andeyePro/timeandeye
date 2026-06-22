@@ -2,6 +2,26 @@
 
 ## Open
 
+- [ ] Timeline free-pan across days: drop the single-day viewport clamp so a
+  block spanning midnight renders whole and the view scrolls continuously
+  across day boundaries (storage already spans midnight — it is the
+  `startOfDay`/`+86 400s` clamp in `TimelineView`). Geometry behind unit
+  tests; Martin render-checks. - 2026-06-22
+- [ ] Backend seam + standalone mode: extract a `TaskBackend`/`TimeSink`
+  protocol, move OpenProject behind it in-process, and make "no backend" the
+  null implementation so Ambitick runs standalone — local task list with CRUD,
+  no-op sync, hidden activity types, CSV/Markdown timesheet export. Plugin
+  loader deferred until a second backend exists. New branch. - 2026-06-22
+- [ ] Right-click 'Open in <backend>' (task URL from the connector); standalone
+  → 'Open task' showing the timestamped comment list. - 2026-06-22
+- [ ] Standalone 'comment to task' storage: persist notes against the local
+  task in SQLite as a timestamped list (the standalone half of the comment
+  toggles already shipped for OP). - 2026-06-22
+- [ ] OpenProject duplicate-entry cleanup: journal-driven reconcile, exact
+  start+duration match only (never collapse genuinely-separate same-duration
+  slices), as an in-app maintenance action — the MCP can see neither start
+  times nor a delete verb. ~96 candidate groups / 143 surplus entries in the
+  most-recent 500. - 2026-06-22
 - [ ] Semantic task search in filters (find "voting" Ghostty's task without
   knowing its OP subject; substring filter is not enough) - Martin 2026-06-12
 - [ ] Named local-only leisure/non-OP tasks (e.g. "Chess") creatable from the

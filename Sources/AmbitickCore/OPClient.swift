@@ -172,6 +172,16 @@ public final class OPClient {
         _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "PATCH", body: body))
     }
 
+    /// Post a comment to a work package's activity feed (the task's journal),
+    /// so a 'comment to task' note is findable on the task itself rather than
+    /// buried on a single time entry.
+    public func addWorkPackageComment(id: Int, text: String) async throws {
+        let body = try JSONSerialization.data(
+            withJSONObject: ["comment": ["raw": text]])
+        _ = try await send(request(path: "api/v3/work_packages/\(id)/activities",
+                                   method: "POST", body: body))
+    }
+
     public func deleteTimeEntry(id: Int) async throws {
         _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "DELETE"))
     }

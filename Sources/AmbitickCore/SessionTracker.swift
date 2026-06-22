@@ -11,6 +11,11 @@ public struct TrackerConfig: Equatable, Sendable {
     /// focus this long; briefer excursions merge back into the current task.
     /// Direct OP-page signals and manual picks bypass the grace.
     public var switchGraceSeconds: TimeInterval
+    /// A sleep shorter than this does NOT stop the clock: waking within the
+    /// window continues the task that was being tracked (stepped away to read
+    /// or to another device, not finished). A longer sleep stops as-of the
+    /// moment activity ceased, like idle.
+    public var sleepGraceSeconds: TimeInterval
 
     public init(minSegmentSeconds: TimeInterval = 20,
                 primeDwellSeconds: TimeInterval = 30,
@@ -18,7 +23,8 @@ public struct TrackerConfig: Equatable, Sendable {
                 uncertainBelow: Double = 0.6,
                 nonWorkTracksLocally: Bool = false,
                 leisureTask: TaskRef? = nil,
-                switchGraceSeconds: TimeInterval = 30) {
+                switchGraceSeconds: TimeInterval = 30,
+                sleepGraceSeconds: TimeInterval = 60) {
         self.minSegmentSeconds = minSegmentSeconds
         self.primeDwellSeconds = primeDwellSeconds
         self.idleThresholdSeconds = idleThresholdSeconds
@@ -26,6 +32,7 @@ public struct TrackerConfig: Equatable, Sendable {
         self.nonWorkTracksLocally = nonWorkTracksLocally
         self.leisureTask = leisureTask
         self.switchGraceSeconds = switchGraceSeconds
+        self.sleepGraceSeconds = sleepGraceSeconds
     }
 }
 
@@ -79,6 +86,22 @@ public final class SessionTracker {
     /// Manual Stop is respected (only a near-certain OP signal restarts);
     /// idle/auto stops may resume from any confident surface.
     private var stoppedManually = false
+    /// Set on willSleep; resolved on didWake. The clock is NOT stopped while
+    /// this is set — a quick wake continues, a long one stops retroactively.
+    private var sleepingSince: Date?
+    /// True between screenLocked and screenUnlocked: no window spans are opened
+    /// while the Mac is locked (the window isn't really in use).
+    private var screenLocked = false
+
+    /// Start of the current continuous tracked slice: the earliest of all
+    /// accumulated (not-yet-flushed) spans and the open visit. Unlike the
+    /// app's per-visit `targetSince`, this is unaffected by sub-grace
+    /// excursions that re-tag spans, so the timeline's live slice spans the
+    /// whole ongoing stretch — exactly what a flush would journal — instead of
+    /// jumping forward to the latest visit and leaving a phantom gap.
+    public var liveSliceStart: Date? {
+        (spans.map(\.start) + [currentStart].compactMap { $0 }).min()
+    }
 
     public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
@@ -125,6 +148,19 @@ public final class SessionTracker {
                                signal: signal, start: date, end: earliest), at: 0)
     }
 
+    /// Journal everything tracked so far on the current task up to `date` as a
+    /// closed slice, then keep tracking the SAME task with a fresh run from
+    /// `date`. Lets the timeline materialise the live slice into a real,
+    /// editable slice without the user having to stop the clock.
+    public func commitLive(at date: Date) {
+        guard case .tracking = state else { return }
+        let signal = currentSignal
+        endCurrentSpan(at: date)
+        flushSessions(asOf: date)
+        currentSignal = signal      // resume the same surface…
+        currentStart = date         // …as a fresh run from now
+    }
+
     /// Relabel the CURRENT in-flight session to `task`: re-tag every
     /// accumulated span (so the elapsed time re-attributes, not just the
     /// future), confirm the association, and hold the clock. Distinct from
@@ -165,6 +201,16 @@ public final class SessionTracker {
     public var away = false
 
     public func handle(_ event: SensorEvent) {
+        // Lock state is resolved even while away: a locked screen must not keep
+        // attributing the last window. Close the open span at lock and record
+        // no window detail until unlock. The session itself keeps running (away
+        // still pins it / idle handling unchanged) — only the bogus "you were
+        // in Ghostty while the Mac was locked" detail is suppressed.
+        switch event {
+        case .screenLocked(let date): screenLocked = true; endCurrentSpan(at: date); return
+        case .screenUnlocked: screenLocked = false; return
+        default: break
+        }
         if away {
             // Hold the current session open: ignore everything except noting
             // input time (so returning doesn't immediately idle-stop once away
@@ -176,9 +222,25 @@ public final class SessionTracker {
         switch event {
         case .focus(let signal): handleFocus(signal)
         case .input(let date): handleInput(date)
-        case .willSleep(let date): idleStop(asOf: min(lastInput ?? date, date), promptNow: false)
-        case .didWake: promptResumeIfIdleStopped()
+        case .willSleep(let date): sleepingSince = date
+        case .didWake(let date): handleWake(at: date)
         case .microphone(let active, let at): handleMic(active: active, at: at)
+        case .screenLocked, .screenUnlocked: break   // handled above
+        }
+    }
+
+    /// Resolve a sleep on wake. Within the grace window the clock simply
+    /// carries on (the brief sleep counts as continued time on the same task).
+    /// Beyond it, stop as-of the moment activity actually ceased and prompt to
+    /// resume — the same retro-trim + prompt an idle stop does.
+    private func handleWake(at date: Date) {
+        guard let slept = sleepingSince else { promptResumeIfIdleStopped(); return }
+        sleepingSince = nil
+        if case .tracking = state, date.timeIntervalSince(slept) <= config.sleepGraceSeconds {
+            lastInput = date
+            onDebug("woke \(Int(date.timeIntervalSince(slept)))s after sleep — within grace, continuing")
+        } else {
+            idleStop(asOf: min(lastInput ?? slept, slept), promptNow: true)
         }
     }
 
@@ -193,6 +255,7 @@ public final class SessionTracker {
     }
 
     private func handleFocus(_ signal: ActivitySignal) {
+        if screenLocked { return }   // locked: don't open a window span
         let now = signal.timestamp
         handleInput(now)   // a focus change counts as input; also runs the idle check
         if let prev = currentSignal, let start = currentStart {
@@ -208,11 +271,12 @@ public final class SessionTracker {
 
         switch state {
         case .stopped:
-            // After a MANUAL stop only a direct OP-task-page signal (URL 0.99
-            // / title 0.97) restarts. After idle/auto stops, any confident
-            // surface (primed >= 0.95) resumes the clock too.
-            let gate = stoppedManually ? 0.96 : 0.9
-            if let best = attribution.best, best.score >= gate,
+            // A MANUAL stop is fully sticky: nothing auto-resumes it until you
+            // explicitly start again — so you can stop to fix the timeline
+            // without the clock restarting under you and clobbering your edits.
+            // Only idle/auto stops resume from a confident surface (>= 0.9).
+            guard !stoppedManually else { return }
+            if let best = attribution.best, best.score >= 0.9,
                case .task(let task) = best.target {
                 lastInput = now
                 state = .tracking(.task(task), certainty: best.score)

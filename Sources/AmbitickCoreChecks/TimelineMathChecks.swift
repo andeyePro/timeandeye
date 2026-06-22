@@ -75,6 +75,23 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(merged.map(\.task), [.op(1), .op(2), .op(1)])
     }
 
+    c.check("mergeAdjacent keeps a real gap discrete (manual Stop→Start boundary)") {
+        // Policy: adjacent same-task slices fold into one; the ONLY discrete
+        // boundary is the untracked gap a manual Stop→Start leaves. A contiguous
+        // continue/revert/away-claim butts up (<= tolerance) and merges; a stop
+        // then restart leaves seconds of untracked time and stays two slices.
+        let stopped = Session(task: .op(1), start: t(0), end: t(300), certainty: 1, comment: "designed")
+        let restarted = Session(task: .op(1), start: t(305), end: t(600), certainty: 1, comment: "tested")
+        let kept = TimelineMath.mergeAdjacent([stopped, restarted])
+        try expectEq(kept.count, 2, "5s untracked gap > 2s tolerance stays discrete")
+        try expectEq(kept.map(\.comment), ["designed", "tested"])
+
+        // Continue/revert/claim: butting same-task slices DO fold.
+        let prior = Session(task: .op(1), start: t(0), end: t(300), certainty: 1)
+        let continued = Session(task: .op(1), start: t(300), end: t(600), certainty: 1)
+        try expectEq(TimelineMath.mergeAdjacent([prior, continued]).count, 1)
+    }
+
     c.check("latest block walks back over <1h gaps") {
         let morning = session(from: 0, to: 1800)
         let later1 = session(from: 20_000, to: 21_000)

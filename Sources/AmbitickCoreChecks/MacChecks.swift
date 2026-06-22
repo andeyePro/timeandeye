@@ -25,6 +25,17 @@ func menuTitleChecks(_ c: Checks) {
         try expectEq(MenuTitle.text(elapsed: 60, certainty: 0.87, showPercent: true), "1m 87%")
     }
 
+    c.check("menu-bar task name suffix") {
+        try expectEq(MenuTitle.withTaskName("Ambitick design", chars: 5, body: "21m"), "21m Ambit")
+        try expectEq(MenuTitle.withTaskName("Inv", chars: 5, body: "21m"), "21m Inv",
+                     "name shorter than the limit is shown whole")
+        try expectEq(MenuTitle.withTaskName("Ambitick", chars: 0, body: "21m"), "21m",
+                     "chars 0 leaves the time alone")
+        try expectEq(MenuTitle.withTaskName(nil, chars: 5, body: "21m"), "21m")
+        try expectEq(MenuTitle.withTaskName("   ", chars: 5, body: "21m"), "21m",
+                     "blank name leaves the time alone")
+    }
+
     c.check("colour gradient and hex parsing") {
         let low = try unwrap(NSColor(hex: "#FF0000"))
         try expectClose(Double(low.redComponent), 1.0)

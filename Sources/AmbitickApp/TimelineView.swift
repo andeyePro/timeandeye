@@ -17,6 +17,10 @@ import AmbitickMac
 ///   the bar by connector lines; click a chip for everything recorded.
 /// A slice: rounded rect, but the live slice gets a zig-zag right edge to
 /// signal "ongoing" while keeping the task's full colour.
+/// Reference holder so the scroll-wheel NSEvent monitor (captured once at
+/// onAppear) can read a flag that SwiftUI @State updates live.
+final class ScrollGate { var overDetail = false }
+
 struct SliceShape: Shape {
     var zigzag: Bool
     func path(in rect: CGRect) -> Path {
@@ -65,9 +69,17 @@ struct TimelineView: View {
     @State private var edgeOrigin: (start: Date, end: Date)?
     @State private var barWidth: CGFloat = 900
     @State private var selectedSpanIdx = Set<Int>()
+    /// Anchor for Finder-style shift-range selection in the window strip.
+    @State private var spanAnchor: Int?
+    /// Anchor for the same in the slice bar (by slice id).
+    @State private var sliceAnchor: UUID?
     @State private var stripPxPerSec: CGFloat = 2
     @State private var stripPinchBase: CGFloat?
     @State private var scrollMonitor: Any?
+    /// Live flag (a reference so the scroll-wheel monitor reads it after install)
+    /// telling the main-timeline pan to stand down while the cursor is over the
+    /// window detail section — otherwise scrolling the strip pans both.
+    @State private var scrollGate = ScrollGate()
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -86,12 +98,6 @@ struct TimelineView: View {
             if let session = editing {
                 editor(session)
                 detailStrip(session)
-                if let detail = singleSpanDetail(session) {
-                    Text(detail)
-                        .font(.system(.caption, design: .monospaced))
-                        .padding(6)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                }
             }
             Spacer(minLength: 0)
         }
@@ -171,6 +177,9 @@ struct TimelineView: View {
     private func installScrollPan() {
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard NSApp.keyWindow?.title.contains("Timeline") == true else { return event }
+            // Over the window detail section the inner ScrollViews handle their
+            // own scrolling — don't ALSO pan the main bar (that moved both).
+            if scrollGate.overDetail { return event }
             let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.scrollingDeltaY
             viewStart = viewStart.addingTimeInterval(-TimeInterval(dx / barWidth) * viewSpan)
             clampViewport()
@@ -245,6 +254,9 @@ struct TimelineView: View {
         .frame(height: 96)
         .clipped()
         .contentShape(Rectangle())
+        // Over the bar, scroll pans it — clear the detail gate so panning
+        // resumes even if the editor was dismissed while hovering the strip.
+        .onHover { if $0 { scrollGate.overDetail = false } }
         .gesture(drawGesture(width: width))
         .onTapGesture(coordinateSpace: .local) { location in gapClick(at: location, width: width) }
         .gesture(MagnificationGesture()
@@ -277,14 +289,14 @@ struct TimelineView: View {
             }
     }
 
-    /// Plain click in a gap proposes a slice filling that gap.
+    /// Plain click in a gap proposes a slice filling that gap. A single click
+    /// always works: any open editor / selection is cleared first, then if the
+    /// click landed in a real gap a fill is proposed in the SAME click (the old
+    /// two-step "first click just dismisses" made gaps feel un-fillable).
     private func gapClick(at location: CGPoint, width: CGFloat) {
-        guard editing == nil, selection.isEmpty else {
-            editing = nil
-            selection = []
-            selectedSpanIdx = []
-            return
-        }
+        editing = nil
+        selection = []
+        selectedSpanIdx = []
         let point = dateFor(location.x, width: width)
         guard let gap = TimelineMath.gap(at: point, in: sessions,
                                          within: dayStart...min(dayEnd, Date())) else { return }
@@ -355,17 +367,34 @@ struct TimelineView: View {
             .overlay { edgeHandles(session, sliceWidth: w) }
             .position(x: x0 + w / 2, y: 56)
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
-            .onTapGesture {
-                if NSEvent.modifierFlags.contains(.command) {
-                    guard !isLive else { return }   // the live slice cannot be batch-edited
-                    if selection.contains(session.id) { selection.remove(session.id) }
-                    else { selection.insert(session.id) }
-                    editing = nil
-                } else {
-                    selection = []
-                    openEditor(for: session, isNew: false)
-                }
-            }
+            .onTapGesture { selectSlice(session, isLive: isLive) }
+    }
+
+    /// Finder-style slice selection, matching the window strip: ⌘-click toggles
+    /// one into the multi-select, ⇧-click extends a contiguous range (by start
+    /// time) from the anchor, ⇧⌘ adds that range, and a plain click opens the
+    /// editor (and sets the anchor for a later ⇧-click). The live slice can't
+    /// be batch-selected.
+    private func selectSlice(_ session: Session, isLive: Bool) {
+        let flags = NSEvent.modifierFlags
+        let ids = sessions.filter { $0.id != AppController.liveSessionID }
+            .sorted { $0.start < $1.start }.map(\.id)
+        if flags.contains(.shift), let anchor = sliceAnchor,
+           let a = ids.firstIndex(of: anchor), let b = ids.firstIndex(of: session.id) {
+            let range = Set(ids[min(a, b)...max(a, b)])
+            selection = flags.contains(.command) ? selection.union(range) : range
+            editing = nil
+        } else if flags.contains(.command) {
+            guard !isLive else { return }
+            if selection.contains(session.id) { selection.remove(session.id) }
+            else { selection.insert(session.id) }
+            sliceAnchor = session.id
+            editing = nil
+        } else {
+            selection = []
+            sliceAnchor = isLive ? nil : session.id
+            openEditor(for: session, isNew: false)
+        }
     }
 
     /// Grips appear only on the slice you've clicked to edit (hover detection
@@ -456,6 +485,18 @@ struct TimelineView: View {
         controller.searchTasks(filter)
     }
 
+    /// The editor's task list always contains the slice's current task, even
+    /// when the filter would exclude it — otherwise the Picker shows blank for
+    /// the very task you clicked to edit.
+    private func editorTasks() -> [WorkTask] {
+        var list = filteredTasks()
+        if let t = editTask, !list.contains(where: { $0.ref == t }),
+           let task = controller.taskCache.first(where: { $0.ref == t }) {
+            list.insert(task, at: 0)
+        }
+        return list
+    }
+
     // MARK: - Editor
 
     private func openEditor(for session: Session, isNew: Bool) {
@@ -469,6 +510,12 @@ struct TimelineView: View {
         editTask = session.task
         conflicts = []
         selectedSpanIdx = []
+        spanAnchor = nil
+        // Leftover filter text used to hide the clicked slice's own task from
+        // the picker (it lists only matches), so the editor opened on a blank
+        // task. Clear it on open; the picker also force-includes the current
+        // task below as a belt-and-braces guard.
+        filter = ""
     }
 
     private var durationBinding: Binding<Date> {
@@ -545,6 +592,11 @@ struct TimelineView: View {
                 }
                 .keyboardShortcut(.defaultAction)   // Enter saves
                 if !isNewEditing, !isLive {
+                    Button {
+                        Task { await controller.markSessionDoNotTrack(session) }
+                        editing = nil
+                    } label: { Label("Don't track", systemImage: "nosign") }
+                        .help("Drop this from tracked time (keeps the window detail) and stop auto-tracking this surface — e.g. an away stretch you didn't work.")
                     Button(role: .destructive) {
                         Task { await controller.deleteTimelineSession(session) }
                         editing = nil
@@ -569,9 +621,19 @@ struct TimelineView: View {
     /// Commit live-slice edits: change task / start / comment / scheduled end.
     private func saveLive(_ session: Session) {
         if let t = editTask, t != session.task { controller.changeCurrentTask(to: t) }
-        controller.adjustLiveStart(to: editStart)
+        // Dragging the live start back over OTHER tasks behaves like any edge
+        // drag: warn once (listing what gets trimmed), absorb on the next Save.
+        let liveConf = controller.liveStartConflicts(newStart: editStart)
+        if !liveConf.isEmpty, conflicts.isEmpty {
+            conflicts = liveConf
+            return
+        }
+        let absorb = !conflicts.isEmpty
+        let newStart = editStart
         controller.manualNote = editComment
         controller.scheduleStop(at: editEnd > Date().addingTimeInterval(60) ? editEnd : nil)
+        Task { await controller.adjustLiveStart(to: newStart, absorbOtherTasks: absorb) }
+        conflicts = []
         editing = nil
     }
 
@@ -582,7 +644,7 @@ struct TimelineView: View {
             Picker("Task", selection: Binding(
                 get: { editTask ?? .op(0) },
                 set: { editTask = $0 })) {
-                ForEach(filteredTasks(), id: \.ref) { task in
+                ForEach(editorTasks(), id: \.ref) { task in
                     Text(task.subject).tag(task.ref)
                 }
             }
@@ -608,7 +670,7 @@ struct TimelineView: View {
                     if let live = liveOverlap, edited.end > live.start, edited.end < Date() {
                         // The live clock cannot overlap recorded history: its
                         // start moves to the edited slice's end.
-                        controller.adjustLiveStart(to: edited.end)
+                        await controller.adjustLiveStart(to: edited.end)
                     }
                     for trim in TimelineMath.trims(for: edited.start, edited.end,
                                                    excluding: edited.id,
@@ -692,9 +754,13 @@ struct TimelineView: View {
             }
 
             if !selectedSpanIdx.isEmpty {
-                spanReassignBar(session, spans: spans)
+                selectedSpanPanes(session, spans: spans)   // the data, one pane per window
+                spanReassignBar(session, spans: spans)     // then the move dialogue
             }
         }
+        // Scrolling anywhere in the detail section drives its own inner
+        // ScrollViews, not the main bar (see the scroll-wheel monitor).
+        .onHover { scrollGate.overDetail = $0 }
     }
 
     private func spanChip(_ span: FocusSpan, index: Int, task: TaskRef) -> some View {
@@ -714,13 +780,31 @@ struct TimelineView: View {
             .overlay(Rectangle().stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
             .frame(width: max(secs * stripPxPerSec, 3), height: 28)
             .help("\(label)\n\(secs < 60 ? "\(Int(secs))s" : "\(Int(secs/60))m")  ·  \(span.start.formatted(date: .omitted, time: .standard))")
-            .onTapGesture {
-                if selectedSpanIdx.contains(index) { selectedSpanIdx.remove(index) }
-                else { selectedSpanIdx.insert(index) }
-            }
+            .onTapGesture { selectSpan(index) }
+    }
+
+    /// Finder-style selection: plain click selects just this one, ⌘-click
+    /// toggles it, ⇧-click extends a contiguous range from the anchor, and
+    /// ⇧⌘ adds that range to the existing selection.
+    private func selectSpan(_ index: Int) {
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.shift), let anchor = spanAnchor {
+            let range = Set(min(anchor, index)...max(anchor, index))
+            selectedSpanIdx = flags.contains(.command)
+                ? selectedSpanIdx.union(range)
+                : range
+        } else if flags.contains(.command) {
+            if selectedSpanIdx.contains(index) { selectedSpanIdx.remove(index) }
+            else { selectedSpanIdx.insert(index) }
+            spanAnchor = index
+        } else {
+            selectedSpanIdx = [index]
+            spanAnchor = index
+        }
     }
 
     private func spanReassignBar(_ session: Session, spans: [FocusSpan]) -> some View {
+        let isLive = session.id == AppController.liveSessionID
         let ranges = selectedSpanIdx.sorted().compactMap { i -> (start: Date, end: Date)? in
             i < spans.count ? (spans[i].start, spans[i].end) : nil
         }
@@ -737,8 +821,14 @@ struct TimelineView: View {
                 HStack {
                     ForEach(filteredTasks(), id: \.ref) { task in
                         Button {
-                            Task { await controller.splitAndReassign(session, ranges: ranges,
-                                                                     to: task.ref) }
+                            // The live slice has no journal row yet — materialise
+                            // it first (keeps tracking), then split the real slice
+                            // it became. Finished slices split directly.
+                            let target = isLive ? controller.commitLiveSlice() : session
+                            if let target {
+                                Task { await controller.splitAndReassign(target, ranges: ranges,
+                                                                         to: task.ref) }
+                            }
                             selectedSpanIdx = []
                             editing = nil
                         } label: {
@@ -755,13 +845,27 @@ struct TimelineView: View {
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
 
-    /// Full detail for exactly-one selected window (the "all the data you hold
-    /// on that tracking" view), shown beneath the strip.
-    private func singleSpanDetail(_ session: Session) -> String? {
-        guard selectedSpanIdx.count == 1, let i = selectedSpanIdx.first else { return nil }
-        let spans = controller.timelineSpans(for: session)
-        guard i < spans.count else { return nil }
-        return detailText(spans[i])
+    /// One data pane per selected window, in a horizontally scrollable set
+    /// directly below the strip — so a second selection adds a pane rather than
+    /// replacing the one detail view (the full record stays visible for every
+    /// window you pick).
+    @ViewBuilder
+    private func selectedSpanPanes(_ session: Session, spans: [FocusSpan]) -> some View {
+        let idxs = selectedSpanIdx.sorted().filter { $0 < spans.count }
+        ScrollView(.horizontal, showsIndicators: true) {
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(idxs, id: \.self) { i in
+                    Text(detailText(spans[i]))
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(6)
+                        .frame(maxWidth: 340, alignment: .leading)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                }
+            }
+            .padding(.bottom, 2)
+        }
+        .frame(maxHeight: 110)
     }
 
     private func detailText(_ span: FocusSpan) -> String {

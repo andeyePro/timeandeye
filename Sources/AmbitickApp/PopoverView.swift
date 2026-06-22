@@ -34,11 +34,26 @@ struct PopoverView: View {
             if case .tracking = controller.trackerState {
                 // Clicking the running task name flips the list below into
                 // "Change to" mode (relabel the current session).
-                Button { changeMode.toggle() } label: {
-                    Text(controller.currentTaskName()).font(.headline).lineLimit(2)
+                HStack(alignment: .firstTextBaseline) {
+                    Button { changeMode.toggle() } label: {
+                        Text(controller.currentTaskName()).font(.headline).lineLimit(2)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Click to change this task")
+                    Spacer()
+                    // One-click "that switch was wrong": fold the current slice
+                    // back onto the previous task. Deliberately light (non-bold)
+                    // so it reads as a quiet undo, not the primary action.
+                    if let prev = controller.revertTargetTask() {
+                        Button { controller.revertToLastTask() } label: {
+                            Label(prev.subject, systemImage: "arrow.uturn.left")
+                                .font(.callout).lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("Back to \(prev.subject) — moves the current slice onto it")
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Click to change this task")
             } else {
                 Text(controller.currentTaskName()).font(.headline).lineLimit(2)
             }
@@ -68,16 +83,20 @@ struct PopoverView: View {
                     .buttonStyle(.plain)
                     .help("Stop tracking")
                 }
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.left")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                    TextField("", text: $note)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.caption)
-                        .focused($noteFocused)
-                        .onSubmit { noteFocused = false }
-                        .help("A note for this task's time — becomes the OpenProject comment")
+                if CommentRouting.noteInputVisible(
+                    toTrackedTime: controller.settings.commentToTrackedTime,
+                    toTask: controller.settings.commentToTask) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                        TextField("", text: $note)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.caption)
+                            .focused($noteFocused)
+                            .onSubmit { noteFocused = false }
+                            .help("A note for this task's time — goes to the time entry and/or the task (see Settings ▸ Comments)")
+                    }
                 }
             } else {
                 HStack {
@@ -104,21 +123,30 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var promptSection: some View {
-        if case .resumeAfterIdle(let stoppedAt)? = controller.lastPrompt {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Stopped at \(stoppedAt.formatted(date: .omitted, time: .shortened)) (idle). Work continued?")
-                    .font(.caption)
-                HStack {
-                    Button("Stop time was correct") { controller.userPostponed() }
-                    Button("Pick task below to resume") { }
-                        .disabled(true)
-                        .buttonStyle(.plain)
-                        .font(.caption2)
+        // The gap already defaults to a break (nothing recorded). One tap claims
+        // it as the task you were on — no timeline needed. The little × just
+        // hides the offer early.
+        if let gap = controller.pendingGap,
+           Date().timeIntervalSince(gap.to) < controller.settings.idleBackfillWindowSeconds {
+            HStack(spacing: 6) {
+                Button { controller.claimIdleGap() } label: {
+                    Label("Worked \(gapText(gap)) on \(controller.name(of: .task(gap.task)))?",
+                          systemImage: "arrow.uturn.backward.circle")
+                        .font(.caption).lineLimit(2)
                 }
+                .buttonStyle(.borderedProminent)
+                .help("You were away — one tap counts the gap as that task. Ignore it and it stays a break.")
+                Spacer(minLength: 0)
+                Button { controller.dismissIdleGap() } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain)
             }
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+    }
+
+    private func gapText(_ gap: IdleGap) -> String {
+        "\(gap.from.formatted(date: .omitted, time: .shortened))–\(gap.to.formatted(date: .omitted, time: .shortened))"
     }
 
     private var switchList: some View {
@@ -173,7 +201,10 @@ struct PopoverView: View {
 
     private func taskRow(_ task: WorkTask) -> some View {
         Button {
-            if changeMode {
+            if NSEvent.modifierFlags.contains(.option) {
+                // ⌥-click = one-shot: start this task and lay out its workspace.
+                controller.openWorkspace(for: task.ref)
+            } else if changeMode {
                 controller.changeCurrentTask(to: task.ref)
                 changeMode = false
                 filter = ""
@@ -195,6 +226,16 @@ struct PopoverView: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, 2)
+        .contextMenu {
+            Button("Save current window layout to \(task.subject)") {
+                controller.saveLayout(for: task.ref)
+            }
+            if controller.hasLayout(for: task.ref) {
+                Button("Open layout") {
+                    controller.openWorkspace(for: task.ref)
+                }
+            }
+        }
     }
 
     private var footer: some View {
@@ -203,7 +244,9 @@ struct PopoverView: View {
                 openWindow(id: "timeline")
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
-                Image(systemName: "calendar.day.timeline.left")
+                // Horizontal segmented bar — matches our left-to-right timeline
+                // (the old calendar.day.timeline.left glyph reads vertical).
+                Image(systemName: "rectangle.split.3x1")
             }
             .help("Timeline – today's tracked time")
             Button {
