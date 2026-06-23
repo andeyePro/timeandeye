@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-23
+
+- [x] **Stable code-signing fixed in `make-app.sh`** — it had been silently
+  falling back to ad-hoc on every build, so the Accessibility/TCC grant was
+  lost on each rebuild. Pinned cert creation to `/usr/bin/openssl` (Homebrew
+  OpenSSL 3 writes a `.p12` that `security import` rejects) and dropped the
+  `-v` filter from the identity lookup (it hides untrusted self-signed certs,
+  which codesign signs with fine). Now prints `Signed with stable identity …`;
+  grants persist across rebuilds.
+
 ## 2026-06-22
 
 - [x] **Slices auto-merge; manual Stop→Start is the only discrete boundary** —

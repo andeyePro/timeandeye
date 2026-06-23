@@ -67,7 +67,7 @@ ensure_identity() {
     }
     security unlock-keychain -p "$KCPASS" "$KC"
     security set-keychain-settings "$KC"   # no auto-lock
-    if ! security find-identity -v -p codesigning "$KC" | grep -q "$IDENTITY"; then
+    if ! security find-identity -p codesigning "$KC" | grep -q "$IDENTITY"; then
         TMP=$(mktemp -d)
         cat > "$TMP/ext.cnf" <<'CNF'
 [req]
@@ -81,9 +81,11 @@ keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,codeSigning
 basicConstraints = critical,CA:false
 CNF
-        openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
-            -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/ext.cnf" 2>/dev/null
-        openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
+        # System LibreSSL: Homebrew OpenSSL 3 writes a .p12 `security import`
+        # silently rejects (AES-256 default), so this must NOT use PATH openssl.
+        /usr/bin/openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
+            -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/ext.cnf"
+        /usr/bin/openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
             -out "$TMP/dev.p12" -passout pass:"$KCPASS" -name "$IDENTITY" 2>/dev/null
         security import "$TMP/dev.p12" -k "$KC" -P "$KCPASS" -T /usr/bin/codesign
         security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPASS" "$KC" >/dev/null 2>&1
@@ -92,8 +94,8 @@ CNF
 }
 
 # Sign by hash: duplicate same-named identities make name-signing ambiguous.
-ensure_identity 2>/dev/null || true
-ID_HASH=$(security find-identity -v -p codesigning "$KC" 2>/dev/null \
+ensure_identity || true
+ID_HASH=$(security find-identity -p codesigning "$KC" 2>/dev/null \
     | awk -v id="$IDENTITY" '$0 ~ id {print $2; exit}')
 if [ -n "$ID_HASH" ] && codesign --force -s "$ID_HASH" --keychain "$KC" "$APP"; then
     echo "Signed with stable identity $ID_HASH"

@@ -11,3 +11,4 @@
 
 # SwiftPM build products
 .build/
+*.app/
