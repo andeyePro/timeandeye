@@ -134,11 +134,19 @@ public final class AppController: ObservableObject {
     private let settingsStore: JSONFileStore<AmbitickSettings>
     private let learningStore: JSONFileStore<LearningStore>
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
+    private let pinsStore: JSONFileStore<[Pin]>
     private var client: OPClient?
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
     private var taskChangedAt = Date()
     private var currentTarget: Target?
+    /// The task we were tracking immediately before the current one, held in
+    /// memory so "revert" offers the task you actually just left — not the
+    /// journal's most-recent-by-start closed slice, which could be a stray
+    /// earlier minute (Martin saw it offer a 1-min "a university course" instead of
+    /// the Ambitick he'd just switched away from, because that slice hadn't
+    /// flushed yet during the switch grace).
+    private var previousTask: TaskRef?
     /// Per-task session accumulators: each task banks its own visited time.
     /// Returning to a task resumes its clock; a task that holds focus past the
     /// grace ("takes over") ends every other task's session. Cleared on stop.
@@ -157,6 +165,7 @@ public final class AppController: ObservableObject {
         settingsStore = JSONFileStore<AmbitickSettings>(url: dir.appendingPathComponent("settings.json"))
         learningStore = JSONFileStore<LearningStore>(url: dir.appendingPathComponent("learning.json"))
         primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
+        pinsStore = JSONFileStore<[Pin]>(url: dir.appendingPathComponent("pins.json"))
         let loadedSettings = (try? settingsStore.load().flatMap { $0 })
             ?? AmbitickSettings(opBaseURL: "")
         settings = loadedSettings
@@ -170,6 +179,17 @@ public final class AppController: ObservableObject {
                                 ranker: TaskRanker(config: RankingConfig(statusOrder: loadedSettings.statusOrder)))
         if let primed = (try? primedStore.load()).flatMap({ $0 }) {
             attributor.primedSurfaces = primed
+        }
+        if let pins = (try? pinsStore.load()).flatMap({ $0 }) {
+            attributor.pins = pins
+        } else {
+            // Migrate legacy scope→task pins (pre-rule-engine) to component pins.
+            let legacyStore = JSONFileStore<[PinScope: TaskRef]>(
+                url: dir.appendingPathComponent("pins.json"))
+            if let legacy = (try? legacyStore.load()).flatMap({ $0 }), !legacy.isEmpty {
+                attributor.pins = legacy.map { Pin(rule: .components($0.key), task: $0.value) }
+                try? pinsStore.save(attributor.pins)
+            }
         }
 
         let leisure = loadedSettings.localTasks.first(where: \.isLeisure)
@@ -188,6 +208,7 @@ public final class AppController: ObservableObject {
         wireTracker()
         rebuildClient()
         taskCache = localWorkTasks()   // locals exist before OP ever connects
+        applyJournalRecency()          // recency survives the relaunch
     }
 
     /// User-defined non-OP tasks rendered as first-class tasks.
@@ -263,6 +284,7 @@ public final class AppController: ObservableObject {
             task.lastConfirmedAt = recency[task.ref]
             taskCache.append(task)
         }
+        applyJournalRecency()   // rebuilt locals keep their durable recency too
     }
 
     private func wireTracker() {
@@ -326,6 +348,9 @@ public final class AppController: ObservableObject {
                     // scratch then back to HighgateOS shows HighgateOS's 5s, not 0).
                     if let old = self.currentTarget, let since = self.targetSince {
                         self.bankedElapsed[old, default: 0] += now.timeIntervalSince(since)
+                    }
+                    if case .task(let oldRef) = self.currentTarget, .task(oldRef) != target {
+                        self.previousTask = oldRef
                     }
                     self.currentTarget = target
                     self.targetSince = now
@@ -404,7 +429,7 @@ public final class AppController: ObservableObject {
             return
         }
         guard let key else {
-            lastError = "No API key stored yet – enter it below and Save"
+            lastError = "No API key yet – open Settings (gear icon) and add your OpenProject API key"
             return
         }
         client = OPClient(baseURL: url, apiKey: key, transport: URLSessionTransport())
@@ -459,7 +484,9 @@ public final class AppController: ObservableObject {
         promoteStaleCheckpoint()   // recover any session a crash/quit left mid-flight
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.checkpointLive()
+            // queue: .main → this runs on the main actor; assert it so the
+            // call is synchronous (must finish before the app quits).
+            MainActor.assumeIsolated { self?.checkpointLive() }
         }
         Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
@@ -581,6 +608,27 @@ public final class AppController: ObservableObject {
         }
     }
 
+    /// Make recency durable across restarts. `lastConfirmedAt` is otherwise an
+    /// in-memory field (stamped on pick and on live-slice flush) that resets to
+    /// nil every launch, so a heavily-tracked task silently drops out of the
+    /// recent pick-list after an app restart — e.g. the morning after an
+    /// overnight gap, the exact "where did Client Work go?" symptom. The journal
+    /// is the durable record of what was actually tracked, so we re-derive each
+    /// task's last-tracked time from it and take the later of that and any
+    /// in-memory value.
+    private func applyJournalRecency() {
+        var lastEnd: [TaskRef: Date] = [:]
+        for s in ((try? journal.allSessions()) ?? []) where s.id != Self.liveCheckpointID {
+            lastEnd[s.task] = max(lastEnd[s.task] ?? .distantPast, s.end)
+        }
+        for i in taskCache.indices {
+            if let l = lastEnd[taskCache[i].ref] {
+                taskCache[i].lastConfirmedAt =
+                    max(taskCache[i].lastConfirmedAt ?? .distantPast, l)
+            }
+        }
+    }
+
     public func pickList() -> [WorkTask] {
         TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
                                          currentUser: connectedAs))
@@ -612,6 +660,49 @@ public final class AppController: ObservableObject {
     private func persistAssociations() {
         try? learningStore.save(attributor.learning)
         try? primedStore.save(attributor.primedSurfaces)
+        try? pinsStore.save(attributor.pins)
+    }
+
+    /// The full broad→narrow identity of the current focus surface plus the
+    /// smart default prefix length — the pin editor's starting state. nil when
+    /// there's nothing to pin (no current surface).
+    public func pinDraft() -> (kind: PinScope.Kind, segments: [String], defaultCount: Int)? {
+        guard let signal = tracker.currentFocusSignal,
+              let id = PinScope.identity(of: signal) else { return nil }
+        return (id.kind, id.segments,
+                PinScope.defaultPrefixCount(kind: id.kind, segments: id.segments))
+    }
+
+    /// Commit a component-prefix pin: the chosen prefix is ALWAYS `ref` at
+    /// 100 %. When `replacingID` is given (editing an existing pin) the same id
+    /// is reused, so a changed scope updates in place instead of duplicating.
+    public func commitPin(kind: PinScope.Kind, prefix: [String], to ref: TaskRef,
+                          replacingID: UUID? = nil) {
+        guard !prefix.isEmpty else { return }
+        let pin = Pin(id: replacingID ?? UUID(),
+                      rule: .components(PinScope(kind: kind, prefix: prefix)), task: ref)
+        attributor.upsert(pin)
+        persistAssociations()
+        tracker.reevaluate()   // lift the live session to 100% now, not on next focus
+        objectWillChange.send()
+    }
+
+    /// The pin (+ its task) covering the current focus surface, if any — drives
+    /// the popover's 📌 badge. nil for ranked / soft-primed surfaces.
+    public var currentPin: (pin: Pin, task: WorkTask)? {
+        guard let signal = tracker.currentFocusSignal,
+              let pin = attributor.matchingPin(for: signal),
+              let task = taskCache.first(where: { $0.ref == pin.task }) else { return nil }
+        return (pin, task)
+    }
+
+    /// Clear the pin covering the current focus surface (the badge's ✕).
+    public func unpinCurrentSurface() {
+        guard let signal = tracker.currentFocusSignal,
+              let pin = attributor.matchingPin(for: signal) else { return }
+        attributor.unpin(id: pin.id)
+        persistAssociations()
+        objectWillChange.send()
     }
 
     public func userStopped() {
@@ -638,6 +729,14 @@ public final class AppController: ObservableObject {
             + (targetSince.map { now.timeIntervalSince($0) } ?? 0)
         let keptNote = manualNote
         tracker.relabelCurrentSession(to: ref)   // re-tags spans; fires onState
+        // Durably TEACH this window→task, not just the soft prime relabel does:
+        // otherwise the learned model re-wins and the window snaps back to its
+        // old task when focus returns (Martin: "Change to Ambitick" kept
+        // reverting to a 70%-certain KLARC on every return).
+        if let signal = tracker.currentFocusSignal {
+            attributor.assign(signal, target: .task(ref))
+            persistAssociations()
+        }
         // Preserve the displayed clock onto the corrected task and continue.
         currentTarget = .task(ref)
         targetSince = now.addingTimeInterval(-elapsed)
@@ -679,31 +778,9 @@ public final class AppController: ObservableObject {
 
     // MARK: - Per-task workspaces (window layouts)
 
-    /// Save the current on-screen window arrangement as `ref`'s workspace.
-    public func saveLayout(for ref: TaskRef) {
-        let layout = WorkspaceLayout.capture()
-        guard !layout.isEmpty else { actionNote = "No windows to save"; return }
-        settings.taskLayouts[ref.storageKey] = layout
-        settings.lastLayout = layout
-        actionNote = "Saved \(layout.count)-window layout to \(name(of: .task(ref)))"
-    }
-
-    public func hasLayout(for ref: TaskRef) -> Bool {
-        settings.taskLayouts[ref.storageKey]?.isEmpty == false
-    }
-
-    /// Start tracking `ref` (if not already) and arrange its workspace on the
-    /// current desktop — its saved layout, else the most recent one. The
-    /// right-click / ⌥-click entry point. (Auto-populating a *newly opened*
-    /// desktop waits on Space detection; this is the manual trigger.)
-    public func openWorkspace(for ref: TaskRef) {
-        if currentTarget != .task(ref), let task = taskCache.first(where: { $0.ref == ref }) {
-            userPicked(task)
-        }
-        let layout = settings.taskLayouts[ref.storageKey] ?? settings.lastLayout
-        guard !layout.isEmpty else { actionNote = "No saved layout yet — use \u{201C}Save current layout\u{201D}"; return }
-        WorkspaceLayout.apply(layout)
-    }
+    // Workspace layouts were cut 2026-06-23: geometry-only restore (no Chrome
+    // tab/URL, no terminal cwd) plus unreliable multi-window/Spaces spawning
+    // made it net-negative. See TODO.md for what re-adding it would require.
 
     /// One-tap: the idle gap WAS work — record it on its task, keeping the
     /// window detail that was captured around it. Zero taps leaves it a break.
@@ -740,11 +817,13 @@ public final class AppController: ObservableObject {
         if undoable {
             let learningSnapshot = attributor.learning
             let primedSnapshot = attributor.primedSurfaces
+            let pinsSnapshot = attributor.pins
             registerUndo("assign \(ids.count) review rows") { [weak self] in
                 guard let self else { return }
                 try? self.journal.assign(ids, to: nil)
                 self.attributor.replaceLearning(learningSnapshot)
                 self.attributor.primedSurfaces = primedSnapshot
+                self.attributor.pins = pinsSnapshot
                 self.persistAssociations()
                 self.reloadReview()
             }
@@ -844,8 +923,20 @@ public final class AppController: ObservableObject {
             // per-visit targetSince: a sub-grace excursion resets targetSince
             // but the time is still one unflushed slice, so anchoring to
             // targetSince drew the live bar short and left a phantom gap.
-            let start = tracker.liveSliceStart ?? targetSince ?? Date()
-            list.append(Session(id: Self.liveSessionID, task: ref, start: start,
+            var liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
+            // Fold the live slice visually into the same-task block it
+            // continues, so the slice you're tracking RIGHT NOW shows as one
+            // piece with its merged history instead of a detached fragment —
+            // the journal only coalesces on flush. Walk back over contiguous
+            // same-task journalled slices, drop them from the drawn list, and
+            // extend the live start to cover them.
+            while let i = list.firstIndex(where: {
+                $0.task == ref && $0.start < liveStart
+                    && abs($0.end.timeIntervalSince(liveStart)) <= 2 }) {
+                liveStart = Swift.min(liveStart, list[i].start)
+                list.remove(at: i)
+            }
+            list.append(Session(id: Self.liveSessionID, task: ref, start: liveStart,
                                 end: Date(), certainty: certainty))
         }
         return list
@@ -886,6 +977,18 @@ public final class AppController: ObservableObject {
     /// Forgiving search over the full ranked task list.
     public func searchTasks(_ query: String) -> [WorkTask] {
         FuzzyMatch.filter(fullPickList(), query: query)
+    }
+
+    /// Sorted, de-duplicated window (focus-span) edges in [from, to] — the
+    /// times an edit can snap to so a tracked window lands wholly in one task
+    /// instead of being split across the slice boundary.
+    public func windowBoundaries(from: Date, to: Date) -> [Date] {
+        var edges = Set<Date>()
+        for s in (try? journal.spans(from: from, to: to)) ?? [] {
+            edges.insert(s.start)
+            edges.insert(s.end)
+        }
+        return edges.sorted()
     }
 
     /// Time Spent hierarchy for the pie: project -> task -> app, including
@@ -983,8 +1086,9 @@ public final class AppController: ObservableObject {
     /// undo). Drives the popover's one-click "← <prev>" when a switch was wrong.
     public func revertTargetTask() -> WorkTask? {
         guard case .tracking(let current, _) = trackerState else { return nil }
-        guard let last = lastTrackedTask(), .task(last.ref) != current else { return nil }
-        return last
+        guard let prev = previousTask, .task(prev) != current,
+              let task = taskCache.first(where: { $0.ref == prev }) else { return nil }
+        return task
     }
 
     /// "That switch was wrong": fold the current (mis-attributed) running slice
@@ -1063,8 +1167,7 @@ public final class AppController: ObservableObject {
             $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
         }) else { return }
         attributor.assign(dominant.signal, target: .task(session.task))
-        try? learningStore.save(attributor.learning)
-        try? primedStore.save(attributor.primedSurfaces)
+        persistAssociations()
     }
 
     /// "Don't track this": drop the slice's tracked time (and any OP entry) but
@@ -1311,6 +1414,8 @@ public final class AppController: ObservableObject {
                 task.lastConfirmedAt = recency[local.ref]
                 return task
             }
+            applyJournalRecency()   // durable recency, not just this session's
+
             if activities.isEmpty {
                 activities = (try? await client.fetchActivities()) ?? []
                 if settings.defaultActivityID == nil {

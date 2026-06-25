@@ -34,6 +34,14 @@ public final class Attributor {
     /// losing primed associations on relaunch dropped session certainty
     /// below the push threshold (found 2026-06-11).
     public var primedSurfaces: [Surface: TaskRef] = [:]
+    /// Explicit user pins. EVERYTHING unpinned caps at 0.95; a pin is the only
+    /// thing that returns 1.0, and it overrides the ranker, learning, soft
+    /// primes and even a work-package URL. Each pin carries a rule (component
+    /// prefix or boolean expression). Set only by the explicit pin editor,
+    /// never by an ordinary correction (those stay soft primes). When several
+    /// match, the most specific wins (manual `priority` first, then leaf count,
+    /// then most-recently-added). See `Pin` / `PinRule`.
+    public var pins: [Pin] = []
 
     public init(instanceHost: String, learning: LearningStore = LearningStore(),
                 ranker: TaskRanker = TaskRanker()) {
@@ -42,10 +50,23 @@ public final class Attributor {
         self.ranker = ranker
     }
 
+    /// Inferred certainty ceiling: everything that isn't an explicit pin tops
+    /// out here. 1.0 is reserved for "the user told me outright" (a pin).
+    public static let inferredCeiling = 0.95
+
     public func attribute(_ signal: ActivitySignal, tasks: [WorkTask], now: Date) -> Attribution {
+        // An explicit pin is law: it wins over a work-package URL and the
+        // ranker alike. Alternatives still rank beneath it for the switch-list.
+        if let pin = matchingPin(for: signal) {
+            var ranked = scored(signal, tasks: tasks, now: now)
+            ranked.removeAll { $0.target == .task(pin.task) }
+            let c = Candidate(target: .task(pin.task), score: 1.0)
+            ranked.insert(c, at: 0)
+            return Attribution(best: c, ranked: ranked)
+        }
         if let url = signal.tabURL, let id = OPURLParser.taskID(in: url, instanceHost: instanceHost) {
             lastOpenedOPTask = .op(id)
-            let c = Candidate(target: .task(.op(id)), score: 0.99)
+            let c = Candidate(target: .task(.op(id)), score: Self.inferredCeiling)
             return Attribution(best: c, ranked: [c])
         }
         // No URL (e.g. OP as a Chrome PWA): the WP id may be in the window
@@ -53,7 +74,7 @@ public final class Attributor {
         for text in [signal.windowTitle, signal.app].compactMap({ $0 }) {
             if let id = OPURLParser.taskID(inTitle: text) {
                 lastOpenedOPTask = .op(id)
-                let c = Candidate(target: .task(.op(id)), score: 0.97)
+                let c = Candidate(target: .task(.op(id)), score: Self.inferredCeiling)
                 return Attribution(best: c, ranked: [c])
             }
         }
@@ -95,7 +116,8 @@ public final class Attributor {
         learning.learn(signal, target: .task(task), weight: 2)
     }
 
-    /// Review-window or prompt assignment, including "Do not track".
+    /// Review-window or prompt assignment, including "Do not track". Always a
+    /// SOFT prime (caps at 0.95) — explicit 100 % pinning goes through `pin`.
     public func assign(_ signal: ActivitySignal, target: Target) {
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
@@ -105,6 +127,33 @@ public final class Attributor {
         }
         if pendingPrime?.surface == surface { pendingPrime = nil }
         learning.learn(signal, target: target, weight: 2)
+    }
+
+    /// Add or update a pin (by id). New pins go last → most recent for ties.
+    public func upsert(_ pin: Pin) {
+        if let i = pins.firstIndex(where: { $0.id == pin.id }) {
+            pins.remove(at: i)
+        }
+        pins.append(pin)
+    }
+
+    /// Lift a pin by id (the popover badge's ✕).
+    public func unpin(id: UUID) {
+        pins.removeAll { $0.id == id }
+    }
+
+    /// The winning pin covering this signal: most specific wins — manual
+    /// priority first, then leaf count, then most-recently-added (array order).
+    public func matchingPin(for signal: ActivitySignal) -> Pin? {
+        let candidates = pins.enumerated().filter { $0.element.matches(signal) }
+        return candidates.max { a, b in
+            let (pa, pb) = (a.element.priority ?? 0, b.element.priority ?? 0)
+            if pa != pb { return pa < pb }
+            if a.element.rule.specificity != b.element.rule.specificity {
+                return a.element.rule.specificity < b.element.rule.specificity
+            }
+            return a.offset < b.offset   // later in the array = more recent
+        }?.element
     }
 
     private func scored(_ signal: ActivitySignal, tasks: [WorkTask], now: Date) -> [Candidate] {

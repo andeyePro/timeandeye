@@ -65,6 +65,9 @@ struct TimelineView: View {
     @State private var filter = ""
     @State private var refreshTick = 0
     @State private var pinchBaseSpan: TimeInterval?
+    /// The date under the pinch start + its screen fraction, held fixed for the
+    /// whole gesture so a pinch zooms around the cursor, not the centre.
+    @State private var pinchAnchor: (date: Date, frac: Double)?
     @State private var drawDraft: (start: Date, end: Date)?
     @State private var edgeOrigin: (start: Date, end: Date)?
     @State private var barWidth: CGFloat = 900
@@ -73,6 +76,9 @@ struct TimelineView: View {
     @State private var spanAnchor: Int?
     /// Anchor for the same in the slice bar (by slice id).
     @State private var sliceAnchor: UUID?
+    /// Last pointer x over the bar (view coords), so zoom keeps the time under
+    /// the cursor fixed instead of fixing the viewport centre.
+    @State private var cursorX: CGFloat?
     @State private var stripPxPerSec: CGFloat = 2
     @State private var stripPinchBase: CGFloat?
     @State private var scrollMonitor: Any?
@@ -102,8 +108,16 @@ struct TimelineView: View {
             Spacer(minLength: 0)
         }
         .padding(12)
+        // Keyboard parity: delete/backspace removes the selected slice(s), or
+        // the slice open in the editor. Fires only when no text field is
+        // editing (an editing field consumes the key itself).
+        .onDeleteCommand { Task { await deleteSelection() } }
         .coordinateSpace(name: "timeline")
-        .onReceive(timer) { _ in refreshTick += 1 }
+        // Don't rebuild while the editor is open: the 30 s tick recomputes the
+        // bar, which re-renders the editor subtree and steals focus from the
+        // h:mm field you just clicked — the intermittent "it didn't go blue, so
+        // I couldn't tell I could type" bug. Pause the tick during an edit.
+        .onReceive(timer) { _ in if editing == nil { refreshTick += 1 } }
         .onAppear {
             zoomToLatestBlock()
             installScrollPan()
@@ -163,14 +177,33 @@ struct TimelineView: View {
 
     private func clampViewport() {
         viewSpan = min(max(viewSpan, 300), 86_400)
-        viewStart = max(dayStart, min(viewStart, dayEnd.addingTimeInterval(-viewSpan)))
+        // Don't let the view drift past the live edge into empty future time:
+        // today's right bound is now (or the last slice end), not midnight.
+        let rightBound = dayOffset == 0
+            ? max(Date(), sessions.map(\.end).max() ?? Date())
+            : dayEnd
+        let maxStart = max(dayStart, rightBound.addingTimeInterval(-viewSpan))
+        viewStart = max(dayStart, min(viewStart, maxStart))
+    }
+
+    /// Zoom keeping `anchor` (a date) pinned at the same screen position — so
+    /// zooming homes in on what's under the cursor, not the viewport centre.
+    private func zoomAround(_ anchor: Date, factor: TimeInterval) {
+        let frac = viewSpan > 0 ? anchor.timeIntervalSince(viewStart) / viewSpan : 0.5
+        viewSpan *= factor
+        viewStart = anchor.addingTimeInterval(-frac * viewSpan)
+        clampViewport()
+    }
+
+    /// The anchor a button/pinch zoom should hold fixed: the time under the
+    /// cursor when the pointer is over the bar, else the viewport centre.
+    private func zoomAnchor(width: CGFloat) -> Date {
+        if let x = cursorX { return dateFor(x, width: width) }
+        return viewStart.addingTimeInterval(viewSpan / 2)
     }
 
     private func zoom(by factor: TimeInterval) {
-        let centre = viewStart.addingTimeInterval(viewSpan / 2)
-        viewSpan *= factor
-        viewStart = centre.addingTimeInterval(-viewSpan / 2)
-        clampViewport()
+        zoomAround(zoomAnchor(width: barWidth), factor: factor)
     }
 
     /// Two-finger scroll pans the bar (drag is reserved for drawing).
@@ -257,17 +290,30 @@ struct TimelineView: View {
         // Over the bar, scroll pans it — clear the detail gate so panning
         // resumes even if the editor was dismissed while hovering the strip.
         .onHover { if $0 { scrollGate.overDetail = false } }
+        // Track the pointer so zoom (± buttons and pinch) homes in on the time
+        // under the cursor.
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let loc): cursorX = loc.x
+            case .ended: cursorX = nil
+            }
+        }
         .gesture(drawGesture(width: width))
         .onTapGesture(coordinateSpace: .local) { location in gapClick(at: location, width: width) }
         .gesture(MagnificationGesture()
             .onChanged { value in
-                if pinchBaseSpan == nil { pinchBaseSpan = viewSpan }
-                let centre = viewStart.addingTimeInterval(viewSpan / 2)
+                if pinchBaseSpan == nil {
+                    pinchBaseSpan = viewSpan
+                    let ax = cursorX ?? width / 2
+                    pinchAnchor = (dateFor(ax, width: width), Double(ax / width))
+                }
                 viewSpan = (pinchBaseSpan ?? viewSpan) / TimeInterval(value)
-                viewStart = centre.addingTimeInterval(-viewSpan / 2)
+                if let a = pinchAnchor {
+                    viewStart = a.date.addingTimeInterval(-a.frac * viewSpan)
+                }
                 clampViewport()
             }
-            .onEnded { _ in pinchBaseSpan = nil })
+            .onEnded { _ in pinchBaseSpan = nil; pinchAnchor = nil })
     }
 
     /// Drag on empty space draws a new slice, snapping to neighbours.
@@ -466,6 +512,11 @@ struct TimelineView: View {
                 Text("Reassign \(selection.count) slices:").font(.caption)
                 TextField("type to filter tasks", text: $filter)
                     .textFieldStyle(.roundedBorder).font(.caption).frame(width: 180)
+                Spacer()
+                Button(role: .destructive) {
+                    Task { await deleteSelection() }
+                } label: { Label("Delete", systemImage: "trash") }
+                    .help("Delete the selected slice\(selection.count == 1 ? "" : "s") (⌫)")
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
@@ -483,6 +534,27 @@ struct TimelineView: View {
 
     private func filteredTasks() -> [WorkTask] {
         controller.searchTasks(filter)
+    }
+
+    /// Delete what's selected (one undo step), or the slice open in the editor.
+    /// Never deletes the live slice — you stop the clock for that. Backed by the
+    /// keyboard (delete/backspace) and the reassign bar's Delete button.
+    private func deleteSelection() async {
+        let live = AppController.liveSessionID
+        let targets: [Session]
+        if !selection.isEmpty {
+            targets = sessions.filter { selection.contains($0.id) && $0.id != live }
+        } else if let e = editing, !isNewEditing, e.id != live {
+            targets = [e]
+        } else {
+            targets = []
+        }
+        guard !targets.isEmpty else { return }
+        await controller.undoGroup("delete \(targets.count) slice\(targets.count == 1 ? "" : "s")") {
+            for s in targets { await controller.deleteTimelineSession(s) }
+        }
+        selection = []
+        editing = nil
     }
 
     /// The editor's task list always contains the slice's current task, even
@@ -587,10 +659,25 @@ struct TimelineView: View {
             }
             if !conflicts.isEmpty { conflictProposal }
             HStack {
-                Button { commitEditor(session) } label: {
-                    Label(isNewEditing ? "Create" : "Save", systemImage: "checkmark.circle")
+                if conflicts.isEmpty || isLive {
+                    Button { commitEditor(session) } label: {
+                        Label(isNewEditing ? "Create" : "Save", systemImage: "checkmark.circle")
+                    }
+                    .keyboardShortcut(.defaultAction)   // Enter saves
+                } else {
+                    // Overlap pending: two ways to resolve it. Enter (default) /
+                    // rightmost snaps the boundary to a whole-window edge so each
+                    // tracked window lands entirely in one task; Space / leftmost
+                    // keeps the exact time you typed.
+                    Button { resolveOverlap(session, snapWindows: false) } label: {
+                        Label("Exact time", systemImage: "clock")
+                    }
+                    .keyboardShortcut(.space, modifiers: [])
+                    Button { resolveOverlap(session, snapWindows: true) } label: {
+                        Label("Snap to windows", systemImage: "rectangle.split.2x1")
+                    }
+                    .keyboardShortcut(.defaultAction)
                 }
-                .keyboardShortcut(.defaultAction)   // Enter saves
                 if !isNewEditing, !isLive {
                     Button {
                         Task { await controller.markSessionDoNotTrack(session) }
@@ -653,6 +740,27 @@ struct TimelineView: View {
         }
     }
 
+    /// Resolve a pending overlap. `snapWindows` (Enter / default) moves the
+    /// edited boundaries to the nearest tracked-window edge first, so a window
+    /// straddling the boundary goes wholly to one task rather than being split
+    /// (and duplicated under both slices). `false` (Space) keeps the exact time
+    /// the user typed. Either way the existing trim path then applies it.
+    private func resolveOverlap(_ session: Session, snapWindows: Bool) {
+        if snapWindows {
+            editStart = snapToWindowEdge(editStart)
+            editEnd = snapToWindowEdge(editEnd)
+        }
+        attemptSave(session)   // conflicts already set → applies with these times
+    }
+
+    /// Nearest tracked-window edge to `date` (within ±30 min), or `date` itself
+    /// when there are no windows nearby.
+    private func snapToWindowEdge(_ date: Date) -> Date {
+        let edges = controller.windowBoundaries(from: date.addingTimeInterval(-1800),
+                                                to: date.addingTimeInterval(1800))
+        return edges.min { abs($0.timeIntervalSince(date)) < abs($1.timeIntervalSince(date)) } ?? date
+    }
+
     private func attemptSave(_ session: Session) {
         let overlapping = sessions.filter {
             $0.id != session.id && $0.end > editStart && $0.start < editEnd
@@ -707,7 +815,7 @@ struct TimelineView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            Text("Press \(isNewEditing ? "Create" : "Save") again to apply, or adjust the times.")
+            Text("Snap to windows (↵) keeps each tracked window whole on one task; Exact time (space) uses the time you typed. Or adjust the times.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }

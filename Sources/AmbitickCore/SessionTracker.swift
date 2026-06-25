@@ -67,8 +67,19 @@ public final class SessionTracker {
     private let config: TrackerConfig
     private let tasks: () -> [WorkTask]
 
+    /// The shortest run that may become its own journalled slice. Never below
+    /// one displayed minute: a sub-minute slice shows as "0:00", which reads as
+    /// a bug (an excursion you don't remember). So even with a short Switch
+    /// Buffer, excursions under a minute fold back into the surrounding task
+    /// instead of committing as their own slice.
+    private var sliceFloor: TimeInterval { max(config.switchGraceSeconds, 60) }
+
     private var spans: [FocusSpan] = []
     private var currentSignal: ActivitySignal?
+
+    /// The window/app currently in focus, so the controller can teach the
+    /// attributor a durable association when the user picks "Change to X".
+    public var currentFocusSignal: ActivitySignal? { currentSignal }
     private var currentStart: Date?
     private var lastInput: Date?
     private var pendingReview: ReviewSegment?
@@ -180,6 +191,22 @@ public final class SessionTracker {
         state = .tracking(.task(task), certainty: 0.95)
     }
 
+    /// Re-evaluate the current surface against the attributor WITHOUT splitting
+    /// the open span — used when an association changes mid-session (e.g. the
+    /// user just pinned this window) so the live certainty/target reflect it
+    /// immediately instead of only on the next focus change. Re-tags the open
+    /// spans if the pin moves the target.
+    public func reevaluate() {
+        guard case .tracking(let displayTarget, _) = state,
+              let signal = currentSignal,
+              let best = attributor.attribute(signal, tasks: tasks(), now: signal.timestamp).best,
+              best.score >= config.uncertainBelow else { return }
+        if best.target != displayTarget {
+            for i in spans.indices { spans[i].target = best.target }
+        }
+        state = .tracking(best.target, certainty: best.score)
+    }
+
     /// User picked a task (popover/prompt) for the surface currently in focus.
     /// This is the UI's confirm entry point: it teaches the attributor AND
     /// lifts the in-flight span to confirmed certainty.
@@ -287,6 +314,16 @@ public final class SessionTracker {
                 state = .tracking(displayTarget, certainty: 0)
                 return
             }
+            // A pending non-work stop is cancelled the instant a real task is
+            // back in focus: returning to work within the grace window must not
+            // let an earlier brief non-work flit auto-stop the clock (which left
+            // an unfillable "pause" — the trailing time after a stop isn't a
+            // between-slices gap, so click-to-fill couldn't reach it).
+            if pendingSwitch?.target == .doNotTrack, best.score >= config.uncertainBelow,
+               case .task = best.target {
+                pendingSwitch = nil
+                pendingNotify = nil
+            }
             if let p = pendingSwitch, p.target != .doNotTrack {
                 // We're provisionally showing p.target; the open slice is p.from.
                 if best.target == p.from {
@@ -294,8 +331,15 @@ public final class SessionTracker {
                 } else if best.target == p.target {
                     state = .tracking(p.target, certainty: best.score)   // hold pending
                 } else if best.score >= config.uncertainBelow {
-                    commitPendingSwitch(at: now)          // a third task: lock in p.target…
-                    handleConfidentSwitch(to: best, from: p.target, at: now)  // …then pend new
+                    // A third task arrived before the pending excursion matured
+                    // past grace — so the pending one was itself just a brief
+                    // flit, not a real switch. DON'T commit it: fold it back
+                    // into the base task and pend the new target from that same
+                    // base. (Committing it here made rapid window-flitting log a
+                    // pile of sub-minute slices on whatever the ranker guessed.)
+                    let base = p.from
+                    revertPendingSwitch()
+                    handleConfidentSwitch(to: best, from: base, at: now)
                 } else {
                     state = .tracking(p.target, certainty: best.score)   // uncertain, hold
                 }
@@ -311,8 +355,11 @@ public final class SessionTracker {
     }
 
     /// A confident switch: the display follows instantly, but the journal slice
-    /// is held provisional through the grace window. A direct OP-page signal
-    /// (>= 0.96) is deliberate and commits at once.
+    /// is held provisional through the grace window. EVERY attribution-driven
+    /// switch — including a 1.0 pin — respects the buffer, so flitting THROUGH a
+    /// pinned window folds back into the base task instead of instant-committing
+    /// and fragmenting the timeline. (Only a held-past-buffer stay commits.
+    /// Manual picks go through confirm()/start(), which bypass this entirely.)
     private func handleConfidentSwitch(to best: Candidate, from committed: Target,
                                        at now: Date) {
         if best.target == .doNotTrack {
@@ -320,10 +367,6 @@ public final class SessionTracker {
                 pendingSwitch = (best.target, committed, now, best.score)
                 onDebug("pending non-work stop since \(now)")
             }
-            return
-        }
-        if best.score >= 0.96 {
-            commitSwitch(to: best.target, score: best.score, at: now)   // deliberate
             return
         }
         pendingSwitch = (best.target, committed, now, best.score)
@@ -366,17 +409,23 @@ public final class SessionTracker {
     /// Driven by every input tick: commits a held switch / non-work stop and
     /// fires the damped task-changed notification once a switch has held.
     private func evaluatePendingSwitch(at date: Date) {
-        if let pending = pendingSwitch, case .tracking = state,
-           date.timeIntervalSince(pending.since) >= config.switchGraceSeconds {
+        if let pending = pendingSwitch, case .tracking = state {
             if pending.target == .doNotTrack {
-                commitSwitch(to: .doNotTrack, score: pending.score, at: date)
-            } else {
+                // Non-work auto-stop keeps the user-set buffer: unchanged.
+                if date.timeIntervalSince(pending.since) >= config.switchGraceSeconds {
+                    commitSwitch(to: .doNotTrack, score: pending.score, at: date)
+                }
+            } else if date.timeIntervalSince(pending.since) >= sliceFloor {
+                // A WORK switch only commits once held a full minute, so a
+                // sub-minute excursion folds back instead of journalling a
+                // "0:00" slice (the reported bug). Display already followed
+                // instantly; only the commit waits.
                 commitPendingSwitch(at: date)
             }
         }
         if let notify = pendingNotify, case .tracking(let current, _) = state,
            current == notify.target,
-           date.timeIntervalSince(notify.since) >= config.switchGraceSeconds {
+           date.timeIntervalSince(notify.since) >= sliceFloor {
             pendingNotify = nil
             onPrompt(.taskChanged(to: notify.target))
         }
@@ -518,6 +567,13 @@ public final class SessionTracker {
         }
         for run in runs {
             guard case .task(let ref) = run.target else { continue }   // doNotTrack time is never a session
+            // No sub-buffer slices: a run shorter than the Switch Buffer is a
+            // flit, not work, and must never reach the timeline. The grace logic
+            // stops most flits upstream; this catches the rest (e.g.
+            // instant-commit pin switches that bypass grace). Kept at the buffer
+            // (not the minute floor) so a genuinely-short first/last slice — the
+            // task you started, then switched off 40 s later — is still kept.
+            guard run.end.timeIntervalSince(run.start) >= config.switchGraceSeconds else { continue }
             // Duration-weighted certainty: a brief uncertain patch must not
             // sink a long confident session below the push threshold (min()
             // did exactly that and silently blocked OP pushes).

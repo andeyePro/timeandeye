@@ -5,11 +5,21 @@ set -euo pipefail
 
 OUT="${1:-.}"
 APP="$OUT/Ambitick.app"
-# Never replace a RUNNING app in place - macOS may kill it mid-execution
-# (the "menu bar icon disappeared" deaths). Stage beside it instead.
+# With no output-dir arg we INSTALL into /Applications (where launchers —
+# Raycast, Spotlight — find it) and relaunch. A running instance must quit
+# first: replacing a running bundle in place can kill it mid-execution
+# (the "menu bar icon disappeared" deaths).
+INSTALL=0
+[ $# -eq 0 ] && INSTALL=1
 if pgrep -xq Ambitick; then
-    APP="$OUT/Ambitick+.app"
-    echo "NOTE: Ambitick is running; building to $APP - quit the old one and rename to swap."
+    if [ "$INSTALL" = 1 ]; then
+        echo "Quitting running Ambitick to replace it…"
+        osascript -e 'quit app "Ambitick"' 2>/dev/null || true
+        for _ in $(seq 1 10); do pgrep -xq Ambitick || break; sleep 0.5; done
+    else
+        APP="$OUT/Ambitick+.app"
+        echo "NOTE: Ambitick is running; building to $APP - quit the old one and rename to swap."
+    fi
 fi
 
 swift build -c release --product AmbitickApp
@@ -88,9 +98,14 @@ CNF
         /usr/bin/openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
             -out "$TMP/dev.p12" -passout pass:"$KCPASS" -name "$IDENTITY" 2>/dev/null
         security import "$TMP/dev.p12" -k "$KC" -P "$KCPASS" -T /usr/bin/codesign
-        security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPASS" "$KC" >/dev/null 2>&1
         rm -rf "$TMP"
     fi
+    # Re-assert the key's partition list on EVERY build, not just at creation:
+    # this is what lets codesign use the key non-interactively. Doing it only
+    # once left a stale ACL that re-prompted for the keychain password every
+    # build. Idempotent; -s + the password authorises it without a GUI prompt.
+    security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPASS" "$KC" \
+        >/dev/null 2>&1 || true
 }
 
 # Sign by hash: duplicate same-named identities make name-signing ambiguous.
@@ -105,4 +120,18 @@ else
 fi
 
 echo "Built $APP"
-echo "First run: right-click -> Open, then grant Accessibility (once - grants now survive rebuilds)."
+
+# Install into /Applications and relaunch, so the build you just made is the
+# one that actually runs. The repo-local bundle is only a staging copy; without
+# this the freshly-built app sits in the repo while launchers keep opening the
+# old /Applications copy.
+if [ "$INSTALL" = 1 ]; then
+    DEST="/Applications/Ambitick.app"
+    rm -rf "$DEST"
+    ditto "$APP" "$DEST"          # preserves the signature + bundle structure
+    echo "Installed to $DEST"
+    open "$DEST"
+    echo "Relaunched from /Applications."
+else
+    echo "First run: right-click -> Open, then grant Accessibility (once - grants now survive rebuilds)."
+fi

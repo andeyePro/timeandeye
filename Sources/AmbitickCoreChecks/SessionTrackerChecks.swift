@@ -32,7 +32,7 @@ func sessionTrackerChecks(_ c: Checks) {
         tracker.start(task: .op(1), at: t(0))
         tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 50)))   // op(1) dominates min 0
-        tracker.handle(.focus(sig("Ghostty", "Investment", at: 90)))   // > grace: switch commits
+        tracker.handle(.input(t(115)))   // > 60 s floor since the t50 switch: it commits
         tracker.stop(at: t(130))
 
         // Instant switch: the boundary is the actual switch moment (t50),
@@ -44,6 +44,80 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[1].task, .op(2))
         try expectEq(sessions[1].start, t(50))
         try expectEq(sessions[1].end, t(130))
+    }
+
+    c.check("rapid window-flitting does not commit a pile of sub-minute slices") {
+        // Three distinct surfaces → three distinct tasks (soft primes at 0.95,
+        // below the 0.96 instant-commit). The user flits A→B→C→A in seconds,
+        // then settles on A. Only A should be tracked; the brief B/C excursions
+        // must NOT each become their own sub-minute slice.
+        let tasks3 = [WorkTask(ref: .op(1), subject: "A", status: "Now"),
+                      WorkTask(ref: .op(2), subject: "B", status: "Next"),
+                      WorkTask(ref: .op(3), subject: "C", status: "Open")]
+        let attributor = Attributor(instanceHost: host)
+        let tracker = SessionTracker(attributor: attributor, config: TrackerConfig()) { tasks3 }
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("X", "A", at: 0), task: .op(1))
+        attributor.confirm(sig("X", "B", at: 0), task: .op(2))
+        attributor.confirm(sig("X", "C", at: 0), task: .op(3))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("X", "A", at: 0)))
+        tracker.handle(.focus(sig("X", "B", at: 3)))     // 3 s flit
+        tracker.handle(.focus(sig("X", "C", at: 6)))     // 3 s flit — must NOT commit B
+        tracker.handle(.focus(sig("X", "A", at: 9)))     // back to A
+        tracker.handle(.focus(sig("X", "A", at: 120)))   // A held long
+        tracker.stop(at: t(180))
+
+        try expect(!sessions.contains { $0.task == .op(2) }, "brief flit to B must not be its own slice")
+        try expect(!sessions.contains { $0.task == .op(3) }, "brief flit to C must not be its own slice")
+        try expectEq(sessions.filter { $0.task == .op(1) }.count, 1, "A is one continuous slice")
+        try expectEq(sessions.first?.start, t(0))
+        try expectEq(sessions.last?.end, t(180))
+    }
+
+    c.check("flitting through a non-work tab and back does not auto-stop the clock") {
+        let (tracker, attributor) = makeTracker()
+        var learning = LearningStore()
+        learning.learn(sig("Steam", "Library", at: 0), target: .doNotTrack, weight: 5)
+        attributor.replaceLearning(learning)
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Steam", "Library", at: 5)))      // brief non-work flit
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 10)))  // back to work within grace
+        tracker.handle(.input(t(60)))   // well past grace from the non-work pend at t5
+        if case .stopped = tracker.state {
+            try expect(false, "returning to work must cancel the pending non-work stop")
+        }
+    }
+
+    c.check("a brief flit to a PINNED window folds back, not fragmenting the base task") {
+        // Both windows are pinned (score 1.0). Before the fix the pin bypassed
+        // the grace window and instant-committed on every flit, splitting op(1)
+        // into pieces with floored gaps between. Now a brief flit to a pinned
+        // window folds back, so op(1) stays one continuous slice.
+        let attributor = Attributor(instanceHost: host)
+        let tracker = SessionTracker(attributor: attributor, config: TrackerConfig()) { tasks }
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["A"])), task: .op(1)))
+        attributor.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["B"])), task: .op(2)))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("A", "x", at: 0)))
+        tracker.handle(.focus(sig("A", "x", at: 300)))    // 5 min on op(1)
+        tracker.handle(.focus(sig("B", "y", at: 300)))    // flit to a pinned op(2) window
+        tracker.handle(.focus(sig("A", "x", at: 305)))    // 5 s flit → back to op(1)
+        tracker.handle(.focus(sig("A", "x", at: 600)))
+        tracker.stop(at: t(660))
+
+        try expect(!sessions.contains { $0.task == .op(2) },
+                   "the 5 s flit to a pinned window must fold, not commit")
+        try expectEq(sessions.filter { $0.task == .op(1) }.count, 1,
+                     "op(1) stays one continuous slice — no fragmentation, no gap")
     }
 
     c.check("uncertain time sticks to last task and queues coalesced review") {
@@ -255,6 +329,31 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[0].end, t(180))
     }
 
+    c.check("a sub-minute excursion past the old grace still folds back (no 0:00 slice)") {
+        // The reported bug: a ~45 s dip into another window (longer than the 30 s
+        // Switch Buffer, but under a displayed minute) committed as its own slice
+        // and showed "0:00". The floor is now a full minute, so it folds back.
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // excursion begins
+        tracker.handle(.input(t(135)))                                 // 35 s in — past old grace
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 145)))    // back at 45 s → folds
+        tracker.stop(at: t(240))
+
+        try expect(!sessions.contains { $0.task == .op(2) },
+                   "a sub-minute excursion must not become its own slice")
+        try expectEq(sessions.count, 1)
+        try expectEq(sessions[0].task, .op(1))
+        try expectEq(sessions[0].start, t(0))
+        try expectEq(sessions[0].end, t(240))
+    }
+
     c.check("display follows the window instantly even while the switch is provisional") {
         let (tracker, attributor) = makeTracker()
         var states: [TrackerState] = []
@@ -310,11 +409,11 @@ func sessionTrackerChecks(_ c: Checks) {
         }
         try expect(!prompts.contains { $0 == .taskChanged(to: .task(.op(2))) },
                    "notification must not fire at the moment of switch")
-        tracker.handle(.input(t(110)))   // within grace: still quiet
+        tracker.handle(.input(t(140)))   // 40 s in: under the one-minute floor, still quiet
         try expect(!prompts.contains { $0 == .taskChanged(to: .task(.op(2))) })
-        tracker.handle(.input(t(140)))   // held past grace: fires once
+        tracker.handle(.input(t(165)))   // held past the minute floor: fires once
         try expect(prompts.contains { $0 == .taskChanged(to: .task(.op(2))) },
-                   "notification fires once the switch has held")
+                   "notification fires once the switch has held a full minute")
     }
 
     c.check("idle stop resumes from a confident surface; manual stop does not") {

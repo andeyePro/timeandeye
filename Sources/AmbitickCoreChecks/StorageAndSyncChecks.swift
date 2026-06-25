@@ -364,12 +364,13 @@ func aiAssistChecks(_ c: Checks) {
         ])
     }
 
-    c.check("rejects unknown segment and garbage") {
-        try expectThrows("unknown segment must throw") {
-            _ = try AIAssist.parseResponse(
-                #"{"assignments": [{"segment": "\#(UUID().uuidString)", "task": 1}]}"#,
-                validSegmentIDs: [segID])
-        }
+    c.check("skips unknown segments, rejects garbage") {
+        // A stray/hallucinated uuid must NOT throw away the whole batch — it is
+        // skipped and the matching assignments still apply.
+        let mixed = try AIAssist.parseResponse(
+            #"{"assignments": [{"segment": "\#(UUID().uuidString)", "task": 1}, {"segment": "\#(segID.uuidString)", "task": 2}]}"#,
+            validSegmentIDs: [segID])
+        try expectEq(mixed, [AIAssist.Assignment(segmentID: segID, target: .task(.op(2)))])
         try expectThrows("non-JSON must throw") {
             _ = try AIAssist.parseResponse("not json", validSegmentIDs: [segID])
         }
@@ -447,7 +448,7 @@ func endToEndChecks(_ c: Checks) async {
         tracker.onSession = { try? journal.save($0) }
         tracker.onReview = { try? journal.save($0) }
 
-        // 1. open WP 1 in OP -> auto-start at 0.99
+        // 1. open WP 1 in OP -> auto-start at the inferred ceiling (0.95)
         tracker.handle(.focus(ActivitySignal(
             app: "Chrome", windowTitle: "WP1",
             tabURL: "https://op.example.com/work_packages/1", timestamp: t(0))))

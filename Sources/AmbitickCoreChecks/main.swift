@@ -6,6 +6,8 @@ let suites: [(String, (Checks) -> Void)] = [
     ("OPURLParser", opURLParserChecks),
     ("LearningStore", learningStoreChecks),
     ("TaskRanker", taskRankerChecks),
+    ("PinScope", pinScopeChecks),
+    ("Predicate", predicateChecks),
     ("Attributor", attributorChecks),
     ("MinuteResolver", minuteResolverChecks),
     ("SessionTracker", sessionTrackerChecks),

@@ -2,6 +2,51 @@
 
 ## Open
 
+- [ ] Full keyboard/mouse parity sweep (retrospective) — every action reachable
+  by BOTH mouse-only and keyboard-only. Done so far: delete/backspace removes
+  selected timeline slice(s). Still mouse-only: slice selection/navigation
+  (arrow keys to move between slices, ⇧-arrow to extend), opening the editor,
+  task picker navigation, span-strip selection, pin editor open, day navigation.
+  STANDING RULE going forward: every new command ships with a keyboard path, not
+  just a button.
+- [ ] Continuous cross-midnight timeline (#8) — drop the per-calendar-day
+  viewport clamp so pan/zoom crosses midnight into adjacent days, fetching
+  sessions for the visible range; day buttons become jump-to shortcuts. (Pass 2.)
+- [ ] Pin editor hamburger: Components + Expression editors (#11) — the boolean
+  engine already exists in `PinRule.swift`; add the hamburger (between pin and
+  cancel) switching Components ↔ typed Expression (`app/title/url` ·
+  `is/contains/starts with/matches` · `and/or/not/parens`; bare text = contains
+  any field). AI paste-back mode ships after (Pass 3 / a later pass).
+- [!] Workspace layouts — CUT 2026-06-23 (UI removed; capture/apply code left
+  dormant). As built it restored only window app + position/size, never content
+  (Chrome tab/URL, terminal cwd), and multi-window/Spaces spawning was
+  unreliable (windows in the wrong Space, blank, mis-sized). Re-add ONLY with:
+  per-app content restore (Chrome tab via AppleScript, terminal cwd), reliable
+  multi-window spawning, and Space detection so it needn't start from a fresh
+  empty desktop. Done right this is the "right-click a task → open its
+  workspace and start working" killer feature; done as-was it was net-negative.
+- [ ] Pin rules — visual boolean builder: a drag/click gate builder (AND/OR/NOT
+  + parens) as an alternative to the typed expression. If too heavy for the
+  app, host it as a static webpage: app opens it with the captured fields in the
+  URL, the page builds the expression, and returns it via an `ambitick://`
+  deep-link (or copy-paste). Keeps the app slim. Phase-1 ships the typed
+  expression; this is the friendlier front-end. - 2026-06-24
+- [ ] Pin rules — priority override (Advanced settings): default precedence is
+  most-specific-wins (more conditions / longer prefix), ties → most recent.
+  Add an optional per-pin `priority` integer in an Advanced section for manual
+  override. Hook already in the `Pin` model (`priority: Int?`); just needs the
+  UI. - 2026-06-24
+- [ ] Pin rules — "look inside" apps (opt-in window-content matching): some apps
+  expose nothing useful in app/title/url (e.g. a generic "Spango" window). For
+  an explicit per-app allow-list ONLY, read static text from the window's
+  Accessibility tree into a 4th rule field `content`, throttled/on-demand so the
+  default stays featherweight (full AX-tree walks are heavy — must not regress
+  Mac performance). Not all apps expose AX content; detect and tell the user.
+  - 2026-06-24
+- [ ] Pin rules — AI "fix this pin": from a pin that should have matched a
+  window but didn't, regenerate the AI prompt including the failing rule + that
+  window's fields + a free-text complaint, so the model corrects it. Iterative
+  refine on top of the one-shot AI pin flow. - 2026-06-24
 - [ ] Timeline free-pan across days: drop the single-day viewport clamp so a
   block spanning midnight renders whole and the view scrolls continuously
   across day boundaries (storage already spans midnight — it is the

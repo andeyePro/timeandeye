@@ -14,7 +14,9 @@ struct SettingsView: View {
             Section("OpenProject") {
                 TextField("Instance URL", text: $controller.settings.opBaseURL,
                           prompt: Text("https://op.example.com"))
+                    .textFieldStyle(.roundedBorder)
                 SecureField("API key", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
                 HStack {
                     Button("Save key & connect") {
                         controller.saveAPIKey(apiKey)
@@ -22,7 +24,7 @@ struct SettingsView: View {
                         keySaved = true
                     }
                     .disabled(apiKey.isEmpty || controller.settings.opBaseURL.isEmpty)
-                    if keySaved { Text("Saved to Keychain").font(.caption).foregroundStyle(.secondary) }
+                    if keySaved { Text("Saved").font(.caption).foregroundStyle(.secondary) }
                 }
                 if let error = controller.lastError {
                     Text(error).font(.caption).foregroundStyle(.red)
@@ -69,7 +71,9 @@ struct SettingsView: View {
 
             Section("Menu bar") {
                 TextField("Low-certainty colour (hex)", text: $controller.settings.colourLow)
+                    .textFieldStyle(.roundedBorder)
                 TextField("High-certainty colour (hex)", text: $controller.settings.colourHigh)
+                    .textFieldStyle(.roundedBorder)
                 Text("Set both to the same colour to disable the signalling.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
@@ -166,6 +170,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .textSelection(.enabled)   // every label copyable, to share text not screenshots
         .padding(8)
     }
 

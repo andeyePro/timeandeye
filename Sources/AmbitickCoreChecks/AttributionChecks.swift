@@ -15,11 +15,12 @@ func attributorChecks(_ c: Checks) {
     }
     let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: now)
 
-    c.check("OP task page is near-certain") {
+    c.check("OP task page is certain (at the inferred ceiling)") {
         let a = Attributor(instanceHost: host)
         let result = a.attribute(opPage(1), tasks: tasks, now: now)
         try expectEq(result.best?.target, .task(.op(1)))
-        try expectClose(result.certainty, 0.99)
+        // Capped at 0.95: 1.0 is reserved for explicit pins.
+        try expectClose(result.certainty, 0.95)
     }
 
     c.check("priming flow: open -> dwell -> confirm") {
@@ -82,6 +83,112 @@ func attributorChecks(_ c: Checks) {
         let result = a.attribute(sig, tasks: tasks, now: now)
         try expectEq(result.best?.target, .task(.op(1)), "'Now' status ranks top")
         try expect(result.certainty >= 0.6)
+    }
+
+    // MARK: - Explicit pins — 100%, override everything
+
+    func ghTab(_ path: String) -> ActivitySignal {
+        ActivitySignal(app: "Google Chrome", windowTitle: "GitHub",
+                       tabURL: "https://github.com/\(path)", timestamp: now)
+    }
+    func componentPin(_ kind: PinScope.Kind, _ prefix: [String], to ref: TaskRef) -> Pin {
+        Pin(rule: .components(PinScope(kind: kind, prefix: prefix)), task: ref)
+    }
+
+    c.check("a site-section pin covers every page beneath it at 100%") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(componentPin(.url, ["github.com", "aqueum"], to: .op(2)))
+        let r = a.attribute(ghTab("aqueum/ambitick/issues/42"), tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(2)), "section pin must cover the page")
+        try expectClose(r.certainty, 1.0)
+        let other = a.attribute(ghTab("someoneelse/repo"), tasks: tasks, now: now)
+        try expect(other.best?.target != .task(.op(2)) || other.certainty < 1.0,
+                   "pin must not leak to a different section")
+    }
+
+    c.check("a pin overrides even a work-package URL") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(componentPin(.url, ["op.example.com"], to: .op(2)))   // whole OP domain
+        let r = a.attribute(opPage(1), tasks: tasks, now: now)         // a real WP page
+        try expectEq(r.best?.target, .task(.op(2)), "explicit pin is law, beats the WP URL")
+        try expectClose(r.certainty, 1.0)
+    }
+
+    c.check("the most specific (longest-prefix) pin wins") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(componentPin(.url, ["github.com"], to: .op(1)))            // whole site
+        a.upsert(componentPin(.url, ["github.com", "aqueum"], to: .op(2)))  // a section
+        let r = a.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(2)), "section pin beats the site pin")
+    }
+
+    c.check("a boolean-expression pin matches across fields") {
+        let a = Attributor(instanceHost: host)
+        // title contains "Ambitick" AND NOT url contains "github"
+        let expr = Predicate.and([
+            .leaf(field: .title, op: .contains, value: "Ambitick"),
+            .not(.leaf(field: .url, op: .contains, value: "github")),
+        ])
+        a.upsert(Pin(rule: .expression(expr), task: .op(2)))
+        let hit = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick — zsh", timestamp: now)
+        try expectEq(a.attribute(hit, tasks: tasks, now: now).best?.target, .task(.op(2)))
+        // same title but a github url → excluded by the NOT
+        let miss = a.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        try expect(miss.best?.target != .task(.op(2)) || miss.certainty < 1.0)
+    }
+
+    c.check("a manual priority overrides specificity") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(Pin(rule: .components(PinScope(kind: .url, prefix: ["github.com", "aqueum"])),
+                     task: .op(2)))                                   // specificity 2
+        a.upsert(Pin(rule: .components(PinScope(kind: .url, prefix: ["github.com"])),
+                     task: .op(1), priority: 5))                      // looser, but prioritised
+        let r = a.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(1)), "priority beats specificity")
+    }
+
+    c.check("an ordinary correction stays SOFT (0.95), not a pin") {
+        let a = Attributor(instanceHost: host)
+        let myPage = ActivitySignal(app: "Chrome", windowTitle: "My page",
+                                    tabURL: "https://op.example.com/my/page", timestamp: now)
+        a.assign(myPage, target: .task(.op(2)))
+        try expect(a.pins.isEmpty, "assign must never create a pin")
+        let r = a.attribute(myPage, tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(2)), "soft prime still beats the ranker")
+        try expectClose(r.certainty, 0.95)
+    }
+
+    c.check("an app pin covers the whole app at 100%") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(componentPin(.app, ["Ghostty"], to: .op(1)))
+        let r = a.attribute(ActivitySignal(app: "Ghostty", windowTitle: "anything", timestamp: now),
+                            tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(1)))
+        try expectClose(r.certainty, 1.0)
+    }
+
+    c.check("unpin by id removes it; upsert by id updates in place") {
+        let a = Attributor(instanceHost: host)
+        var pin = componentPin(.app, ["Ghostty"], to: .op(1))
+        a.upsert(pin)
+        pin.task = .op(2)                       // same id, new task
+        a.upsert(pin)
+        try expectEq(a.pins.count, 1, "upsert by id must not duplicate")
+        let sig = ActivitySignal(app: "Ghostty", windowTitle: "x", timestamp: now)
+        try expectEq(a.attribute(sig, tasks: tasks, now: now).best?.target, .task(.op(2)))
+        a.unpin(id: pin.id)
+        try expect(a.pins.isEmpty)
+    }
+
+    c.check("pins survive a snapshot round-trip (relaunch persistence)") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(componentPin(.url, ["github.com", "aqueum"], to: .op(2)))
+        let snap = try JSONEncoder().encode(a.pins)
+        let b = Attributor(instanceHost: host)
+        b.pins = try JSONDecoder().decode([Pin].self, from: snap)
+        let r = b.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(2)))
+        try expectClose(r.certainty, 1.0)
     }
 }
 

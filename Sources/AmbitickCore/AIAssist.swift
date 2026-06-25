@@ -94,13 +94,13 @@ public enum AIAssist {
         } catch {
             throw ParseError.notJSON
         }
-        return try response.assignments.map { entry in
-            guard let id = UUID(uuidString: entry.segment) else {
-                throw ParseError.badShape("bad segment uuid: \(entry.segment)")
-            }
-            guard validSegmentIDs.contains(id) else {
-                throw ParseError.unknownSegment(entry.segment)
-            }
+        // Skip entries that don't match a current segment (a hallucinated or
+        // mistyped uuid, or one already assigned in another batch) rather than
+        // rejecting the WHOLE paste on the first bad one — one stray uuid used
+        // to throw away 300 good assignments. The caller applies what matched.
+        return response.assignments.compactMap { entry -> Assignment? in
+            guard let id = UUID(uuidString: entry.segment),
+                  validSegmentIDs.contains(id) else { return nil }
             switch entry.task {
             case .id(let n): return Assignment(segmentID: id, target: .task(.op(n)))
             case .doNotTrack: return Assignment(segmentID: id, target: .doNotTrack)
