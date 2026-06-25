@@ -2,6 +2,17 @@
 
 ## 2026-06-25
 
+- [x] **Continuous cross-midnight timeline (#8)** — the viewport was hard-
+  bucketed per calendar day (clamped midnight..midnight, `dayOffset` stepper),
+  so a work block spanning midnight couldn't be seen whole and you couldn't pan
+  across the boundary. The timeline is now one continuous absolute-time window
+  that pans/zooms freely across midnight; the only bounds are a 90-day history
+  floor and the live edge (now). Sessions fetch by visible range
+  (`timelineSessions(from:to:)`, replacing the per-day variant); grid ticks
+  anchor to local midnight and show the date + a darker line at each day
+  boundary; the header shows the visible date (or a cross-midnight range), ‹ ›
+  pan by a day, Today jumps to midnight..now, Block to the latest run.
+  `TimelineView` + `AppController`.
 - [x] **Sub-minute excursions no longer journal a "0:00" slice** — a ~31 s dip
   into another window (longer than the 30 s Switch Buffer, under a displayed
   minute) committed as its own slice and showed `0:00`. A WORK switch now only

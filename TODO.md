@@ -9,9 +9,6 @@
   task picker navigation, span-strip selection, pin editor open, day navigation.
   STANDING RULE going forward: every new command ships with a keyboard path, not
   just a button.
-- [ ] Continuous cross-midnight timeline (#8) — drop the per-calendar-day
-  viewport clamp so pan/zoom crosses midnight into adjacent days, fetching
-  sessions for the visible range; day buttons become jump-to shortcuts. (Pass 2.)
 - [ ] Pin editor hamburger: Components + Expression editors (#11) — the boolean
   engine already exists in `PinRule.swift`; add the hamburger (between pin and
   cancel) switching Components ↔ typed Expression (`app/title/url` ·

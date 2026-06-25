@@ -51,7 +51,9 @@ struct SliceShape: Shape {
 
 struct TimelineView: View {
     @ObservedObject var controller: AppController
-    @State private var dayOffset = 0
+    /// Continuous timeline: the viewport is an absolute [viewStart, +viewSpan]
+    /// window that pans/zooms freely across midnight. No per-day bucketing —
+    /// the only bounds are a history floor and the live edge (now).
     @State private var viewStart: Date = Calendar.current.startOfDay(for: Date())
     @State private var viewSpan: TimeInterval = 86_400
     @State private var selection = Set<UUID>()
@@ -132,7 +134,11 @@ struct TimelineView: View {
 
     private var sessions: [Session] {
         _ = refreshTick
-        var list = controller.timelineSessions(dayOffset: dayOffset)
+        // Fetch the visible window, padded a quarter-span each side so slices at
+        // the edges render whole and a pan stays smooth. Range-based, so it
+        // spans midnight without per-day bucketing.
+        var list = controller.timelineSessions(from: viewStart.addingTimeInterval(-viewSpan * 0.25),
+                                                to: viewEnd.addingTimeInterval(viewSpan * 0.25))
         // While editing an existing slice, the bar reflects the editor's live
         // values — so a handle drag (which updates editStart/editEnd) moves the
         // slice AND the numbers below in lock-step, and Save commits exactly
@@ -145,45 +151,61 @@ struct TimelineView: View {
         return list
     }
 
-    private var dayStart: Date {
-        Calendar.current.startOfDay(
-            for: Calendar.current.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date())
-    }
+    private var viewEnd: Date { viewStart.addingTimeInterval(viewSpan) }
 
-    private var dayEnd: Date { dayStart.addingTimeInterval(86_400) }
+    /// You can't track the future: the viewport's right bound is now.
+    private var liveEdge: Date { Date() }
+
+    /// How far back the timeline can be panned. Generous — covers any
+    /// cross-midnight / recent-week navigation — without scanning all history.
+    private var historyFloor: Date { Date().addingTimeInterval(-90 * 86_400) }
+
+    /// Widest zoom-out: a week on screen at once. Tightest is 5 min (below).
+    private let maxViewSpan: TimeInterval = 7 * 86_400
 
     private var snapTolerance: TimeInterval { viewSpan / Double(barWidth) * 8 }
 
     // MARK: - Viewport
 
     private func zoomToLatestBlock() {
-        guard let block = TimelineMath.latestBlock(in: sessions) else {
-            viewStart = dayStart
+        // Look across the last couple of days so a block that began before
+        // midnight is found whole.
+        let recent = controller.timelineSessions(from: liveEdge.addingTimeInterval(-2 * 86_400),
+                                                  to: liveEdge)
+        guard let block = TimelineMath.latestBlock(in: recent) else {
+            viewStart = Calendar.current.startOfDay(for: Date())
             viewSpan = 86_400
+            clampViewport()
             return
         }
         let pad = max(block.end.timeIntervalSince(block.start) * 0.1, 300)
-        viewStart = max(block.start.addingTimeInterval(-pad), dayStart)
-        viewSpan = min(block.end.timeIntervalSince(viewStart) + pad, 86_400)
+        viewStart = block.start.addingTimeInterval(-pad)
+        viewSpan = block.end.timeIntervalSince(viewStart) + pad
+        clampViewport()
     }
 
-    private func changeDay(_ delta: Int) {
-        dayOffset += delta
+    /// Pan by whole days (the ‹ › buttons) — the continuous-timeline analogue
+    /// of the old day-stepper, but it just slides the same-width window.
+    private func pan(days: Int) {
+        viewStart = viewStart.addingTimeInterval(Double(days) * 86_400)
         editing = nil
         selection = []
         selectedSpanIdx = []
-        DispatchQueue.main.async { zoomToLatestBlock() }
+        clampViewport()
+    }
+
+    private func showToday() {
+        viewStart = Calendar.current.startOfDay(for: Date())
+        viewSpan = 86_400
+        clampViewport()
     }
 
     private func clampViewport() {
-        viewSpan = min(max(viewSpan, 300), 86_400)
-        // Don't let the view drift past the live edge into empty future time:
-        // today's right bound is now (or the last slice end), not midnight.
-        let rightBound = dayOffset == 0
-            ? max(Date(), sessions.map(\.end).max() ?? Date())
-            : dayEnd
-        let maxStart = max(dayStart, rightBound.addingTimeInterval(-viewSpan))
-        viewStart = max(dayStart, min(viewStart, maxStart))
+        viewSpan = min(max(viewSpan, 300), maxViewSpan)
+        // Free across midnight; the only bounds are the history floor and the
+        // live edge (now) — never drift into empty future time.
+        let maxStart = max(historyFloor, liveEdge.addingTimeInterval(-viewSpan))
+        viewStart = max(historyFloor, min(viewStart, maxStart))
     }
 
     /// Zoom keeping `anchor` (a date) pinned at the same screen position — so
@@ -232,23 +254,38 @@ struct TimelineView: View {
 
     private var header: some View {
         HStack {
-            Button { changeDay(-1) } label: { Image(systemName: "chevron.left") }
-            Text(dayStart.formatted(date: .abbreviated, time: .omitted))
+            Button { pan(days: -1) } label: { Image(systemName: "chevron.left") }
+                .help("Back a day")
+            Text(viewportLabel)
                 .font(.headline)
-                .frame(width: 130)
-            Button { changeDay(1) } label: { Image(systemName: "chevron.right") }
-                .disabled(dayOffset >= 0)
-            if dayOffset != 0 {
-                Button("Today") { dayOffset = 0; changeDay(0) }
-            }
+                .frame(width: 168)
+            Button { pan(days: 1) } label: { Image(systemName: "chevron.right") }
+                .disabled(viewEnd >= liveEdge)
+                .help("Forward a day")
             Spacer()
             Button { zoom(by: 1.5) } label: { Image(systemName: "minus.magnifyingglass") }
             Button { zoom(by: 1 / 1.5) } label: { Image(systemName: "plus.magnifyingglass") }
             Button("Block") { zoomToLatestBlock() }
-            Button("Day") { viewStart = dayStart; viewSpan = 86_400 }
+                .help("Zoom to the latest run of work")
+            Button("Today") { showToday() }
+                .help("Today, midnight to now")
             Text(totalText).font(.caption).foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
+    }
+
+    /// The visible date span: one date when the window sits inside a day, else
+    /// a "Jun 24 – 25" range across the midnight it crosses.
+    private var viewportLabel: String {
+        let cal = Calendar.current
+        let startDay = cal.startOfDay(for: viewStart)
+        let endDay = cal.startOfDay(for: viewEnd)
+        if startDay == endDay {
+            return viewStart.formatted(date: .abbreviated, time: .omitted)
+        }
+        let a = viewStart.formatted(date: .abbreviated, time: .omitted)
+        let b = viewEnd.formatted(date: .abbreviated, time: .omitted)
+        return "\(a) – \(b)"
     }
 
     private var totalText: String {
@@ -344,8 +381,9 @@ struct TimelineView: View {
         selection = []
         selectedSpanIdx = []
         let point = dateFor(location.x, width: width)
-        guard let gap = TimelineMath.gap(at: point, in: sessions,
-                                         within: dayStart...min(dayEnd, Date())) else { return }
+        guard point <= liveEdge,
+              let gap = TimelineMath.gap(at: point, in: sessions,
+                                         within: historyFloor...liveEdge) else { return }
         // Cap a cavernous gap at 2h around the click, snapped to neighbours.
         let start = max(gap.start, point.addingTimeInterval(-3600))
         let end = min(gap.end, point.addingTimeInterval(3600))
@@ -361,21 +399,34 @@ struct TimelineView: View {
     }
 
     private func gridLines(width: CGFloat) -> some View {
-        let step: TimeInterval = viewSpan > 6 * 3600 ? 3600
-            : viewSpan > 3600 ? 900 : 300
-        let first = viewStart.timeIntervalSince(dayStart)
-        let start = dayStart.addingTimeInterval((first / step).rounded(.down) * step)
+        // Step scales with the zoom so the tick count stays bounded even at a
+        // multi-day span.
+        let step: TimeInterval =
+            viewSpan > 3 * 86_400 ? 86_400 :
+            viewSpan > 86_400 ? 6 * 3600 :
+            viewSpan > 6 * 3600 ? 3600 :
+            viewSpan > 3600 ? 900 : 300
+        // Anchor ticks to LOCAL midnight (not the absolute epoch) so a day
+        // boundary lands on 00:00, then step forward. Midnight ticks carry the
+        // date and a darker line, so crossing midnight reads clearly.
+        let cal = Calendar.current
+        let anchor = cal.startOfDay(for: viewStart)
+        let firstK = (viewStart.timeIntervalSince(anchor) / step).rounded(.down)
+        let firstTick = anchor.addingTimeInterval(firstK * step)
         let count = Int(viewSpan / step) + 2
         return ForEach(0..<count, id: \.self) { i in
-            let tick = start.addingTimeInterval(TimeInterval(i) * step)
+            let tick = firstTick.addingTimeInterval(TimeInterval(i) * step)
+            let isMidnight = cal.component(.hour, from: tick) == 0
+                && cal.component(.minute, from: tick) == 0
             VStack(alignment: .leading, spacing: 0) {
-                Text(tick.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                Text(isMidnight ? tick.formatted(.dateTime.month(.abbreviated).day())
+                                : tick.formatted(date: .omitted, time: .shortened))
+                    .font(.system(size: 9, weight: isMidnight ? .semibold : .regular))
+                    .foregroundStyle(isMidnight ? Color.primary.opacity(0.7) : .secondary)
                     .fixedSize()
                 Rectangle()
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(width: 1, height: 78)
+                    .fill(Color.secondary.opacity(isMidnight ? 0.45 : 0.2))
+                    .frame(width: isMidnight ? 1.5 : 1, height: 78)
             }
             .position(x: xFor(tick, width: width) + 14, y: 48)
         }
@@ -590,11 +641,16 @@ struct TimelineView: View {
         filter = ""
     }
 
+    /// A stable local-midnight epoch the Duration field encodes a length
+    /// against (the picker shows h:mm, so a duration is rendered as "midnight +
+    /// duration"). Keyed to the edited slice's day so get/set agree.
+    private var durationEpoch: Date { Calendar.current.startOfDay(for: editStart) }
+
     private var durationBinding: Binding<Date> {
         Binding(
-            get: { dayStart.addingTimeInterval(editEnd.timeIntervalSince(editStart)) },
+            get: { durationEpoch.addingTimeInterval(editEnd.timeIntervalSince(editStart)) },
             set: { newValue in
-                applyDurationChange(max(newValue.timeIntervalSince(dayStart), 60))
+                applyDurationChange(max(newValue.timeIntervalSince(durationEpoch), 60))
             })
     }
 

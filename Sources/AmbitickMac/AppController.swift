@@ -907,29 +907,23 @@ public final class AppController: ObservableObject {
 
     // MARK: - Timeline
 
-    /// Sessions overlapping the given day (0 = today, -1 = yesterday, ...),
-    /// plus a synthetic live slice for the current visit when tracking.
-    public func timelineSessions(dayOffset: Int) -> [Session] {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: calendar.date(byAdding: .day, value: dayOffset,
-                                                              to: Date()) ?? Date())
-        let dayEnd = dayStart.addingTimeInterval(86_400)
+    /// Sessions overlapping an arbitrary [from, to] window — the continuous
+    /// timeline's fetch, so a viewport can span midnight / several days — plus
+    /// the synthetic live slice (folded into the same-task block it continues)
+    /// when the current visit overlaps the window.
+    public func timelineSessions(from: Date, to: Date) -> [Session] {
         // The live checkpoint row is internal crash-recovery state, not a
         // user-facing slice — never draw it on the timeline.
-        var list = ((try? journal.sessions(from: dayStart, to: dayEnd)) ?? [])
+        var list = ((try? journal.sessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
-        if dayOffset == 0, case .tracking(.task(let ref), let certainty) = trackerState {
-            // Start from the tracker's true continuous-slice start, not the
-            // per-visit targetSince: a sub-grace excursion resets targetSince
-            // but the time is still one unflushed slice, so anchoring to
-            // targetSince drew the live bar short and left a phantom gap.
+        if case .tracking(.task(let ref), let certainty) = trackerState {
             var liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
+            let liveEnd = Date()
+            guard liveEnd > from, liveStart < to else { return list }
             // Fold the live slice visually into the same-task block it
-            // continues, so the slice you're tracking RIGHT NOW shows as one
-            // piece with its merged history instead of a detached fragment —
-            // the journal only coalesces on flush. Walk back over contiguous
-            // same-task journalled slices, drop them from the drawn list, and
-            // extend the live start to cover them.
+            // continues (the journal only coalesces on flush): walk back over
+            // contiguous same-task journalled slices, drop them, extend the
+            // live start to cover them.
             while let i = list.firstIndex(where: {
                 $0.task == ref && $0.start < liveStart
                     && abs($0.end.timeIntervalSince(liveStart)) <= 2 }) {
@@ -937,7 +931,7 @@ public final class AppController: ObservableObject {
                 list.remove(at: i)
             }
             list.append(Session(id: Self.liveSessionID, task: ref, start: liveStart,
-                                end: Date(), certainty: certainty))
+                                end: liveEnd, certainty: certainty))
         }
         return list
     }
