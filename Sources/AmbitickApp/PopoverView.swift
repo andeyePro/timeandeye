@@ -19,6 +19,12 @@ struct PopoverView: View {
     // updates it in place instead of duplicating. nil = creating a new pin.
     @State private var pinEditingID: UUID?
     @FocusState private var pinFocused: Bool
+    // Hamburger modes: the visual blue/grey Components editor, or a typed
+    // boolean Expression. (AI mode lands in a later pass.)
+    enum PinMode { case components, expression }
+    @State private var pinMode: PinMode = .components
+    @State private var pinExpression = ""
+    @State private var pinExprError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -174,27 +180,31 @@ struct PopoverView: View {
 
     private var pinEditor: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Each part is clickable: tap a segment to make IT the rightmost
-            // pinned part. Blue = pinned, grey = not. ← / → do the same by key.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(Array(pinSegments.enumerated()), id: \.offset) { i, seg in
-                        let piece = (i == 0 ? "" : PinScope.separator(for: pinKind)) + seg
-                        Button { pinCount = i + 1 } label: {
-                            Text(piece).foregroundColor(i < pinCount ? .accentColor : .secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+            if pinMode == .components {
+                componentsEditor
+            } else {
+                expressionEditor
             }
-            .font(.callout)
             HStack(spacing: 6) {
-                Text("← wider · → narrower · click a part")
+                Text(pinHint)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(pinExprError == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
                 Spacer()
                 Button { commitPinning() } label: { Image(systemName: "return") }
                     .buttonStyle(.plain).help("Pin (↵)")
+                // The hamburger sits between Pin and Cancel — switch editor mode.
+                Menu {
+                    Button { switchMode(.components) } label: {
+                        Label("Components", systemImage: pinMode == .components ? "checkmark" : "rectangle.split.3x1")
+                    }
+                    Button { switchMode(.expression) } label: {
+                        Label("Expression", systemImage: pinMode == .expression ? "checkmark" : "curlybraces")
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help("Pin mode: Components or Expression")
                 Button { cancelPinning() } label: { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                     .help(pinEditingID != nil ? "Unpin (esc)" : "Don't pin (esc)")
@@ -203,6 +213,24 @@ struct PopoverView: View {
         .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.08)))
+    }
+
+    /// The visual blue/grey prefix selector (Components mode).
+    private var componentsEditor: some View {
+        // Each part is clickable: tap a segment to make IT the rightmost pinned
+        // part. Blue = pinned, grey = not. ← / → do the same by key.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(Array(pinSegments.enumerated()), id: \.offset) { i, seg in
+                    let piece = (i == 0 ? "" : PinScope.separator(for: pinKind)) + seg
+                    Button { pinCount = i + 1 } label: {
+                        Text(piece).foregroundColor(i < pinCount ? .accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .font(.callout)
         .focusable()
         .focused($pinFocused)
         .onKeyPress(.leftArrow) { pinCount = max(1, pinCount - 1); return .handled }
@@ -212,37 +240,111 @@ struct PopoverView: View {
         .onAppear { pinFocused = true }
     }
 
+    /// The footer hint: the parse error if there is one, else mode help.
+    private var pinHint: String {
+        if let error = pinExprError { return error }
+        return pinMode == .components
+            ? "← wider · → narrower · click a part"
+            : "fields: app·title·url   ops: is·contains·starts with·matches   logic: and·or·not·( )"
+    }
+
+    /// The typed boolean Expression editor.
+    private var expressionEditor: some View {
+        TextField("e.g. title contains \"Ambitick\" and not url contains \"github\"",
+                  text: $pinExpression)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(.callout, design: .monospaced))
+            .focused($pinFocused)
+            .onSubmit { commitPinning() }
+            .onChange(of: pinExpression) { _, _ in pinExprError = nil }
+            .onAppear { pinFocused = true }
+    }
+
     private func beginPinning() {
         guard let draft = controller.pinDraft() else { return }
         pinKind = draft.kind
         pinSegments = draft.segments
         pinCount = draft.defaultCount
         pinEditingID = nil
+        pinMode = .components
+        pinExpression = ""
+        pinExprError = nil
         pinning = true
     }
 
-    /// Re-open the editor on an existing pin to adjust its scope. (Phase 1 only
-    /// the component form is editable here; boolean/AI rules get their editors
-    /// next phase.)
+    /// Re-open the editor on an existing pin to adjust it. A Components pin opens
+    /// in Components mode; an Expression pin opens in Expression mode with its
+    /// rule rendered back to text, fully editable.
     private func reopenPinning(_ pin: Pin) {
         guard let draft = controller.pinDraft() else { return }
         pinKind = draft.kind
         pinSegments = draft.segments
-        if case .components(let scope) = pin.rule {
+        pinExprError = nil
+        switch pin.rule {
+        case .components(let scope):
+            pinMode = .components
             pinCount = min(scope.prefix.count, draft.segments.count)
-        } else {
+            pinExpression = ""
+        case .expression(let predicate):
+            pinMode = .expression
             pinCount = draft.defaultCount
+            pinExpression = PredicateParser.string(from: predicate)
         }
         pinEditingID = pin.id
         pinning = true
     }
 
+    /// Switch hamburger mode. Crossing into Expression with an empty box seeds it
+    /// from the current Components selection, so the typed rule starts where the
+    /// visual one left off (converting what's convertible).
+    private func switchMode(_ mode: PinMode) {
+        if mode == .expression, pinExpression.trimmingCharacters(in: .whitespaces).isEmpty {
+            pinExpression = componentsAsExpression()
+        }
+        pinExprError = nil
+        pinMode = mode
+    }
+
+    /// The current Components selection as an equivalent typed expression.
+    private func componentsAsExpression() -> String {
+        let prefix = Array(pinSegments.prefix(pinCount))
+        guard !prefix.isEmpty else { return "" }
+        switch pinKind {
+        case .url:
+            return "url contains \"\(prefix.joined(separator: "/"))\""
+        case .app:
+            if prefix.count == 1 { return "app is \"\(prefix[0])\"" }
+            let rest = prefix.dropFirst().joined(separator: " ")
+            return "app is \"\(prefix[0])\" and title contains \"\(rest)\""
+        }
+    }
+
     private func commitPinning() {
         guard case .tracking(.task(let ref), _) = controller.trackerState else { pinning = false; return }
-        controller.commitPin(kind: pinKind, prefix: Array(pinSegments.prefix(pinCount)),
-                             to: ref, replacingID: pinEditingID)
+        if pinMode == .expression {
+            switch PredicateParser.parse(pinExpression) {
+            case .success(let predicate):
+                controller.commitPin(rule: .expression(predicate), to: ref,
+                                     replacingID: pinEditingID)
+            case .failure(let error):
+                pinExprError = message(for: error)
+                return   // keep the editor open so the user can fix it
+            }
+        } else {
+            controller.commitPin(kind: pinKind, prefix: Array(pinSegments.prefix(pinCount)),
+                                 to: ref, replacingID: pinEditingID)
+        }
         pinning = false
         pinEditingID = nil
+    }
+
+    private func message(for error: PredicateParser.ParseError) -> String {
+        switch error {
+        case .empty: return "Type an expression, or switch to Components."
+        case .unbalancedParens: return "Unbalanced parentheses."
+        case .expectedValue: return "An operator needs a value, e.g. contains \"…\"."
+        case .unexpected(let what): return "Didn't understand near: \(what)"
+        }
     }
 
     /// No "exit without saving": Enter is the only way to keep a pin. The ✕

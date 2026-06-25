@@ -8,6 +8,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("TaskRanker", taskRankerChecks),
     ("PinScope", pinScopeChecks),
     ("Predicate", predicateChecks),
+    ("PredicateParser", predicateParserChecks),
     ("Attributor", attributorChecks),
     ("MinuteResolver", minuteResolverChecks),
     ("SessionTracker", sessionTrackerChecks),

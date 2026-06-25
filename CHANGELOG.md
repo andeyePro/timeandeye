@@ -2,6 +2,17 @@
 
 ## 2026-06-25
 
+- [x] **Pin editor hamburger: Components + Expression (#11)** — the boolean
+  engine existed but only the visual Components editor was wired up. The pin
+  editor now has a hamburger (between Pin and Cancel) switching Components ↔ a
+  typed Expression editor. New `PredicateParser` (Core, 7 checks) parses the
+  agreed syntax — `app/title/url` · `is/contains/starts with/matches` ·
+  `and/or/not/( )`, bare text = contains-any-field — into the same `Predicate`
+  the engine evaluates, and renders it back (so re-opening an Expression pin
+  shows editable text). Switching into Expression seeds the box from the current
+  Components selection. Parse errors show inline and keep the editor open. AI
+  paste-back mode is the remaining phase. `AppController.commitPin(rule:)`,
+  `PopoverView`.
 - [x] **Continuous cross-midnight timeline (#8)** — the viewport was hard-
   bucketed per calendar day (clamped midnight..midnight, `dayOffset` stepper),
   so a work block spanning midnight couldn't be seen whole and you couldn't pan

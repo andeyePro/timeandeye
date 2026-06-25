@@ -679,8 +679,15 @@ public final class AppController: ObservableObject {
     public func commitPin(kind: PinScope.Kind, prefix: [String], to ref: TaskRef,
                           replacingID: UUID? = nil) {
         guard !prefix.isEmpty else { return }
-        let pin = Pin(id: replacingID ?? UUID(),
-                      rule: .components(PinScope(kind: kind, prefix: prefix)), task: ref)
+        commitPin(rule: .components(PinScope(kind: kind, prefix: prefix)),
+                  to: ref, replacingID: replacingID)
+    }
+
+    /// Commit any pin rule (components OR a boolean expression) — the general
+    /// path the Expression editor and the AI mode both feed into. `replacingID`
+    /// reuses the id so editing updates in place instead of duplicating.
+    public func commitPin(rule: PinRule, to ref: TaskRef, replacingID: UUID? = nil) {
+        let pin = Pin(id: replacingID ?? UUID(), rule: rule, task: ref)
         attributor.upsert(pin)
         persistAssociations()
         tracker.reevaluate()   // lift the live session to 100% now, not on next focus

@@ -9,11 +9,13 @@
   task picker navigation, span-strip selection, pin editor open, day navigation.
   STANDING RULE going forward: every new command ships with a keyboard path, not
   just a button.
-- [ ] Pin editor hamburger: Components + Expression editors (#11) — the boolean
-  engine already exists in `PinRule.swift`; add the hamburger (between pin and
-  cancel) switching Components ↔ typed Expression (`app/title/url` ·
-  `is/contains/starts with/matches` · `and/or/not/parens`; bare text = contains
-  any field). AI paste-back mode ships after (Pass 3 / a later pass).
+- [ ] Pin editor AI mode (#11, remaining phase) — a fourth hamburger entry that
+  builds an AI prompt from the captured fields (app/title/url) + an editable
+  advice box (pre-seeded with the "prefer a stable title/URL pattern; if the
+  title looks volatile, suggest a more robust field or a setup change" nudge),
+  shows it scrollable, auto-copies it, and takes a paste-back that deserialises
+  into a normal editable Components/Expression rule (or shows an error). Builds
+  on the now-final rule format; the hamburger + Components + Expression shipped.
 - [!] Workspace layouts — CUT 2026-06-23 (UI removed; capture/apply code left
   dormant). As built it restored only window app + position/size, never content
   (Chrome tab/URL, terminal cwd), and multi-window/Spaces spawning was
