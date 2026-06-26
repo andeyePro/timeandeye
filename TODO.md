@@ -16,6 +16,9 @@
   shows it scrollable, auto-copies it, and takes a paste-back that deserialises
   into a normal editable Components/Expression rule (or shows an error). Builds
   on the now-final rule format; the hamburger + Components + Expression shipped.
+  Also: offer "couldn't parse this — generate an AI prompt from it?" on a
+  parse-error tap, handing the failed expression to the AI mode as a starting
+  point.
 - [!] Workspace layouts — CUT 2026-06-23 (UI removed; capture/apply code left
   dormant). As built it restored only window app + position/size, never content
   (Chrome tab/URL, terminal cwd), and multi-window/Spaces spawning was

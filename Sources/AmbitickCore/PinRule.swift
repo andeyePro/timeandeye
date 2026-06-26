@@ -109,15 +109,28 @@ public enum PinRule: Codable, Equatable, Sendable {
 }
 
 extension Predicate {
-    /// A compact one-liner for the badge, e.g. `title∋Ambitick` or `…`.
+    /// A compact one-liner for the badge, e.g. `title∋Ambitick` or `…`. For a
+    /// compound rule, show the MOST DISTINCTIVE leaf (longest value) rather than
+    /// just the first clause — that's the bit that actually identifies what's
+    /// pinned, which is what the badge is for.
     var shortLabel: String {
         switch self {
         case .leaf(let f, let op, let v):
             let sym = op == .contains ? "∋" : op == .regex ? "~" : op == .equals ? "=" : "^"
             return "\(f.rawValue)\(sym)\(v)"
-        case .and(let ps): return ps.first?.shortLabel ?? "…"
-        case .or(let ps):  return ps.first?.shortLabel ?? "…"
+        case .and(let ps), .or(let ps):
+            return (ps.max { $0.labelWeight < $1.labelWeight })?.shortLabel ?? "…"
         case .not(let p):  return "¬" + p.shortLabel
+        }
+    }
+
+    /// How distinctive a sub-tree's strongest leaf is — the length of its
+    /// longest matched value. Drives `shortLabel`'s "most specific clause" pick.
+    private var labelWeight: Int {
+        switch self {
+        case .leaf(_, _, let v): return v.count
+        case .and(let ps), .or(let ps): return ps.map(\.labelWeight).max() ?? 0
+        case .not(let p): return p.labelWeight
         }
     }
 }

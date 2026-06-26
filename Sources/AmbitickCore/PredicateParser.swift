@@ -128,7 +128,7 @@ public enum PredicateParser {
                 if logicWords.contains(lw) { return true }
                 if PinField(token: lw) != nil, idx + 1 < toks.count,
                    case .word(let n)? = toks[safe: idx + 1],
-                   operatorWord(n.lowercased()) != nil {
+                   looksLikeOperator(n.lowercased()) {
                     return true
                 }
             }
@@ -136,14 +136,12 @@ public enum PredicateParser {
         return false
     }
 
-    private static func operatorWord(_ w: String) -> PinOp? {
-        switch w {
-        case "is", "equals": return .equals
-        case "contains": return .contains
-        case "matches", "regex": return .regex
-        case "starts": return .startsWith   // "starts with" — the "with" is consumed in parse
-        default: return nil
-        }
+    /// First word of an operator phrase — used only to tell bare text from a
+    /// `field op value` leaf. The full phrase (incl. negation and "starts with"
+    /// / "does not contain") is consumed in `parseOperator`.
+    private static func looksLikeOperator(_ w: String) -> Bool {
+        ["is", "equals", "=", "contains", "matches", "regex",
+         "starts", "does", "doesn't", "doesnt", "not"].contains(w)
     }
 
     // MARK: Recursive-descent cursor
@@ -194,9 +192,10 @@ public enum PredicateParser {
             if case .word(let w)? = peek(), let field = PinField(token: w.lowercased()) {
                 let save = i
                 i += 1
-                if let op = parseOperator() {
+                if let (op, negate) = parseOperator() {
                     guard let v = parseValue() else { throw ParseError.expectedValue }
-                    return .leaf(field: field, op: op, value: v)
+                    let leaf: Predicate = .leaf(field: field, op: op, value: v)
+                    return negate ? .not(leaf) : leaf
                 }
                 i = save   // it wasn't field+operator after all — treat as bare text
             }
@@ -207,15 +206,41 @@ public enum PredicateParser {
             return PredicateParser.anyFieldContains(v)
         }
 
-        mutating func parseOperator() -> PinOp? {
-            guard case .word(let w)? = peek() else { return nil }
-            guard let op = PredicateParser.operatorWord(w.lowercased()) else { return nil }
-            i += 1
-            // "starts with": swallow the following "with".
-            if op == .startsWith, case .word(let n)? = peek(), n.lowercased() == "with" {
+        /// Parse an operator phrase, returning the op and whether it is negated.
+        /// Supports `is` / `is not`, `contains`, `starts with`, `matches`, and
+        /// the natural negations `does not contain` / `doesn't match` / etc.
+        mutating func parseOperator() -> (op: PinOp, negate: Bool)? {
+            guard case .word(let w0)? = peek() else { return nil }
+            switch w0.lowercased() {
+            case "is", "equals", "=":
                 i += 1
+                return (.equals, matchWord("not"))
+            case "contains":
+                i += 1
+                return (.contains, false)
+            case "matches", "regex":
+                i += 1
+                return (.regex, false)
+            case "starts":
+                i += 1
+                _ = matchWord("with")
+                return (.startsWith, false)
+            case "does", "doesn't", "doesnt":
+                let isDoesnt = w0.lowercased() != "does"
+                i += 1
+                let negate = isDoesnt ? true : matchWord("not")
+                guard case .word(let verb)? = peek() else { return nil }
+                i += 1
+                switch verb.lowercased() {
+                case "contain", "contains": return (.contains, negate)
+                case "match", "matches": return (.regex, negate)
+                case "equal", "equals", "be": return (.equals, negate)
+                case "start", "starts": _ = matchWord("with"); return (.startsWith, negate)
+                default: return nil
+                }
+            default:
+                return nil
             }
-            return op
         }
 
         mutating func parseValue() -> String? {

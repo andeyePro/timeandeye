@@ -49,12 +49,27 @@ public struct PinScope: Hashable, Codable, Sendable {
         }
     }
 
-    /// Does this pin cover the given signal? (Its identity must start with the
-    /// pinned prefix, same kind.)
+    /// Does this pin cover the given signal?
+    ///  • url: identity must START WITH the pinned prefix — host/path is
+    ///    structurally stable, so the broad→narrow prefix is reliable.
+    ///  • app: the app must match and every pinned title segment must be
+    ///    PRESENT (in any position). App/window titles are volatile in ORDER —
+    ///    a terminal prepends its mode ("nvim — project", "~/dir — fish"), so a
+    ///    window-name pinned at position 1 slides to position 2 and a strict
+    ///    positional prefix would silently stop matching. Presence-matching
+    ///    keeps a window-name pin working as the leading title text changes.
     public func matches(_ signal: ActivitySignal) -> Bool {
         guard let id = Self.identity(of: signal), id.kind == kind,
-              id.segments.count >= prefix.count else { return false }
-        return Array(id.segments.prefix(prefix.count)) == prefix
+              let root = id.segments.first, let pinnedRoot = prefix.first else { return false }
+        switch kind {
+        case .url:
+            guard id.segments.count >= prefix.count else { return false }
+            return Array(id.segments.prefix(prefix.count)) == prefix
+        case .app:
+            guard root == pinnedRoot else { return false }
+            let titleSegments = id.segments.dropFirst()
+            return prefix.dropFirst().allSatisfy { titleSegments.contains($0) }
+        }
     }
 
     /// Split a window title into identity parts on the separators apps use

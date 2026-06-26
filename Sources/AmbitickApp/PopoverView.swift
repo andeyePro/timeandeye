@@ -9,6 +9,7 @@ struct PopoverView: View {
     @State private var note = ""
     @State private var changeMode = false
     @FocusState private var noteFocused: Bool
+    @FocusState private var filterFocused: Bool
     // Inline pin editor: blue = the chosen prefix, grey = the rest;
     // ← widens, → narrows, ↵ pins, esc abandons.
     @State private var pinning = false
@@ -25,6 +26,8 @@ struct PopoverView: View {
     @State private var pinMode: PinMode = .components
     @State private var pinExpression = ""
     @State private var pinExprError: String?
+    // Expand a (possibly long, truncated) parse error on tap.
+    @State private var pinErrorExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,6 +50,9 @@ struct PopoverView: View {
         // clears the note on task-switch/stop).
         .onChange(of: note) { _, new in controller.manualNote = new }
         .onChange(of: controller.trackerState) { _, _ in note = controller.manualNote }
+        // Focus the filter when the popover opens so you can type-to-search
+        // immediately (the "type to search…" hint promised typing would work).
+        .onAppear { DispatchQueue.main.async { filterFocused = true } }
     }
 
     private var header: some View {
@@ -189,6 +195,9 @@ struct PopoverView: View {
                 Text(pinHint)
                     .font(.caption2)
                     .foregroundStyle(pinExprError == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
+                    .lineLimit(pinErrorExpanded ? nil : 1)
+                    .help(pinExprError ?? "")
+                    .onTapGesture { if pinExprError != nil { pinErrorExpanded.toggle() } }
                 Spacer()
                 Button { commitPinning() } label: { Image(systemName: "return") }
                     .buttonStyle(.plain).help("Pin (↵)")
@@ -256,7 +265,7 @@ struct PopoverView: View {
             .font(.system(.callout, design: .monospaced))
             .focused($pinFocused)
             .onSubmit { commitPinning() }
-            .onChange(of: pinExpression) { _, _ in pinExprError = nil }
+            .onChange(of: pinExpression) { _, _ in pinExprError = nil; pinErrorExpanded = false }
             .onAppear { pinFocused = true }
     }
 
@@ -401,6 +410,7 @@ struct PopoverView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                     .frame(width: 120)
+                    .focused($filterFocused)
             }
             // Default view: recent + likely first, then the rest of the ranked
             // set — all of it scrollable, so a task that isn't in the top picks
@@ -421,7 +431,9 @@ struct PopoverView: View {
             if noteFocused {
                 Text("type a comment on your current work, ↵ when done")
                     .font(.caption2).foregroundStyle(.tertiary)
-            } else if filter.isEmpty, !controller.taskCache.isEmpty {
+            } else if filter.isEmpty, filterFocused, !controller.taskCache.isEmpty {
+                // Only when the filter has focus — otherwise it promised typing
+                // would do something when focus was elsewhere and it didn't.
                 Text("type to search all \(controller.taskCache.count) tasks")
                     .font(.caption2).foregroundStyle(.tertiary)
             }

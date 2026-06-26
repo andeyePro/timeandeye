@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-06-26
+
+- [x] **Window-name pins survive title volatility (#2 follow-up)** — a Ghostty
+  window pinned by name ("electroPioreactor" → AEP-design) tracked as the wrong
+  task because `PinScope.matches()` was a strict POSITIONAL prefix match, and a
+  terminal prepends its mode to the title ("nvim — electroPioreactor"), sliding
+  the name out of position 1 so the pin silently stopped matching and a broader
+  Ghostty attribution won. App pins now match on PRESENCE: the app must match
+  and every pinned title segment must appear somewhere in the title (any order).
+  URL pins keep positional prefix (host/path is stable). `PinScope`. (Two
+  subagents investigated; one proposed "the pin-precedence comparator is
+  inverted" — verified false, `max(by:)` with `<` correctly picks highest
+  specificity, and the specificity test passes; the real cause was matching, not
+  selection.)
+- [x] **Pin badge shows the most distinctive clause (#11)** — an Expression
+  pin's badge showed the FIRST clause; it now shows the leaf with the longest
+  value (the bit that actually identifies the pin). `Predicate.shortLabel`.
+- [x] **Expression negation: `is not` / `does not contain` (#11)** — the parser
+  now accepts natural negations (`app is not "Ghostty"`, `url does not contain
+  "github"`, `title doesn't match "…"`), so the user's example parses.
+  `PredicateParser` (+ checks).
+- [x] **Pin parse errors are viewable in full (#11)** — a long parse error was
+  truncated to one line; tap it to expand (and it's in the hover tooltip too).
+  `PopoverView`.
+- [x] **Popover filter is focused on open** — the "type to search all N tasks"
+  hint promised typing would work, but the filter field had no focus so nothing
+  happened. It's now focused when the popover opens (and the hint only shows
+  while the filter has focus). `PopoverView`.
+
 ## 2026-06-25
 
 - [x] **Pin editor hamburger: Components + Expression (#11)** — the boolean

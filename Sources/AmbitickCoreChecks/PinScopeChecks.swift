@@ -57,6 +57,33 @@ func pinScopeChecks(_ c: Checks) {
         try expect(!pin.matches(ActivitySignal(app: "Terminal", windowTitle: "a", timestamp: now)))
     }
 
+    c.check("a window-name app pin survives the title's leading text changing") {
+        // The bug: a Ghostty window pinned by name ("electroPioreactor") stopped
+        // matching once the terminal prepended its mode to the title, so it fell
+        // back to a broader attribution. App pins now match on PRESENCE.
+        let pin = PinScope(kind: .app, prefix: ["Ghostty", "electroPioreactor"])
+        func g(_ t: String) -> ActivitySignal {
+            ActivitySignal(app: "Ghostty", windowTitle: t, timestamp: now)
+        }
+        try expect(pin.matches(g("electroPioreactor")), "name alone")
+        try expect(pin.matches(g("nvim — electroPioreactor")), "editor prepended")
+        try expect(pin.matches(g("electroPioreactor — fish")), "shell appended")
+        try expect(pin.matches(g("~/code — electroPioreactor — vim")), "name in the middle")
+        try expect(!pin.matches(g("nvim — somethingElse")), "a different window does NOT match")
+        try expect(!pin.matches(ActivitySignal(app: "Terminal", windowTitle: "electroPioreactor",
+                                               timestamp: now)), "wrong app does not match")
+    }
+
+    c.check("a more-specific app pin still requires all its segments present") {
+        let pin = PinScope(kind: .app, prefix: ["Code", "Attributor.swift", "ambitick"])
+        func c2(_ t: String) -> ActivitySignal {
+            ActivitySignal(app: "Code", windowTitle: t, timestamp: now)
+        }
+        try expect(pin.matches(c2("Attributor.swift — ambitick")))
+        try expect(pin.matches(c2("ambitick — Attributor.swift — zsh")), "order-independent")
+        try expect(!pin.matches(c2("Attributor.swift — other")), "missing 'ambitick'")
+    }
+
     c.check("a url pin never matches a native app and vice-versa") {
         let urlPin = PinScope(kind: .url, prefix: ["github.com"])
         try expect(!urlPin.matches(ActivitySignal(app: "github.com", windowTitle: "x", timestamp: now)))
