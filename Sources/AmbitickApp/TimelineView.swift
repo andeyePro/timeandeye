@@ -119,9 +119,15 @@ struct TimelineView: View {
         // bar, which re-renders the editor subtree and steals focus from the
         // h:mm field you just clicked — the intermittent "it didn't go blue, so
         // I couldn't tell I could type" bug. Pause the tick during an edit.
-        .onReceive(timer) { _ in if editing == nil { refreshTick += 1 } }
+        .onReceive(timer) { _ in if editing == nil { refreshTick += 1; reloadSessions() } }
+        // Cache invalidation: viewport moved out of the loaded range, or the
+        // journal mutated (revision bumps on every edit, even same-duration).
+        .onChange(of: viewStart) { _, _ in reloadIfNeeded() }
+        .onChange(of: viewSpan) { _, _ in reloadIfNeeded() }
+        .onChange(of: controller.journalRevision) { _, _ in reloadSessions() }
         .onAppear {
             zoomToLatestBlock()
+            reloadSessions()
             installScrollPan()
         }
         .onDisappear {
@@ -132,23 +138,42 @@ struct TimelineView: View {
 
     // MARK: - Data
 
+    /// Cached journal fetch for the (padded) visible window. Reading the journal
+    /// is a SQLite query + JSON decode; `sessions` is read many times per body
+    /// eval AND inside every gesture .onChanged (and a mouse-move retriggers
+    /// body via cursorX), so a computed re-fetch ran SQLite per frame. The cache
+    /// is refreshed only when the viewport leaves the loaded range, on the timer
+    /// tick, or when the journal actually mutates (controller.journalRevision).
+    @State private var cachedSessions: [Session] = []
+    @State private var cachedRange: ClosedRange<Date>?
+
     private var sessions: [Session] {
-        _ = refreshTick
-        // Fetch the visible window, padded a quarter-span each side so slices at
-        // the edges render whole and a pan stays smooth. Range-based, so it
-        // spans midnight without per-day bucketing.
-        var list = controller.timelineSessions(from: viewStart.addingTimeInterval(-viewSpan * 0.25),
-                                                to: viewEnd.addingTimeInterval(viewSpan * 0.25))
+        var list = cachedSessions
         // While editing an existing slice, the bar reflects the editor's live
-        // values — so a handle drag (which updates editStart/editEnd) moves the
-        // slice AND the numbers below in lock-step, and Save commits exactly
-        // what is shown.
+        // values — applied to the CACHE in memory (cheap), so a handle drag
+        // moves the slice and the numbers below in lock-step with no re-query.
         if let editing, !isNewEditing,
            let i = list.firstIndex(where: { $0.id == editing.id }) {
             list[i].start = editStart
             list[i].end = editEnd
         }
         return list
+    }
+
+    /// Fetch the visible window padded a full span each side, so panning within
+    /// the buffer needs no re-query. Range-based, so it spans midnight.
+    private func reloadSessions() {
+        let from = viewStart.addingTimeInterval(-viewSpan)
+        let to = viewEnd.addingTimeInterval(viewSpan)
+        cachedSessions = controller.timelineSessions(from: from, to: to)
+        cachedRange = from...to
+    }
+
+    /// Re-fetch only when the viewport has moved outside the loaded range (a
+    /// cheap range check on the frames where it hasn't).
+    private func reloadIfNeeded() {
+        if let r = cachedRange, r.lowerBound <= viewStart, viewEnd <= r.upperBound { return }
+        reloadSessions()
     }
 
     private var viewEnd: Date { viewStart.addingTimeInterval(viewSpan) }

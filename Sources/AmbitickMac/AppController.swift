@@ -841,12 +841,18 @@ public final class AppController: ObservableObject {
         updateJournalSummary()
     }
 
+    /// Bumped on every journal mutation (this is called on all of them), so a
+    /// view can invalidate a cached journal read without polling — even when the
+    /// summary STRING is unchanged (e.g. a same-duration reassign).
+    @Published public private(set) var journalRevision = 0
+
     private func updateJournalSummary() {
         let all = ((try? journal.allSessions()) ?? []).filter { $0.id != Self.liveCheckpointID }
         let awaiting = (try? journal.sessions(
             needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
         let pushed = all.filter(\.pushedToOP).count
         journalSummary = "\(all.count) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
+        journalRevision &+= 1
     }
 
     // MARK: - Undo
