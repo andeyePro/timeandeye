@@ -148,7 +148,7 @@ func taskRankerChecks(_ c: Checks) {
         try expectEq(mine.ranked([tracked, myOpen], at: now).first?.subject, "claudes")
     }
 
-    c.check("pick list is recent then likely, no duplicates") {
+    c.check("pick list is recent first, then everything ranked, no duplicates") {
         let tasks = [
             task(1, "recent1", "Open", confirmedDaysAgo: 0.1),
             task(2, "recent2", "Closed", confirmedDaysAgo: 0.2),
@@ -156,7 +156,9 @@ func taskRankerChecks(_ c: Checks) {
             task(4, "likelyNext", "Next"),
             task(5, "tail", "Closed"),
         ]
-        let picks = ranker.pickList(tasks, at: now, recentCount: 2, likelyCount: 2)
-        try expectEq(picks.map(\.subject), ["recent1", "recent2", "likelyNow", "likelyNext"])
+        // No caps now: recently-confirmed first (most recent first), then the
+        // rest in ranked order — the whole scrollable list.
+        let picks = ranker.recentThenRanked(tasks, at: now)
+        try expectEq(picks.map(\.subject), ["recent1", "recent2", "likelyNow", "likelyNext", "tail"])
     }
 }

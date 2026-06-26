@@ -399,8 +399,6 @@ func settingsChecks(_ c: Checks) {
         let s = AmbitickSettings(opBaseURL: "https://op.example.com")
         try expectEq(s.certaintyAutoPushThreshold, 0.8)
         try expectEq(s.statusOrder, ["Now", "Next", "Open", "Closed"])
-        try expectEq(s.recentCount, 5)
-        try expectEq(s.likelyCount, 5)
         try expect(!s.showPercent)
         try expect(!s.autoComment, "auto comments are opt-in (Martin: window details are noise)")
         try expect(!s.trackLeisureLocally)

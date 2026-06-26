@@ -155,12 +155,6 @@ struct SettingsView: View {
                        isOn: $controller.settings.lockOnLeave)
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
-                Stepper("Recent tasks in popover: \(controller.settings.recentCount)",
-                        value: $controller.settings.recentCount, in: 1...15)
-                Stepper("Likely tasks in popover: \(controller.settings.likelyCount)",
-                        value: $controller.settings.likelyCount, in: 1...15)
-                Text("The menu-bar list shows this many recent + likely tasks; type in its filter to fuzzy-search the rest.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("About") {

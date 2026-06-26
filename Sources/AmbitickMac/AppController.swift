@@ -629,23 +629,13 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func pickList() -> [WorkTask] {
+    /// The popover / picker ordering: recently-confirmed tasks first (most
+    /// recent first), then everything else ranked. The whole list — it's
+    /// scrollable and filterable, so there's no recent/likely cap any more.
+    public func fullPickList() -> [WorkTask] {
         TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
                                          currentUser: connectedAs))
-            .pickList(taskCache, at: Date(), recentCount: settings.recentCount,
-                      likelyCount: settings.likelyCount, learning: attributor.learning)
-    }
-
-    /// Pick list first (N recent + M likely), then every remaining task in
-    /// ranked order — every list is scrollable to the full task set.
-    public func fullPickList() -> [WorkTask] {
-        let ranker = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
-                                                      currentUser: connectedAs))
-        let top = pickList()
-        let topRefs = Set(top.map(\.ref))
-        let rest = ranker.ranked(taskCache.filter { !topRefs.contains($0.ref) },
-                                 at: Date(), learning: attributor.learning)
-        return top + rest
+            .recentThenRanked(taskCache, at: Date(), learning: attributor.learning)
     }
 
     public func userPicked(_ task: WorkTask) {

@@ -26,8 +26,6 @@ struct PopoverView: View {
     @State private var pinMode: PinMode = .components
     @State private var pinExpression = ""
     @State private var pinExprError: String?
-    // Expand a (possibly long, truncated) parse error on tap.
-    @State private var pinErrorExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -191,13 +189,20 @@ struct PopoverView: View {
             } else {
                 expressionEditor
             }
-            HStack(spacing: 6) {
-                Text(pinHint)
+            // Parse errors get their OWN full-width, wrapping line — not crammed
+            // into the button row where they overlapped the icons.
+            if let err = pinExprError {
+                Text(err)
                     .font(.caption2)
-                    .foregroundStyle(pinExprError == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
-                    .lineLimit(pinErrorExpanded ? nil : 1)
-                    .help(pinExprError ?? "")
-                    .onTapGesture { if pinExprError != nil { pinErrorExpanded.toggle() } }
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            HStack(spacing: 6) {
+                Text(modeHint)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 Button { commitPinning() } label: { Image(systemName: "return") }
                     .buttonStyle(.plain).help("Pin (↵)")
@@ -249,10 +254,9 @@ struct PopoverView: View {
         .onAppear { pinFocused = true }
     }
 
-    /// The footer hint: the parse error if there is one, else mode help.
-    private var pinHint: String {
-        if let error = pinExprError { return error }
-        return pinMode == .components
+    /// Footer mode help (the parse error has its own line above).
+    private var modeHint: String {
+        pinMode == .components
             ? "← wider · → narrower · click a part"
             : "fields: app·title·url   ops: is·contains·starts with·matches   logic: and·or·not·( )"
     }
@@ -265,7 +269,7 @@ struct PopoverView: View {
             .font(.system(.callout, design: .monospaced))
             .focused($pinFocused)
             .onSubmit { commitPinning() }
-            .onChange(of: pinExpression) { _, _ in pinExprError = nil; pinErrorExpanded = false }
+            .onChange(of: pinExpression) { _, _ in pinExprError = nil }
             .onAppear { pinFocused = true }
     }
 

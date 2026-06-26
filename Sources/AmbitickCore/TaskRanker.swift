@@ -55,18 +55,19 @@ public struct TaskRanker: Sendable {
         tasks.sorted { score($0, at: now, learning: learning) > score($1, at: now, learning: learning) }
     }
 
-    /// Every "pick a task" surface: N most recently confirmed, then M most
-    /// likely of the rest. No duplicates.
-    public func pickList(_ tasks: [WorkTask], at now: Date, recentCount: Int,
-                         likelyCount: Int, learning: LearningStore? = nil) -> [WorkTask] {
+    /// The "pick a task" ordering: every recently-confirmed task first (most
+    /// recent first), then everything else in ranked order. No duplicates, no
+    /// caps — the popover shows the whole scrollable list, so a fixed
+    /// recent/likely count is no longer meaningful; recency-first is the only
+    /// guarantee worth keeping (your just-used task sits at the top).
+    public func recentThenRanked(_ tasks: [WorkTask], at now: Date,
+                                 learning: LearningStore? = nil) -> [WorkTask] {
         let recent = tasks
             .compactMap { t in t.lastConfirmedAt.map { (t, $0) } }
             .sorted { $0.1 > $1.1 }
-            .prefix(recentCount)
             .map(\.0)
         let taken = Set(recent.map(\.ref))
-        let likely = ranked(tasks.filter { !taken.contains($0.ref) }, at: now, learning: learning)
-            .prefix(likelyCount)
-        return recent + Array(likely)
+        let rest = ranked(tasks.filter { !taken.contains($0.ref) }, at: now, learning: learning)
+        return recent + rest
     }
 }

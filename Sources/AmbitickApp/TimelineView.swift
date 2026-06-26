@@ -393,7 +393,7 @@ struct TimelineView: View {
     }
 
     private func makeDraft(start: Date, end: Date) -> Session {
-        let likely = controller.pickList().first?.ref ?? .op(0)
+        let likely = controller.fullPickList().first?.ref ?? .op(0)
         return Session(task: likely, start: start, end: end, certainty: 1.0,
                        comment: nil)
     }

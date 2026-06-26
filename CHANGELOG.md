@@ -2,6 +2,16 @@
 
 ## 2026-06-26
 
+- [x] **Removed the redundant "Recent/Likely tasks in popover" counts (#4)** —
+  the popover now shows the whole task list (recency-first, then ranked,
+  scrollable + filterable), so a fixed recent/likely cap was meaningless. Dropped
+  both Settings, the `AmbitickSettings` fields, and `TaskRanker.pickList`'s
+  count parameters; the ordering is now `TaskRanker.recentThenRanked` (recently-
+  confirmed first, then everything ranked, no caps). Old settings JSON with the
+  keys still decodes (the keys are just ignored).
+- [x] **Pin parse errors are now legible** — the earlier tap-to-expand showed
+  the error inside the cramped button row, overlapping the icons. The error now
+  has its own full-width wrapping line above the buttons (selectable). `PopoverView`.
 - [x] **Window-name pins survive title volatility (#2 follow-up)** — a Ghostty
   window pinned by name ("electroPioreactor" → AEP-design) tracked as the wrong
   task because `PinScope.matches()` was a strict POSITIONAL prefix match, and a

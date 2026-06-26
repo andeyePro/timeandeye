@@ -40,8 +40,6 @@ public extension TaskRef {
 /// macOS Keychain. Persist via JSONFileStore.
 public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var opBaseURL: String
-    public var recentCount: Int
-    public var likelyCount: Int
     /// Sessions at/above this certainty auto-push to OP. > 1.0 means never.
     public var certaintyAutoPushThreshold: Double
     public var colourLow: String      // hex; certainty 0 end of the gradient
@@ -79,8 +77,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var taskColours: [String: String]
 
     public init(opBaseURL: String,
-                recentCount: Int = 5,
-                likelyCount: Int = 5,
                 certaintyAutoPushThreshold: Double = 0.8,
                 colourLow: String = "#FF3B30",
                 colourHigh: String = "#34C759",
@@ -105,8 +101,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:]) {
         self.opBaseURL = opBaseURL
-        self.recentCount = recentCount
-        self.likelyCount = likelyCount
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
         self.colourHigh = colourHigh
@@ -138,8 +132,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = AmbitickSettings(opBaseURL: "")
         opBaseURL = try c.decodeIfPresent(String.self, forKey: .opBaseURL) ?? defaults.opBaseURL
-        recentCount = try c.decodeIfPresent(Int.self, forKey: .recentCount) ?? defaults.recentCount
-        likelyCount = try c.decodeIfPresent(Int.self, forKey: .likelyCount) ?? defaults.likelyCount
         certaintyAutoPushThreshold = try c.decodeIfPresent(Double.self, forKey: .certaintyAutoPushThreshold) ?? defaults.certaintyAutoPushThreshold
         colourLow = try c.decodeIfPresent(String.self, forKey: .colourLow) ?? defaults.colourLow
         colourHigh = try c.decodeIfPresent(String.self, forKey: .colourHigh) ?? defaults.colourHigh
