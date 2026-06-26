@@ -767,8 +767,9 @@ public final class AppController: ObservableObject {
         visitSolid = true
         updateJournalSummary()
         refreshTitle(force: true)
-        let dayStart = Calendar.current.startOfDay(for: now)
-        return ((try? journal.sessions(from: dayStart, to: now)) ?? [])
+        // Search from the live slice's own start (not the calendar day) so a
+        // slice that began before midnight is still found.
+        return ((try? journal.sessions(from: from.addingTimeInterval(-2), to: now)) ?? [])
             .filter { $0.task == ref && $0.id != Self.liveCheckpointID }
             .max(by: { $0.end < $1.end })
     }
@@ -1066,10 +1067,12 @@ public final class AppController: ObservableObject {
         refreshTitle(force: true)
     }
 
-    /// The most recently tracked task today — the obvious resume candidate.
+    /// The most recently tracked task — the obvious resume candidate. Looks back
+    /// 36 h, not just "today", so just after midnight the candidate is still the
+    /// task you were on at 23:50 rather than nothing.
     public func lastTrackedTask() -> WorkTask? {
-        let dayStart = Calendar.current.startOfDay(for: Date())
-        guard let last = ((try? journal.sessions(from: dayStart, to: Date())) ?? [])
+        let lookback = Date().addingTimeInterval(-36 * 3600)
+        guard let last = ((try? journal.sessions(from: lookback, to: Date())) ?? [])
             .filter({ $0.id != Self.liveCheckpointID }).last else {
             return nil
         }
@@ -1275,10 +1278,12 @@ public final class AppController: ObservableObject {
         guard !coalescing else { return }
         coalescing = true
         defer { coalescing = false }
-        let cal = Calendar.current
-        let dayStart = cal.startOfDay(for: date)
-        let dayEnd = dayStart.addingTimeInterval(86_400)
-        let original = ((try? journal.sessions(from: dayStart, to: dayEnd)) ?? [])
+        // A window AROUND the edit point, not the calendar day — so two same-
+        // task slices straddling midnight (23:50–00:20) still fold into one.
+        // Bounded (±12 h) so it never becomes a full-history scan.
+        let from = date.addingTimeInterval(-12 * 3600)
+        let to = date.addingTimeInterval(12 * 3600)
+        let original = ((try? journal.sessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }   // never fold the crash-safety row
         let merged = TimelineMath.mergeAdjacent(original)
         guard merged.count != original.count else { return }
