@@ -2,6 +2,24 @@
 
 ## 2026-06-26
 
+- [x] **Optimisation programme — passes 1–3** (Programme Manager + per-domain
+  Project Managers analysed Ambitick; deep-review pending a credit reset). Done:
+  - **perf:** added the missing `sessions(start)` index; `sessions(from:to:)`
+    now bounds both sides in SQL via a new `end` column (was: decode every row
+    before `to`, filter in Swift); hoisted per-push `ISO8601DateFormatter`;
+    de-duplicated the triplicated dominant-span idiom into `dominantSpan(of:)`.
+  - **fix (cross-midnight #8 follow-up):** `coalesceAdjacent`, `commitLiveSlice`
+    and `lastTrackedTask` still bucketed by calendar day, so same-task slices
+    straddling midnight didn't merge, a pre-midnight live slice wasn't found on
+    commit, and the post-midnight resume candidate was empty. Now window-around-
+    the-edit / live-slice-start / 36h-lookback respectively.
+  - **perf:** `TimelineView` cached its journal fetch (`@State` + a
+    `journalRevision` mutation signal) instead of running a SQLite query + JSON
+    decode on every `sessions` access — it was re-querying inside gesture
+    `.onChanged` closures and on every mouse-move.
+  - Remaining backlog captured in TODO.md (gesture robustness, menu/banked-clock,
+    attribution deep pass, crash-safety, OP write path, test extraction, dead
+    code, backend seam).
 - [x] **Removed the redundant "Recent/Likely tasks in popover" counts (#4)** —
   the popover now shows the whole task list (recency-first, then ranked,
   scrollable + filterable), so a fixed recent/likely cap was meaningless. Dropped

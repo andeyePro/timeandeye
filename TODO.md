@@ -1,5 +1,48 @@
 # TODO
 
+## Optimisation backlog (programme review 2026-06-26)
+
+A Programme-Manager + per-domain Project-Manager pass produced this. Three
+passes already DONE (see CHANGELOG 2026-06-26): sessions index + bounded query,
+cross-midnight controller fixes, TimelineView sessions cache. The deep-review
+consolidation and two PMs (backend-seam, crash-safety) didn't run (session
+credit limit) — resume the `ambitick-optimise` workflow after reset for the full
+consolidated plan. Remaining items, by domain:
+
+- [ ] Perf: `updateJournalSummary` decodes the WHOLE sessions table on every
+  mutation — add COUNT-based queries (`sessionCount`/`pushedCount` on the
+  JournalStore protocol) instead of `allSessions()`. Also: `applyTimelineEdit`/
+  create/delete call `allSessions()` just to find one row — add `session(id:)`.
+- [ ] Reliability: timeline gesture composition (draw vs gap-tap vs pinch vs
+  per-slice tap vs edge-handle drag) — audit SwiftUI precedence; the scroll-pan
+  NSEvent monitor gates on `keyWindow.title.contains("Timeline")` (brittle,
+  localisation-fragile) — key off window identifier instead; confirm the global
+  monitor can't leak/double-install.
+- [ ] Perf/correctness: menu cadence + banked-clock — the 1Hz titleTimer runs
+  forever though MenuTitle only needs sub-minute refresh in the first minute;
+  and the banked-clock under-counts during heavy flitting (CHANGELOG 2026-06-24
+  follow-up) — mirror the now-correct journal grace logic.
+- [ ] Correctness (Core): attribution deep pass — confirm the grace floor +
+  sliceFloor compose so a genuinely-short first/last slice survives; verify
+  duration-weighted certainty; pin specificity compares `prefix.count` vs
+  `Predicate.leafCount` across rule kinds (not obviously commensurable); regex
+  PinOp compiles NSRegularExpression per `test()` call, unanchored — cache it.
+- [ ] Reliability: crash-safe checkpoint + SQLite serialization audit — 60s
+  checkpoint loses up to ~60s on a hard crash (also checkpoint on task switch?);
+  verify every db access goes through the lock; signal-handler DebugLog.write is
+  not async-signal-safe.
+- [ ] OP write path: prove no path double-creates a time entry; failed-PATCH-
+  during-coalesce leaves OP stale (retry/reconcile); build the journal-driven
+  duplicate-entry cleanup (exact start+duration match, in-app maintenance).
+- [ ] Test coverage: extract the cross-midnight day-window selection + coalesce
+  logic out of AppController into Core/TimelineMath so it's unit-testable (it's
+  controller-only glue today); add the missing SessionTracker grace edge cases.
+- [ ] Dead code: WorkspaceLayout.swift (228 lines, dormant since the 2026-06-23
+  cut) — delete and recover from git when re-added, or mark clearly; gate the
+  per-launch legacy pins.json migration.
+- [ ] Architecture (large, design-only so far): backend seam
+  (`TaskBackend`/`TimeSink`) + standalone mode — see the dedicated item below.
+
 ## Open
 
 - [ ] Full keyboard/mouse parity sweep (retrospective) — every action reachable
@@ -49,11 +92,6 @@
   window but didn't, regenerate the AI prompt including the failing rule + that
   window's fields + a free-text complaint, so the model corrects it. Iterative
   refine on top of the one-shot AI pin flow. - 2026-06-24
-- [ ] Timeline free-pan across days: drop the single-day viewport clamp so a
-  block spanning midnight renders whole and the view scrolls continuously
-  across day boundaries (storage already spans midnight — it is the
-  `startOfDay`/`+86 400s` clamp in `TimelineView`). Geometry behind unit
-  tests; Martin render-checks. - 2026-06-22
 - [ ] Backend seam + standalone mode: extract a `TaskBackend`/`TimeSink`
   protocol, move OpenProject behind it in-process, and make "no backend" the
   null implementation so Ambitick runs standalone — local task list with CRUD,
@@ -82,10 +120,6 @@
 - [ ] iPhone-side call detection
 - [ ] Auto-comment as debugging aid is OFF by default now; revisit whether
   window summaries have any user value (Martin: prefers manual note only)
-- [ ] Timeline phase 2: draw-to-create slices (drag + snapping), edge-drag
-  handles that eat into neighbours, gap-click creates a gap-filling slice,
-  connected zoom strip (lines from slice edges to detail strip), user-editable
-  task colours, edit start time of the CURRENTLY tracked session
 - [ ] Attribution: a newly-created local task (e.g. Games) isn't auto-associated
   with its window, so its time files under the previous task until the user
   reassigns once (reassign now teaches the association, so it self-corrects
