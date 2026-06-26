@@ -935,6 +935,10 @@ public final class AppController: ObservableObject {
 
     public static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
 
+    /// One reusable ISO-8601 formatter for OP pushes — it was allocated per
+    /// push in several paths (allocating a formatter is not cheap).
+    private static let iso8601 = ISO8601DateFormatter()
+
     public func timelineSpans(for session: Session) -> [FocusSpan] {
         (try? journal.spans(from: session.start, to: session.end)) ?? []
     }
@@ -1139,7 +1143,7 @@ public final class AppController: ObservableObject {
                     duration: session.end.timeIntervalSince(session.start),
                     activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
                     comment: session.comment,
-                    startTime: ISO8601DateFormatter().string(from: session.start))
+                    startTime: Self.iso8601.string(from: session.start))
                 DebugLog.write("timeline edit pushed to OP entry \(entryID)")
             } catch {
                 lastError = "OP update failed: \(error)"
@@ -1150,13 +1154,17 @@ public final class AppController: ObservableObject {
         updateJournalSummary()
     }
 
+    /// The longest focus span inside a session — the surface that dominated it,
+    /// for teaching a durable window→task (or →don't-track) association.
+    private func dominantSpan(of session: Session) -> FocusSpan? {
+        ((try? journal.spans(from: session.start, to: session.end)) ?? [])
+            .max { $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start) }
+    }
+
     /// Teach the attributor the dominant surface→task association inside a
     /// reassigned session, so future time on that window stops mis-filing.
     private func teachAssociation(for session: Session) {
-        let spans = (try? journal.spans(from: session.start, to: session.end)) ?? []
-        guard let dominant = spans.max(by: {
-            $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
-        }) else { return }
+        guard let dominant = dominantSpan(of: session) else { return }
         attributor.assign(dominant.signal, target: .task(session.task))
         persistAssociations()
     }
@@ -1166,10 +1174,7 @@ public final class AppController: ObservableObject {
     /// non-work so similar time stops auto-tracking. Undo restores the slice.
     /// Used to undo e.g. an away stretch you didn't actually work.
     public func markSessionDoNotTrack(_ session: Session) async {
-        let spans = (try? journal.spans(from: session.start, to: session.end)) ?? []
-        if let dominant = spans.max(by: {
-            $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
-        }) {
+        if let dominant = dominantSpan(of: session) {
             attributor.assign(dominant.signal, target: .doNotTrack)
             persistAssociations()
         }
@@ -1297,7 +1302,7 @@ public final class AppController: ObservableObject {
                         duration: survivor.end.timeIntervalSince(survivor.start),
                         activityID: settings.activityOverrides[survivor.task] ?? settings.defaultActivityID,
                         comment: survivor.comment,
-                        startTime: ISO8601DateFormatter().string(from: survivor.start))
+                        startTime: Self.iso8601.string(from: survivor.start))
                     survivor.pushedToOP = true   // updated in place; don't re-create
                     DebugLog.write("coalesce patched OP entry \(entryID)")
                 } catch {

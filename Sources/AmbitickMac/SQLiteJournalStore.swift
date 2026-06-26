@@ -50,7 +50,14 @@ public final class SQLiteJournalStore: JournalStore {
             json TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS spans_start ON spans(start);
+        CREATE INDEX IF NOT EXISTS sessions_start ON sessions(start);
         """)
+        // `end` is a queryable column so sessions(from:to:) can bound BOTH sides
+        // in SQL instead of decoding every row before `to` and filtering in
+        // Swift. ADD COLUMN has no IF NOT EXISTS, so tolerate the duplicate on
+        // an already-migrated db, then backfill any rows written before it.
+        try? exec("ALTER TABLE sessions ADD COLUMN end REAL NOT NULL DEFAULT 0")
+        try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
         try exec("DELETE FROM spans WHERE start < \(Date().addingTimeInterval(-30 * 86_400).timeIntervalSince1970)")
@@ -105,17 +112,18 @@ public final class SQLiteJournalStore: JournalStore {
             var isOP = 0
             if case .op = session.task { isOP = 1 }
             var stmt: OpaquePointer?
-            let sql = "INSERT OR REPLACE INTO sessions (id, start, certainty, pushed, is_op, json) VALUES (?,?,?,?,?,?)"
+            let sql = "INSERT OR REPLACE INTO sessions (id, start, end, certainty, pushed, is_op, json) VALUES (?,?,?,?,?,?,?)"
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
             defer { sqlite3_finalize(stmt) }
             sqlite3_bind_text(stmt, 1, session.id.uuidString, -1, Self.transient)
             sqlite3_bind_double(stmt, 2, session.start.timeIntervalSince1970)
-            sqlite3_bind_double(stmt, 3, session.certainty)
-            sqlite3_bind_int(stmt, 4, session.pushedToOP ? 1 : 0)
-            sqlite3_bind_int(stmt, 5, Int32(isOP))
-            sqlite3_bind_text(stmt, 6, jsonString, -1, Self.transient)
+            sqlite3_bind_double(stmt, 3, session.end.timeIntervalSince1970)
+            sqlite3_bind_double(stmt, 4, session.certainty)
+            sqlite3_bind_int(stmt, 5, session.pushedToOP ? 1 : 0)
+            sqlite3_bind_int(stmt, 6, Int32(isOP))
+            sqlite3_bind_text(stmt, 7, jsonString, -1, Self.transient)
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
@@ -153,11 +161,27 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func sessions(from: Date, to: Date) throws -> [Session] {
         var out: [Session] = []
-        try query("SELECT json FROM sessions WHERE start < ? ORDER BY start",
-                  bind: { sqlite3_bind_double($0, 1, to.timeIntervalSince1970) }) { stmt in
+        // Bounds BOTH sides in SQL (was: start < to, then a Swift end > from
+        // filter that still decoded every row before `to`).
+        try query("SELECT json FROM sessions WHERE start < ? AND end > ? ORDER BY start",
+                  bind: {
+                      sqlite3_bind_double($0, 1, to.timeIntervalSince1970)
+                      sqlite3_bind_double($0, 2, from.timeIntervalSince1970)
+                  }) { stmt in
             out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
         }
-        return out.filter { $0.end > from }
+        return out
+    }
+
+    /// Populate `end` for rows written before that column existed (end == 0 is
+    /// impossible for a real post-1970 date, so it reliably marks unmigrated
+    /// rows). One-time, on the first launch after the column is added.
+    private func backfillSessionEnds() throws {
+        var stale: [Session] = []
+        try query("SELECT json FROM sessions WHERE end = 0") { stmt in
+            stale.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
+        }
+        for session in stale { try save(session) }   // save() now writes `end`
     }
 
     public func update(_ session: Session) throws {
