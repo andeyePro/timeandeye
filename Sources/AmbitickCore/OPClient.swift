@@ -191,6 +191,97 @@ public final class OPClient {
         _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "DELETE"))
     }
 
+    /// PATCH only the comment (used by the duplicate-reconcile, which folds the
+    /// deleted entries' comments into the survivor without touching its times).
+    public func updateTimeEntryComment(id: Int, comment: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["comment": ["raw": comment]])
+        _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "PATCH", body: body))
+    }
+
+    private struct TEPage: Decodable {
+        struct Embedded: Decodable { let elements: [TEElement] }
+        let total: Int
+        let count: Int
+        let _embedded: Embedded
+    }
+    private struct TEElement: Decodable {
+        struct Links: Decodable { struct Href: Decodable { let href: String? }; let workPackage: Href? }
+        struct Comment: Decodable { let raw: String? }
+        let id: Int
+        let hours: String?
+        let spentOn: String?
+        let startTime: String?
+        let comment: Comment?
+        let _links: Links
+    }
+
+    /// Read back the current user's time entries spent in [from, to] — the input
+    /// to the duplicate-entry reconcile (the MCP exposes neither start times nor
+    /// a delete verb, so this has to come straight from the API).
+    public func listTimeEntries(from: Date, to: Date, pageSize: Int = 200) async throws -> [OPTimeEntry] {
+        let fromDay = Self.dayFormatter.string(from: from)
+        let toDay = Self.dayFormatter.string(from: to)
+        let filters = "[{\"spentOn\":{\"operator\":\"<>d\",\"values\":[\"\(fromDay)\",\"\(toDay)\"]}},"
+            + "{\"user\":{\"operator\":\"=\",\"values\":[\"me\"]}}]"
+        var out: [OPTimeEntry] = []
+        var fetched = 0
+        var page = 1
+        while true {
+            let data = try await send(request(
+                path: "api/v3/time_entries",
+                query: [URLQueryItem(name: "pageSize", value: String(pageSize)),
+                        URLQueryItem(name: "offset", value: String(page)),
+                        URLQueryItem(name: "filters", value: filters)]))
+            let decoded = try decode(TEPage.self, from: data)
+            fetched += decoded.count
+            out += decoded._embedded.elements.compactMap(Self.parse)
+            page += 1
+            if fetched >= decoded.total || decoded.count == 0 { break }
+        }
+        return out
+    }
+
+    private static func parse(_ e: TEElement) -> OPTimeEntry? {
+        guard let href = e._links.workPackage?.href,
+              let wp = Int(href.split(separator: "/").last.map(String.init) ?? ""),
+              let spentOn = e.spentOn else { return nil }
+        return OPTimeEntry(id: e.id, workPackageID: wp,
+                           start: startDate(spentOn: spentOn, startTime: e.startTime),
+                           durationSeconds: parseISO8601Duration(e.hours ?? ""),
+                           comment: e.comment?.raw)
+    }
+
+    /// Combine OP's `spentOn` (local day) + `startTime` (HH:MM) into an instant,
+    /// in the user's timezone (matching how entries are written). No startTime →
+    /// local midnight of that day.
+    static func startDate(spentOn: String, startTime: String?) -> Date {
+        let hm = startTime.map { String($0.prefix(5)) } ?? "00:00"
+        return dateTimeFormatter.date(from: "\(spentOn) \(hm)")
+            ?? dayFormatter.date(from: spentOn) ?? Date()
+    }
+
+    /// Parse an OP `hours` value ("PT1H30M", "PT45M", "PT2H") to seconds — the
+    /// inverse of `iso8601Duration`.
+    static func parseISO8601Duration(_ s: String) -> TimeInterval {
+        guard s.hasPrefix("PT") else { return 0 }
+        var hours = 0, minutes = 0, num = ""
+        for ch in s.dropFirst(2) {
+            if ch.isNumber { num.append(ch) }
+            else if ch == "H" { hours = Int(num) ?? 0; num = "" }
+            else if ch == "M" { minutes = Int(num) ?? 0; num = "" }
+            else { num = "" }
+        }
+        return TimeInterval(hours * 3600 + minutes * 60)
+    }
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        f.timeZone = .current
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
     private static func timeEntryPayload(workPackageID: Int, start: Date,
                                          duration: TimeInterval, activityID: Int?,
                                          comment: String?, startTime: String?) throws -> Data {

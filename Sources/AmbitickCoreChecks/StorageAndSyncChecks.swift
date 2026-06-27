@@ -178,6 +178,28 @@ func opClientChecks(_ c: Checks) async {
         try expect(transport.requests[0].url!.path.hasSuffix("/api/v3/time_entries/form"))
     }
 
+    await c.check("listTimeEntries parses id, work package, duration and comment") {
+        let transport = MockTransport()
+        transport.responses = [(200, """
+        {"total": 2, "count": 2, "_embedded": {"elements": [
+          {"id": 11, "hours": "PT1H30M", "spentOn": "2026-06-20", "startTime": "09:15",
+           "comment": {"raw": "work"}, "_links": {"workPackage": {"href": "/api/v3/work_packages/42"}}},
+          {"id": 12, "hours": "PT0H45M", "spentOn": "2026-06-20", "startTime": "09:15",
+           "comment": {"raw": null}, "_links": {"workPackage": {"href": "/api/v3/work_packages/42"}}}
+        ]}}
+        """)]
+        let entries = try await makeClient(transport)
+            .listTimeEntries(from: Date(timeIntervalSince1970: 1_750_000_000),
+                             to: Date(timeIntervalSince1970: 1_760_000_000))
+        try expectEq(entries.count, 2)
+        try expectEq(entries[0].id, 11)
+        try expectEq(entries[0].workPackageID, 42)
+        try expectEq(entries[0].durationSeconds, 5400)
+        try expectEq(entries[0].comment, "work")
+        try expectNil(entries[1].comment)
+        try expect(transport.requests[0].url!.path.hasSuffix("/api/v3/time_entries"))
+    }
+
     await c.check("createTimeEntry body") {
         let transport = MockTransport()
         transport.responses = [(201, "{}")]
