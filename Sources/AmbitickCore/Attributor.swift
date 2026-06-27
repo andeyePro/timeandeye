@@ -149,7 +149,11 @@ public final class Attributor {
         return candidates.max { a, b in
             let (pa, pb) = (a.element.priority ?? 0, b.element.priority ?? 0)
             if pa != pb { return pa < pb }
-            if a.element.rule.specificity != b.element.rule.specificity {
+            // Specificity only breaks ties between LIKE kinds — prefix.count and
+            // leafCount aren't commensurable. Across kinds, fall through to
+            // recency rather than pretending one is "more specific".
+            if a.element.rule.sameKind(as: b.element.rule),
+               a.element.rule.specificity != b.element.rule.specificity {
                 return a.element.rule.specificity < b.element.rule.specificity
             }
             return a.offset < b.offset   // later in the array = more recent

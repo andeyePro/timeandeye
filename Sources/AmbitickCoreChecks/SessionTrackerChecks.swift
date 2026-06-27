@@ -354,6 +354,30 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[0].end, t(240))
     }
 
+    c.check("a 61-120s started slice survives a Switch Buffer above 60s (not dropped)") {
+        // Keystone: SettingsView allows the buffer up to 120s. A slice the user
+        // deliberately started that runs 65s then is switched off is WORK; the
+        // old flush floor (== buffer) silently dropped it for buffer>60.
+        var config = TrackerConfig()
+        config.switchGraceSeconds = 90
+        let (tracker, attributor) = makeTracker(config: config)
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 65)))   // switch away at 65 s
+        tracker.handle(.input(t(160)))   // B held 95 s > sliceFloor(90) → commits, flushes A[0,65]
+        tracker.stop(at: t(220))
+
+        let a = sessions.first { $0.task == .op(1) }
+        try expect(a != nil, "the 65 s started slice is work, not a dropped flit")
+        try expectEq(a?.start, t(0))
+        try expectEq(a?.end, t(65))
+    }
+
     c.check("display follows the window instantly even while the switch is provisional") {
         let (tracker, attributor) = makeTracker()
         var states: [TrackerState] = []

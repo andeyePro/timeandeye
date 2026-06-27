@@ -23,8 +23,17 @@ public enum PinOp: String, Codable, Sendable, CaseIterable {
         switch self {
         case .equals:     return field.caseInsensitiveCompare(value) == .orderedSame
         case .contains:   return field.range(of: value, options: .caseInsensitive) != nil
-        case .startsWith: return field.hasPrefix(value)
+        case .startsWith:
+            // Case-insensitive, to match `equals`/`contains` above — the typed
+            // expression editor offers "starts with" as their peer, so a
+            // case-sensitive odd-one-out is a surprise. Empty prefix matches all
+            // (as hasPrefix did).
+            return value.isEmpty
+                || field.range(of: value, options: [.caseInsensitive, .anchored]) != nil
         case .regex:
+            // UNANCHORED — a contains-pattern (firstMatch anywhere). Use ^…$ in
+            // the pattern for a whole-string match. Compiled per call, but
+            // .focus events fire at human focus-change cadence, so no cache.
             guard let re = try? NSRegularExpression(pattern: value) else { return false }
             return re.firstMatch(in: field, range: NSRange(field.startIndex..., in: field)) != nil
         }
@@ -92,10 +101,22 @@ public enum PinRule: Codable, Equatable, Sendable {
     }
 
     /// Higher = more specific; used to pick a winner when several pins match.
+    /// Only comparable WITHIN a kind — `prefix.count` and `leafCount` are not
+    /// commensurable (see `sameKind(as:)`).
     public var specificity: Int {
         switch self {
         case .components(let s): return s.prefix.count
         case .expression(let p): return p.leafCount
+        }
+    }
+
+    /// Same rule kind, so the two specificities mean the same thing. A 2-leaf
+    /// expression isn't "more specific" than a 3-segment component pin, so the
+    /// tiebreak only applies the specificity comparison within a kind.
+    public func sameKind(as other: PinRule) -> Bool {
+        switch (self, other) {
+        case (.components, .components), (.expression, .expression): return true
+        default: return false
         }
     }
 

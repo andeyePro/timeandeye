@@ -10,6 +10,8 @@ func predicateChecks(_ c: Checks) {
         try expect(PinOp.equals.test("Ghostty", "ghostty"), "equals is case-insensitive")
         try expect(PinOp.contains.test("Ambitick — vim", "ambitick"))
         try expect(PinOp.startsWith.test("Ambitick — vim", "Ambitick"))
+        try expect(PinOp.startsWith.test("Ambitick — vim", "ambitick"), "startsWith is case-insensitive, like equals/contains")
+        try expect(PinOp.startsWith.test("anything", ""), "empty prefix matches all (was hasPrefix)")
         try expect(!PinOp.startsWith.test("Ambitick — vim", "vim"))
         try expect(PinOp.regex.test("ambitick", "amb.?t"))
         try expect(!PinOp.regex.test("foo", "(unterminated"), "bad regex never matches, never throws")

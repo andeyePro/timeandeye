@@ -137,6 +137,23 @@ func attributorChecks(_ c: Checks) {
         try expect(miss.best?.target != .task(.op(2)) || miss.certainty < 1.0)
     }
 
+    c.check("a cross-kind pin tie resolves by recency, not incomparable specificity") {
+        // A 3-segment component pin and a 1-leaf expression both match. prefix.count
+        // (3) and leafCount (1) aren't commensurable, so the winner is the most
+        // recently added, not the numerically-"bigger" one.
+        let sig = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: now)
+        let comp = Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty", "Ambitick"])),
+                       task: .op(1))
+        let expr = Pin(rule: .expression(.leaf(field: .app, op: .equals, value: "Ghostty")),
+                       task: .op(2))
+        let a = Attributor(instanceHost: host)
+        a.upsert(comp); a.upsert(expr)                 // expression added last → wins
+        try expectEq(a.matchingPin(for: sig)?.task, .op(2))
+        let b = Attributor(instanceHost: host)
+        b.upsert(expr); b.upsert(comp)                 // component added last → flips
+        try expectEq(b.matchingPin(for: sig)?.task, .op(1))
+    }
+
     c.check("a manual priority overrides specificity") {
         let a = Attributor(instanceHost: host)
         a.upsert(Pin(rule: .components(PinScope(kind: .url, prefix: ["github.com", "aqueum"])),

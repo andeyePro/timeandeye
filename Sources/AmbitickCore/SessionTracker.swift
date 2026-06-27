@@ -573,7 +573,13 @@ public final class SessionTracker {
             // instant-commit pin switches that bypass grace). Kept at the buffer
             // (not the minute floor) so a genuinely-short first/last slice — the
             // task you started, then switched off 40 s later — is still kept.
-            guard run.end.timeIntervalSince(run.start) >= config.switchGraceSeconds else { continue }
+            // Floor the run at the buffer, but NEVER above one displayed minute:
+            // with a Switch Buffer set > 60s, a slice the user deliberately
+            // started that ran 61–120s and was then switched off is WORK, not a
+            // flit — dropping it (the old `>= switchGraceSeconds`) was silent
+            // data loss. Default buffer (30s) is unchanged: min(30,60)=30.
+            guard run.end.timeIntervalSince(run.start)
+                    >= min(config.switchGraceSeconds, 60) else { continue }
             // Duration-weighted certainty: a brief uncertain patch must not
             // sink a long confident session below the push threshold (min()
             // did exactly that and silently blocked OP pushes).
