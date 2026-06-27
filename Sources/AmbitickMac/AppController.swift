@@ -1015,6 +1015,17 @@ public final class AppController: ObservableObject {
         return TimeAggregator.byProject(sessions: sessions, tasks: taskCache, spans: spans)
     }
 
+    /// The journalled slices a live-start drag from `liveStart` back to
+    /// `newStart` spans (live/checkpoint rows excluded). The overlap WARNING and
+    /// the absorb TRIM BOTH derive from this one window, so what the user is
+    /// warned about always equals what actually gets trimmed — a calendar-day
+    /// anchor (used before) desynced the two when the drag crossed midnight.
+    /// Bounded by the drag distance, never a full-history scan.
+    private func liveEditContext(from newStart: Date, to liveStart: Date) -> [Session] {
+        ((try? journal.sessions(from: newStart.addingTimeInterval(-2), to: liveStart)) ?? [])
+            .filter { $0.id != Self.liveSessionID && $0.id != Self.liveCheckpointID }
+    }
+
     /// Different-task slices the live start would cross if dragged to
     /// `newStart` — what an absorb would trim/delete. The timeline shows these
     /// as a warning before the second Save confirms.
@@ -1022,10 +1033,8 @@ public final class AppController: ObservableObject {
         guard case .tracking(.task(let ref), _) = trackerState else { return [] }
         let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
         guard newStart < liveStart else { return [] }
-        let dayStart = Calendar.current.startOfDay(for: newStart)
-        return ((try? journal.sessions(from: dayStart, to: liveStart)) ?? [])
-            .filter { $0.id != Self.liveSessionID && $0.id != Self.liveCheckpointID
-                      && $0.task != ref && $0.end > newStart && $0.start < liveStart }
+        return liveEditContext(from: newStart, to: liveStart)
+            .filter { $0.task != ref && $0.end > newStart && $0.start < liveStart }
             .sorted { $0.start < $1.start }
     }
 
@@ -1038,9 +1047,9 @@ public final class AppController: ObservableObject {
     public func adjustLiveStart(to date: Date, absorbOtherTasks: Bool = false) async {
         guard case .tracking(.task(let ref), _) = trackerState else { return }
         let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
-        let dayStart = Calendar.current.startOfDay(for: min(date, Date()))
-        let context = ((try? journal.sessions(from: dayStart, to: Date())) ?? [])
-            .filter { $0.id != Self.liveSessionID && $0.id != Self.liveCheckpointID }
+        // Same window as the warning (liveStartConflicts) so warn-set == absorb-
+        // set even across midnight.
+        let context = liveEditContext(from: min(date, Date()), to: liveStart)
 
         let sameTask = context.filter {
             $0.task == ref && $0.start < liveStart
