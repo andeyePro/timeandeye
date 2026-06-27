@@ -15,6 +15,7 @@ struct SpentView: View {
     /// In-window navigation to the timeline (and the second-window escape hatch).
     let nav: TimeNav
     @State private var period: Period = .today
+    @State private var nodes: [TimeAggregator.Node] = []
     @State private var blockData: (sessions: [Session], start: Date, end: Date)?
     @State private var hover: Selection = .none
     @State private var pinned: Selection = .none
@@ -104,10 +105,27 @@ struct SpentView: View {
             }
         }
         .padding(12)
-        .onReceive(timer) { _ in refreshTick += 1; reloadBlock() }
+        .onReceive(timer) { _ in refreshTick += 1; reloadNodes(); reloadBlock() }
+        .onChange(of: period) { _, _ in reloadNodes() }
+        .onChange(of: opOnly) { _, _ in reloadNodes() }
+        .onChange(of: controller.journalRevision) { _, _ in reloadNodes(); reloadBlock() }
         .onAppear {
             controller.noteTimeViewOpened(.spent)
+            reloadNodes()
             reloadBlock()
+        }
+    }
+
+    /// Cached pie data. Was a computed property that ran a journal query +
+    /// aggregation on EVERY body eval, and the view re-renders every second (the
+    /// menu clock), so the pie re-queried the journal ~1Hz — the launch/idle slow.
+    private func reloadNodes() {
+        let (from, to) = period.range
+        let all = controller.spentNodes(from: from, to: to)
+        let filtered = opOnly ? all.filter { !isLocalProject($0) } : all
+        nodes = filtered.sorted { a, b in
+            if isLocalProject(a) != isLocalProject(b) { return !isLocalProject(a) }
+            return a.seconds > b.seconds
         }
     }
 
@@ -127,17 +145,6 @@ struct SpentView: View {
 
     // MARK: - Data
 
-    private var nodes: [TimeAggregator.Node] {
-        _ = refreshTick
-        let (from, to) = period.range
-        let all = controller.spentNodes(from: from, to: to)
-        let filtered = opOnly ? all.filter { !isLocalProject($0) } : all
-        // OP work first, then local/personal — the pie reads as two groups.
-        return filtered.sorted { a, b in
-            if isLocalProject(a) != isLocalProject(b) { return !isLocalProject(a) }
-            return a.seconds > b.seconds
-        }
-    }
 
     private func isLocalProject(_ node: TimeAggregator.Node) -> Bool {
         !node.children.isEmpty && node.children.allSatisfy { child in

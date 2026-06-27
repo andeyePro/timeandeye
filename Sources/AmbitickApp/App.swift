@@ -75,10 +75,18 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     private func apply(to view: NSView) {
         let windowID = windowID
         DispatchQueue.main.async { [weak view] in
-            view?.window?.collectionBehavior.insert(.moveToActiveSpace)
-            // A stable identity for code that needs to recognise this window
-            // (e.g. the timeline's scroll-pan monitor) without a title match.
-            if let windowID { view?.window?.identifier = NSUserInterfaceItemIdentifier(windowID) }
+            guard let w = view?.window else { return }
+            // Idempotent: updateNSView runs on every re-render (~1Hz from the
+            // menu clock), so only touch the window when something actually
+            // differs — no per-render churn.
+            if !w.collectionBehavior.contains(.moveToActiveSpace) {
+                w.collectionBehavior.insert(.moveToActiveSpace)
+            }
+            // A stable identity for code that recognises this window (the
+            // timeline scroll-pan monitor) without a title match.
+            if let windowID, w.identifier?.rawValue != windowID {
+                w.identifier = NSUserInterfaceItemIdentifier(windowID)
+            }
         }
     }
 }

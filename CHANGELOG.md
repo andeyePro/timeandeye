@@ -2,6 +2,14 @@
 
 ## 2026-06-27
 
+- [x] **Faster Time window + readable "why" panel** — the pie window was slow
+  because `SpentView.nodes` was a computed property running a journal query +
+  TimeAggregator pass on EVERY body render, and the view re-renders ~1Hz (the
+  menu clock), so it re-queried the journal about once a second. Now cached in
+  `@State`, refreshed only on appear / the 30s tick / journal mutation / period /
+  OP-only toggle. Also made the active-space window config idempotent (it re-ran
+  per render). The attribution "why" panel was clipped with no scroll — each
+  detail pane now scrolls vertically so the full explanation is reachable.
 - [x] **One Time window, two views in place + a second-window escape hatch** —
   the timeline and pie are no longer separate windows that swap; they're one
   "Time" window whose view flips in place when you click a preview. To see both

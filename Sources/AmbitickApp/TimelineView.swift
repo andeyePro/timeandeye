@@ -1093,17 +1093,22 @@ struct TimelineView: View {
         ScrollView(.horizontal, showsIndicators: true) {
             HStack(alignment: .top, spacing: 8) {
                 ForEach(idxs, id: \.self) { i in
-                    Text(detailText(spans[i]))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .padding(6)
-                        .frame(maxWidth: 360, alignment: .leading)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                    // Each pane scrolls VERTICALLY so the full "why" is reachable
+                    // (it was clipped by the fixed height with no scroll).
+                    ScrollView(.vertical, showsIndicators: true) {
+                        Text(detailText(spans[i]))
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .padding(6)
+                            .frame(maxWidth: 360, alignment: .leading)
+                    }
+                    .frame(width: 372)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
             .padding(.bottom, 2)
         }
-        .frame(maxHeight: 200)
+        .frame(maxHeight: 260)
     }
 
     private func detailText(_ span: FocusSpan) -> String {
