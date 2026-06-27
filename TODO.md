@@ -55,11 +55,12 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   data to chase the live mis-attribution bugs (tracking as Ambitick while on
   Chrome; the revert button offering a stale task — `revertTargetTask` returns
   `previousTask`, which can be wrong; now diagnosable via the explain panel).
-- [x] #5 — combined Timeline/Pie view: DONE (CHANGELOG 2026-06-27). Footer
-  launcher is itself a live today mini-pie; no switcher icon — clicking the
-  timeline's today-pie opens the pie, clicking a slice in the pie's current-block
-  mini-timeline opens the timeline framed on that exact slice; 3-way open Setting;
-  last-viewed persists. Possible polish: richer mini-pie (task rings).
+- [x] #5 — combined Timeline/Pie view: DONE (CHANGELOG 2026-06-27). Now ONE Time
+  window, views flipped in place by clicking a preview; ⌃/right-click a preview
+  opens the other view in a 2nd window. Footer launcher is a live today mini-pie;
+  3-way open Setting; last-viewed persists. User manual written (MANUAL.md).
+  Possible polish: richer mini-pie (task rings); only-one-monitor if two timeline
+  windows are open at once (currently two timelines would double-pan - uncommon).
 
 ## Open
 

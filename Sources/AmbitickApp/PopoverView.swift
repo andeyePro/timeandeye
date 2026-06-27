@@ -485,7 +485,8 @@ struct PopoverView: View {
             // whichever was viewed last (Settings ▸ Time view). Each window has
             // a switcher to the other in its top-right.
             Button {
-                openWindow(id: controller.timeViewToOpen())
+                controller.timeWindowView = controller.initialTimeView()
+                openWindow(id: "time")
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
                 if todayNodes.isEmpty {

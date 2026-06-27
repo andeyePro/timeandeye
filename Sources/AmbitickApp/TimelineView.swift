@@ -51,8 +51,8 @@ struct SliceShape: Shape {
 
 struct TimelineView: View {
     @ObservedObject var controller: AppController
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
+    /// In-window navigation to the pie view (and the second-window escape hatch).
+    let nav: TimeNav
     /// Continuous timeline: the viewport is an absolute [viewStart, +viewSpan]
     /// window that pans/zooms freely across midnight. No per-day bucketing —
     /// the only bounds are a history floor and the live edge (now).
@@ -313,18 +313,18 @@ struct TimelineView: View {
                 .help("Today, midnight to now")
             Text(totalText).font(.caption).foregroundStyle(.secondary)
             Spacer()
-            // Cross-preview / navigation: today's pie + total. Clicking the pie
-            // opens the pie view (no separate switcher icon).
+            // Cross-preview / navigation: today's pie + total. Click flips this
+            // window to the pie; ⌃-click / right-click opens it in a 2nd window.
             Button {
-                controller.noteTimeViewOpened(.spent)
-                openWindow(id: "spent")
-                dismissWindow(id: "timeline")
+                if NSEvent.modifierFlags.contains(.control) { nav.openSecond(.spent) }
+                else { nav.switchTo(.spent) }
             } label: {
                 MiniPie(nodes: todayNodes, colour: { Color(nsColor: controller.colour(for: $0)) })
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            .help("Today's breakdown — click for the pie view")
+            .help("Today's breakdown — click for the pie (⌃/right-click: 2nd window)")
+            .contextMenu { Button("Open the pie in a 2nd window") { nav.openSecond(.spent) } }
             Text("today \(MenuTitle.text(elapsed: todayTotalSeconds, certainty: nil, showPercent: false))")
                 .font(.caption).foregroundStyle(.secondary)
         }

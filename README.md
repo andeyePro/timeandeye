@@ -7,7 +7,8 @@ prompts reduce over time. Local-first: a SQLite journal on your Mac is the
 source of truth; nothing leaves the machine except pushes to your own OP
 instance (and the optional copy-paste AI assist you trigger yourself).
 
-Spec: `docs/superpowers/specs/2026-06-10-ambitick-design.md`. Status: v0.1 pre-alpha.
+Day-to-day usage: **[MANUAL.md](MANUAL.md)**. Spec:
+`docs/superpowers/specs/2026-06-10-ambitick-design.md`. Status: v0.1 pre-alpha.
 
 ## Build
 

@@ -2,6 +2,46 @@ import SwiftUI
 import AmbitickCore
 import AmbitickMac
 
+/// Navigation handed to the timeline & pie views inside the Time window: flip
+/// THIS window's view in place (the normal switch), or open the second window
+/// showing the other view (control/right-click a preview).
+struct TimeNav {
+    var switchTo: (TimeView) -> Void
+    var openSecond: (TimeView) -> Void
+}
+
+/// The single Time window's content: the timeline or the pie, flipped in place.
+/// Both windows (primary + the optional second) use this; `isPrimary` only
+/// decides which records "last viewed".
+struct TimeContainer: View {
+    @ObservedObject var controller: AppController
+    @Binding var view: TimeView
+    let isPrimary: Bool
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        let nav = TimeNav(
+            switchTo: { v in
+                view = v
+                if isPrimary { controller.noteTimeViewOpened(v) }
+            },
+            openSecond: { v in
+                controller.timeWindow2View = v
+                openWindow(id: "time2")
+            })
+        Group {
+            switch view {
+            case .timeline: TimelineView(controller: controller, nav: nav)
+            case .spent:    SpentView(controller: controller, nav: nav)
+            }
+        }
+        // Reflect the current view in the window identity so the timeline's
+        // scroll-pan monitor can recognise it; updates as the view flips.
+        .openOnActiveSpace(id: view == .timeline ? "timeline" : "spent")
+        .onAppear { if isPrimary { controller.noteTimeViewOpened(view) } }
+    }
+}
+
 /// A compact donut of a project breakdown — the timeline window's "today"
 /// cross-preview. Project-level only (no rings / hover), so it stays cheap.
 struct MiniPie: View {

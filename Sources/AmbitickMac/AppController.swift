@@ -958,8 +958,15 @@ public final class AppController: ObservableObject {
     /// and clears it.
     @Published public var pendingTimelineFocus: Session?
 
-    /// Record which time view was last opened (persists, so "last viewed"
-    /// survives a relaunch).
+    /// The view shown in the single Time window, and in the optional second
+    /// window (control/right-click a preview). Flipping the primary in place is
+    /// the normal "switch"; the second window is the escape hatch for both at
+    /// once.
+    @Published public var timeWindowView: TimeView = .timeline
+    @Published public var timeWindow2View: TimeView = .spent
+
+    /// Record which time view is showing (persists, so "last viewed" survives a
+    /// relaunch).
     public func noteTimeViewOpened(_ which: TimeView) {
         if settings.lastViewedTimeView != which { settings.lastViewedTimeView = which }
     }
@@ -979,12 +986,12 @@ public final class AppController: ObservableObject {
         return (slices, block.start, block.end)
     }
 
-    /// The window id the combined Time entry point opens, per the 3-way setting.
-    public func timeViewToOpen() -> String {
+    /// Which view the single Time window opens on, per the 3-way setting.
+    public func initialTimeView() -> TimeView {
         switch settings.timeViewOpenMode {
-        case .timeline: return "timeline"
-        case .spent: return "spent"
-        case .lastViewed: return settings.lastViewedTimeView == .spent ? "spent" : "timeline"
+        case .timeline: return .timeline
+        case .spent: return .spent
+        case .lastViewed: return settings.lastViewedTimeView
         }
     }
 

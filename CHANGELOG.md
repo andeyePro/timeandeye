@@ -2,6 +2,18 @@
 
 ## 2026-06-27
 
+- [x] **One Time window, two views in place + a second-window escape hatch** —
+  the timeline and pie are no longer separate windows that swap; they're one
+  "Time" window whose view flips in place when you click a preview. To see both
+  at once, ⌃-click / right-click (or the preview's context menu) opens the other
+  view in a second window. App.swift now has `time` + `time2` windows hosting a
+  `TimeContainer` bound to `controller.timeWindowView` / `timeWindow2View`;
+  TimelineView/SpentView take a `TimeNav` (switchTo / openSecond) instead of
+  opening/dismissing windows themselves; the window identity tracks the shown
+  view so the scroll-pan monitor still recognises the timeline.
+- [x] **User manual** — `MANUAL.md` (linked from the README): popover, auto-
+  tracking + the "why" panel, pinning, the Time window incl. the combined-view
+  navigation and the ⌃/right-click second window, Settings, data/sync, keyboard.
 - [x] **Combined Timeline/Pie view — the previews ARE the navigation (#5)** — the
   popover's two separate Timeline/Pie footer icons are now one launcher that
   itself shows a **live mini-pie of today's breakdown**; clicking it opens the

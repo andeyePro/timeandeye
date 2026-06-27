@@ -22,15 +22,18 @@ struct AmbitickApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Ambitick Time Spent", id: "spent") {
-            SpentView(controller: controller).openOnActiveSpace()
+        // One Time window — timeline or pie, flipped in place (click a preview).
+        Window("Ambitick Time", id: "time") {
+            TimeContainer(controller: controller, view: $controller.timeWindowView, isPrimary: true)
         }
-        .defaultSize(width: 640, height: 420)
+        .defaultSize(width: 980, height: 460)
 
-        Window("Ambitick Timeline", id: "timeline") {
-            TimelineView(controller: controller).openOnActiveSpace(id: "timeline")
+        // The optional second Time window (control/right-click a preview), so you
+        // can see both views at once.
+        Window("Ambitick Time · 2nd view", id: "time2") {
+            TimeContainer(controller: controller, view: $controller.timeWindow2View, isPrimary: false)
         }
-        .defaultSize(width: 980, height: 420)
+        .defaultSize(width: 980, height: 460)
 
         Window("Ambitick Review", id: "review") {
             ReviewView(controller: controller).openOnActiveSpace()

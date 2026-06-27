@@ -12,8 +12,8 @@ import AmbitickMac
 /// are drawn desaturated with a dashed outline (and "local" in the legend).
 struct SpentView: View {
     @ObservedObject var controller: AppController
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
+    /// In-window navigation to the timeline (and the second-window escape hatch).
+    let nav: TimeNav
     @State private var period: Period = .today
     @State private var blockData: (sessions: [Session], start: Date, end: Date)?
     @State private var hover: Selection = .none
@@ -81,11 +81,14 @@ struct SpentView: View {
                 HStack(spacing: 6) {
                     Text("from \(from.formatted(date: .omitted, time: .shortened))")
                         .font(.caption2).foregroundStyle(.secondary)
-                        .onTapGesture { openTimeline(focus: nil) }   // label → nothing selected
+                        .onTapGesture { goTimeline(focus: nil, second: controlHeld) }
                     MiniTimeline(sessions: block.sessions, start: block.start, end: block.end,
                                  colour: { Color(nsColor: controller.colour(for: $0)) },
-                                 onTap: { openTimeline(focus: $0) },     // slice → frame + edit it
-                                 onTapEmpty: { openTimeline(focus: nil) }) // gap → nothing selected
+                                 onTap: { goTimeline(focus: $0, second: controlHeld) },
+                                 onTapEmpty: { goTimeline(focus: nil, second: controlHeld) })
+                    .contextMenu { Button("Open the timeline in a 2nd window") {
+                        goTimeline(focus: nil, second: true)
+                    } }
                 }
             }
             if let note = controller.actionNote {
@@ -112,14 +115,15 @@ struct SpentView: View {
     /// query — don't recompute per body eval).
     private func reloadBlock() { blockData = controller.currentBlock() }
 
-    /// Open the timeline window, optionally framed on a specific slice; `nil`
-    /// focus opens it with nothing selected (the label / a gap tap).
-    private func openTimeline(focus: Session?) {
+    /// Go to the timeline, optionally framed on a slice (`nil` = nothing
+    /// selected). `second` (⌃/right-click) opens it in a 2nd window instead of
+    /// flipping this one.
+    private func goTimeline(focus: Session?, second: Bool) {
         controller.pendingTimelineFocus = focus
-        controller.noteTimeViewOpened(.timeline)
-        openWindow(id: "timeline")
-        dismissWindow(id: "spent")
+        if second { nav.openSecond(.timeline) } else { nav.switchTo(.timeline) }
     }
+
+    private var controlHeld: Bool { NSEvent.modifierFlags.contains(.control) }
 
     // MARK: - Data
 
