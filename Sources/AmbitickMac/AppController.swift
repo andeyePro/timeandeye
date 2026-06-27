@@ -1030,6 +1030,39 @@ public final class AppController: ObservableObject {
         if settings.lastViewedTimeView != which { settings.lastViewedTimeView = which }
     }
 
+    /// Scan OP for duplicate time entries over a recent window and plan the
+    /// richest-survivor reconcile against the journal. Empty when not connected
+    /// or nothing duplicated.
+    public func findDuplicateActions(daysBack: Int = 90) async -> [ReconcileAction] {
+        guard let client else { return [] }
+        let to = Date()
+        let from = to.addingTimeInterval(-Double(daysBack) * 86_400)
+        let entries = (try? await client.listTimeEntries(from: from, to: to)) ?? []
+        let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        return DuplicateReconcile.plan(entries: entries, sessions: sessions)
+    }
+
+    /// Apply ONE confirmed reconcile: fold the deleted entries' comments into the
+    /// survivor, delete the duplicates, and re-point the journal slices so future
+    /// edits still PATCH the right entry. Nothing is lost.
+    public func applyReconcile(_ action: ReconcileAction) async {
+        guard let client else { return }
+        if let merged = action.mergedComment {
+            try? await client.updateTimeEntryComment(id: action.survivorID, comment: merged)
+        }
+        for id in action.deleteIDs {
+            try? await client.deleteTimeEntry(id: id)
+        }
+        for sid in action.repointSessionIDs {
+            if var s = try? journal.session(id: sid) {
+                s.opTimeEntryID = action.survivorID
+                try? journal.update(s)
+            }
+        }
+        updateJournalSummary()
+    }
+
     /// Today's project breakdown + total (the timeline window's mini-pie
     /// cross-preview).
     public func todaySpentNodes() -> [TimeAggregator.Node] {

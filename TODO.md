@@ -18,7 +18,8 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   coalesces the wakeup). Attach the superseded-survivors here: `session(id:)`
   single-row fetch + COUNT-based `updateJournalSummary` (stop decoding the whole
   table on every mutation).
-- [~] Rank 3 — OP write path: double-create CLOSED 2026-06-27; the duplicate-RECONCILE tool (richest-survivor policy) remains — `SyncEngine` marks pushed AFTER the POST, so a
+- [x] Rank 3 — OP write path (DONE 2026-06-27): double-create closed AND the journal-driven duplicate-reconcile tool shipped (richest-survivor, confirm-each, Settings ▸ Maintenance).
+  Original spec: `SyncEngine` marks pushed AFTER the POST, so a
   throw after a successful create re-POSTs next sync (likely root of the ~143
   surplus entries). Make create idempotent across a failed mark (delete the
   orphan on the failure path); surface a malformed created-entry id instead of

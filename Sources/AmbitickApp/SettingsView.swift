@@ -8,6 +8,9 @@ struct SettingsView: View {
     @State private var keySaved = false
     @State private var newLocalName = ""
     @State private var newLocalProject = ""
+    @State private var dupActions: [ReconcileAction] = []
+    @State private var scanning = false
+    @State private var scanned = false
 
     var body: some View {
         Form {
@@ -163,6 +166,40 @@ struct SettingsView: View {
                        isOn: $controller.settings.lockOnLeave)
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
+            }
+
+            Section("Maintenance") {
+                HStack {
+                    Button(scanning ? "Scanning…" : "Scan for duplicate OpenProject entries") {
+                        scanning = true; scanned = false
+                        Task {
+                            let found = await controller.findDuplicateActions()
+                            dupActions = found; scanning = false; scanned = true
+                        }
+                    }
+                    .disabled(scanning || controller.settings.opBaseURL.isEmpty)
+                    if scanned, dupActions.isEmpty {
+                        Text("No duplicates found").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Finds OP time entries duplicated at the same task + minute, keeps the richest, folds the others' comments into it, then deletes them. Re-points your journal so future edits still hit the kept entry. Confirm each.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(dupActions) { act in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(act.label).font(.caption)
+                            Text(act.start.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Apply") {
+                            Task {
+                                await controller.applyReconcile(act)
+                                dupActions.removeAll { $0.id == act.id }
+                            }
+                        }
+                    }
+                }
             }
 
             Section("About") {

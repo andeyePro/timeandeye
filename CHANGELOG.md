@@ -2,6 +2,19 @@
 
 ## 2026-06-27
 
+- [x] **OpenProject duplicate-entry reconcile (rank 3 complete)** — an in-app
+  maintenance action (Settings ▸ Maintenance ▸ "Scan for duplicate OpenProject
+  entries"). Reads back your recent OP time entries (`listTimeEntries`), groups
+  them against the journal, and for each genuine duplicate proposes a confirm-
+  each cleanup following the agreed policy: never two records for one point in
+  time; keep the RICHEST entry (most comment, then longest, then lowest id); fold
+  the deleted entries' comments into the survivor (`updateTimeEntryComment`, so
+  nothing is lost); re-point the journal slices at the survivor; and never touch a
+  group with no matching journal slice (could be hand-entered in OP). Pure
+  `DuplicateReconcile` core (4 checks) + the OP endpoint (mock-transport check) +
+  controller `findDuplicateActions`/`applyReconcile` + the confirm-each UI. This
+  is the cleanup half; the double-create that *made* new dupes was closed earlier
+  today (rank 3a).
 - [x] **Backlog batch (drafted by subagents, integrated + verified serially)** —
   five contained optimisation items, each built and checked on the Mac before
   the next; 160 checks pass.
