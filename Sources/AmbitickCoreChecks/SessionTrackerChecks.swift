@@ -519,4 +519,136 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(segments.count, 1)
         try expectEq(segments[0].app, "FaceTime")
     }
+
+    c.check("commitLive journals the elapsed slice, resumes the same task, resets liveSliceStart") {
+        // Materialise the live slice into a real journalled slice without
+        // stopping the clock: the elapsed time commits as op(1), tracking keeps
+        // running on op(1) from the commit moment, and liveSliceStart snaps to it.
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        try expectEq(tracker.liveSliceStart, t(0), "live slice starts at the open visit")
+        tracker.commitLive(at: t(120))
+
+        // The 120 s already on op(1) is journalled now…
+        try expectEq(sessions.count, 1)
+        try expectEq(sessions[0].task, .op(1))
+        try expectEq(sessions[0].start, t(0))
+        try expectEq(sessions[0].end, t(120))
+        // …and the clock keeps running on the SAME task from the commit moment.
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "commitLive must keep tracking op(1), got \(tracker.state)")
+        }
+        try expectEq(tracker.liveSliceStart, t(120),
+                     "liveSliceStart resets to the commit moment (fresh run)")
+
+        tracker.stop(at: t(180))
+        try expectEq(sessions.count, 2, "the resumed run flushes as a second op(1) slice")
+        try expectEq(sessions[1].start, t(120))
+        try expectEq(sessions[1].end, t(180))
+    }
+
+    c.check("relabelCurrentSession re-tags every accumulated span, not just the future") {
+        // Correct a mis-attributed RUNNING session: the elapsed (already-closed)
+        // span re-attributes to the new task too, so the whole slice journals as
+        // op(2) — without resetting the clock.
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 60)))  // closes the first span as op(1)
+        tracker.relabelCurrentSession(to: .op(2))                    // re-tag elapsed + future
+        guard case .tracking(.task(.op(2)), let cert) = tracker.state, cert >= 0.9 else {
+            throw CheckFailure(description: "relabel must hold op(2) at confirmed certainty, got \(tracker.state)")
+        }
+        tracker.stop(at: t(180))
+
+        try expect(!sessions.contains { $0.task == .op(1) },
+                   "the elapsed time must re-attribute, leaving no op(1) slice")
+        try expectEq(sessions.filter { $0.task == .op(2) }.count, 1, "one continuous op(2) slice")
+        try expectEq(sessions.first?.start, t(0))
+        try expectEq(sessions.first?.end, t(180))
+    }
+
+    c.check("backdateSessionStart extends the live slice earlier with a synthetic span") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(100))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 100)))
+        try expectEq(tracker.liveSliceStart, t(100))
+        tracker.backdateSessionStart(to: t(40))                      // drag the slice back
+        try expectEq(tracker.liveSliceStart, t(40),
+                     "a synthetic span covers the gap so the slice spans the whole stretch")
+        // Backdating later than the current earliest is a no-op (guarded).
+        tracker.backdateSessionStart(to: t(200))
+        try expectEq(tracker.liveSliceStart, t(40), "a later backdate must not move the start forward")
+    }
+
+    c.check("adjustCurrentStart clamps to the previous closed span's end") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 50)))  // closes a span ending at t(50)
+        // The open visit started at t(50); dragging it back past the closed span
+        // is clamped so the visits cannot overlap.
+        tracker.adjustCurrentStart(to: t(30))
+        try expectEq(tracker.liveSliceStart, t(0),
+                     "the closed span still starts at t(0); the clamp only bounds the open visit")
+        // Dragging the open visit FORWARD within the slice is honoured.
+        tracker.adjustCurrentStart(to: t(55))
+        try expectEq(tracker.liveSliceStart, t(0))
+    }
+
+    c.check("reevaluate re-tags the open spans and live target when a pin moves the target") {
+        // A pin added mid-session must take effect immediately, not only on the
+        // next focus change — reevaluate re-attributes the open spans and lifts
+        // the live certainty/target to the pinned task.
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        // User pins this surface to op(2), then asks the tracker to re-evaluate.
+        attributor.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty"])),
+                              task: .op(2)))
+        tracker.reevaluate()
+        guard case .tracking(.task(.op(2)), let cert) = tracker.state, cert >= 0.99 else {
+            throw CheckFailure(description: "reevaluate must follow the pin to op(2) at 1.0, got \(tracker.state)")
+        }
+    }
+
+    c.check("away mode holds the session open across focus changes, then resumes and switches normally") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.away = true
+        // While away, focus changes are ignored: the pinned task is held.
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 30)))
+        tracker.handle(.input(t(60)))
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "away must hold op(1) through a focus change, got \(tracker.state)")
+        }
+        // Clear away: the session is still op(1), and a real switch now lands.
+        tracker.away = false
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "clearing away must leave op(1) running, got \(tracker.state)")
+        }
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 90)))
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "a switch after away clears must follow normally, got \(tracker.state)")
+        }
+    }
 }

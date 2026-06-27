@@ -93,4 +93,36 @@ func predicateParserChecks(_ c: Checks) {
             try expectEq(try parsed(text), p, "round-trip failed for: \(text)")
         }
     }
+
+    c.check("operator aliases: = / equals / regex; written-out negations") {
+        // `=` and `equals` are aliases of `is`; `regex` is an alias of `matches`.
+        try expectEq(try parsed("app = \"Ghostty\""),
+                     .leaf(field: .app, op: .equals, value: "Ghostty"))
+        try expectEq(try parsed("app equals \"Ghostty\""),
+                     .leaf(field: .app, op: .equals, value: "Ghostty"))
+        try expectEq(try parsed("url regex \"amb.*\""),
+                     .leaf(field: .url, op: .regex, value: "amb.*"))
+        // `does not match` and the contracted `doesn't` negate the verb.
+        try expectEq(try parsed("title does not match \"^Inv\""),
+                     .not(.leaf(field: .title, op: .regex, value: "^Inv")))
+        try expectEq(try parsed("app doesn't start with \"G\""),
+                     .not(.leaf(field: .app, op: .startsWith, value: "G")))
+    }
+
+    c.check("double-not, logic-word-as-value, and unknown-verb fallthrough") {
+        // `not not X` parses to a doubled negation (parseNot recurses).
+        try expectEq(try parsed("not not app is \"Ghostty\""),
+                     .not(.not(.leaf(field: .app, op: .equals, value: "Ghostty"))))
+        // A logic word can't be swallowed as a leaf value: `app is and …` is an
+        // error, not `app is "and"`.
+        if case .success = PredicateParser.parse("app is and title contains \"x\"") {
+            throw CheckFailure(description: "a logic word as a value must fail, not parse")
+        }
+        // `does <unknown-verb>` returns nil from parseOperator, so the field is
+        // re-read as bare text → any-field-contains, which then chokes on the
+        // trailing `"x"` it can't place: the whole expression errors.
+        if case .success = PredicateParser.parse("app does frobnicate \"x\"") {
+            throw CheckFailure(description: "an unknown verb after 'does' must not parse as a leaf")
+        }
+    }
 }

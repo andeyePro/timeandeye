@@ -88,4 +88,19 @@ func pinScopeChecks(_ c: Checks) {
         let urlPin = PinScope(kind: .url, prefix: ["github.com"])
         try expect(!urlPin.matches(ActivitySignal(app: "github.com", windowTitle: "x", timestamp: now)))
     }
+
+    c.check("a hostless tabURL (about:blank) falls through to .app identity") {
+        // A malformed / hostless tabURL must NOT produce a url-kind identity with
+        // an empty/garbage root — it falls through to the app, so the pin editor
+        // and the matcher work off the real surface (Safari) instead of silently
+        // mis-attributing a blank tab. Locks the current fall-through behaviour.
+        let sig = ActivitySignal(app: "Safari", windowTitle: "Untitled",
+                                 tabURL: "about:blank", timestamp: now)
+        let id = PinScope.identity(of: sig)
+        try expectEq(id?.kind, .app, "about:blank has no host → identity is the app, not a url")
+        try expectEq(id?.segments ?? [], ["Safari", "Untitled"])
+        // And an app pin on Safari covers it, as a url pin never could.
+        try expect(PinScope(kind: .app, prefix: ["Safari"]).matches(sig))
+        try expect(!PinScope(kind: .url, prefix: ["about"]).matches(sig))
+    }
 }
