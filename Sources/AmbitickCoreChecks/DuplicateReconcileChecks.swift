@@ -43,13 +43,36 @@ func duplicateReconcileChecks(_ c: Checks) {
         try expectEq(actions.count, 0)
     }
 
-    c.check("richest falls back to longest, then lowest id; no comment merge when none") {
+    c.check("different durations at the same instant are NOT duplicates") {
         let a = entry(1, start: t0, dur: 600)
-        let b = entry(2, start: t0, dur: 1800)   // longer → survives
-        let actions = DuplicateReconcile.plan(entries: [a, b], sessions: [session(start: t0)])
+        let b = entry(2, start: t0, dur: 1800)   // different length → a separate log
+        let actions = DuplicateReconcile.plan(
+            entries: [a, b],
+            sessions: [session(start: t0), session(start: t0)])
+        try expectEq(actions.count, 0)
+    }
+
+    c.check("never deletes below the journal's real count (two real slices → no action)") {
+        // The safety rail when OP doesn't report start times: the journal decides
+        // how many entries are real. Two real slices → both kept, nothing deleted.
+        let a = entry(1, start: t0, comment: "x")
+        let b = entry(2, start: t0, comment: "y")
+        let actions = DuplicateReconcile.plan(
+            entries: [a, b],
+            sessions: [session(start: t0, opID: 1), session(start: t0, opID: 2)])
+        try expectEq(actions.count, 0, "2 entries, 2 journal slices → not duplicates")
+    }
+
+    c.check("deletes only the excess over the journal count") {
+        // Three OP entries but the journal knows of two → delete exactly one.
+        let a = entry(1, start: t0, comment: "aaa")
+        let b = entry(2, start: t0, comment: "bb")
+        let cc = entry(3, start: t0, comment: "c")
+        let actions = DuplicateReconcile.plan(
+            entries: [a, b, cc],
+            sessions: [session(start: t0, opID: 1), session(start: t0, opID: 2)])
         try expectEq(actions.count, 1)
-        try expectEq(actions[0].survivorID, 2)
-        try expectEq(actions[0].deleteIDs, [1])
-        try expectNil(actions[0].mergedComment, "no comments → nothing to fold")
+        try expectEq(actions[0].deleteIDs.count, 1, "3 entries − 2 real = 1 deleted")
+        try expectEq(actions[0].deleteIDs, [3], "the least-rich (shortest comment) goes")
     }
 }

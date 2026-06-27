@@ -252,17 +252,26 @@ public final class OPClient {
         guard let href = e._links.workPackage?.href,
               let wp = Int(href.split(separator: "/").last.map(String.init) ?? ""),
               let spentOn = e.spentOn else { return nil }
+        let hm = e.startTime.map { String($0.prefix(5)) }
+        let hasStart = (hm?.isEmpty == false)
         return OPTimeEntry(id: e.id, workPackageID: wp,
                            start: startDate(spentOn: spentOn, startTime: e.startTime),
                            durationSeconds: parseISO8601Duration(e.hours ?? ""),
                            comment: e.comment?.raw,
-                           createdAt: e.createdAt.flatMap(stamp.date(from:)),
-                           updatedAt: e.updatedAt.flatMap(stamp.date(from:)),
-                           activity: e._links.activity?.title)
+                           createdAt: parseStamp(e.createdAt),
+                           updatedAt: parseStamp(e.updatedAt),
+                           activity: e._links.activity?.title,
+                           hasStart: hasStart)
     }
 
-    /// OP's full ISO-8601 timestamps (createdAt / updatedAt).
-    private static let stamp = ISO8601DateFormatter()
+    /// OP's full ISO-8601 timestamps — tolerate fractional seconds (".000Z"),
+    /// which the default formatter rejects (the cause of "created ?").
+    static func parseStamp(_ s: String?) -> Date? {
+        guard let s else { return nil }
+        let frac = ISO8601DateFormatter()
+        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return frac.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+    }
 
     /// Combine OP's `spentOn` (local day) + `startTime` (HH:MM) into an instant,
     /// in the user's timezone (matching how entries are written). No startTime →

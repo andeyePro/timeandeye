@@ -12,9 +12,15 @@ public struct OPTimeEntry: Equatable, Sendable, Identifiable {
     public var createdAt: Date?
     public var updatedAt: Date?
     public var activity: String?
+    /// Whether OP actually reported a per-entry start time. Some instances don't
+    /// (the feature can be off), in which case `start` is just the day at
+    /// midnight — the UI must not show a misleading "0:00", and grouping must not
+    /// rely on the minute (it falls back to the journal count, below).
+    public var hasStart: Bool
     public init(id: Int, workPackageID: Int, start: Date,
                 durationSeconds: TimeInterval, comment: String? = nil,
-                createdAt: Date? = nil, updatedAt: Date? = nil, activity: String? = nil) {
+                createdAt: Date? = nil, updatedAt: Date? = nil, activity: String? = nil,
+                hasStart: Bool = true) {
         self.id = id
         self.workPackageID = workPackageID
         self.start = start
@@ -23,6 +29,7 @@ public struct OPTimeEntry: Equatable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.activity = activity
+        self.hasStart = hasStart
     }
 }
 
@@ -69,37 +76,47 @@ public struct ReconcileAction: Equatable, Sendable, Identifiable {
 /// and — the safety rail — NEVER touch a group that has no matching journal
 /// slice (it could be a hand-entered OP entry).
 public enum DuplicateReconcile {
-    private static func minuteKey(_ d: Date) -> Int {
-        Int((d.timeIntervalSince1970 / 60).rounded(.down))
-    }
+    private static func minuteKey(_ d: Date) -> Int { Int((d.timeIntervalSince1970 / 60).rounded(.down)) }
+    private static func durMin(_ s: TimeInterval) -> Int { Int((s / 60).rounded()) }
 
     public static func plan(entries: [OPTimeEntry], sessions: [Session]) -> [ReconcileAction] {
+        // Key on task + start-minute + duration (never duration alone, never
+        // start alone): two records at the same point in time for the same task
+        // with the same length.
         var groups: [String: [OPTimeEntry]] = [:]
         for e in entries {
-            groups["\(e.workPackageID)@\(minuteKey(e.start))", default: []].append(e)
+            groups["\(e.workPackageID)@\(minuteKey(e.start))#\(durMin(e.durationSeconds))",
+                   default: []].append(e)
         }
         var actions: [ReconcileAction] = []
         for group in groups.values where group.count > 1 {
             let wp = group[0].workPackageID
             let mk = minuteKey(group[0].start)
+            let dm = durMin(group[0].durationSeconds)
             let ids = Set(group.map(\.id))
-            // Safety rail: only reconcile a group that is genuinely app-tracked
-            // time — a journal slice at the same task+minute, or one already
-            // linked to an entry in the group. Otherwise leave it alone (could be
-            // hand-entered in OP).
-            let matched = sessions.contains { s in
-                (s.task == .op(wp) && minuteKey(s.start) == mk)
-                    || (s.opTimeEntryID.map { ids.contains($0) } ?? false)
-            }
-            guard matched else { continue }
-            // Survivor = richest: most comment, then longest, then lowest id.
-            let survivor = group.max { a, b in
+            // How many of these are REAL, per the journal (the source of truth):
+            // slices linked to one of the entries, or matching task+minute+
+            // duration. The journal decides the count, so this stays safe even
+            // when OP doesn't report per-entry start times (everything would
+            // otherwise collapse to a day). realCount 0 → no journal evidence →
+            // never touch (could be hand-entered in OP).
+            let realCount = sessions.filter { s in
+                (s.opTimeEntryID.map { ids.contains($0) } ?? false)
+                    || (s.task == .op(wp) && minuteKey(s.start) == mk
+                        && durMin(s.end.timeIntervalSince(s.start)) == dm)
+            }.count
+            guard realCount >= 1, group.count > realCount else { continue }
+            // Keep the `realCount` richest (most comment, then longest, then
+            // lowest id); the excess are the spurious copies to delete.
+            let ranked = group.sorted { a, b in
                 let (ca, cb) = (a.comment?.count ?? 0, b.comment?.count ?? 0)
-                if ca != cb { return ca < cb }
-                if a.durationSeconds != b.durationSeconds { return a.durationSeconds < b.durationSeconds }
-                return a.id > b.id
-            }!
-            let deletes = group.filter { $0.id != survivor.id }
+                if ca != cb { return ca > cb }
+                if a.durationSeconds != b.durationSeconds { return a.durationSeconds > b.durationSeconds }
+                return a.id < b.id
+            }
+            let survivor = ranked[0]
+            let deletes = Array(ranked.dropFirst(realCount))
+            guard !deletes.isEmpty else { continue }
             // Fold every distinct non-empty comment into the survivor.
             var seen = Set<String>()
             var merged: [String] = []
@@ -108,8 +125,7 @@ public enum DuplicateReconcile {
                 if !t.isEmpty, seen.insert(t).inserted { merged.append(t) }
             }
             let mergedText = merged.joined(separator: "; ")
-            let mergedComment = mergedText == (survivor.comment ?? "") ? nil
-                : (mergedText.isEmpty ? nil : mergedText)
+            let mergedComment = (mergedText.isEmpty || mergedText == (survivor.comment ?? "")) ? nil : mergedText
             let deleteIDs = deletes.map(\.id)
             let repoint = sessions
                 .filter { s in s.opTimeEntryID.map { deleteIDs.contains($0) } ?? false }
@@ -122,6 +138,6 @@ public enum DuplicateReconcile {
                 label: "WP #\(wp): keep entry #\(survivor.id), delete \(deleteIDs.count) duplicate"
                     + (deleteIDs.count == 1 ? "" : "s")))
         }
-        return actions.sorted { $0.start < $1.start }
+        return actions.sorted { ($0.entries.first?.createdAt ?? $0.start) < ($1.entries.first?.createdAt ?? $1.start) }
     }
 }

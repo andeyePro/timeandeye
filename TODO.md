@@ -1,5 +1,20 @@
 # TODO
 
+## Time-window polish (Martin, 2026-06-27)
+
+- [ ] Window titles: the Time window should be titled "Timeline" when showing the
+  timeline and "Time Pie" when showing the pie (currently "Ambitick Time").
+- [ ] Pie view — closeable calendar bottom-right, below the key: highlights the
+  day(s) currently shown. If on "This week", clicking another week shows that
+  full week; if on "Last 7 days", clicking a prior date shows the 7 days ending
+  on the same day-of-week as today. Consider moving the Today | Yesterday | This
+  week period menu to BELOW the calendar rather than the top of the page.
+- [ ] Pie view — move the "OpenProject only" selector to bottom-left, with the
+  view total shown above it.
+- [ ] Reconcile "open in OpenProject" currently opens the entry's work package
+  (OP has no per-time-entry web page). Find a better deep-link to the WP's time
+  entries / cost view if one is stable across OP versions.
+
 ## Optimisation backlog (programme review, consolidated 2026-06-26/27)
 
 A Programme-Manager + per-domain Project-Manager pass, then an adversarial

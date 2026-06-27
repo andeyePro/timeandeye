@@ -2,6 +2,20 @@
 
 ## 2026-06-27
 
+- [x] **Reconcile robustness + display fixes** (from live testing) — three real
+  problems with the duplicate tool:
+  - **Safety:** grouping keyed on task+start-minute alone, so on an OP instance
+    that doesn't report per-entry start times every entry collapsed to the day's
+    midnight and genuinely-separate entries could be grouped as "duplicates".
+    Grouping now also keys on duration, and — the real safety rail — the JOURNAL
+    decides how many entries are real (slices linked to the group, or matching
+    task+minute+duration); only the EXCESS over that count is ever deleted, so
+    two real same-day slices are never collapsed. (+2 checks.)
+  - **"created ?":** OP timestamps with fractional seconds were rejected by the
+    default ISO-8601 parser; `parseStamp` now tolerates them.
+  - **"start 0:00":** when OP reports no start time, the entry no longer shows a
+    misleading midnight — it reads "no start time" and the group header omits the
+    time, leaning on the created timestamp instead (`OPTimeEntry.hasStart`).
 - [x] **OpenProject duplicate-entry reconcile (rank 3 complete)** — an in-app
   maintenance action (Settings ▸ Maintenance ▸ "Scan for duplicate OpenProject
   entries"). Reads back your recent OP time entries (`listTimeEntries`), groups

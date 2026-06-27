@@ -221,7 +221,8 @@ struct SettingsView: View {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(act.label).font(.caption)
-                            Text(act.start.formatted(date: .abbreviated, time: .shortened))
+                            Text(act.start.formatted(date: .abbreviated,
+                                time: act.entries.contains { $0.hasStart } ? .shortened : .omitted))
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                     }
@@ -251,7 +252,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("#\(e.id) · \(durText(e.durationSeconds))\(e.activity.map { " · \($0)" } ?? "")")
                     .font(.caption2)
-                Text("created \(e.createdAt.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "?")  ·  start \(e.start.formatted(date: .omitted, time: .shortened))")
+                Text("created \(e.createdAt.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "unknown")  ·  \(e.hasStart ? "start " + e.start.formatted(date: .omitted, time: .shortened) : "no start time")")
                     .font(.caption2).foregroundStyle(.secondary)
                 if let c = e.comment, !c.isEmpty {
                     Text("“\(c)”").font(.caption2).foregroundStyle(.secondary)
