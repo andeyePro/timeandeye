@@ -187,6 +187,9 @@ public final class AppController: ObservableObject {
             attributor.pins = pins
         } else {
             // Migrate legacy scope→task pins (pre-rule-engine) to component pins.
+            // Self-terminating one-shot: once we save the migrated [Pin] back to
+            // pins.json, the [Pin] decode above succeeds on every later launch, so
+            // this else branch never runs again.
             let legacyStore = JSONFileStore<[PinScope: TaskRef]>(
                 url: dir.appendingPathComponent("pins.json"))
             if let legacy = (try? legacyStore.load()).flatMap({ $0 }), !legacy.isEmpty {

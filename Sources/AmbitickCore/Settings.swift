@@ -73,10 +73,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var idleBackfillWindowSeconds: Double
     /// First N characters of the tracked task name shown in the menu bar; 0 = off.
     public var menuTaskChars: Int
-    /// Saved per-task window layouts (keyed by TaskRef.storageKey) + the most
-    /// recent capture, for "Open workspace" (launch & arrange the task's apps).
-    public var taskLayouts: [String: [WindowFrame]]
-    public var lastLayout: [WindowFrame]
     public var systemNotifications: Bool
     /// The popover's default mode when tracking: true = "Change to" (relabel the
     /// running session), false = "Switch to" (start a fresh session). Clicking
@@ -111,8 +107,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 sleepGraceSeconds: Double = 60,
                 idleBackfillWindowSeconds: Double = 18 * 3600,
                 menuTaskChars: Int = 5,
-                taskLayouts: [String: [WindowFrame]] = [:],
-                lastLayout: [WindowFrame] = [],
                 systemNotifications: Bool = true,
                 popoverDefaultsToChangeMode: Bool = true,
                 timeViewOpenMode: TimeViewOpenMode = .lastViewed,
@@ -138,8 +132,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.sleepGraceSeconds = sleepGraceSeconds
         self.idleBackfillWindowSeconds = idleBackfillWindowSeconds
         self.menuTaskChars = menuTaskChars
-        self.taskLayouts = taskLayouts
-        self.lastLayout = lastLayout
         self.systemNotifications = systemNotifications
         self.popoverDefaultsToChangeMode = popoverDefaultsToChangeMode
         self.timeViewOpenMode = timeViewOpenMode
@@ -172,8 +164,6 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         sleepGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .sleepGraceSeconds) ?? defaults.sleepGraceSeconds
         idleBackfillWindowSeconds = try c.decodeIfPresent(Double.self, forKey: .idleBackfillWindowSeconds) ?? defaults.idleBackfillWindowSeconds
         menuTaskChars = try c.decodeIfPresent(Int.self, forKey: .menuTaskChars) ?? defaults.menuTaskChars
-        taskLayouts = try c.decodeIfPresent([String: [WindowFrame]].self, forKey: .taskLayouts) ?? defaults.taskLayouts
-        lastLayout = try c.decodeIfPresent([WindowFrame].self, forKey: .lastLayout) ?? defaults.lastLayout
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
         popoverDefaultsToChangeMode = try c.decodeIfPresent(Bool.self, forKey: .popoverDefaultsToChangeMode) ?? defaults.popoverDefaultsToChangeMode
         timeViewOpenMode = try c.decodeIfPresent(TimeViewOpenMode.self, forKey: .timeViewOpenMode) ?? defaults.timeViewOpenMode
