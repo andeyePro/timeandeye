@@ -183,7 +183,9 @@ func opClientChecks(_ c: Checks) async {
         transport.responses = [(200, """
         {"total": 2, "count": 2, "_embedded": {"elements": [
           {"id": 11, "hours": "PT1H30M", "spentOn": "2026-06-20", "startTime": "09:15",
-           "comment": {"raw": "work"}, "_links": {"workPackage": {"href": "/api/v3/work_packages/42"}}},
+           "comment": {"raw": "work"}, "createdAt": "2026-06-20T09:16:00Z",
+           "_links": {"workPackage": {"href": "/api/v3/work_packages/42"},
+                      "activity": {"title": "Development"}}},
           {"id": 12, "hours": "PT0H45M", "spentOn": "2026-06-20", "startTime": "09:15",
            "comment": {"raw": null}, "_links": {"workPackage": {"href": "/api/v3/work_packages/42"}}}
         ]}}
@@ -196,6 +198,8 @@ func opClientChecks(_ c: Checks) async {
         try expectEq(entries[0].workPackageID, 42)
         try expectEq(entries[0].durationSeconds, 5400)
         try expectEq(entries[0].comment, "work")
+        try expectEq(entries[0].activity, "Development")
+        try expect(entries[0].createdAt != nil, "createdAt parsed")
         try expectNil(entries[1].comment)
         try expect(transport.requests[0].url!.path.hasSuffix("/api/v3/time_entries"))
     }

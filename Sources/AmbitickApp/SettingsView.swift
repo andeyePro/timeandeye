@@ -4,6 +4,7 @@ import AmbitickMac
 
 struct SettingsView: View {
     @ObservedObject var controller: AppController
+    @Environment(\.openURL) private var openURL
     @State private var apiKey = ""
     @State private var keySaved = false
     @State private var newLocalName = ""
@@ -11,6 +12,8 @@ struct SettingsView: View {
     @State private var dupActions: [ReconcileAction] = []
     @State private var scanning = false
     @State private var scanned = false
+    @State private var expandedDup: Set<Int> = []
+    @State private var expandAllDup = false
 
     var body: some View {
         Form {
@@ -171,7 +174,7 @@ struct SettingsView: View {
             Section("Maintenance") {
                 HStack {
                     Button(scanning ? "Scanning…" : "Scan for duplicate OpenProject entries") {
-                        scanning = true; scanned = false
+                        scanning = true; scanned = false; expandedDup = []; expandAllDup = false
                         Task {
                             let found = await controller.findDuplicateActions()
                             dupActions = found; scanning = false; scanned = true
@@ -181,25 +184,15 @@ struct SettingsView: View {
                     if scanned, dupActions.isEmpty {
                         Text("No duplicates found").font(.caption).foregroundStyle(.secondary)
                     }
-                }
-                Text("Finds OP time entries duplicated at the same task + minute, keeps the richest, folds the others' comments into it, then deletes them. Re-points your journal so future edits still hit the kept entry. Confirm each.")
-                    .font(.caption).foregroundStyle(.secondary)
-                ForEach(dupActions) { act in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(act.label).font(.caption)
-                            Text(act.start.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
+                    if !dupActions.isEmpty {
                         Spacer()
-                        Button("Apply") {
-                            Task {
-                                await controller.applyReconcile(act)
-                                dupActions.removeAll { $0.id == act.id }
-                            }
-                        }
+                        Button(expandAllDup ? "Collapse all" : "Expand all") { expandAllDup.toggle() }
+                            .font(.caption)
                     }
                 }
+                Text("Finds OP entries duplicated at the same task + minute. Click a group to see every difference between its entries; the survivor is the richest, the rest are deleted (their comments folded into the survivor) and your journal re-points to the survivor. Open any entry in OpenProject to check anything not shown here (e.g. custom fields) before deleting. Confirm each.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(dupActions) { act in dupRow(act) }
             }
 
             Section("About") {
@@ -211,6 +204,74 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .textSelection(.enabled)   // every label copyable, to share text not screenshots
         .padding(8)
+    }
+
+    // MARK: - Duplicate reconcile rows
+
+    @ViewBuilder
+    private func dupRow(_ act: ReconcileAction) -> some View {
+        let expanded = expandAllDup || expandedDup.contains(act.id)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Button {
+                    if expandedDup.contains(act.id) { expandedDup.remove(act.id) }
+                    else { expandedDup.insert(act.id) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(act.label).font(.caption)
+                            Text(act.start.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button("Apply") {
+                    Task {
+                        await controller.applyReconcile(act)
+                        dupActions.removeAll { $0.id == act.id }
+                    }
+                }
+            }
+            if expanded {
+                ForEach(act.entries) { e in dupEntryRow(e, survivor: e.id == act.survivorID) }
+            }
+        }
+    }
+
+    private func dupEntryRow(_ e: OPTimeEntry, survivor: Bool) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(survivor ? "KEEP" : "delete")
+                .font(.caption2).bold()
+                .foregroundStyle(survivor ? Color.green : Color.red)
+                .frame(width: 48, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("#\(e.id) · \(durText(e.durationSeconds))\(e.activity.map { " · \($0)" } ?? "")")
+                    .font(.caption2)
+                Text("created \(e.createdAt.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "?")  ·  start \(e.start.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption2).foregroundStyle(.secondary)
+                if let c = e.comment, !c.isEmpty {
+                    Text("“\(c)”").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button { openInOP(e.workPackageID) } label: { Image(systemName: "arrow.up.right.square") }
+                .buttonStyle(.plain)
+                .help("Open work package #\(e.workPackageID) in OpenProject to check anything not shown here")
+        }
+        .padding(.leading, 18)
+    }
+
+    private func durText(_ secs: TimeInterval) -> String {
+        MenuTitle.text(elapsed: secs, certainty: nil, showPercent: false)
+    }
+
+    private func openInOP(_ wp: Int) {
+        let base = controller.settings.opBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        if let url = URL(string: "\(base)/work_packages/\(wp)") { openURL(url) }
     }
 
     /// The single non-work catch-all, expressed as a one-of selection over the

@@ -7,13 +7,22 @@ public struct OPTimeEntry: Equatable, Sendable, Identifiable {
     public var start: Date
     public var durationSeconds: TimeInterval
     public var comment: String?
+    /// When OP recorded / last changed the entry — the key signal for telling an
+    /// accidental duplicate from a deliberate second entry.
+    public var createdAt: Date?
+    public var updatedAt: Date?
+    public var activity: String?
     public init(id: Int, workPackageID: Int, start: Date,
-                durationSeconds: TimeInterval, comment: String? = nil) {
+                durationSeconds: TimeInterval, comment: String? = nil,
+                createdAt: Date? = nil, updatedAt: Date? = nil, activity: String? = nil) {
         self.id = id
         self.workPackageID = workPackageID
         self.start = start
         self.durationSeconds = durationSeconds
         self.comment = comment
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.activity = activity
     }
 }
 
@@ -26,6 +35,9 @@ public struct ReconcileAction: Equatable, Sendable, Identifiable {
     public var start: Date
     public var survivorID: Int
     public var deleteIDs: [Int]
+    /// Every entry in the duplicate group (survivor + to-delete), so the UI can
+    /// expand and show exactly what differs before you confirm.
+    public var entries: [OPTimeEntry]
     /// The survivor's comment after folding in the deleted entries' comments, or
     /// nil when nothing needs to change on the survivor.
     public var mergedComment: String?
@@ -36,11 +48,13 @@ public struct ReconcileAction: Equatable, Sendable, Identifiable {
     public var id: Int { survivorID }
 
     public init(workPackageID: Int, start: Date, survivorID: Int, deleteIDs: [Int],
-                mergedComment: String?, repointSessionIDs: [UUID], label: String) {
+                entries: [OPTimeEntry], mergedComment: String?,
+                repointSessionIDs: [UUID], label: String) {
         self.workPackageID = workPackageID
         self.start = start
         self.survivorID = survivorID
         self.deleteIDs = deleteIDs
+        self.entries = entries
         self.mergedComment = mergedComment
         self.repointSessionIDs = repointSessionIDs
         self.label = label
@@ -102,7 +116,9 @@ public enum DuplicateReconcile {
                 .map(\.id)
             actions.append(ReconcileAction(
                 workPackageID: wp, start: survivor.start, survivorID: survivor.id,
-                deleteIDs: deleteIDs, mergedComment: mergedComment, repointSessionIDs: repoint,
+                deleteIDs: deleteIDs,
+                entries: group.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) },
+                mergedComment: mergedComment, repointSessionIDs: repoint,
                 label: "WP #\(wp): keep entry #\(survivor.id), delete \(deleteIDs.count) duplicate"
                     + (deleteIDs.count == 1 ? "" : "s")))
         }

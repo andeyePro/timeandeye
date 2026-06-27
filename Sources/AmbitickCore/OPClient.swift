@@ -205,13 +205,20 @@ public final class OPClient {
         let _embedded: Embedded
     }
     private struct TEElement: Decodable {
-        struct Links: Decodable { struct Href: Decodable { let href: String? }; let workPackage: Href? }
+        struct Links: Decodable {
+            struct Href: Decodable { let href: String? }
+            struct Titled: Decodable { let title: String? }
+            let workPackage: Href?
+            let activity: Titled?
+        }
         struct Comment: Decodable { let raw: String? }
         let id: Int
         let hours: String?
         let spentOn: String?
         let startTime: String?
         let comment: Comment?
+        let createdAt: String?
+        let updatedAt: String?
         let _links: Links
     }
 
@@ -248,8 +255,14 @@ public final class OPClient {
         return OPTimeEntry(id: e.id, workPackageID: wp,
                            start: startDate(spentOn: spentOn, startTime: e.startTime),
                            durationSeconds: parseISO8601Duration(e.hours ?? ""),
-                           comment: e.comment?.raw)
+                           comment: e.comment?.raw,
+                           createdAt: e.createdAt.flatMap(stamp.date(from:)),
+                           updatedAt: e.updatedAt.flatMap(stamp.date(from:)),
+                           activity: e._links.activity?.title)
     }
+
+    /// OP's full ISO-8601 timestamps (createdAt / updatedAt).
+    private static let stamp = ISO8601DateFormatter()
 
     /// Combine OP's `spentOn` (local day) + `startTime` (HH:MM) into an instant,
     /// in the user's timezone (matching how entries are written). No startTime →

@@ -14,7 +14,12 @@
   `DuplicateReconcile` core (4 checks) + the OP endpoint (mock-transport check) +
   controller `findDuplicateActions`/`applyReconcile` + the confirm-each UI. This
   is the cleanup half; the double-create that *made* new dupes was closed earlier
-  today (rank 3a).
+  today (rank 3a). Each group expands (chevron, or Expand all) to show every
+  entry's id, created time, duration, activity and comment so you can judge
+  safety before deleting, with KEEP/delete tags; and an "open in OpenProject"
+  per entry (opens its work package) to check anything Ambitick can't read —
+  custom fields etc. (`listTimeEntries` now also reads createdAt/updatedAt/
+  activity).
 - [x] **Backlog batch (drafted by subagents, integrated + verified serially)** —
   five contained optimisation items, each built and checked on the Mac before
   the next; 160 checks pass.
