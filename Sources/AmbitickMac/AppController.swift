@@ -957,6 +957,23 @@ public final class AppController: ObservableObject {
         (try? journal.spans(from: session.start, to: session.end)) ?? []
     }
 
+    /// Why the attributor would pick a task for this window — drives the
+    /// timeline's "why was this tracked as X?" panel. Scored at the window's own
+    /// time so the time-of-day prior matches what actually happened.
+    public func explainSpan(_ span: FocusSpan) -> AttributionExplanation {
+        attributor.explain(span.signal, tasks: taskCache, now: span.signal.timestamp)
+    }
+
+    /// Teach the attributor that this window is `ref` (a strong correction, like
+    /// a confirmation): future time on it attributes here. The visible "edit the
+    /// weighting" action behind the why-panel.
+    public func teachSurface(_ span: FocusSpan, to ref: TaskRef) {
+        attributor.confirm(span.signal, task: ref)
+        persistAssociations()
+        tracker.reevaluate()
+        objectWillChange.send()
+    }
+
     /// Per-task colour: user override first, stable hash otherwise.
     public func colour(for ref: TaskRef) -> NSColor {
         if let hex = settings.taskColours[ref.storageKey], let c = NSColor(hex: hex) {

@@ -19,6 +19,45 @@ public struct Attribution: Equatable, Sendable {
     }
 }
 
+/// A human-readable account of WHY a signal attributed to a target — the
+/// timeline "why was this tracked as X?" view. Mirrors `attribute()` exactly so
+/// the explanation can never disagree with the real decision.
+public struct AttributionExplanation: Equatable, Sendable {
+    public enum Source: String, Sendable, Equatable {
+        case pin                 // an explicit user pin (100%)
+        case opTaskURL           // a work-package URL in the tab
+        case opTaskTitle         // a work-package id in the window title / app
+        case pendingPrime        // a just-opened OP task priming the next surface
+        case primedSurface       // a remembered surface→task (a past correction)
+        case ranked              // learned associations + status/recency priors
+        case none
+    }
+    /// One candidate task and how its score broke down (learned vs prior).
+    public struct Line: Equatable, Sendable {
+        public var target: Target
+        public var score: Double
+        public var learned: Double   // contribution from learned associations
+        public var prior: Double     // contribution from status/recency/time-of-day
+        public init(target: Target, score: Double, learned: Double, prior: Double) {
+            self.target = target; self.score = score; self.learned = learned; self.prior = prior
+        }
+    }
+    public var source: Source
+    public var chosen: Target?
+    public var chosenScore: Double
+    /// Ranked alternatives with their score breakdown (empty for pin/OP sources,
+    /// where the decision bypasses scoring).
+    public var lines: [Line]
+    /// The signal features the learner keys on (e.g. "app=chrome",
+    /// "title=insurance") — what you'd correct to change the outcome.
+    public var features: [String]
+    public init(source: Source, chosen: Target?, chosenScore: Double,
+                lines: [Line], features: [String]) {
+        self.source = source; self.chosen = chosen; self.chosenScore = chosenScore
+        self.lines = lines; self.features = features
+    }
+}
+
 /// Turns one ActivitySignal into a ranked list of targets.
 /// Source strength order (spec): OP task URL > primed surface > pending prime
 /// > learned associations + priors.
@@ -161,6 +200,14 @@ public final class Attributor {
     }
 
     private func scored(_ signal: ActivitySignal, tasks: [WorkTask], now: Date) -> [Candidate] {
+        scoredComponents(signal, tasks: tasks, now: now)
+            .map { Candidate(target: $0.target, score: $0.score) }
+    }
+
+    /// The ranked candidates with their score split into the learned and the
+    /// prior contribution — the data behind both `scored()` and `explain()`.
+    private func scoredComponents(_ signal: ActivitySignal, tasks: [WorkTask],
+                                  now: Date) -> [AttributionExplanation.Line] {
         let targets = tasks.map { Target.task($0.ref) } + [.doNotTrack]
         let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets)
         let priors = tasks.map { ranker.score($0, at: now, learning: learning) }
@@ -172,14 +219,56 @@ public final class Attributor {
         let onOPProjectPage = opURL?.host == instanceHost
             && opURL?.path.contains("/projects/") == true
         let priorWeight = onOPProjectPage ? 0.65 : 0.2
-        var out: [Candidate] = []
+        var out: [AttributionExplanation.Line] = []
         for (task, prior) in zip(tasks, priors) {
-            let l = learned[.task(task.ref)] ?? 0
-            out.append(Candidate(target: .task(task.ref),
-                                 score: min(0.9, 0.7 * l + priorWeight * prior / maxPrior)))
+            let learnedPart = 0.7 * (learned[.task(task.ref)] ?? 0)
+            let priorPart = priorWeight * prior / maxPrior
+            out.append(.init(target: .task(task.ref), score: min(0.9, learnedPart + priorPart),
+                             learned: learnedPart, prior: priorPart))
         }
-        out.append(Candidate(target: .doNotTrack, score: 0.7 * (learned[.doNotTrack] ?? 0)))
+        let dntLearned = 0.7 * (learned[.doNotTrack] ?? 0)
+        out.append(.init(target: .doNotTrack, score: dntLearned, learned: dntLearned, prior: 0))
         return out.sorted { $0.score > $1.score }
+    }
+
+    /// Why this signal attributes the way it does — drives the timeline's
+    /// "why was this tracked as X?" panel. Mirrors `attribute()`'s source order
+    /// exactly, so what it explains is what actually happened.
+    public func explain(_ signal: ActivitySignal, tasks: [WorkTask],
+                        now: Date) -> AttributionExplanation {
+        let feats = LearningStore.features(from: signal).map { "\($0.kind.rawValue)=\($0.value)" }
+        if let pin = matchingPin(for: signal) {
+            return .init(source: .pin, chosen: .task(pin.task), chosenScore: 1.0,
+                         lines: [], features: feats)
+        }
+        if let url = signal.tabURL, OPURLParser.taskID(in: url, instanceHost: instanceHost) != nil {
+            return .init(source: .opTaskURL, chosen: bestURLTarget(signal), chosenScore: Self.inferredCeiling,
+                         lines: [], features: feats)
+        }
+        for text in [signal.windowTitle, signal.app].compactMap({ $0 }) {
+            if let id = OPURLParser.taskID(inTitle: text) {
+                return .init(source: .opTaskTitle, chosen: .task(.op(id)), chosenScore: Self.inferredCeiling,
+                             lines: [], features: feats)
+            }
+        }
+        let lines = scoredComponents(signal, tasks: tasks, now: now)
+        let surface = Surface(signal: signal)
+        if let pending = pendingPrime, pending.surface == surface {
+            return .init(source: .pendingPrime, chosen: .task(pending.task), chosenScore: 0.7,
+                         lines: lines, features: feats)
+        }
+        if let primed = primedSurfaces[surface] {
+            return .init(source: .primedSurface, chosen: .task(primed), chosenScore: 0.95,
+                         lines: lines, features: feats)
+        }
+        return .init(source: lines.isEmpty ? .none : .ranked, chosen: lines.first?.target,
+                     chosenScore: lines.first?.score ?? 0, lines: lines, features: feats)
+    }
+
+    private func bestURLTarget(_ signal: ActivitySignal) -> Target? {
+        guard let url = signal.tabURL,
+              let id = OPURLParser.taskID(in: url, instanceHost: instanceHost) else { return nil }
+        return .task(.op(id))
     }
 }
 

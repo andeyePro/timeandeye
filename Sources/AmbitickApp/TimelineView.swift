@@ -915,7 +915,7 @@ struct TimelineView: View {
         let spans = controller.timelineSpans(for: session)
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Windows in \(controller.name(of: .task(session.task))) · \(slot(session))")
+                Text("Windows in \(controller.name(of: .task(session.task))) · \(slot(session))  —  click one for why it tracked here")
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if !spans.isEmpty {
                     Spacer()
@@ -1056,21 +1056,53 @@ struct TimelineView: View {
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .padding(6)
-                        .frame(maxWidth: 340, alignment: .leading)
+                        .frame(maxWidth: 360, alignment: .leading)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
             .padding(.bottom, 2)
         }
-        .frame(maxHeight: 110)
+        .frame(maxHeight: 200)
     }
 
     private func detailText(_ span: FocusSpan) -> String {
-        """
+        let e = controller.explainSpan(span)
+        let chosen = e.chosen.map { controller.name(of: $0) } ?? "—"
+        var why = "why: \(whyLabel(e.source)) → \(chosen)"
+        if !e.lines.isEmpty {
+            let cands = e.lines.prefix(4).map {
+                "  \(controller.name(of: $0.target))  \(pct($0.score))  (learned \(pct($0.learned)) · prior \(pct($0.prior)))"
+            }.joined(separator: "\n")
+            why += "\ncandidates:\n\(cands)"
+        }
+        if !e.features.isEmpty {
+            why += "\nlearns on: \(e.features.joined(separator: ", "))"
+        }
+        return """
         \(span.signal.app)\(span.signal.windowTitle.map { " – \($0)" } ?? "")
         \(span.start.formatted(date: .omitted, time: .standard)) – \(span.end.formatted(date: .omitted, time: .standard))  (\(Int(span.end.timeIntervalSince(span.start)))s)
-        attributed: \(controller.name(of: span.target))  certainty \(String(format: "%.0f%%", span.certainty * 100))
+        attributed: \(controller.name(of: span.target))  certainty \(pct(span.certainty))
         url: \(span.signal.tabURL ?? "-")
+
+        \(why)
+
+        To fix future tracking: Move this window to the right task below — that
+        teaches it (boosts the learned weight), so this window attributes there
+        next time.
         """
+    }
+
+    private func pct(_ d: Double) -> String { String(format: "%.0f%%", d * 100) }
+
+    private func whyLabel(_ s: AttributionExplanation.Source) -> String {
+        switch s {
+        case .pin:           return "pinned (100%)"
+        case .opTaskURL:     return "OpenProject task URL in the tab"
+        case .opTaskTitle:   return "OpenProject id in the title"
+        case .pendingPrime:  return "a just-opened OP task primed it"
+        case .primedSurface: return "remembered from a past correction"
+        case .ranked:        return "learned associations + status/recency priors"
+        case .none:          return "nothing matched"
+        }
     }
 }

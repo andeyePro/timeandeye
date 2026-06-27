@@ -137,6 +137,31 @@ func attributorChecks(_ c: Checks) {
         try expect(miss.best?.target != .task(.op(2)) || miss.certainty < 1.0)
     }
 
+    c.check("explain mirrors the decision source and exposes the learned/prior breakdown") {
+        let a = Attributor(instanceHost: host)
+        let e = a.explain(ghostty, tasks: tasks, now: now)
+        try expectEq(e.source, .ranked, "no pin/url/prime → ranked")
+        try expect(!e.features.isEmpty, "the features the learner keys on are surfaced")
+        try expect(e.lines.contains { $0.target == .task(.op(1)) }, "candidates are listed")
+        try expect(e.lines.allSatisfy { abs($0.score - ($0.learned + $0.prior)) < 0.5 || $0.score <= 0.9 },
+                   "each line carries its learned + prior split")
+
+        // A primed surface (a past correction) shows as primedSurface.
+        let primed = Attributor(instanceHost: host)
+        primed.confirm(ghostty, task: .op(1))
+        let pe = primed.explain(ghostty, tasks: tasks, now: now)
+        try expectEq(pe.source, .primedSurface)
+        try expectEq(pe.chosen, .task(.op(1)))
+
+        // A pin overrides everything at 1.0.
+        let pinned = Attributor(instanceHost: host)
+        pinned.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty"])), task: .op(2)))
+        let pp = pinned.explain(ghostty, tasks: tasks, now: now)
+        try expectEq(pp.source, .pin)
+        try expectEq(pp.chosen, .task(.op(2)))
+        try expectEq(pp.chosenScore, 1.0)
+    }
+
     c.check("a cross-kind pin tie resolves by recency, not incomparable specificity") {
         // A 3-segment component pin and a 1-leaf expression both match. prefix.count
         // (3) and leafCount (1) aren't commensurable, so the winner is the most
