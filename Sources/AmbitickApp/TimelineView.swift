@@ -51,6 +51,8 @@ struct SliceShape: Shape {
 
 struct TimelineView: View {
     @ObservedObject var controller: AppController
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     /// Continuous timeline: the viewport is an absolute [viewStart, +viewSpan]
     /// window that pans/zooms freely across midnight. No per-day bucketing —
     /// the only bounds are a history floor and the live edge (now).
@@ -125,11 +127,13 @@ struct TimelineView: View {
         .onChange(of: viewStart) { _, _ in reloadIfNeeded() }
         .onChange(of: viewSpan) { _, _ in reloadIfNeeded() }
         .onChange(of: controller.journalRevision) { _, _ in reloadSessions(); reloadTodayPreview() }
+        .onChange(of: controller.pendingTimelineFocus) { _, _ in focusOnPendingSlice() }
         .onAppear {
             controller.noteTimeViewOpened(.timeline)
             zoomToLatestBlock()
             reloadSessions()
             reloadTodayPreview()
+            focusOnPendingSlice()
             installScrollPan()
         }
         .onDisappear {
@@ -309,20 +313,40 @@ struct TimelineView: View {
                 .help("Today, midnight to now")
             Text(totalText).font(.caption).foregroundStyle(.secondary)
             Spacer()
-            // Cross-preview: today's pie + total tracked today, without leaving
-            // the timeline. Then the switcher to the pie window.
-            MiniPie(nodes: todayNodes, colour: { Color(nsColor: controller.colour(for: $0)) })
-                .frame(width: 20, height: 20)
-                .help("Today's breakdown — switch to the pie for detail")
+            // Cross-preview / navigation: today's pie + total. Clicking the pie
+            // opens the pie view (no separate switcher icon).
+            Button {
+                controller.noteTimeViewOpened(.spent)
+                openWindow(id: "spent")
+                dismissWindow(id: "timeline")
+            } label: {
+                MiniPie(nodes: todayNodes, colour: { Color(nsColor: controller.colour(for: $0)) })
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .help("Today's breakdown — click for the pie view")
             Text("today \(MenuTitle.text(elapsed: todayTotalSeconds, certainty: nil, showPercent: false))")
                 .font(.caption).foregroundStyle(.secondary)
-            TimeViewSwitcher(controller: controller, current: .timeline)
         }
         .buttonStyle(.plain)
     }
 
     private var todayTotalSeconds: TimeInterval { todayNodes.reduce(0) { $0 + $1.seconds } }
     private func reloadTodayPreview() { todayNodes = controller.todaySpentNodes() }
+
+    /// Frame and open the slice the pie view asked us to focus (clicking a slice
+    /// in its mini-timeline), then clear the request.
+    private func focusOnPendingSlice() {
+        guard let s = controller.pendingTimelineFocus else { return }
+        controller.pendingTimelineFocus = nil
+        let dur = max(s.end.timeIntervalSince(s.start), 60)
+        let pad = max(dur * 0.5, 300)
+        viewStart = s.start.addingTimeInterval(-pad)
+        viewSpan = dur + 2 * pad
+        clampViewport()
+        reloadSessions()
+        openEditor(for: s, isNew: false)
+    }
 
     /// The visible date span: one date when the window sits inside a day, else
     /// a "Jun 24 – 25" range across the midnight it crosses.

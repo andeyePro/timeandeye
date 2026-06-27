@@ -7,6 +7,9 @@ struct PopoverView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var filter = ""
     @State private var note = ""
+    /// Today's breakdown for the footer launch button (a live mini-pie). Cached —
+    /// it's a journal query, not for every popover render.
+    @State private var todayNodes: [TimeAggregator.Node] = []
     @State private var changeMode = false
     @FocusState private var noteFocused: Bool
     @FocusState private var filterFocused: Bool
@@ -47,11 +50,13 @@ struct PopoverView: View {
         // steal focus). Re-sync when tracking state changes (the controller
         // clears the note on task-switch/stop).
         .onChange(of: note) { _, new in controller.manualNote = new }
-        .onChange(of: controller.trackerState) { _, _ in note = controller.manualNote }
+        .onChange(of: controller.trackerState) { _, _ in note = controller.manualNote; todayNodes = controller.todaySpentNodes() }
+        .onChange(of: controller.journalRevision) { _, _ in todayNodes = controller.todaySpentNodes() }
         // Focus the filter when the popover opens so you can type-to-search
         // immediately (the "type to search…" hint promised typing would work).
         .onAppear {
             changeMode = controller.settings.popoverDefaultsToChangeMode
+            todayNodes = controller.todaySpentNodes()
             DispatchQueue.main.async { filterFocused = true }
         }
     }
@@ -483,9 +488,14 @@ struct PopoverView: View {
                 openWindow(id: controller.timeViewToOpen())
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
-                Image(systemName: "chart.bar.xaxis")
+                if todayNodes.isEmpty {
+                    Image(systemName: "chart.pie")
+                } else {
+                    MiniPie(nodes: todayNodes, colour: { Color(nsColor: controller.colour(for: $0)) })
+                        .frame(width: 22, height: 22)
+                }
             }
-            .help("Time – timeline & breakdown")
+            .help("Time – today's breakdown; click for the timeline / pie")
             Button {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)

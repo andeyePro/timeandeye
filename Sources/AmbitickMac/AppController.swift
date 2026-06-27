@@ -953,6 +953,11 @@ public final class AppController: ObservableObject {
     /// push in several paths (allocating a formatter is not cheap).
     private static let iso8601 = ISO8601DateFormatter()
 
+    /// A slice the timeline should frame + open when it next appears — set when
+    /// you click a slice in the pie window's mini-timeline. The timeline consumes
+    /// and clears it.
+    @Published public var pendingTimelineFocus: Session?
+
     /// Record which time view was last opened (persists, so "last viewed"
     /// survives a relaunch).
     public func noteTimeViewOpened(_ which: TimeView) {

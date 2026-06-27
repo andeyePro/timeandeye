@@ -2,40 +2,6 @@ import SwiftUI
 import AmbitickCore
 import AmbitickMac
 
-/// Top-right switcher shared by the Timeline and Pie windows: swap to the other
-/// view (open it, dismiss this one) and remember the choice so the combined
-/// entry point's "last viewed" mode is right.
-struct TimeViewSwitcher: View {
-    @ObservedObject var controller: AppController
-    let current: TimeView
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
-
-    var body: some View {
-        HStack(spacing: 2) {
-            seg(.timeline, "rectangle.split.3x1", "Timeline")
-            seg(.spent, "chart.pie", "Pie chart")
-        }
-    }
-
-    private func seg(_ which: TimeView, _ icon: String, _ help: String) -> some View {
-        Button {
-            guard which != current else { return }
-            controller.noteTimeViewOpened(which)
-            openWindow(id: which == .timeline ? "timeline" : "spent")
-            dismissWindow(id: current == .timeline ? "timeline" : "spent")
-        } label: {
-            Image(systemName: icon)
-                .font(.callout)
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(which == current ? Color.accentColor.opacity(0.25) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 5))
-        }
-        .buttonStyle(.plain)
-        .help(which == current ? "\(help) (current)" : "Switch to \(help)")
-    }
-}
-
 /// A compact donut of a project breakdown — the timeline window's "today"
 /// cross-preview. Project-level only (no rings / hover), so it stays cheap.
 struct MiniPie: View {
@@ -82,6 +48,8 @@ struct MiniTimeline: View {
     let start: Date
     let end: Date
     let colour: (TaskRef) -> Color
+    /// Clicking a slice opens the full timeline focused on that exact slice.
+    var onTap: ((Session) -> Void)? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -96,6 +64,7 @@ struct MiniTimeline: View {
                         .fill(colour(s.task).opacity(0.9))
                         .frame(width: max(x1 - x0, 2), height: 16)
                         .position(x: (x0 + x1) / 2, y: 11)
+                        .onTapGesture { onTap?(s) }
                 }
             }
         }

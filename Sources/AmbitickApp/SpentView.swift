@@ -12,6 +12,8 @@ import AmbitickMac
 /// are drawn desaturated with a dashed outline (and "local" in the legend).
 struct SpentView: View {
     @ObservedObject var controller: AppController
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var period: Period = .today
     @State private var blockData: (sessions: [Session], start: Date, end: Date)?
     @State private var hover: Selection = .none
@@ -70,14 +72,23 @@ struct SpentView: View {
                     .font(.caption)
                 Spacer()
                 Text(totalText).font(.caption).foregroundStyle(.secondary)
-                TimeViewSwitcher(controller: controller, current: .spent)
             }
-            // Cross-preview: the current block's timeline, without leaving the pie.
+            // Cross-preview / navigation: the current block's timeline. Clicking
+            // a slice opens the full timeline framed on that exact slice. Labelled
+            // with the first slice's start time.
             if let block = blockData, !block.sessions.isEmpty {
+                let from = block.sessions.map(\.start).min() ?? block.start
                 HStack(spacing: 6) {
-                    Text("current block").font(.caption2).foregroundStyle(.secondary)
+                    Text("from \(from.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption2).foregroundStyle(.secondary)
                     MiniTimeline(sessions: block.sessions, start: block.start, end: block.end,
-                                 colour: { Color(nsColor: controller.colour(for: $0)) })
+                                 colour: { Color(nsColor: controller.colour(for: $0)) },
+                                 onTap: { s in
+                                     controller.pendingTimelineFocus = s
+                                     controller.noteTimeViewOpened(.timeline)
+                                     openWindow(id: "timeline")
+                                     dismissWindow(id: "spent")
+                                 })
                 }
             }
             if let note = controller.actionNote {
