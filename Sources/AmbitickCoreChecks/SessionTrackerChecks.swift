@@ -329,6 +329,24 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[0].end, t(180))
     }
 
+    c.check("liveSliceStart is unchanged across a sub-grace excursion + revert") {
+        // The menu bar reads its clock off liveSliceStart; a sub-grace excursion
+        // that re-tags spans back to the base task must NOT move that start, or
+        // the menu under-counts versus what flushes to OP.
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        let before = tracker.liveSliceStart
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // 10s excursion (< grace)
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))    // back within grace → revert
+        try expectEq(before, t(0), "live slice begins at the start of tracking")
+        try expectEq(tracker.liveSliceStart, before,
+                     "a reverted sub-grace excursion must not move liveSliceStart")
+    }
+
     c.check("a sub-minute excursion past the old grace still folds back (no 0:00 slice)") {
         // The reported bug: a ~45 s dip into another window (longer than the 30 s
         // Switch Buffer, but under a displayed minute) committed as its own slice

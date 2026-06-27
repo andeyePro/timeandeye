@@ -39,6 +39,20 @@ public enum MenuTitle {
         return "\(body) \(String(trimmed.prefix(chars)))"
     }
 
+    /// Elapsed for the live clock. `liveSliceStart` (the tracker's contiguous
+    /// slice start) is authoritative: it spans excursion windows that reverted
+    /// back to the base task, which the per-visit banked+running figure misses —
+    /// so without it the menu bar under-counts heavy flitting versus what flushes
+    /// to OP. The banked+running fallback wins when there is no live slice (slice
+    /// just committed: the tracker reset to `now` while the controller re-banked
+    /// the committed time to keep the clock continuous), so take the larger.
+    public static func displayedElapsed(liveSliceStart: Date?, bankedFallback: TimeInterval,
+                                        running: TimeInterval, now: Date) -> TimeInterval {
+        let fallback = bankedFallback + running
+        guard let start = liveSliceStart else { return fallback }
+        return max(now.timeIntervalSince(start), fallback)
+    }
+
     /// Linear blend between the user's two gradient colours; grey when stopped.
     public static func colour(certainty: Double?, lowHex: String, highHex: String) -> NSColor {
         guard let certainty else { return .systemGray }
@@ -543,7 +557,8 @@ public final class AppController: ObservableObject {
             newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
         case .tracking(let target, let certainty):
-            let running = targetSince.map { Date().timeIntervalSince($0) } ?? 0
+            let now = Date()
+            let running = targetSince.map { now.timeIntervalSince($0) } ?? 0
             // When THIS task's current visit survives the grace it has "taken
             // over": every OTHER task's session is now ended (a real stint
             // elsewhere starts fresh on return). Brief excursions never reach
@@ -553,7 +568,14 @@ public final class AppController: ObservableObject {
                 visitSolid = true
                 bankedElapsed = bankedElapsed.filter { $0.key == target }
             }
-            let elapsed = bankedElapsed[target, default: 0] + running
+            // tracker.liveSliceStart spans the whole contiguous stretch —
+            // INCLUDING sub-grace excursion windows that reverted back to this
+            // task — so it recovers re-tagged seconds the per-visit banked figure
+            // drops; banked+running is the fallback when no live slice is open.
+            let elapsed = MenuTitle.displayedElapsed(
+                liveSliceStart: tracker.liveSliceStart,
+                bankedFallback: bankedElapsed[target, default: 0],
+                running: running, now: now)
             let body = MenuTitle.text(elapsed: elapsed, certainty: certainty,
                                       showPercent: settings.showPercent)
             // Elapsed WITHOUT the task name — the popover already shows the task

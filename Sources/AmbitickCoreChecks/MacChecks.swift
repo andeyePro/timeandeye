@@ -36,6 +36,35 @@ func menuTitleChecks(_ c: Checks) {
                      "blank name leaves the time alone")
     }
 
+    c.check("displayed elapsed recovers re-tagged excursion seconds") {
+        let now = Date(timeIntervalSince1970: 1_750_000_300)
+        // Live slice opened 180 s ago and spans a reverted excursion; the
+        // per-visit banked figure only saw the latest visit (70 s) and so
+        // under-counts. liveSliceStart is authoritative → 180 s.
+        try expectClose(
+            MenuTitle.displayedElapsed(liveSliceStart: now.addingTimeInterval(-180),
+                                       bankedFallback: 0, running: 70, now: now),
+            180)
+        // A just-committed live slice: the tracker reset to `now` (elapsed 0)
+        // while the controller re-banked the committed time — the fallback wins.
+        try expectClose(
+            MenuTitle.displayedElapsed(liveSliceStart: now, bankedFallback: 600,
+                                       running: 0, now: now),
+            600)
+    }
+
+    c.check("displayed elapsed falls back to banked+running when no live slice") {
+        let now = Date(timeIntervalSince1970: 1_750_000_300)
+        try expectClose(
+            MenuTitle.displayedElapsed(liveSliceStart: nil, bankedFallback: 120,
+                                       running: 45, now: now),
+            165)
+        try expectClose(
+            MenuTitle.displayedElapsed(liveSliceStart: nil, bankedFallback: 0,
+                                       running: 0, now: now),
+            0)
+    }
+
     c.check("colour gradient and hex parsing") {
         let low = try unwrap(NSColor(hex: "#FF0000"))
         try expectClose(Double(low.redComponent), 1.0)
