@@ -69,6 +69,10 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var taskLayouts: [String: [WindowFrame]]
     public var lastLayout: [WindowFrame]
     public var systemNotifications: Bool
+    /// The popover's default mode when tracking: true = "Change to" (relabel the
+    /// running session), false = "Switch to" (start a fresh session). Clicking
+    /// the running task title flips to the other mode for that open.
+    public var popoverDefaultsToChangeMode: Bool
     /// Lock the Mac when "I'm leaving my desk" is activated.
     public var lockOnLeave: Bool
     /// Non-OP tasks (leisure etc.), fully tracked locally.
@@ -97,6 +101,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 taskLayouts: [String: [WindowFrame]] = [:],
                 lastLayout: [WindowFrame] = [],
                 systemNotifications: Bool = true,
+                popoverDefaultsToChangeMode: Bool = true,
                 lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:]) {
@@ -121,6 +126,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.taskLayouts = taskLayouts
         self.lastLayout = lastLayout
         self.systemNotifications = systemNotifications
+        self.popoverDefaultsToChangeMode = popoverDefaultsToChangeMode
         self.lockOnLeave = lockOnLeave
         self.localTasks = localTasks
         self.taskColours = taskColours
@@ -152,6 +158,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         taskLayouts = try c.decodeIfPresent([String: [WindowFrame]].self, forKey: .taskLayouts) ?? defaults.taskLayouts
         lastLayout = try c.decodeIfPresent([WindowFrame].self, forKey: .lastLayout) ?? defaults.lastLayout
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
+        popoverDefaultsToChangeMode = try c.decodeIfPresent(Bool.self, forKey: .popoverDefaultsToChangeMode) ?? defaults.popoverDefaultsToChangeMode
         lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
         localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
         taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours

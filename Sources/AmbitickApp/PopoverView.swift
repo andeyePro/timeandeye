@@ -50,7 +50,10 @@ struct PopoverView: View {
         .onChange(of: controller.trackerState) { _, _ in note = controller.manualNote }
         // Focus the filter when the popover opens so you can type-to-search
         // immediately (the "type to search…" hint promised typing would work).
-        .onAppear { DispatchQueue.main.async { filterFocused = true } }
+        .onAppear {
+            changeMode = controller.settings.popoverDefaultsToChangeMode
+            DispatchQueue.main.async { filterFocused = true }
+        }
     }
 
     private var header: some View {
@@ -63,7 +66,9 @@ struct PopoverView: View {
                         Text(controller.currentTaskName()).font(.headline).lineLimit(2)
                     }
                     .buttonStyle(.plain)
-                    .help("Click to change this task")
+                    .help(changeMode
+                          ? "In Change-to mode — click to switch to Switch-to (start a new session)"
+                          : "In Switch-to mode — click to switch to Change-to (relabel this session)")
                     Spacer()
                     // One-click "that switch was wrong": fold the current slice
                     // back onto the previous task. Deliberately light (non-bold)
@@ -86,9 +91,9 @@ struct PopoverView: View {
                     if let pin = controller.currentPin {
                         // Pinned: drop the redundant "% certain" — the chip says
                         // it's locked. Pin icon + the scope's last segment (NOT
-                        // the task name, which is already shown above) re-opens
-                        // the editor; only the ✕ unpins.
-                        Text(controller.menuText)
+                        // the task name, already shown above) re-opens the
+                        // editor, where the ✕ unpins (no separate badge ✕).
+                        Text(controller.elapsedText)
                             .font(.caption).foregroundStyle(.secondary)
                         Button { reopenPinning(pin.pin) } label: {
                             HStack(spacing: 2) {
@@ -100,16 +105,9 @@ struct PopoverView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.primary)   // white in dark mode, visible in light
-                        .help("Pinned — click to adjust the scope")
-                        Button { controller.unpinCurrentSurface() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .font(.caption2)
-                        .help("Unpin")
+                        .help("Pinned — click to adjust the scope or unpin")
                     } else {
-                        Text("\(controller.menuText)  ·  \(Int((certainty * 100).rounded()))% certain")
+                        Text("\(controller.elapsedText)  ·  \(Int((certainty * 100).rounded()))% certain")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -122,11 +120,6 @@ struct PopoverView: View {
                         .buttonStyle(.plain)
                         .help("Pin this window/site to the current task (always 100%)")
                     }
-                    Button { changeMode.toggle() } label: {
-                        Image(systemName: changeMode ? "arrow.left.arrow.right" : "pencil")
-                    }
-                    .buttonStyle(.plain)
-                    .help(changeMode ? "Back to Switch to" : "Change the current task")
                     Button { controller.setAway(!controller.away) } label: {
                         Image(systemName: controller.away ? "figure.walk.motion" : "figure.walk")
                             .foregroundStyle(controller.away ? Color.accentColor : .primary)

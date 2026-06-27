@@ -149,6 +149,8 @@ struct SettingsView: View {
                         value: $controller.settings.idleBackfillWindowSeconds, in: 3600...86_400, step: 3600)
                 Text("After an idle stop the gap defaults to a break. For this long afterwards the popover offers a one-tap \"count it as <task>\" — no need to open the timeline.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Popover defaults to \"Change to\" (relabel the running session); off = \"Switch to\" (start fresh). Clicking the task title flips it.",
+                       isOn: $controller.settings.popoverDefaultsToChangeMode)
                 Toggle("System notifications (sounds still play when off)",
                        isOn: $controller.settings.systemNotifications)
                 Toggle("Lock the Mac when I leave my desk (⌘⇧L)",

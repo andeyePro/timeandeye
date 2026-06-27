@@ -97,6 +97,9 @@ public struct IdleGap: Equatable, Sendable {
 public final class AppController: ObservableObject {
     @Published public private(set) var trackerState: TrackerState = .stopped
     @Published public private(set) var menuText = "–"
+    /// Elapsed time only (no task name) for the popover, which shows the task as
+    /// its headline — see refreshTitle.
+    @Published public private(set) var elapsedText = "–"
     @Published public private(set) var menuColour = NSColor.systemGray
     @Published public private(set) var taskCache: [WorkTask] = []
     @Published public private(set) var pendingReview: [ReviewSegment] = []
@@ -550,6 +553,10 @@ public final class AppController: ObservableObject {
             let elapsed = bankedElapsed[target, default: 0] + running
             let body = MenuTitle.text(elapsed: elapsed, certainty: certainty,
                                       showPercent: settings.showPercent)
+            // Elapsed WITHOUT the task name — the popover already shows the task
+            // as its headline, so menuText (which carries the name for the menu
+            // bar) would duplicate it there.
+            elapsedText = body
             // menuTaskChars == 0 → withTaskName returns the body unchanged (off).
             newText = MenuTitle.withTaskName(name(of: target), chars: settings.menuTaskChars,
                                              body: body)
