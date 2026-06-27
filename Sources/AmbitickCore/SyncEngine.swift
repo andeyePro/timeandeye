@@ -53,7 +53,20 @@ public final class SyncEngine {
                     workPackageID: wpID, start: session.start, duration: duration,
                     activityID: activity, comment: comment, startTime: nil)
             }
-            try journal.markPushed(session.id, opTimeEntryID: entryID)
+            // The create succeeded; OP now holds the entry. If marking the
+            // journal fails (save() can throw on the SQLite store), the session
+            // would stay pushedToOP=false and the next sync would re-POST it =
+            // duplicate. Roll OP back to match the journal: best-effort delete
+            // the just-created entry, then rethrow so the session retries clean.
+            do {
+                try journal.markPushed(session.id, opTimeEntryID: entryID)
+            } catch {
+                if let entryID {
+                    do { try await client.deleteTimeEntry(id: entryID) }
+                    catch { onDebug("orphan cleanup failed for entry \(entryID): \(error)") }
+                }
+                throw error
+            }
             pushed += 1
         }
         return pushed

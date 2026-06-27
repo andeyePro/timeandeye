@@ -25,6 +25,7 @@ let suites: [(String, (Checks) -> Void)] = [
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("OPClient", opClientChecks),
     ("SyncEngine", syncEngineChecks),
+    ("SyncIdempotency", syncIdempotencyChecks),
     ("EndToEnd", endToEndChecks),
 ]
 

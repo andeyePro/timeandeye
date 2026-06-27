@@ -159,7 +159,12 @@ public final class OPClient {
                                              comment: comment, startTime: startTime)
         let data = try await send(request(path: "api/v3/time_entries", method: "POST", body: body))
         struct Created: Decodable { let id: Int? }
-        return (try? JSONDecoder().decode(Created.self, from: data))?.id
+        // Don't swallow an undecodable 2xx body with `try?`: a body we can't
+        // parse means OP may have created an entry whose id we can't recover,
+        // i.e. an un-PATCHable/-DELETE-able orphan. Surface it via the shared
+        // decode helper (-> .malformedResponse). A valid but id-less body like
+        // `{}` still decodes to nil and returns nil.
+        return try decode(Created.self, from: data).id
     }
 
     /// Timeline edits: rewrite an existing entry in place.
