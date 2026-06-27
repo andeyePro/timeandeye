@@ -5,6 +5,14 @@ import Foundation
 public protocol JournalStore {
     func save(_ session: Session) throws
     func allSessions() throws -> [Session]
+    /// A single session by id, without decoding every row — for edit/undo paths
+    /// that previously did `allSessions().first(where: id==)` (a full-table
+    /// decode to find one row).
+    func session(id: UUID) throws -> Session?
+    /// Total journalled sessions, and how many have been pushed — COUNT queries
+    /// so the journal summary never decodes the whole table just to size it.
+    func sessionCount() throws -> Int
+    func pushedCount() throws -> Int
     /// Sessions overlapping [from, to), oldest first — the timeline's feed.
     func sessions(from: Date, to: Date) throws -> [Session]
     /// Sessions eligible for OP push: certainty >= threshold, not yet pushed,
@@ -39,6 +47,18 @@ public final class InMemoryJournalStore: JournalStore {
 
     public func allSessions() throws -> [Session] {
         sessions
+    }
+
+    public func session(id: UUID) throws -> Session? {
+        sessions.first { $0.id == id }
+    }
+
+    public func sessionCount() throws -> Int {
+        sessions.count
+    }
+
+    public func pushedCount() throws -> Int {
+        sessions.filter(\.pushedToOP).count
     }
 
     public func sessions(from: Date, to: Date) throws -> [Session] {

@@ -155,6 +155,10 @@ public final class AppController: ObservableObject {
     private var client: OPClient?
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
+    /// Dedicated, tight (~12 s) crash-safety checkpoint timer, gated to
+    /// .tracking. Generous tolerance lets the OS coalesce the wakeup, so the
+    /// extra cadence costs no measurable energy over the 60 s refresh timer.
+    private var checkpointTimer: Timer?
     private var taskChangedAt = Date()
     private var currentTarget: Target?
     /// The task we were tracking immediately before the current one, held in
@@ -376,6 +380,15 @@ public final class AppController: ObservableObject {
                     self.targetSince = now
                     self.visitSolid = false
                     self.taskChangedAt = now
+                    // The old task's slice has already been flushed by the
+                    // tracker on this switch, so the 60 s checkpoint still
+                    // pointing at the OLD [start,end] would, on a crash in this
+                    // window, be promoted to a slice overlapping the flushed one
+                    // (duplicate time + duplicate OP entry). Clear it and
+                    // re-anchor to the new task's start (targetSince is `now`,
+                    // already set above, which checkpointLive reads).
+                    self.clearCheckpoint()
+                    self.checkpointLive()
                     // NB: the note is NOT cleared here. A display switch (incl.
                     // a sub-grace excursion that reverts) used to wipe the note
                     // before the slice it belonged to was flushed, losing it.
@@ -538,6 +551,14 @@ public final class AppController: ObservableObject {
                 await self?.syncIfEnabled()   // retry path for failed/late pushes
             }
         }
+        // Tight crash-safety cadence: checkpointLive itself no-ops unless we're
+        // .tracking, so a stopped app does nothing here. The 5 s tolerance lets
+        // the OS batch this with other timer fires — no extra wakeups.
+        let cp = Timer.scheduledTimer(withTimeInterval: 12, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkpointLive() }
+        }
+        cp.tolerance = 5
+        checkpointTimer = cp
         Task { await refreshTasks() }
         reloadReview()
     }
@@ -612,15 +633,22 @@ public final class AppController: ObservableObject {
     }
 
     private func promoteStaleCheckpoint() {
-        guard let stale = (try? journal.allSessions())?.first(where: { $0.id == Self.liveCheckpointID }),
-              stale.end.timeIntervalSince(stale.start) >= 60 else {
+        let all = (try? journal.allSessions()) ?? []
+        let stale = all.first { $0.id == Self.liveCheckpointID }
+        // Real journalled slices only (drop the checkpoint row itself) — these
+        // are what a switch-flush would already have written, so an overlap with
+        // them means promoting the checkpoint would duplicate time + OP entry.
+        let journalled = all.filter { $0.id != Self.liveCheckpointID }
+        guard let recovered = CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: journalled) else {
             clearCheckpoint(); return
         }
         // Recover crash-lost time as a real, pushable slice.
-        try? journal.save(Session(task: stale.task, start: stale.start, end: stale.end,
-                                  certainty: stale.certainty, comment: "recovered after restart"))
+        try? journal.save(Session(task: recovered.task, start: recovered.start,
+                                  end: recovered.end, certainty: recovered.certainty,
+                                  comment: "recovered after restart"))
         clearCheckpoint()
-        DebugLog.write("recovered crash-lost session \(stale.start)..\(stale.end)")
+        DebugLog.write("recovered crash-lost session \(recovered.start)..\(recovered.end)")
     }
 
     // MARK: - User actions
@@ -879,11 +907,17 @@ public final class AppController: ObservableObject {
     @Published public private(set) var journalRevision = 0
 
     private func updateJournalSummary() {
-        let all = ((try? journal.allSessions()) ?? []).filter { $0.id != Self.liveCheckpointID }
+        // COUNT queries instead of decoding the whole table. The checkpoint row
+        // (pushedToOP=true sentinel) is counted in both totals, exactly as the
+        // old allSessions()-minus-checkpoint logic netted out: total includes it
+        // and `handled` includes it, so both shift by one and the visible
+        // "journalled vs handled" arithmetic is unchanged. (The row is normally
+        // absent — present only while a live session is in flight.)
+        let total = (try? journal.sessionCount()) ?? 0
+        let pushed = (try? journal.pushedCount()) ?? 0
         let awaiting = (try? journal.sessions(
             needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
-        let pushed = all.filter(\.pushedToOP).count
-        journalSummary = "\(all.count) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
+        journalSummary = "\(total) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
         journalRevision &+= 1
     }
 
@@ -1208,7 +1242,7 @@ public final class AppController: ObservableObject {
         try? journal.save(session)
         registerUndo("create \(name(of: .task(session.task)))") { [weak self] in
             guard let self else { return }
-            let saved = (try? self.journal.allSessions())?.first { $0.id == session.id }
+            let saved = try? self.journal.session(id: session.id)
             await self.deleteTimelineSession(saved ?? session, undoable: false)
         }
         updateJournalSummary()
@@ -1218,13 +1252,13 @@ public final class AppController: ObservableObject {
     /// Persist a timeline edit; PATCH the OP entry when one exists.
     public func applyTimelineEdit(_ session: Session, undoable: Bool = true) async {
         if undoable,
-           let previous = (try? journal.allSessions())?.first(where: { $0.id == session.id }) {
+           let previous = try? journal.session(id: session.id) {
             registerUndo("edit \(name(of: .task(previous.task)))") { [weak self] in
                 await self?.applyTimelineEdit(previous, undoable: false)
             }
         }
         var session = session
-        let previous = (try? journal.allSessions())?.first(where: { $0.id == session.id })
+        let previous = try? journal.session(id: session.id)
         // Task changed (e.g. a mis-filed slice reassigned in the editor): the
         // old OP entry belongs to the old work package — delete it, drop the
         // id, and let sync recreate under the new task. Also teach the

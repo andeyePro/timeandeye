@@ -138,6 +138,31 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
+    public func session(id: UUID) throws -> Session? {
+        var out: [Session] = []
+        try query("SELECT json FROM sessions WHERE id = ?",
+                  bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
+            out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
+        }
+        return out.first
+    }
+
+    public func sessionCount() throws -> Int {
+        var count = 0
+        try query("SELECT COUNT(*) FROM sessions") { stmt in
+            count = Int(sqlite3_column_int64(stmt, 0))
+        }
+        return count
+    }
+
+    public func pushedCount() throws -> Int {
+        var count = 0
+        try query("SELECT COUNT(*) FROM sessions WHERE pushed = 1") { stmt in
+            count = Int(sqlite3_column_int64(stmt, 0))
+        }
+        return count
+    }
+
     public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE pushed = 0 AND is_op = 1 AND certainty >= ? ORDER BY start",

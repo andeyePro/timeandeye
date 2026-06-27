@@ -1,6 +1,48 @@
 import Foundation
+import AmbitickCore
 
 // Suites register here as they are implemented (plan task order).
+
+func checkpointRecoveryChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func slice(_ task: TaskRef, _ from: TimeInterval, _ to: TimeInterval) -> Session {
+        Session(task: task, start: t0.addingTimeInterval(from),
+                end: t0.addingTimeInterval(to), certainty: 0.9)
+    }
+
+    c.check("nil stale -> nil") {
+        try expectNil(CheckpointRecovery.recover(stale: nil, floor: 60, alreadyJournalled: []))
+    }
+
+    c.check("stale shorter than floor -> nil") {
+        let stale = slice(.op(1), 0, 30)   // 30 s < 60 s floor
+        try expectNil(CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: []))
+    }
+
+    c.check("stale already covered by a same-task journalled slice -> nil") {
+        // The switch flushed the old task's slice; the checkpoint still pointed
+        // at the same span. Promoting it would duplicate the time + OP entry.
+        let stale = slice(.op(1), 0, 600)
+        let flushed = slice(.op(1), 0, 600)
+        try expectNil(CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: [flushed]))
+    }
+
+    c.check("genuine orphan >= floor, no overlap -> recovered") {
+        let stale = slice(.op(1), 0, 600)
+        let elsewhere = slice(.op(2), 1000, 1600)   // different task + time
+        try expectEq(CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: [elsewhere]), stale)
+    }
+
+    c.check("same span but DIFFERENT task -> recovered (not a duplicate)") {
+        let stale = slice(.op(1), 0, 600)
+        let other = slice(.op(2), 0, 600)
+        try expectEq(CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: [other]), stale)
+    }
+}
 let suites: [(String, (Checks) -> Void)] = [
     ("Models", modelsChecks),
     ("OPURLParser", opURLParserChecks),
@@ -11,6 +53,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("PredicateParser", predicateParserChecks),
     ("Attributor", attributorChecks),
     ("MinuteResolver", minuteResolverChecks),
+    ("CheckpointRecovery", checkpointRecoveryChecks),
     ("SessionTracker", sessionTrackerChecks),
     ("TimelineMath", timelineMathChecks),
     ("CommentRouting", commentRoutingChecks),

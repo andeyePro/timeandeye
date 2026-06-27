@@ -22,6 +22,26 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.allSessions(), [a])
     }
 
+    c.check("session(id:) fetches one row; miss returns nil") {
+        let s = make()
+        let a = session(0.9)
+        let b = session(0.7, task: .op(2))
+        try s.save(a)
+        try s.save(b)
+        try expectEq(try s.session(id: a.id), a)
+        try expectEq(try s.session(id: b.id), b)
+        try expectNil(try s.session(id: UUID()), "unknown id is nil, not a throw")
+    }
+
+    c.check("sessionCount / pushedCount") {
+        let s = make()
+        try s.save(session(0.9))                       // unpushed
+        try s.save(session(0.95, pushed: true))        // pushed
+        try s.save(session(0.8, task: .op(2), pushed: true))   // pushed
+        try expectEq(try s.sessionCount(), 3)
+        try expectEq(try s.pushedCount(), 2)
+    }
+
     c.check("push eligibility filters by threshold, pushed and local-only") {
         let s = make()
         let eligible = session(0.9)

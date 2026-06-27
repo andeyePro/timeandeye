@@ -38,6 +38,9 @@ final class FailingMarkJournalStore: JournalStore {
     // Everything else is a straight passthrough.
     func save(_ session: Session) throws { try inner.save(session) }
     func allSessions() throws -> [Session] { try inner.allSessions() }
+    func session(id: UUID) throws -> Session? { try inner.session(id: id) }
+    func sessionCount() throws -> Int { try inner.sessionCount() }
+    func pushedCount() throws -> Int { try inner.pushedCount() }
     func sessions(from: Date, to: Date) throws -> [Session] { try inner.sessions(from: from, to: to) }
     func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         try inner.sessions(needingPushAtOrAbove: threshold)
