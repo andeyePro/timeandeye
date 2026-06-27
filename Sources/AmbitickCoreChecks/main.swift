@@ -64,6 +64,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("MenuTitle", menuTitleChecks),
     ("AIAssist", aiAssistChecks),
     ("Settings", settingsChecks),
+    ("DuplicateReconcile", duplicateReconcileChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("OPClient", opClientChecks),
