@@ -50,6 +50,8 @@ struct MiniTimeline: View {
     let colour: (TaskRef) -> Color
     /// Clicking a slice opens the full timeline focused on that exact slice.
     var onTap: ((Session) -> Void)? = nil
+    /// Clicking a GAP (the empty track) opens the timeline with nothing selected.
+    var onTapEmpty: (() -> Void)? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -57,6 +59,8 @@ struct MiniTimeline: View {
             let span = max(end.timeIntervalSince(start), 1)
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 3).fill(Color.black.opacity(0.06))
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTapEmpty?() }
                 ForEach(sessions) { s in
                     let x0 = CGFloat(s.start.timeIntervalSince(start) / span) * w
                     let x1 = CGFloat(s.end.timeIntervalSince(start) / span) * w

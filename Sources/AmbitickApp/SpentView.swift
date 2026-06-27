@@ -81,14 +81,11 @@ struct SpentView: View {
                 HStack(spacing: 6) {
                     Text("from \(from.formatted(date: .omitted, time: .shortened))")
                         .font(.caption2).foregroundStyle(.secondary)
+                        .onTapGesture { openTimeline(focus: nil) }   // label → nothing selected
                     MiniTimeline(sessions: block.sessions, start: block.start, end: block.end,
                                  colour: { Color(nsColor: controller.colour(for: $0)) },
-                                 onTap: { s in
-                                     controller.pendingTimelineFocus = s
-                                     controller.noteTimeViewOpened(.timeline)
-                                     openWindow(id: "timeline")
-                                     dismissWindow(id: "spent")
-                                 })
+                                 onTap: { openTimeline(focus: $0) },     // slice → frame + edit it
+                                 onTapEmpty: { openTimeline(focus: nil) }) // gap → nothing selected
                 }
             }
             if let note = controller.actionNote {
@@ -114,6 +111,15 @@ struct SpentView: View {
     /// Cached current-block slices for the mini-timeline cross-preview (a journal
     /// query — don't recompute per body eval).
     private func reloadBlock() { blockData = controller.currentBlock() }
+
+    /// Open the timeline window, optionally framed on a specific slice; `nil`
+    /// focus opens it with nothing selected (the label / a gap tap).
+    private func openTimeline(focus: Session?) {
+        controller.pendingTimelineFocus = focus
+        controller.noteTimeViewOpened(.timeline)
+        openWindow(id: "timeline")
+        dismissWindow(id: "spent")
+    }
 
     // MARK: - Data
 
