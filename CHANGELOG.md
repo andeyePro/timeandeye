@@ -2,6 +2,27 @@
 
 ## 2026-06-27
 
+- [x] **Backlog batch (drafted by subagents, integrated + verified serially)** —
+  five contained optimisation items, each built and checked on the Mac before
+  the next; 160 checks pass.
+  - **Rank 2 crash-safety:** a task switch now clears-then-rewrites the live
+    checkpoint to the new task (a crash mid-switch could otherwise double-recover
+    already-flushed time); new pure Core `CheckpointRecovery` rejects a stale row
+    that's sub-floor or already covered; dedicated ~12s checkpoint timer gated to
+    tracking (tolerance-coalesced). Plus `JournalStore.session(id:)` /
+    `sessionCount()` / `pushedCount()` so edit/undo paths and the journal summary
+    stop decoding the whole table.
+  - **Rank 6 banked menu-clock:** under-counted during heavy flitting; now
+    derived from `tracker.liveSliceStart` (= what posts to OP).
+  - **Rank 3a OP double-create:** `SyncEngine` was marking pushed after the POST,
+    so a failed mark re-POSTed next sync (the ~143-surplus root); the create is
+    idempotent now (delete the orphan on a failed mark; surface a malformed id).
+  - **Rank 7 test backfill:** SessionTracker live-editing/away, parser aliases,
+    PinScope about:blank fallthrough (+9 checks, no hidden bugs surfaced).
+  - **Rank 8 dead-code:** removed `WorkspaceLayout.swift` (228 dormant lines) and
+    the dormant `taskLayouts`/`lastLayout` settings.
+- [x] **Timeline: ⌘A selects all windows** in a slice once you've selected one
+  (the span-reassign bar carries the shortcut).
 - [x] **Faster Time window + readable "why" panel** — the pie window was slow
   because `SpentView.nodes` was a computed property running a journal query +
   TimeAggregator pass on EVERY body render, and the view re-renders ~1Hz (the

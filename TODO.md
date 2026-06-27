@@ -9,7 +9,7 @@ cross-midnight controller fixes incl. the live-start pair (rank 1), attribution
 floor/startsWith/tiebreak (rank 4), scroll-monitor hardening (rank 5),
 formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 
-- [ ] Rank 2 — crash-safety: a task switch never clears/rewrites the 60s
+- [x] Rank 2 — crash-safety (DONE 2026-06-27): a task switch never clears/rewrites the 60s
   checkpoint, so a hard crash can double-recover time already journalled
   (duplicate time + duplicate OP entry). Clear-then-rewrite the checkpoint on
   switch; extract a Core `CheckpointRecovery` (reject promotion when the stale
@@ -18,7 +18,7 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   coalesces the wakeup). Attach the superseded-survivors here: `session(id:)`
   single-row fetch + COUNT-based `updateJournalSummary` (stop decoding the whole
   table on every mutation).
-- [ ] Rank 3 — OP write path: `SyncEngine` marks pushed AFTER the POST, so a
+- [~] Rank 3 — OP write path: double-create CLOSED 2026-06-27; the duplicate-RECONCILE tool (richest-survivor policy) remains — `SyncEngine` marks pushed AFTER the POST, so a
   throw after a successful create re-POSTs next sync (likely root of the ~143
   surplus entries). Make create idempotent across a failed mark (delete the
   orphan on the failure path); surface a malformed created-entry id instead of
@@ -28,15 +28,15 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   as a comment (nothing irrecoverable), re-point the journal's opTimeEntryID to
   the survivor, confirm-EACH (no bulk auto-delete), never delete an OP entry
   with no exact journal match. Land before the backend seam.
-- [ ] Rank 6 — banked menu-clock under-count: brief excursions re-tagged back to
+- [x] Rank 6 — banked menu-clock under-count (DONE 2026-06-27): brief excursions re-tagged back to
   the base task aren't recovered by `bankedElapsed + running`; compute the
   tracking clock from `tracker.liveSliceStart` so it equals what posts to OP
   (CHANGELOG 2026-06-24 follow-up). Optional: gate the 1Hz title rebuild to
   first-minute/minute-boundary (keep the 1Hz timer for scheduledStop).
-- [ ] Rank 7 — test backfill (pure test code): SessionTracker live-editing
+- [x] Rank 7 — test backfill (DONE 2026-06-27) (pure test code): SessionTracker live-editing
   (commitLive/relabel/backdate/adjustCurrentStart/reevaluate/liveSliceStart) +
   away-mode; parser aliases/negations; PinScope malformed-URL fallthrough.
-- [ ] Rank 8 — dead code: delete `WorkspaceLayout.swift` (228 dormant lines,
+- [x] Rank 8 — dead code (DONE 2026-06-27): delete `WorkspaceLayout.swift` (228 dormant lines,
   recover from git when re-added) + remove the dormant `taskLayouts`/`lastLayout`
   settings in the same commit; one-line comment that the pins.json migration is
   a self-terminating one-shot. (One owner for the Core window-helper extraction
