@@ -1081,6 +1081,14 @@ struct TimelineView: View {
         }
         .padding(6)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        // ⌘A selects every window in the slice once you've selected at least one
+        // (this bar only shows while a selection exists, so the shortcut is live
+        // only in window-selection mode).
+        .background(
+            Button("") { selectedSpanIdx = Set(spans.indices) }
+                .keyboardShortcut("a", modifiers: .command)
+                .opacity(0)
+        )
     }
 
     /// One data pane per selected window, in a horizontally scrollable set
