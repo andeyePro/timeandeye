@@ -28,7 +28,7 @@ struct AmbitickApp: App {
         .defaultSize(width: 640, height: 420)
 
         Window("Ambitick Timeline", id: "timeline") {
-            TimelineView(controller: controller).openOnActiveSpace()
+            TimelineView(controller: controller).openOnActiveSpace(id: "timeline")
         }
         .defaultSize(width: 980, height: 420)
 
@@ -61,6 +61,7 @@ struct AmbitickApp: App {
 /// yanking the user across to whichever Space the window was last on. Fixes the
 /// "click the gear on Desktop 2 and get thrown to Desktop 1" jump.
 private struct ActiveSpaceWindow: NSViewRepresentable {
+    var windowID: String?
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         apply(to: view)
@@ -69,12 +70,18 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) { apply(to: nsView) }
 
     private func apply(to view: NSView) {
+        let windowID = windowID
         DispatchQueue.main.async { [weak view] in
             view?.window?.collectionBehavior.insert(.moveToActiveSpace)
+            // A stable identity for code that needs to recognise this window
+            // (e.g. the timeline's scroll-pan monitor) without a title match.
+            if let windowID { view?.window?.identifier = NSUserInterfaceItemIdentifier(windowID) }
         }
     }
 }
 
 extension View {
-    func openOnActiveSpace() -> some View { background(ActiveSpaceWindow()) }
+    func openOnActiveSpace(id windowID: String? = nil) -> some View {
+        background(ActiveSpaceWindow(windowID: windowID))
+    }
 }

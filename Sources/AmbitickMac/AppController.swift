@@ -423,7 +423,7 @@ public final class AppController: ObservableObject {
         }
         let key: String?
         do {
-            key = try KeychainStore.loadAPIKey()
+            key = try APIKeyStore.loadAPIKey()
         } catch {
             lastError = "Cannot read API key – \(error). Re-enter and Save."
             return
@@ -1395,7 +1395,7 @@ public final class AppController: ObservableObject {
 
     public func saveAPIKey(_ key: String) {
         do {
-            try KeychainStore.saveAPIKey(key)
+            try APIKeyStore.saveAPIKey(key)
         } catch {
             lastError = "API key save failed – \(error)"
             return

@@ -1,20 +1,19 @@
 import Foundation
 
-/// OP API key storage.
+/// OP API-key storage.
 ///
-/// This WAS the login Keychain, but a self-signed / no-Apple-team app cannot
-/// read its own keychain item without macOS prompting for the login password
-/// on every launch — and "Always Allow" never sticks, because the system won't
-/// trust an unanchored signature across rebuilds (confirmed 2026-06-24). The
-/// data-protection keychain (which has no such prompt) needs an entitlement a
-/// teamless app can't get either.
+/// This WAS the login Keychain (hence the old `KeychainStore` name), but a
+/// self-signed / no-Apple-team app cannot read its own keychain item without
+/// macOS prompting for the login password on every launch — and "Always Allow"
+/// never sticks, because the system won't trust an unanchored signature across
+/// rebuilds (confirmed 2026-06-24). The data-protection keychain (no such
+/// prompt) needs an entitlement a teamless app can't get either.
 ///
 /// So the key now lives in an owner-only (0600) file in the app's support
 /// folder, beside the journal and settings — which are already plaintext in the
 /// same directory, so this matches the existing on-disk posture. No keychain,
-/// no prompt. (Type name kept for call-site stability; it is no longer a
-/// keychain.)
-public enum KeychainStore {
+/// no prompt. Renamed from `KeychainStore` so the name stops implying a keychain.
+public enum APIKeyStore {
     private static func fileURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ambitick")

@@ -255,8 +255,16 @@ struct TimelineView: View {
 
     /// Two-finger scroll pans the bar (drag is reserved for drawing).
     private func installScrollPan() {
+        // Idempotent: a re-entrant onAppear must not stack a second process-
+        // global monitor (that double-panned, app-wide). onDisappear nils it.
+        guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            guard NSApp.keyWindow?.title.contains("Timeline") == true else { return event }
+            // Gate on the stable window identifier, not a localizable title
+            // substring. Title kept only as a fallback while the identifier
+            // is being set, so the gate can never silently match nothing.
+            let w = NSApp.keyWindow
+            guard w?.identifier?.rawValue == "timeline"
+                    || w?.title.contains("Timeline") == true else { return event }
             // Over the window detail section the inner ScrollViews handle their
             // own scrolling — don't ALSO pan the main bar (that moved both).
             if scrollGate.overDetail { return event }
