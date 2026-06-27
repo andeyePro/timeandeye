@@ -151,6 +151,12 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Popover defaults to \"Change to\" (relabel the running session); off = \"Switch to\" (start fresh). Clicking the task title flips it.",
                        isOn: $controller.settings.popoverDefaultsToChangeMode)
+                Picker("Time button opens", selection: $controller.settings.timeViewOpenMode) {
+                    Text("Timeline").tag(TimeViewOpenMode.timeline)
+                    Text("Last viewed").tag(TimeViewOpenMode.lastViewed)
+                    Text("Pie chart").tag(TimeViewOpenMode.spent)
+                }
+                .pickerStyle(.menu).fixedSize()
                 Toggle("System notifications (sounds still play when off)",
                        isOn: $controller.settings.systemNotifications)
                 Toggle("Lock the Mac when I leave my desk (⌘⇧L)",

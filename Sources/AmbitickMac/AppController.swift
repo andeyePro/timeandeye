@@ -953,6 +953,36 @@ public final class AppController: ObservableObject {
     /// push in several paths (allocating a formatter is not cheap).
     private static let iso8601 = ISO8601DateFormatter()
 
+    /// Record which time view was last opened (persists, so "last viewed"
+    /// survives a relaunch).
+    public func noteTimeViewOpened(_ which: TimeView) {
+        if settings.lastViewedTimeView != which { settings.lastViewedTimeView = which }
+    }
+
+    /// Today's project breakdown + total (the timeline window's mini-pie
+    /// cross-preview).
+    public func todaySpentNodes() -> [TimeAggregator.Node] {
+        spentNodes(from: Calendar.current.startOfDay(for: Date()), to: Date())
+    }
+
+    /// The latest work block's slices + extent (the pie window's mini-timeline
+    /// cross-preview). nil when there's no recent activity.
+    public func currentBlock() -> (sessions: [Session], start: Date, end: Date)? {
+        let recent = timelineSessions(from: Date().addingTimeInterval(-2 * 86_400), to: Date())
+        guard let block = TimelineMath.latestBlock(in: recent) else { return nil }
+        let slices = recent.filter { $0.end > block.start && $0.start < block.end }
+        return (slices, block.start, block.end)
+    }
+
+    /// The window id the combined Time entry point opens, per the 3-way setting.
+    public func timeViewToOpen() -> String {
+        switch settings.timeViewOpenMode {
+        case .timeline: return "timeline"
+        case .spent: return "spent"
+        case .lastViewed: return settings.lastViewedTimeView == .spent ? "spent" : "timeline"
+        }
+    }
+
     public func timelineSpans(for session: Session) -> [FocusSpan] {
         (try? journal.spans(from: session.start, to: session.end)) ?? []
     }

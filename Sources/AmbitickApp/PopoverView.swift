@@ -476,22 +476,16 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
+            // One combined Time entry point — opens the timeline, the pie, or
+            // whichever was viewed last (Settings ▸ Time view). Each window has
+            // a switcher to the other in its top-right.
             Button {
-                openWindow(id: "timeline")
+                openWindow(id: controller.timeViewToOpen())
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
-                // Horizontal segmented bar — matches our left-to-right timeline
-                // (the old calendar.day.timeline.left glyph reads vertical).
-                Image(systemName: "rectangle.split.3x1")
+                Image(systemName: "chart.bar.xaxis")
             }
-            .help("Timeline – today's tracked time")
-            Button {
-                openWindow(id: "spent")
-                NSApp.activate(ignoringOtherApps: true)
-            } label: {
-                Image(systemName: "chart.pie")
-            }
-            .help("Time Spent – period breakdown")
+            .help("Time – timeline & breakdown")
             Button {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)

@@ -55,11 +55,12 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   data to chase the live mis-attribution bugs (tracking as Ambitick while on
   Chrome; the revert button offering a stale task — `revertTargetTask` returns
   `previousTask`, which can be wrong; now diagnosable via the explain panel).
-- [~] #5 — combined Timeline/Pie view: IN PROGRESS. One footer icon opening the
-  last-viewed window; an in-window top-right switcher between Timeline and Pie;
-  cross-previews (today's pie + total in the timeline view, the current block's
-  timeline in the pie view); last-viewed persists between sessions; a 3-way
-  Settings toggle (timeline / last-viewed / pie).
+- [x] #5 — combined Timeline/Pie view: DONE (CHANGELOG 2026-06-27). Combined
+  footer icon (opens timeline / pie / last-viewed per the 3-way Setting),
+  in-window top-right switcher, cross-previews (today's mini-pie + total in the
+  timeline; the current block's mini-timeline in the pie), last-viewed persists.
+  Possible polish: richer mini-pie (task rings), make the cross-previews
+  clickable to jump to that view.
 
 ## Open
 

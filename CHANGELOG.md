@@ -2,6 +2,16 @@
 
 ## 2026-06-27
 
+- [x] **Combined Timeline/Pie view with switcher + cross-previews (#5)** — the
+  popover's two separate Timeline and Pie footer icons are now one "Time" icon
+  that opens the timeline, the pie, or whichever was viewed last, per a new
+  3-way Setting (Time button opens: Timeline / Last viewed / Pie chart). Each
+  window has a top-right switcher to swap to the other (and the choice persists,
+  so "last viewed" survives a relaunch). Cross-previews: the timeline window
+  shows today's breakdown as a mini-pie plus today's total; the pie window shows
+  the current block's timeline as a mini-strip. `TimeViewChrome.swift` (switcher
+  + `MiniPie` + `MiniTimeline`), `AppController.todaySpentNodes`/`currentBlock`/
+  `timeViewToOpen`/`noteTimeViewOpened`, both views cache the preview query.
 - [x] **Explainable attribution — "why was this tracked as X?" (#1 v1)** — click
   a slice, click a window in its detail strip, and the pane shows why that task
   was chosen: the decision source (pinned / OP-URL / OP-id-in-title / just-opened

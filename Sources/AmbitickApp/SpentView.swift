@@ -13,6 +13,7 @@ import AmbitickMac
 struct SpentView: View {
     @ObservedObject var controller: AppController
     @State private var period: Period = .today
+    @State private var blockData: (sessions: [Session], start: Date, end: Date)?
     @State private var hover: Selection = .none
     @State private var pinned: Selection = .none
     @State private var opOnly = false
@@ -69,6 +70,15 @@ struct SpentView: View {
                     .font(.caption)
                 Spacer()
                 Text(totalText).font(.caption).foregroundStyle(.secondary)
+                TimeViewSwitcher(controller: controller, current: .spent)
+            }
+            // Cross-preview: the current block's timeline, without leaving the pie.
+            if let block = blockData, !block.sessions.isEmpty {
+                HStack(spacing: 6) {
+                    Text("current block").font(.caption2).foregroundStyle(.secondary)
+                    MiniTimeline(sessions: block.sessions, start: block.start, end: block.end,
+                                 colour: { Color(nsColor: controller.colour(for: $0)) })
+                }
             }
             if let note = controller.actionNote {
                 Text(note).font(.caption).foregroundStyle(.secondary)
@@ -83,8 +93,16 @@ struct SpentView: View {
             }
         }
         .padding(12)
-        .onReceive(timer) { _ in refreshTick += 1 }
+        .onReceive(timer) { _ in refreshTick += 1; reloadBlock() }
+        .onAppear {
+            controller.noteTimeViewOpened(.spent)
+            reloadBlock()
+        }
     }
+
+    /// Cached current-block slices for the mini-timeline cross-preview (a journal
+    /// query — don't recompute per body eval).
+    private func reloadBlock() { blockData = controller.currentBlock() }
 
     // MARK: - Data
 

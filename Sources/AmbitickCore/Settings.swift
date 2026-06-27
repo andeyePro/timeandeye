@@ -36,8 +36,17 @@ public extension TaskRef {
     }
 }
 
-/// All user-tunable knobs. The OP API key is NOT here – it lives in the
-/// macOS Keychain. Persist via JSONFileStore.
+/// The two time views (one combined entry point opens one of them).
+public enum TimeView: String, Codable, Sendable, CaseIterable { case timeline, spent }
+
+/// What the combined Time entry point opens: always the timeline, always the
+/// pie, or whichever was viewed last.
+public enum TimeViewOpenMode: String, Codable, Sendable, CaseIterable {
+    case timeline, lastViewed, spent
+}
+
+/// All user-tunable knobs. The OP API key is NOT here – it lives in a 0600 file
+/// (see APIKeyStore). Persist via JSONFileStore.
 public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var opBaseURL: String
     /// Sessions at/above this certainty auto-push to OP. > 1.0 means never.
@@ -73,6 +82,10 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     /// running session), false = "Switch to" (start a fresh session). Clicking
     /// the running task title flips to the other mode for that open.
     public var popoverDefaultsToChangeMode: Bool
+    /// Which time view the combined entry point opens (timeline / last / pie).
+    public var timeViewOpenMode: TimeViewOpenMode
+    /// The last time view opened — persisted so "last viewed" survives a restart.
+    public var lastViewedTimeView: TimeView
     /// Lock the Mac when "I'm leaving my desk" is activated.
     public var lockOnLeave: Bool
     /// Non-OP tasks (leisure etc.), fully tracked locally.
@@ -102,6 +115,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 lastLayout: [WindowFrame] = [],
                 systemNotifications: Bool = true,
                 popoverDefaultsToChangeMode: Bool = true,
+                timeViewOpenMode: TimeViewOpenMode = .lastViewed,
+                lastViewedTimeView: TimeView = .timeline,
                 lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:]) {
@@ -127,6 +142,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.lastLayout = lastLayout
         self.systemNotifications = systemNotifications
         self.popoverDefaultsToChangeMode = popoverDefaultsToChangeMode
+        self.timeViewOpenMode = timeViewOpenMode
+        self.lastViewedTimeView = lastViewedTimeView
         self.lockOnLeave = lockOnLeave
         self.localTasks = localTasks
         self.taskColours = taskColours
@@ -159,6 +176,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         lastLayout = try c.decodeIfPresent([WindowFrame].self, forKey: .lastLayout) ?? defaults.lastLayout
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
         popoverDefaultsToChangeMode = try c.decodeIfPresent(Bool.self, forKey: .popoverDefaultsToChangeMode) ?? defaults.popoverDefaultsToChangeMode
+        timeViewOpenMode = try c.decodeIfPresent(TimeViewOpenMode.self, forKey: .timeViewOpenMode) ?? defaults.timeViewOpenMode
+        lastViewedTimeView = try c.decodeIfPresent(TimeView.self, forKey: .lastViewedTimeView) ?? defaults.lastViewedTimeView
         lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
         localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
         taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours

@@ -119,15 +119,17 @@ struct TimelineView: View {
         // bar, which re-renders the editor subtree and steals focus from the
         // h:mm field you just clicked — the intermittent "it didn't go blue, so
         // I couldn't tell I could type" bug. Pause the tick during an edit.
-        .onReceive(timer) { _ in if editing == nil { refreshTick += 1; reloadSessions() } }
+        .onReceive(timer) { _ in if editing == nil { refreshTick += 1; reloadSessions(); reloadTodayPreview() } }
         // Cache invalidation: viewport moved out of the loaded range, or the
         // journal mutated (revision bumps on every edit, even same-duration).
         .onChange(of: viewStart) { _, _ in reloadIfNeeded() }
         .onChange(of: viewSpan) { _, _ in reloadIfNeeded() }
-        .onChange(of: controller.journalRevision) { _, _ in reloadSessions() }
+        .onChange(of: controller.journalRevision) { _, _ in reloadSessions(); reloadTodayPreview() }
         .onAppear {
+            controller.noteTimeViewOpened(.timeline)
             zoomToLatestBlock()
             reloadSessions()
+            reloadTodayPreview()
             installScrollPan()
         }
         .onDisappear {
@@ -146,6 +148,9 @@ struct TimelineView: View {
     /// tick, or when the journal actually mutates (controller.journalRevision).
     @State private var cachedSessions: [Session] = []
     @State private var cachedRange: ClosedRange<Date>?
+    /// Cached today's-breakdown for the header mini-pie (a journal query — don't
+    /// recompute per body eval).
+    @State private var todayNodes: [TimeAggregator.Node] = []
 
     private var sessions: [Session] {
         var list = cachedSessions
@@ -303,9 +308,21 @@ struct TimelineView: View {
             Button("Today") { showToday() }
                 .help("Today, midnight to now")
             Text(totalText).font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            // Cross-preview: today's pie + total tracked today, without leaving
+            // the timeline. Then the switcher to the pie window.
+            MiniPie(nodes: todayNodes, colour: { Color(nsColor: controller.colour(for: $0)) })
+                .frame(width: 20, height: 20)
+                .help("Today's breakdown — switch to the pie for detail")
+            Text("today \(MenuTitle.text(elapsed: todayTotalSeconds, certainty: nil, showPercent: false))")
+                .font(.caption).foregroundStyle(.secondary)
+            TimeViewSwitcher(controller: controller, current: .timeline)
         }
         .buttonStyle(.plain)
     }
+
+    private var todayTotalSeconds: TimeInterval { todayNodes.reduce(0) { $0 + $1.seconds } }
+    private func reloadTodayPreview() { todayNodes = controller.todaySpentNodes() }
 
     /// The visible date span: one date when the window sits inside a day, else
     /// a "Jun 24 – 25" range across the midnight it crosses.
