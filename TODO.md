@@ -1,47 +1,65 @@
 # TODO
 
-## Optimisation backlog (programme review 2026-06-26)
+## Optimisation backlog (programme review, consolidated 2026-06-26/27)
 
-A Programme-Manager + per-domain Project-Manager pass produced this. Three
-passes already DONE (see CHANGELOG 2026-06-26): sessions index + bounded query,
-cross-midnight controller fixes, TimelineView sessions cache. The deep-review
-consolidation and two PMs (backend-seam, crash-safety) didn't run (session
-credit limit) — resume the `ambitick-optimise` workflow after reset for the full
-consolidated plan. Remaining items, by domain:
+A Programme-Manager + per-domain Project-Manager pass, then an adversarial
+deep-review, produced a 9-pass plan (CHANGELOG 2026-06-26/27 for what's landed).
+DONE so far: store index + bounded query, TimelineView sessions cache,
+cross-midnight controller fixes incl. the live-start pair (rank 1), attribution
+floor/startsWith/tiebreak (rank 4), scroll-monitor hardening (rank 5),
+formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 
-- [ ] Perf: `updateJournalSummary` decodes the WHOLE sessions table on every
-  mutation — add COUNT-based queries (`sessionCount`/`pushedCount` on the
-  JournalStore protocol) instead of `allSessions()`. Also: `applyTimelineEdit`/
-  create/delete call `allSessions()` just to find one row — add `session(id:)`.
-- [ ] Reliability: timeline gesture composition (draw vs gap-tap vs pinch vs
-  per-slice tap vs edge-handle drag) — audit SwiftUI precedence; the scroll-pan
-  NSEvent monitor gates on `keyWindow.title.contains("Timeline")` (brittle,
-  localisation-fragile) — key off window identifier instead; confirm the global
-  monitor can't leak/double-install.
-- [ ] Perf/correctness: menu cadence + banked-clock — the 1Hz titleTimer runs
-  forever though MenuTitle only needs sub-minute refresh in the first minute;
-  and the banked-clock under-counts during heavy flitting (CHANGELOG 2026-06-24
-  follow-up) — mirror the now-correct journal grace logic.
-- [ ] Correctness (Core): attribution deep pass — confirm the grace floor +
-  sliceFloor compose so a genuinely-short first/last slice survives; verify
-  duration-weighted certainty; pin specificity compares `prefix.count` vs
-  `Predicate.leafCount` across rule kinds (not obviously commensurable); regex
-  PinOp compiles NSRegularExpression per `test()` call, unanchored — cache it.
-- [ ] Reliability: crash-safe checkpoint + SQLite serialization audit — 60s
-  checkpoint loses up to ~60s on a hard crash (also checkpoint on task switch?);
-  verify every db access goes through the lock; signal-handler DebugLog.write is
-  not async-signal-safe.
-- [ ] OP write path: prove no path double-creates a time entry; failed-PATCH-
-  during-coalesce leaves OP stale (retry/reconcile); build the journal-driven
-  duplicate-entry cleanup (exact start+duration match, in-app maintenance).
-- [ ] Test coverage: extract the cross-midnight day-window selection + coalesce
-  logic out of AppController into Core/TimelineMath so it's unit-testable (it's
-  controller-only glue today); add the missing SessionTracker grace edge cases.
-- [ ] Dead code: WorkspaceLayout.swift (228 lines, dormant since the 2026-06-23
-  cut) — delete and recover from git when re-added, or mark clearly; gate the
-  per-launch legacy pins.json migration.
-- [ ] Architecture (large, design-only so far): backend seam
-  (`TaskBackend`/`TimeSink`) + standalone mode — see the dedicated item below.
+- [ ] Rank 2 — crash-safety: a task switch never clears/rewrites the 60s
+  checkpoint, so a hard crash can double-recover time already journalled
+  (duplicate time + duplicate OP entry). Clear-then-rewrite the checkpoint on
+  switch; extract a Core `CheckpointRecovery` (reject promotion when the stale
+  span is already covered); tighten the checkpoint timer to ~12s while tracking
+  (Martin: OK if no perf/energy hit — use a generous Timer tolerance so the OS
+  coalesces the wakeup). Attach the superseded-survivors here: `session(id:)`
+  single-row fetch + COUNT-based `updateJournalSummary` (stop decoding the whole
+  table on every mutation).
+- [ ] Rank 3 — OP write path: `SyncEngine` marks pushed AFTER the POST, so a
+  throw after a successful create re-POSTs next sync (likely root of the ~143
+  surplus entries). Make create idempotent across a failed mark (delete the
+  orphan on the failure path); surface a malformed created-entry id instead of
+  swallowing it. Then the journal-driven duplicate reconcile — DECIDED policy
+  (Martin): never two records for one point in time; keep the RICHEST record
+  (most likely the real one), fold the deleted record's data into the survivor
+  as a comment (nothing irrecoverable), re-point the journal's opTimeEntryID to
+  the survivor, confirm-EACH (no bulk auto-delete), never delete an OP entry
+  with no exact journal match. Land before the backend seam.
+- [ ] Rank 6 — banked menu-clock under-count: brief excursions re-tagged back to
+  the base task aren't recovered by `bankedElapsed + running`; compute the
+  tracking clock from `tracker.liveSliceStart` so it equals what posts to OP
+  (CHANGELOG 2026-06-24 follow-up). Optional: gate the 1Hz title rebuild to
+  first-minute/minute-boundary (keep the 1Hz timer for scheduledStop).
+- [ ] Rank 7 — test backfill (pure test code): SessionTracker live-editing
+  (commitLive/relabel/backdate/adjustCurrentStart/reevaluate/liveSliceStart) +
+  away-mode; parser aliases/negations; PinScope malformed-URL fallthrough.
+- [ ] Rank 8 — dead code: delete `WorkspaceLayout.swift` (228 dormant lines,
+  recover from git when re-added) + remove the dormant `taskLayouts`/`lastLayout`
+  settings in the same commit; one-line comment that the pins.json migration is
+  a self-terminating one-shot. (One owner for the Core window-helper extraction
+  — rides this or rank 7, not duplicated.)
+- [ ] Rank 9 — backend seam (`TaskBackend`/`TimeSink`) + standalone mode, NEW
+  branch: pure-Core slices first (TimesheetExport, task_comments table), then a
+  behaviour-preserving protocol refactor (NullBackend must NOT silently become a
+  no-op sink on misconfig; keep the typed-422 fallback), Attributor hook last.
+  Absorbs the standalone TODO sub-items (local comment storage, open-in-backend,
+  project-slug). Plugin loader stays deferred.
+
+## New-batch features (Martin, 2026-06-27)
+
+- [ ] #1 follow-on — beyond the shipped explain panel + move-to-teach loop: a
+  direct learned-weight control (slider) on the why panel, and use the explain
+  data to chase the live mis-attribution bugs (tracking as Ambitick while on
+  Chrome; the revert button offering a stale task — `revertTargetTask` returns
+  `previousTask`, which can be wrong; now diagnosable via the explain panel).
+- [~] #5 — combined Timeline/Pie view: IN PROGRESS. One footer icon opening the
+  last-viewed window; an in-window top-right switcher between Timeline and Pie;
+  cross-previews (today's pie + total in the timeline view, the current block's
+  timeline in the pie view); last-viewed persists between sessions; a 3-way
+  Settings toggle (timeline / last-viewed / pie).
 
 ## Open
 

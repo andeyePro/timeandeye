@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-06-27
+
+- [x] **Explainable attribution — "why was this tracked as X?" (#1 v1)** — click
+  a slice, click a window in its detail strip, and the pane shows why that task
+  was chosen: the decision source (pinned / OP-URL / OP-id-in-title / just-opened
+  OP task / remembered correction / learned+priors), the ranked candidate tasks
+  each with their score split into learned-vs-prior, and the signal features the
+  learner keys on. `AttributionExplanation` + `Attributor.explain()` mirror
+  `attribute()`'s source order so the explanation can't disagree with reality;
+  `scored()` refactored to expose its components. Moving a window to the right
+  task already teaches the learner, so that's the weight-edit loop — the panel
+  points you to it and shows the scores. Controller `explainSpan`/`teachSurface`.
+- [x] **Deep-review optimisation passes (ranks 1, 4, 5)** —
+  - **Rank 1:** `liveStartConflicts` (warning) and `adjustLiveStart` (trim) now
+    derive from one `liveEditContext(from:to:)` window, so the overlap warning
+    equals what's actually trimmed even across midnight (they previously used
+    independent calendar-day windows that could desync).
+  - **Rank 4:** a slice deliberately started that ran 61–120s under a Switch
+    Buffer set >60s was silently dropped at flush — floored at `min(buffer,60)`
+    now (it's work, Martin's call; default 30s unchanged). `PinOp.startsWith` is
+    case-insensitive like `equals`/`contains`. `matchingPin` only compares
+    specificity within a rule kind (prefix.count vs leafCount aren't
+    commensurable), else falls through to recency. `.regex` documented as
+    unanchored. +3 regression checks.
+  - **Rank 5:** the timeline scroll-pan monitor gates on the window identifier
+    (set via `openOnActiveSpace(id:)`) not a localisable title substring, and is
+    idempotent (no stacked global monitor → no app-wide double-pan).
+- [x] **Renamed `KeychainStore` → `APIKeyStore`** — it has stored the OP API key
+  in a plain 0600 file, not the Keychain, since 2026-06-24; the name was
+  misleading.
+- [x] **Popover tidy (#2/#3/#4)** — removed the pencil/double-arrow mode icons
+  (the running-task title flips Change-to ⇄ Switch-to; the default is now a
+  Setting, `popoverDefaultsToChangeMode`, defaulting to Change-to); dropped the
+  separate unpin-✕ on the pin badge (the chip reopens the editor, whose ✕
+  unpins); dropped the task name duplicated under the headline (popover shows
+  `elapsedText`, time only).
+
 ## 2026-06-26
 
 - [x] **Optimisation programme — passes 1–3** (Programme Manager + per-domain
