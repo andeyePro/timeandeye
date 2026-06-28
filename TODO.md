@@ -2,15 +2,16 @@
 
 ## Time-window polish (Martin, 2026-06-27)
 
-- [ ] Window titles: the Time window should be titled "Timeline" when showing the
+- [x] Window titles (DONE 2026-06-28): the Time window is titled "Timeline" when showing the
   timeline and "Time Pie" when showing the pie (currently "Ambitick Time").
-- [ ] Pie view — closeable calendar bottom-right, below the key: highlights the
+- [ ] Pie view — closeable highlight-calendar (FOCUS: subagent draft conflicted
+  with the OP-only relocation + a malformed test; reverted, do directly). Spec:
+  closeable calendar bottom-right, below the key: highlights the
   day(s) currently shown. If on "This week", clicking another week shows that
   full week; if on "Last 7 days", clicking a prior date shows the 7 days ending
   on the same day-of-week as today. Consider moving the Today | Yesterday | This
   week period menu to BELOW the calendar rather than the top of the page.
-- [ ] Pie view — move the "OpenProject only" selector to bottom-left, with the
-  view total shown above it.
+- [x] Pie view — OpenProject-only + total moved bottom-left (DONE 2026-06-28).
 - [ ] Reconcile "open in OpenProject" currently opens the entry's work package
   (OP has no per-time-entry web page). Find a better deep-link to the WP's time
   entries / cost view if one is stable across OP versions.
@@ -66,8 +67,8 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 
 ## New-batch features (Martin, 2026-06-27)
 
-- [ ] #1 follow-on — beyond the shipped explain panel + move-to-teach loop: a
-  direct learned-weight control (slider) on the why panel, and use the explain
+- [ ] #1 follow-on — weight controls SHIPPED 2026-06-28 (boost/always on the why
+  panel); STILL OPEN: use the explain
   data to chase the live mis-attribution bugs (tracking as Ambitick while on
   Chrome; the revert button offering a stale task — `revertTargetTask` returns
   `previousTask`, which can be wrong; now diagnosable via the explain panel).
@@ -81,8 +82,8 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 ## Open
 
 - [ ] Full keyboard/mouse parity sweep (retrospective) — every action reachable
-  by BOTH mouse-only and keyboard-only. Done so far: delete/backspace removes
-  selected timeline slice(s). Still mouse-only: slice selection/navigation
+  by BOTH mouse-only and keyboard-only. Done so far: delete/backspace + ARROW-KEY
+  slice navigation (←/→ move, ⇧ extend, Return edit) [2026-06-28]. Still mouse-only: slice selection/navigation
   (arrow keys to move between slices, ⇧-arrow to extend), opening the editor,
   task picker navigation, span-strip selection, pin editor open, day navigation.
   STANDING RULE going forward: every new command ships with a keyboard path, not
@@ -111,7 +112,7 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   URL, the page builds the expression, and returns it via an `ambitick://`
   deep-link (or copy-paste). Keeps the app slim. Phase-1 ships the typed
   expression; this is the friendlier front-end. - 2026-06-24
-- [ ] Pin rules — priority override (Advanced settings): default precedence is
+- [x] Pin rules — priority override (DONE 2026-06-28): default precedence is
   most-specific-wins (more conditions / longer prefix), ties → most recent.
   Add an optional per-pin `priority` integer in an Advanced section for manual
   override. Hook already in the `Pin` model (`priority: Int?`); just needs the
@@ -137,17 +138,11 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 - [ ] Standalone 'comment to task' storage: persist notes against the local
   task in SQLite as a timestamped list (the standalone half of the comment
   toggles already shipped for OP). - 2026-06-22
-- [ ] OpenProject duplicate-entry cleanup: journal-driven reconcile, exact
-  start+duration match only (never collapse genuinely-separate same-duration
-  slices), as an in-app maintenance action — the MCP can see neither start
-  times nor a delete verb. ~96 candidate groups / 143 surplus entries in the
-  most-recent 500. - 2026-06-22
 - [ ] Semantic task search in filters (find "voting" Ghostty's task without
   knowing its OP subject; substring filter is not enough) - Martin 2026-06-12
-- [ ] Named local-only leisure/non-OP tasks (e.g. "Chess") creatable from the
-  review window, instead of the single anonymous leisure bucket
-- [ ] Keychain "Always Allow" still prompts once per new binary despite the
-  stable signing identity - investigate ACL/designated-requirement pairing
+- [ ] Named local-only leisure/non-OP tasks creatable from the Review window
+  (subagent didn't draft this one; do directly). Settings already creates named
+  local tasks; Review needs the same affordance.
 - [ ] iOS companion app (manual 2-tap tracking; Core is ready)
 - [ ] Safari, then Opera tab URLs; Chrome-PWA AppleScript support
 - [ ] In-app onboarding flow (user 2)
@@ -155,15 +150,12 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 - [ ] iPhone-side call detection
 - [ ] Auto-comment as debugging aid is OFF by default now; revisit whether
   window summaries have any user value (Martin: prefers manual note only)
-- [ ] Attribution: a newly-created local task (e.g. Games) isn't auto-associated
+- [x] Attribution auto-prime (DONE 2026-06-28): a newly-created local task wasn't auto-associated
   with its window, so its time files under the previous task until the user
   reassigns once (reassign now teaches the association, so it self-corrects
   after the first fix). Consider auto-priming a local task to the frontmost
   window at creation time.
-- [ ] Keyboard-only / mouse-only completeness audit: Enter saves + Esc cancels
-  are wired in the timeline editor; do a full pass so EVERY action has both a
-  keyboard and a mouse route (tab order, list arrow-key nav, popover focus).
-- [ ] True global hotkey for "I'm leaving my desk" (currently ⌘⇧L works when
+- [x] True global hotkey for "I'm leaving my desk" (DONE 2026-06-28) (currently ⌘⇧L works when
   Ambitick/its popover is key; a global RegisterEventHotKey would fire from
   any app).
 - [ ] Martin to verify: timeline edits write back correctly to OpenProject and

@@ -2,6 +2,19 @@
 
 ## 2026-06-28
 
+- [x] **TODO batch (drafted by subagents, integrated serially)** — 7 items, each
+  built + checked + committed: Time-window titles per view (Timeline / Time Pie);
+  pie "OpenProject only" + total moved bottom-left; optional per-pin **priority**
+  override (Advanced) in the pin editor; **auto-prime a new local task** to the
+  current window so its time files correctly from the first second; why-panel
+  **weight controls** (boost/always via `Attributor.learnSurface`); a **true
+  global ⌘⇧L** away hotkey (Carbon, fires from any app); **arrow-key slice
+  navigation** in the timeline (←/→ move, ⇧ extends, Return edits). 175 checks
+  pass. (Two items not shipped: the pie highlight-calendar draft conflicted with
+  the OP-only relocation and had a malformed test — reverted, needs a focused
+  pass; named-local-tasks-from-Review the agent didn't draft.)
+- [x] **Reconnect on the URL alone when a key is stored** — the connect button
+  required the always-blank key field; now "Connect" reuses the stored key.
 - [x] **Settings can no longer be silently wiped (data-safety)** — `JSONFileStore`
   treated any unreadable file as "use empty defaults", and the first settings
   change then atomically OVERWROTE the file with those defaults — so one bad read
