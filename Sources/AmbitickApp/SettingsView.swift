@@ -21,16 +21,25 @@ struct SettingsView: View {
                 TextField("Instance URL", text: $controller.settings.opBaseURL,
                           prompt: Text("https://op.example.com"))
                     .textFieldStyle(.roundedBorder)
-                SecureField("API key", text: $apiKey)
+                SecureField(controller.hasStoredAPIKey() ? "API key (saved — leave blank to keep)" : "API key",
+                            text: $apiKey)
                     .textFieldStyle(.roundedBorder)
                 HStack {
-                    Button("Save key & connect") {
-                        controller.saveAPIKey(apiKey)
-                        apiKey = ""
+                    // With a key already on disk you can reconnect on the URL
+                    // alone; only require a key entry when none is stored.
+                    let canConnect = !controller.settings.opBaseURL.isEmpty
+                        && (!apiKey.isEmpty || controller.hasStoredAPIKey())
+                    Button(apiKey.isEmpty ? "Connect" : "Save key & connect") {
+                        if apiKey.isEmpty {
+                            controller.reconnect()
+                        } else {
+                            controller.saveAPIKey(apiKey)
+                            apiKey = ""
+                        }
                         keySaved = true
                     }
-                    .disabled(apiKey.isEmpty || controller.settings.opBaseURL.isEmpty)
-                    if keySaved { Text("Saved").font(.caption).foregroundStyle(.secondary) }
+                    .disabled(!canConnect)
+                    if keySaved { Text("Connected").font(.caption).foregroundStyle(.secondary) }
                 }
                 if let error = controller.lastError {
                     Text(error).font(.caption).foregroundStyle(.red)

@@ -1565,8 +1565,20 @@ public final class AppController: ObservableObject {
             lastError = "API key save failed – \(error)"
             return
         }
+        reconnect()
+    }
+
+    /// Reconnect using the already-stored API key — e.g. after re-entering only
+    /// the instance URL (the key lives in its own file and need not be retyped).
+    public func reconnect() {
         rebuildClient()
         Task { await refreshTasks() }
+    }
+
+    /// True when an API key is already on disk, so the UI can offer "Connect"
+    /// without forcing a re-entry.
+    public func hasStoredAPIKey() -> Bool {
+        (try? APIKeyStore.loadAPIKey())?.isEmpty == false
     }
 
     public func refreshTasks() async {
