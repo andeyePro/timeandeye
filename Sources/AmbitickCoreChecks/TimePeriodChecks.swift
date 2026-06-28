@@ -6,13 +6,14 @@ func timePeriodChecks(_ c: Checks) {
     cal.timeZone = TimeZone(identifier: "UTC")!
     let now = Date(timeIntervalSince1970: 1_750_000_000)
 
-    c.check("today / yesterday anchor on the given day") {
+    c.check("today anchors on the given day") {
         let t = TimePeriod.today.range(anchor: now, now: now, calendar: cal)
         try expectEq(t.start, cal.startOfDay(for: now))
         try expectEq(t.end, cal.startOfDay(for: now).addingTimeInterval(86_400))
-        let y = TimePeriod.yesterday.range(anchor: now, now: now, calendar: cal)
-        try expectEq(y.end, cal.startOfDay(for: now))
-        try expectEq(y.start, cal.startOfDay(for: now).addingTimeInterval(-86_400))
+        // A prior anchor gives that prior day.
+        let back = now.addingTimeInterval(-2 * 86_400)
+        let tb = TimePeriod.today.range(anchor: back, now: now, calendar: cal)
+        try expectEq(tb.start, cal.startOfDay(for: back))
     }
 
     c.check("last 7 days: 7-long, ends on today's weekday wherever anchored") {

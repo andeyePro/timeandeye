@@ -5,10 +5,9 @@ import Foundation
 /// any prior period. Pure (date maths only) so it's unit-checkable.
 public enum TimePeriod: String, CaseIterable, Identifiable, Sendable {
     case today = "Today"
-    case yesterday = "Yesterday"
-    case thisWeek = "This week"
+    case thisWeek = "Week"
     case last7 = "Last 7 days"
-    case thisMonth = "This month"
+    case thisMonth = "Month"
     public var id: String { rawValue }
 
     /// The [start, end) range shown for this period, anchored on `anchor`.
@@ -21,8 +20,6 @@ public enum TimePeriod: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .today:
             return (day, day.addingTimeInterval(86_400))
-        case .yesterday:
-            return (day.addingTimeInterval(-86_400), day)
         case .thisWeek:
             let start = cal.dateInterval(of: .weekOfYear, for: anchor)?.start ?? day
             return (start, start.addingTimeInterval(7 * 86_400))

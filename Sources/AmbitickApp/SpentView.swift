@@ -128,22 +128,26 @@ struct SpentView: View {
 
     /// The closeable highlight-calendar plus its period picker, bottom-right.
     /// Collapsed it's a single button so the pie keeps the room.
+    /// Shared so the period picker is exactly as wide as the calendar and its
+    /// right edge sits flush with it.
+    private let calWidth: CGFloat = 232
+
     @ViewBuilder private var calendarPane: some View {
         if calendarVisible {
             VStack(alignment: .trailing, spacing: 6) {
                 MonthCalendar(month: $calMonth,
                               highlighted: period.range(anchor: anchorDate, now: Date()),
-                              today: Calendar.current.startOfDay(for: Date())) { day in
+                              today: Calendar.current.startOfDay(for: Date()), onPick: { day in
                     anchorDate = day
-                } onClose: {
+                }, onClose: {
                     calendarVisible = false
-                }
+                }, width: calWidth)
                 Picker("", selection: $period) {
                     ForEach(TimePeriod.allCases) { p in Text(p.rawValue).tag(p) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 232)
+                .frame(width: calWidth)
             }
         } else {
             Button {

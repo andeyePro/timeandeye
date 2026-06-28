@@ -11,6 +11,7 @@ struct MonthCalendar: View {
     let today: Date
     let onPick: (Date) -> Void
     let onClose: () -> Void
+    var width: CGFloat = 232
 
     private var cal: Calendar { .current }
 
@@ -22,7 +23,7 @@ struct MonthCalendar: View {
         }
         .padding(8)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-        .frame(width: 232)
+        .frame(width: width)
     }
 
     private var header: some View {
