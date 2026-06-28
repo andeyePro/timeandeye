@@ -1443,6 +1443,13 @@ public final class AppController: ObservableObject {
     }
 
     private var coalescing = false
+    /// Serialises sync: `syncIfEnabled` is fired from many places (every slice
+    /// flush, the 60 s timer, every timeline edit). Without this, two overlapping
+    /// runs both fetch the same unpushed session across their network `await` and
+    /// both POST it — the duplicate-OP-entry bug. `syncRequested` runs one more
+    /// pass if a trigger arrived mid-sync, so nothing eligible is missed.
+    private var syncing = false
+    private var syncRequested = false
 
     /// Merge same-task sessions that now butt up against each other (after an
     /// edit/drag) into one, without losing data. Direct journal+OP cleanup,
@@ -1604,21 +1611,30 @@ public final class AppController: ObservableObject {
 
     public func syncIfEnabled() async {
         guard let client else { return }
+        // Non-reentrant: if a push is already in flight, just ask it to run once
+        // more when it finishes (a concurrent run would re-POST the same session
+        // across its network await — duplicate OP entries).
+        if syncing { syncRequested = true; return }
+        syncing = true
+        defer { syncing = false }
         let engine = SyncEngine(journal: journal, client: client)
         engine.onDebug = { DebugLog.write("sync: \($0)") }
-        do {
-            let pushed = try await engine.pushEligible(
-                threshold: settings.certaintyAutoPushThreshold,
-                defaultActivityID: settings.defaultActivityID,   // nil = OP's default
-                activityOverrides: settings.activityOverrides,
-                includeComments: settings.autoComment)
-            if pushed > 0 { DebugLog.write("pushed \(pushed) entries to OP") }
-            if !engine.startTimesSupported {
-                lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
+        repeat {
+            syncRequested = false
+            do {
+                let pushed = try await engine.pushEligible(
+                    threshold: settings.certaintyAutoPushThreshold,
+                    defaultActivityID: settings.defaultActivityID,   // nil = OP's default
+                    activityOverrides: settings.activityOverrides,
+                    includeComments: settings.autoComment)
+                if pushed > 0 { DebugLog.write("pushed \(pushed) entries to OP") }
+                if !engine.startTimesSupported {
+                    lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
+                }
+            } catch {
+                lastError = "OP push failed: \(error)"
             }
-        } catch {
-            lastError = "OP push failed: \(error)"
-        }
+        } while syncRequested
         updateJournalSummary()
     }
 }

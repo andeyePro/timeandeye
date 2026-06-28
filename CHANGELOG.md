@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-28
+
+- [x] **Stop NEW OP duplicates at the real source: serialise sync** — duplicates
+  were STILL appearing because `syncIfEnabled` had no re-entrancy guard, yet it's
+  fired from ~7 places (every slice flush, the 60 s timer, every timeline edit).
+  `pushEligible` fetches the unpushed sessions, then `await`s the network
+  `createTimeEntry` before `markPushed` — and that await frees the main actor, so
+  a second sync (e.g. the 60 s timer firing during a flush-triggered sync) fetched
+  the SAME still-unpushed session and POSTed it again = two OP entries. The
+  earlier rank-3a fix only covered a `markPushed` throw, not two runs that both
+  succeed. `syncIfEnabled` is now non-reentrant (a `syncing` flag), with a
+  `syncRequested` re-run so a trigger arriving mid-sync isn't lost. This is the
+  root cause of the ongoing duplicate creation.
+
 ## 2026-06-27
 
 - [x] **Reconcile robustness + display fixes** (from live testing) — three real
