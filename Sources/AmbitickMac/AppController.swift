@@ -1126,6 +1126,19 @@ public final class AppController: ObservableObject {
         objectWillChange.send()
     }
 
+    public func boostSurface(_ span: FocusSpan, to ref: TaskRef, weight: Double = 4) {
+        attributor.learnSurface(span.signal, to: ref, weight: weight)
+        persistAssociations(); tracker.reevaluate(); objectWillChange.send()
+    }
+
+    public func pinSurface(_ span: FocusSpan, to ref: TaskRef) {
+        guard let id = PinScope.identity(of: span.signal) else {
+            boostSurface(span, to: ref, weight: 6); return
+        }
+        let n = PinScope.defaultPrefixCount(kind: id.kind, segments: id.segments)
+        commitPin(kind: id.kind, prefix: Array(id.segments.prefix(n)), to: ref)
+    }
+
     /// Per-task colour: user override first, stable hash otherwise.
     public func colour(for ref: TaskRef) -> NSColor {
         if let hex = settings.taskColours[ref.storageKey], let c = NSColor(hex: hex) {

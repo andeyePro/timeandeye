@@ -149,10 +149,15 @@ public final class Attributor {
 
     /// Explicit user confirmation (popover click + return, or any direct pick).
     public func confirm(_ signal: ActivitySignal, task: TaskRef) {
+        learnSurface(signal, to: task, weight: 2)
+    }
+
+    /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
+    public func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double) {
         let surface = Surface(signal: signal)
         primedSurfaces[surface] = task
         if pendingPrime?.surface == surface { pendingPrime = nil }
-        learning.learn(signal, target: .task(task), weight: 2)
+        learning.learn(signal, target: .task(task), weight: weight)
     }
 
     /// Review-window or prompt assignment, including "Do not track". Always a

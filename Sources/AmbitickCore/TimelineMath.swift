@@ -143,6 +143,56 @@ public enum TimelineMath {
         return out
     }
 
+    /// Result of a keyboard move over the slice bar: the range anchor, the
+    /// moving focus cursor, and the resulting selection set.
+    public struct TimelineKeyNav: Equatable {
+        public var anchor: UUID?
+        public var focus: UUID?
+        public var selection: Set<UUID>
+        public init(anchor: UUID?, focus: UUID?, selection: Set<UUID>) {
+            self.anchor = anchor; self.focus = focus; self.selection = selection
+        }
+    }
+
+    /// Keyboard navigation over the slice bar. `ids` is the selectable slices in
+    /// start-time order (the caller excludes the live slice, matching the
+    /// mouse-selection rules). `anchor` is the shift-range anchor and `focus`
+    /// the moving cursor.
+    /// - Plain move (`extend == false`): land on the first/last slice when
+    ///   nothing is focused yet, else step one neighbour (clamped at the ends);
+    ///   the selection becomes just the focused slice and the anchor follows it.
+    /// - Extend move (`extend == true`): keep the anchor fixed (seeded from the
+    ///   current focus if absent), step the focus one neighbour, and select the
+    ///   inclusive anchor…focus range — same shape as a shift-click.
+    /// Returns nil when there is nothing selectable.
+    public static func keyboardMove(in ids: [UUID], anchor: UUID?, focus: UUID?,
+                                    forward: Bool, extend: Bool) -> TimelineKeyNav? {
+        guard !ids.isEmpty else { return nil }
+        let step = forward ? 1 : -1
+        let current = focus ?? anchor
+        if extend {
+            // Anchor stays put for the whole shift-drag; seed it on first use.
+            let anchorID = anchor ?? current ?? (forward ? ids.first : ids.last)
+            guard let anchorID, let ai = ids.firstIndex(of: anchorID) else { return nil }
+            let fromFocus = focus ?? anchorID
+            let fi = ids.firstIndex(of: fromFocus) ?? ai
+            let ni = min(max(fi + step, 0), ids.count - 1)
+            let newFocus = ids[ni]
+            let lo = min(ai, ni), hi = max(ai, ni)
+            return TimelineKeyNav(anchor: anchorID, focus: newFocus,
+                                  selection: Set(ids[lo...hi]))
+        }
+        // Plain move: first arrow lands on an end; subsequent arrows step + clamp.
+        let ni: Int
+        if let current, let ci = ids.firstIndex(of: current) {
+            ni = min(max(ci + step, 0), ids.count - 1)
+        } else {
+            ni = forward ? 0 : ids.count - 1
+        }
+        let newFocus = ids[ni]
+        return TimelineKeyNav(anchor: newFocus, focus: newFocus, selection: [newFocus])
+    }
+
     /// The most recent block of sessions separated by gaps < maxGap.
     public static func latestBlock(in sessions: [Session],
                                    maxGap: TimeInterval = 3600) -> (start: Date, end: Date)? {

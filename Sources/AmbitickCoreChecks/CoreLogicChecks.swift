@@ -71,6 +71,14 @@ func learningStoreChecks(_ c: Checks) {
         try expect(scores[.doNotTrack]! > scores[taskA]!)
     }
 
+    c.check("heavier learn weight raises the learned score") {
+        var lo = LearningStore(); lo.learn(ghostty, target: taskA); lo.learn(ghostty, target: taskB)
+        var hi = lo; hi.learn(ghostty, target: taskA, weight: 4)
+        let h = hi.scores(for: ghostty, among: [taskA, taskB])
+        try expect(h[taskA]! > lo.scores(for: ghostty, among: [taskA, taskB])[taskA]!)
+        try expect(h[taskA]! > h[taskB]!)
+    }
+
     c.check("round-trips through JSON") {
         var store = LearningStore()
         store.learn(ghostty, target: taskA)

@@ -80,6 +80,13 @@ struct TimelineView: View {
     @State private var spanAnchor: Int?
     /// Anchor for the same in the slice bar (by slice id).
     @State private var sliceAnchor: UUID?
+    /// Keyboard focus cursor for the slice bar (by slice id). Distinct from
+    /// `sliceAnchor`: the anchor pins a shift-range, this is the moving end that
+    /// arrows walk. Kept in lockstep with the anchor on a plain click.
+    @State private var sliceFocus: UUID?
+    /// Whether the slice bar holds key focus, so the arrow / Return key presses
+    /// route here (the editor's text fields take their own focus when active).
+    @FocusState private var barFocused: Bool
     /// Last pointer x over the bar (view coords), so zoom keeps the time under
     /// the cursor fixed instead of fixing the viewport centre.
     @State private var cursorX: CGFloat?
@@ -135,6 +142,7 @@ struct TimelineView: View {
             reloadTodayPreview()
             focusOnPendingSlice()
             installScrollPan()
+            barFocused = true
         }
         .onDisappear {
             if let monitor = scrollMonitor { NSEvent.removeMonitor(monitor) }
@@ -224,6 +232,8 @@ struct TimelineView: View {
         viewStart = viewStart.addingTimeInterval(Double(days) * 86_400)
         editing = nil
         selection = []
+        sliceFocus = nil
+        sliceAnchor = nil
         selectedSpanIdx = []
         clampViewport()
     }
@@ -398,6 +408,25 @@ struct TimelineView: View {
         .frame(height: 96)
         .clipped()
         .contentShape(Rectangle())
+        // Make the bar a key-focus target so arrows / Return drive it. The
+        // editor's text fields take their own focus when active, so they keep
+        // their keystrokes; clicking the bar re-takes focus (below).
+        .focusable()
+        .focused($barFocused)
+        // Keyboard navigation over slices. Left/right move the selection to the
+        // previous/next slice (by start time); ⇧ extends a contiguous range;
+        // Return opens the editor on the focused slice. Everything else is
+        // ignored so delete/backspace still reach .onDeleteCommand, Esc still
+        // cancels the editor, and typing elsewhere is untouched.
+        .onKeyPress { press in
+            let extend = press.modifiers.contains(.shift)
+            switch press.key {
+            case .leftArrow:  moveSelection(forward: false, extend: extend); return .handled
+            case .rightArrow: moveSelection(forward: true,  extend: extend); return .handled
+            case .return:     openFocusedEditor(); return .handled
+            default:          return .ignored
+            }
+        }
         // Over the bar, scroll pans it — clear the detail gate so panning
         // resumes even if the editor was dismissed while hovering the strip.
         .onHover { if $0 { scrollGate.overDetail = false } }
@@ -453,6 +482,8 @@ struct TimelineView: View {
     private func gapClick(at location: CGPoint, width: CGFloat) {
         editing = nil
         selection = []
+        sliceFocus = nil
+        sliceAnchor = nil
         selectedSpanIdx = []
         let point = dateFor(location.x, width: width)
         guard point <= liveEdge,
@@ -566,6 +597,38 @@ struct TimelineView: View {
             sliceAnchor = isLive ? nil : session.id
             openEditor(for: session, isNew: false)
         }
+        // Keep the keyboard cursor in step with the mouse and take key focus, so
+        // an arrow press right after a click continues from the clicked slice.
+        sliceFocus = isLive ? nil : session.id
+        barFocused = true
+    }
+
+    /// Selectable slices in start order (live excluded), matching selectSlice.
+    private func selectableIDs() -> [UUID] {
+        sessions.filter { $0.id != AppController.liveSessionID }
+            .sorted { $0.start < $1.start }.map(\.id)
+    }
+
+    /// Arrow-key move: shift `selection` (and the focus cursor) to the
+    /// previous/next slice, or extend a contiguous range when `extend`.
+    private func moveSelection(forward: Bool, extend: Bool) {
+        guard let nav = TimelineMath.keyboardMove(in: selectableIDs(),
+                                                  anchor: sliceAnchor,
+                                                  focus: sliceFocus,
+                                                  forward: forward, extend: extend)
+        else { return }
+        sliceAnchor = nav.anchor
+        sliceFocus = nav.focus
+        selection = nav.selection
+        editing = nil   // arrows are pure selection nav; Return opens the editor
+    }
+
+    /// Return opens the editor on the focused slice (falling back to a lone
+    /// selection), resolving the id back to its Session.
+    private func openFocusedEditor() {
+        let id = sliceFocus ?? (selection.count == 1 ? selection.first : nil)
+        guard let id, let session = sessions.first(where: { $0.id == id }) else { return }
+        openEditor(for: session, isNew: false)
     }
 
     /// Grips appear only on the slice you've clicked to edit (hover detection

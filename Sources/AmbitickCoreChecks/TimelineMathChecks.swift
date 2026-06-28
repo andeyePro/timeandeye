@@ -16,6 +16,68 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(TimelineMath.snap(t(8), to: sessions, tolerance: 10), t(0))
     }
 
+    c.check("keyboard nav: empty list -> nil") {
+        try expectNil(TimelineMath.keyboardMove(in: [], anchor: nil, focus: nil,
+                                                forward: true, extend: false))
+    }
+
+    c.check("keyboard nav: first arrow lands on an end, then steps + clamps") {
+        let ids = [UUID(), UUID(), UUID()]
+        // No focus yet: right lands on first, left lands on last.
+        let r0 = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: nil, focus: nil,
+                                                      forward: true, extend: false))
+        try expectEq(r0.focus, ids[0])
+        try expectEq(r0.anchor, ids[0])
+        try expectEq(r0.selection, [ids[0]])
+        let l0 = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: nil, focus: nil,
+                                                      forward: false, extend: false))
+        try expectEq(l0.focus, ids[2])
+        // Step forward one.
+        let r1 = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: ids[0], focus: ids[0],
+                                                      forward: true, extend: false))
+        try expectEq(r1.focus, ids[1])
+        try expectEq(r1.selection, [ids[1]])
+        // Clamp at the right end (no wrap).
+        let rEnd = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: ids[2], focus: ids[2],
+                                                        forward: true, extend: false))
+        try expectEq(rEnd.focus, ids[2])
+        // Clamp at the left end.
+        let lEnd = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: ids[0], focus: ids[0],
+                                                        forward: false, extend: false))
+        try expectEq(lEnd.focus, ids[0])
+    }
+
+    c.check("keyboard nav: shift extends a contiguous range from the anchor") {
+        let ids = [UUID(), UUID(), UUID(), UUID()]
+        // Focus on index 1, shift-right grows to {1,2}, anchor stays.
+        let g1 = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: ids[1], focus: ids[1],
+                                                      forward: true, extend: true))
+        try expectEq(g1.anchor, ids[1])
+        try expectEq(g1.focus, ids[2])
+        try expectEq(g1.selection, Set([ids[1], ids[2]]))
+        // Continue shift-right -> {1,2,3}.
+        let g2 = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: ids[1], focus: ids[2],
+                                                      forward: true, extend: true))
+        try expectEq(g2.selection, Set([ids[1], ids[2], ids[3]]))
+        // Shift-left from focus 3 shrinks back toward the anchor -> {1,2}.
+        let s1 = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: ids[1], focus: ids[3],
+                                                      forward: false, extend: true))
+        try expectEq(s1.anchor, ids[1])
+        try expectEq(s1.focus, ids[2])
+        try expectEq(s1.selection, Set([ids[1], ids[2]]))
+    }
+
+    c.check("keyboard nav: shift seeds the anchor from the current focus") {
+        let ids = [UUID(), UUID(), UUID()]
+        // No anchor yet but focus on index 1: shift-right pins the anchor at 1
+        // and extends to {1,2}.
+        let g = try unwrap(TimelineMath.keyboardMove(in: ids, anchor: nil, focus: ids[1],
+                                                     forward: true, extend: true))
+        try expectEq(g.anchor, ids[1])
+        try expectEq(g.focus, ids[2])
+        try expectEq(g.selection, Set([ids[1], ids[2]]))
+    }
+
     c.check("gap bounds come from neighbours; inside a session is nil") {
         let sessions = [session(from: 0, to: 600), session(from: 1800, to: 2400)]
         let gap = try unwrap(TimelineMath.gap(at: t(1000), in: sessions,
