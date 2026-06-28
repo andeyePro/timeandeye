@@ -14,7 +14,14 @@ struct SpentView: View {
     @ObservedObject var controller: AppController
     /// In-window navigation to the timeline (and the second-window escape hatch).
     let nav: TimeNav
-    @State private var period: Period = .today
+    @State private var period: TimePeriod = .today
+    /// The day the period is anchored on. `Today`/`Last 7 days` move this with
+    /// the calendar to view any prior period; defaults to now.
+    @State private var anchorDate = Date()
+    @State private var calendarVisible = true
+    /// The month the calendar grid is currently showing (for nav, distinct from
+    /// the anchored day).
+    @State private var calMonth = Date()
     @State private var nodes: [TimeAggregator.Node] = []
     @State private var blockData: (sessions: [Session], start: Date, end: Date)?
     @State private var hover: Selection = .none
@@ -23,33 +30,6 @@ struct SpentView: View {
     @State private var refreshTick = 0
 
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-
-    enum Period: String, CaseIterable, Identifiable {
-        case today = "Today"
-        case yesterday = "Yesterday"
-        case thisWeek = "This week"
-        case last7 = "Last 7 days"
-        case thisMonth = "This month"
-        var id: String { rawValue }
-
-        var range: (Date, Date) {
-            let cal = Calendar.current
-            let todayStart = cal.startOfDay(for: Date())
-            switch self {
-            case .today: return (todayStart, todayStart.addingTimeInterval(86_400))
-            case .yesterday: return (todayStart.addingTimeInterval(-86_400), todayStart)
-            case .thisWeek:
-                let start = cal.dateInterval(of: .weekOfYear, for: Date())?.start ?? todayStart
-                return (start, start.addingTimeInterval(7 * 86_400))
-            case .last7:
-                return (todayStart.addingTimeInterval(-6 * 86_400),
-                        todayStart.addingTimeInterval(86_400))
-            case .thisMonth:
-                let start = cal.dateInterval(of: .month, for: Date())?.start ?? todayStart
-                return (start, start.addingTimeInterval(32 * 86_400))
-            }
-        }
-    }
 
     enum Selection: Equatable {
         case none
@@ -62,14 +42,6 @@ struct SpentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Picker("", selection: $period) {
-                    ForEach(Period.allCases) { p in Text(p.rawValue).tag(p) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                Spacer()
-            }
             // Cross-preview / navigation: the current block's timeline. Clicking
             // a slice opens the full timeline framed on that exact slice. Labelled
             // with the first slice's start time.
@@ -99,17 +71,23 @@ struct SpentView: View {
                 legend
                     .frame(width: 250)
             }
-            // Total over the OpenProject-only toggle, bottom-left.
-            VStack(alignment: .leading, spacing: 4) {
-                Text(totalText).font(.caption).foregroundStyle(.secondary)
-                Toggle("OpenProject only", isOn: $opOnly)
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
+            // Bottom row: total + OpenProject-only toggle (bottom-left), the
+            // closeable highlight-calendar with its period picker (bottom-right).
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(totalText).font(.caption).foregroundStyle(.secondary)
+                    Toggle("OpenProject only", isOn: $opOnly)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                }
+                Spacer()
+                calendarPane
             }
         }
         .padding(12)
         .onReceive(timer) { _ in refreshTick += 1; reloadNodes(); reloadBlock() }
         .onChange(of: period) { _, _ in reloadNodes() }
+        .onChange(of: anchorDate) { _, _ in reloadNodes() }
         .onChange(of: opOnly) { _, _ in reloadNodes() }
         .onChange(of: controller.journalRevision) { _, _ in reloadNodes(); reloadBlock() }
         .onAppear {
@@ -123,7 +101,7 @@ struct SpentView: View {
     /// aggregation on EVERY body eval, and the view re-renders every second (the
     /// menu clock), so the pie re-queried the journal ~1Hz — the launch/idle slow.
     private func reloadNodes() {
-        let (from, to) = period.range
+        let (from, to) = period.range(anchor: anchorDate, now: Date())
         let all = controller.spentNodes(from: from, to: to)
         let filtered = opOnly ? all.filter { !isLocalProject($0) } : all
         nodes = filtered.sorted { a, b in
@@ -145,6 +123,39 @@ struct SpentView: View {
     }
 
     private var controlHeld: Bool { NSEvent.modifierFlags.contains(.control) }
+
+    // MARK: - Calendar
+
+    /// The closeable highlight-calendar plus its period picker, bottom-right.
+    /// Collapsed it's a single button so the pie keeps the room.
+    @ViewBuilder private var calendarPane: some View {
+        if calendarVisible {
+            VStack(alignment: .trailing, spacing: 6) {
+                MonthCalendar(month: $calMonth,
+                              highlighted: period.range(anchor: anchorDate, now: Date()),
+                              today: Calendar.current.startOfDay(for: Date())) { day in
+                    anchorDate = day
+                } onClose: {
+                    calendarVisible = false
+                }
+                Picker("", selection: $period) {
+                    ForEach(TimePeriod.allCases) { p in Text(p.rawValue).tag(p) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 232)
+            }
+        } else {
+            Button {
+                calendarVisible = true
+            } label: {
+                Label(period.rawValue, systemImage: "calendar")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .help("Show the calendar")
+        }
+    }
 
     // MARK: - Data
 
@@ -457,7 +468,7 @@ struct SpentView: View {
             let task = nodes[i].children[j]
             if let ref = task.ref {
                 reassignRow(label: "all \(task.label) (\(hm(task.seconds)))") { target in
-                    let (from, to) = period.range
+                    let (from, to) = period.range(anchor: anchorDate, now: Date())
                     Task { await controller.reassignSpentTask(ref, from: from, to: to, to: target) }
                 }
             }
@@ -465,7 +476,7 @@ struct SpentView: View {
             && k < nodes[i].children[j].children.count:
             let app = nodes[i].children[j].children[k]
             reassignRow(label: "\(app.label) time (\(hm(app.seconds)))") { target in
-                let (from, to) = period.range
+                let (from, to) = period.range(anchor: anchorDate, now: Date())
                 Task { await controller.reassignSpentApp(app.label, from: from, to: to, to: target) }
             }
         default:

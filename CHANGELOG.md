@@ -2,6 +2,18 @@
 
 ## 2026-06-28
 
+- [x] **Pie highlight-calendar + no timeline focus-ring** — the whole timeline
+  bar had picked up a blue selection ring (`.focusable()` draws a focus effect);
+  added `.focusEffectDisabled()` so arrow-key focus stays but the ring is gone.
+  Then implemented the pie's calendar: a new pure `TimePeriod` enum in Core with
+  an **anchorable** `range(anchor:now:)` (so a period can be viewed on any prior
+  date, not just relative to today), unit-checked. A new `MonthCalendar` grid
+  sits bottom-right below the legend: it highlights the days in the shown range,
+  pages months (future months disabled), rings today, and re-anchors the pie on
+  a tapped day — "This week" jumps to that day's whole week, "Last 7 days" to the
+  7 days ending on today's weekday. The Today/Yesterday/… picker moved from the
+  top of the window to below the calendar, and the calendar is closeable (✕ →
+  a compact reopen button). 178 checks pass.
 - [x] **TODO batch (drafted by subagents, integrated serially)** — 7 items, each
   built + checked + committed: Time-window titles per view (Timeline / Time Pie);
   pie "OpenProject only" + total moved bottom-left; optional per-pin **priority**

@@ -4,13 +4,11 @@
 
 - [x] Window titles (DONE 2026-06-28): the Time window is titled "Timeline" when showing the
   timeline and "Time Pie" when showing the pie (currently "Ambitick Time").
-- [ ] Pie view — closeable highlight-calendar (FOCUS: subagent draft conflicted
-  with the OP-only relocation + a malformed test; reverted, do directly). Spec:
-  closeable calendar bottom-right, below the key: highlights the
-  day(s) currently shown. If on "This week", clicking another week shows that
-  full week; if on "Last 7 days", clicking a prior date shows the 7 days ending
-  on the same day-of-week as today. Consider moving the Today | Yesterday | This
-  week period menu to BELOW the calendar rather than the top of the page.
+- [x] Pie view — closeable highlight-calendar (DONE 2026-06-28). Anchorable
+  `TimePeriod` in Core (unit-checked); a `MonthCalendar` grid bottom-right (below
+  the key) highlights the shown range and re-anchors on a tapped day; the period
+  picker moved below the calendar. "This week" → tapped day's whole week;
+  "Last 7 days" → 7 days ending on today's weekday; future days disabled.
 - [x] Pie view — OpenProject-only + total moved bottom-left (DONE 2026-06-28).
 - [ ] Reconcile "open in OpenProject" currently opens the entry's work package
   (OP has no per-time-entry web page). Find a better deep-link to the WP's time
