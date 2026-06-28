@@ -64,6 +64,28 @@ func attributorChecks(_ c: Checks) {
         try expect(result.certainty < 0.6)
     }
 
+    c.check("confirming a fresh surface to a new local task primes it (auto-prime on create)") {
+        // The Core half of AppController.addLocalTask(primeToCurrentSurface:):
+        // a never-seen surface confirmed to a brand-new .local task must attribute
+        // to it at the soft-prime ceiling on the very next attribute() — i.e. the
+        // new task's time lands immediately, not on the previously-focused task.
+        let a = Attributor(instanceHost: host)
+        let id = UUID()
+        let pre = a.attribute(ghostty, tasks: tasks, now: now)
+        try expect(pre.best?.target != .task(.local(id)),
+                   "surface is unbound before the create-time confirm")
+        a.confirm(ghostty, task: .local(id))
+        let primed = a.attribute(ghostty, tasks: tasks, now: now)
+        try expectEq(primed.best?.target, .task(.local(id)))
+        try expectClose(primed.certainty, 0.95)
+        // Re-confirming the same surface to a different new local re-primes it,
+        // so a later genuine create rebinds rather than sticking on the first.
+        let id2 = UUID()
+        a.confirm(ghostty, task: .local(id2))
+        try expectEq(a.attribute(ghostty, tasks: tasks, now: now).best?.target,
+                     .task(.local(id2)))
+    }
+
     c.check("primed surfaces survive a snapshot round-trip (relaunch persistence)") {
         let a = Attributor(instanceHost: host)
         a.confirm(ghostty, task: .op(1))

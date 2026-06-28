@@ -243,8 +243,17 @@ public final class AppController: ObservableObject {
         }
     }
 
+    /// Create (or reuse) a local task. `primeToCurrentSurface` is set ONLY by the
+    /// genuine user-creation UI paths (Settings/Review): on a brand-new task it
+    /// confirms the current frontmost surface to it so the live session
+    /// attributes to the new task immediately, instead of staying on the
+    /// previously-focused task until the user reassigns once. It must stay false
+    /// for rename/merge/programmatic callers — they aren't a fresh user pick of
+    /// "this surface is this task", and the same-name reuse path below returns
+    /// before any priming so re-typing an existing name never re-primes.
     @discardableResult
-    public func addLocalTask(name: String, isLeisure: Bool, project: String? = nil) -> TaskRef {
+    public func addLocalTask(name: String, isLeisure: Bool, project: String? = nil,
+                            primeToCurrentSurface: Bool = false) -> TaskRef {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Reuse an existing local task of the same name instead of duplicating.
         if let existing = settings.localTasks.first(where: {
@@ -257,6 +266,14 @@ public final class AppController: ObservableObject {
         mergeLocalTasksIntoCache()
         registerUndo("add local task \(trimmed)") { [weak self] in
             self?.removeLocalTask(def.id, undoable: false)
+        }
+        // Genuine NEW creation from a user pick: bind the frontmost surface to it
+        // now (confirm = soft 0.95 prime + learn) and lift the in-flight span,
+        // the same way commitPin does, so attribution doesn't lag a focus cycle.
+        if primeToCurrentSurface, let signal = tracker.currentFocusSignal {
+            attributor.confirm(signal, task: .local(def.id))
+            persistAssociations()
+            tracker.reevaluate()
         }
         return .local(def.id)
     }

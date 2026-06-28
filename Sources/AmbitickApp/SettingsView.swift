@@ -300,7 +300,8 @@ struct SettingsView: View {
     private func addLocal() {
         let project = newLocalProject.trimmingCharacters(in: .whitespacesAndNewlines)
         controller.addLocalTask(name: newLocalName, isLeisure: false,
-                                project: project.isEmpty ? nil : project)
+                                project: project.isEmpty ? nil : project,
+                                primeToCurrentSurface: true)
         newLocalName = ""
         newLocalProject = ""
     }

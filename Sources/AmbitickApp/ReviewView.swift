@@ -112,7 +112,8 @@ struct ReviewView: View {
     private func createAndAssign() {
         let name = newLocalName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
-        let ref = controller.addLocalTask(name: name, isLeisure: false)
+        let ref = controller.addLocalTask(name: name, isLeisure: false,
+                                          primeToCurrentSurface: true)
         newLocalName = ""
         assign(.task(ref))
     }
