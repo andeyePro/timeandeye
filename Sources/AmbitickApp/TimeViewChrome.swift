@@ -36,8 +36,10 @@ struct TimeContainer: View {
             }
         }
         // Reflect the current view in the window identity so the timeline's
-        // scroll-pan monitor can recognise it; updates as the view flips.
-        .openOnActiveSpace(id: view == .timeline ? "timeline" : "spent")
+        // scroll-pan monitor can recognise it, and retitle the host window to
+        // match; both update as the view flips.
+        .openOnActiveSpace(id: view == .timeline ? "timeline" : "spent",
+                           title: view == .timeline ? "Timeline" : "Time Pie")
         .onAppear { if isPrimary { controller.noteTimeViewOpened(view) } }
     }
 }

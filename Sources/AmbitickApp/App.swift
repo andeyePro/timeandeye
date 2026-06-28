@@ -65,6 +65,10 @@ struct AmbitickApp: App {
 /// "click the gear on Desktop 2 and get thrown to Desktop 1" jump.
 private struct ActiveSpaceWindow: NSViewRepresentable {
     var windowID: String?
+    /// Runtime override for the host NSWindow's title. A SwiftUI Window's title
+    /// is static, so views that change what they show (the Time window flips
+    /// between timeline and pie) set it here instead. Nil = leave the title be.
+    var title: String?
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         apply(to: view)
@@ -87,12 +91,17 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             if let windowID, w.identifier?.rawValue != windowID {
                 w.identifier = NSUserInterfaceItemIdentifier(windowID)
             }
+            // Retitle when the hosted view changes what it shows. Idempotent
+            // like the identifier set above — only touch it when it differs.
+            if let title, w.title != title {
+                w.title = title
+            }
         }
     }
 }
 
 extension View {
-    func openOnActiveSpace(id windowID: String? = nil) -> some View {
-        background(ActiveSpaceWindow(windowID: windowID))
+    func openOnActiveSpace(id windowID: String? = nil, title: String? = nil) -> some View {
+        background(ActiveSpaceWindow(windowID: windowID, title: title))
     }
 }

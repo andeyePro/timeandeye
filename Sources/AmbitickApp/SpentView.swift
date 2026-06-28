@@ -68,11 +68,7 @@ struct SpentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                Toggle("OpenProject only", isOn: $opOnly)
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
                 Spacer()
-                Text(totalText).font(.caption).foregroundStyle(.secondary)
             }
             // Cross-preview / navigation: the current block's timeline. Clicking
             // a slice opens the full timeline framed on that exact slice. Labelled
@@ -102,6 +98,13 @@ struct SpentView: View {
                 }
                 legend
                     .frame(width: 250)
+            }
+            // Total over the OpenProject-only toggle, bottom-left.
+            VStack(alignment: .leading, spacing: 4) {
+                Text(totalText).font(.caption).foregroundStyle(.secondary)
+                Toggle("OpenProject only", isOn: $opOnly)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
             }
         }
         .padding(12)
