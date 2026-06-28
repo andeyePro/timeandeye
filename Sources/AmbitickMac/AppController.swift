@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Carbon.HIToolbox   // kVK_ANSI_L / cmdKey / shiftKey for the global Away hotkey
 import AmbitickCore
 
 /// Pure title/cadence logic, kept out of the controller so it is checkable.
@@ -155,6 +156,11 @@ public final class AppController: ObservableObject {
     private var client: OPClient?
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
+    /// System-wide ⌘⇧L "Away" toggle (Carbon RegisterEventHotKey). The
+    /// SwiftUI .keyboardShortcut in the popover only fires when Ambitick is
+    /// key; this fires from any app. Installed in startUp, torn down on
+    /// terminate/deinit (which unregisters the Carbon hotkey + handler).
+    private var awayHotKey: GlobalHotKey?
     /// Dedicated, tight (~12 s) crash-safety checkpoint timer, gated to
     /// .tracking. Generous tolerance lets the OS coalesce the wakeup, so the
     /// extra cadence costs no measurable energy over the 60 s refresh timer.
@@ -531,12 +537,16 @@ public final class AppController: ObservableObject {
     public func startUp() {
         installCrashTraps()
         installUndoKey()
+        installAwayHotKey()
         promoteStaleCheckpoint()   // recover any session a crash/quit left mid-flight
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             // queue: .main → this runs on the main actor; assert it so the
             // call is synchronous (must finish before the app quits).
-            MainActor.assumeIsolated { self?.checkpointLive() }
+            MainActor.assumeIsolated {
+                self?.checkpointLive()
+                self?.awayHotKey = nil   // unregister the Carbon hotkey before quit
+            }
         }
         Notifier.enabled = settings.systemNotifications
         sensors.requestPermissions()
@@ -991,6 +1001,32 @@ public final class AppController: ObservableObject {
             }
             return event
         }
+    }
+
+    /// True system-wide ⌘⇧L: toggles Away from any app (kVK_ANSI_L = 37). The
+    /// popover's SwiftUI .keyboardShortcut only fires while Ambitick is key, so
+    /// this is the one that works on your way out of the room. setAway no-ops
+    /// unless we're .tracking, so the chord is harmless when stopped.
+    private func installAwayHotKey() {
+        let signature = OSType(0x416D6274)   // 'Ambt'
+        awayHotKey = GlobalHotKey(
+            keyCode: UInt32(kVK_ANSI_L),
+            modifiers: UInt32(cmdKey | shiftKey),
+            signature: signature,
+            id: 1) { [weak self] in
+            guard let self else { return }
+            self.setAway(!self.away)
+        }
+        if awayHotKey == nil {
+            DebugLog.write("global ⌘⇧L hotkey: registration failed")
+        }
+    }
+
+    deinit {
+        // Belt-and-braces: also unregister if the controller is torn down
+        // without a willTerminate (e.g. in tests / previews). deinit runs
+        // GlobalHotKey.deinit which unregisters the Carbon hotkey + handler.
+        awayHotKey = nil
     }
 
     // MARK: - Timeline
