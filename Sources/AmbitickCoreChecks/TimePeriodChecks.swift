@@ -41,4 +41,15 @@ func timePeriodChecks(_ c: Checks) {
         let mp = TimePeriod.thisMonth.range(anchor: prior, now: now, calendar: cal)
         try expectEq(mp.start, cal.dateInterval(of: .month, for: prior)!.start)
     }
+
+    c.check("matching identifies a preset-equal selection, nil for custom") {
+        // A selection equal to this-week's range re-lights the Week preset.
+        let w = TimePeriod.thisWeek.range(anchor: now, now: now, calendar: cal)
+        try expectEq(TimePeriod.matching(start: w.start, endExclusive: w.end,
+                                         now: now, calendar: cal), .thisWeek)
+        // A single arbitrary day in the past matches nothing → custom.
+        let d = cal.startOfDay(for: now.addingTimeInterval(-10 * 86_400))
+        try expectNil(TimePeriod.matching(start: d, endExclusive: d.addingTimeInterval(86_400),
+                                          now: now, calendar: cal))
+    }
 }

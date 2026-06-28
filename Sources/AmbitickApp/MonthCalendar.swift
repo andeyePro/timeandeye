@@ -1,18 +1,28 @@
 import SwiftUI
 
-/// A compact month grid for the Time-Pie. Highlights the days within the shown
-/// period's `[start, end)` range, lets you page months, and reports a tapped day
-/// back so the pie can re-anchor on it. Closeable via the header ✕.
+/// A compact month grid for the Time-Pie. Days are selectable: click one day,
+/// drag across a span, or shift-click to extend the current selection. The swept
+/// contiguous range is reported back via `onSelect`; the shown range
+/// (`selStart...selEnd`, both start-of-day inclusive) is highlighted. Closeable
+/// via the header ✕.
 struct MonthCalendar: View {
     @Binding var month: Date
-    /// The currently-shown period range; days within it are highlighted.
-    let highlighted: (start: Date, end: Date)
-    /// Today (start-of-day), ringed for orientation.
+    /// Currently-selected days (start-of-day, inclusive both ends), highlighted.
+    let selStart: Date
+    let selEnd: Date
+    /// Today (start-of-day): ringed for orientation, and the latest selectable day.
     let today: Date
-    let onPick: (Date) -> Void
+    let onSelect: (ClosedRange<Date>) -> Void
     let onClose: () -> Void
     var width: CGFloat = 232
 
+    /// The day a drag/shift gesture is anchored on (nil between gestures).
+    @State private var dragOrigin: Date?
+    /// Each day-cell's frame in the grid's coordinate space, for hit-testing the
+    /// drag location back to a day.
+    @State private var cellFrames: [Date: CGRect] = [:]
+
+    private static let space = "calGrid"
     private var cal: Calendar { .current }
 
     var body: some View {
@@ -64,30 +74,57 @@ struct MonthCalendar: View {
                 }
             }
         }
+        .coordinateSpace(name: Self.space)
+        .onPreferenceChange(CellFrameKey.self) { cellFrames = $0 }
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+                .onChanged { handleDrag(at: $0.location) }
+                .onEnded { _ in dragOrigin = nil }
+        )
     }
 
     private func dayCell(_ day: Date) -> some View {
-        let inRange = day >= cal.startOfDay(for: highlighted.start) && day < highlighted.end
+        let inSel = day >= selStart && day <= selEnd
         let isToday = cal.isDate(day, inSameDayAs: today)
         let future = day > today
-        return Button { onPick(day) } label: {
-            Text("\(cal.component(.day, from: day))")
-                .font(.system(size: 11))
-                .frame(maxWidth: .infinity, minHeight: 22)
-                .foregroundStyle(future ? AnyShapeStyle(.tertiary)
-                                 : inRange ? AnyShapeStyle(Color.white) : AnyShapeStyle(.primary))
-                .background {
-                    if inRange { RoundedRectangle(cornerRadius: 4).fill(Color.accentColor) }
+        return Text("\(cal.component(.day, from: day))")
+            .font(.system(size: 11))
+            .frame(maxWidth: .infinity, minHeight: 22)
+            .foregroundStyle(future ? AnyShapeStyle(.tertiary)
+                             : inSel ? AnyShapeStyle(Color.white) : AnyShapeStyle(.primary))
+            .background {
+                if inSel { RoundedRectangle(cornerRadius: 4).fill(Color.accentColor) }
+            }
+            .overlay {
+                if isToday {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Color.accentColor, lineWidth: 1)
                 }
-                .overlay {
-                    if isToday {
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Color.accentColor, lineWidth: 1)
-                    }
-                }
+            }
+            .contentShape(Rectangle())
+            .background(GeometryReader { g in
+                Color.clear.preference(key: CellFrameKey.self,
+                                       value: [day: g.frame(in: .named(Self.space))])
+            })
+    }
+
+    // MARK: - Gesture → day selection
+
+    /// Map the drag/click location to a day and report the swept range. A bare
+    /// click (no movement) selects one day; dragging grows the range; holding ⇧
+    /// extends from the existing selection's start instead of the touched day.
+    private func handleDrag(at location: CGPoint) {
+        guard let touched = dayAt(location) else { return }
+        let day = min(touched, today)               // never select into the future
+        if dragOrigin == nil {
+            dragOrigin = NSEvent.modifierFlags.contains(.shift) ? selStart : day
         }
-        .buttonStyle(.plain)
-        .disabled(future)
+        let origin = dragOrigin ?? day
+        onSelect(min(origin, day)...max(origin, day))
+    }
+
+    private func dayAt(_ p: CGPoint) -> Date? {
+        cellFrames.first { $0.value.contains(p) }?.key
     }
 
     // MARK: - Date maths
@@ -120,5 +157,13 @@ struct MonthCalendar: View {
 
     private func page(_ delta: Int) {
         if let m = cal.date(byAdding: .month, value: delta, to: month) { month = m }
+    }
+}
+
+/// Collects each day-cell's frame so a drag location can be mapped back to a day.
+private struct CellFrameKey: PreferenceKey {
+    static let defaultValue: [Date: CGRect] = [:]
+    static func reduce(value: inout [Date: CGRect], nextValue: () -> [Date: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }

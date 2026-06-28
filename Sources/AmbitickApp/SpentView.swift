@@ -14,10 +14,14 @@ struct SpentView: View {
     @ObservedObject var controller: AppController
     /// In-window navigation to the timeline (and the second-window escape hatch).
     let nav: TimeNav
-    @State private var period: TimePeriod = .today
-    /// The day the period is anchored on. `Today`/`Last 7 days` move this with
-    /// the calendar to view any prior period; defaults to now.
-    @State private var anchorDate = Date()
+    /// The selected day-range (start-of-day, inclusive both ends). The pie shows
+    /// exactly these days. A preset button sets it; the calendar's click / drag /
+    /// shift-click overwrites it with an arbitrary contiguous range.
+    @State private var selStart = Calendar.current.startOfDay(for: Date())
+    @State private var selEnd = Calendar.current.startOfDay(for: Date())
+    /// The preset whose range equals the current selection, for the picker's
+    /// highlight; nil when the selection is custom.
+    @State private var activePreset: TimePeriod? = .today
     @State private var calendarVisible = true
     /// The month the calendar grid is currently showing (for nav, distinct from
     /// the anchored day).
@@ -64,30 +68,35 @@ struct SpentView: View {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
             reassignBar
+            // Pie fills the full remaining height (left); the legend + calendar
+            // share the same height in the right column, so opening the calendar
+            // never forces the pie up. Total + OP-only overlay the pie's empty
+            // bottom-left corner so they stay bottom-left without stealing height.
             HStack(alignment: .top, spacing: 16) {
                 GeometryReader { geo in
                     pie(in: geo.size)
                 }
-                legend
-                    .frame(width: 250)
-            }
-            // Bottom row: total + OpenProject-only toggle (bottom-left), the
-            // closeable highlight-calendar with its period picker (bottom-right).
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(totalText).font(.caption).foregroundStyle(.secondary)
-                    Toggle("OpenProject only", isOn: $opOnly)
-                        .toggleStyle(.checkbox)
-                        .font(.caption)
+                .overlay(alignment: .bottomLeading) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(totalText).font(.caption).foregroundStyle(.secondary)
+                        Toggle("OpenProject only", isOn: $opOnly)
+                            .toggleStyle(.checkbox)
+                            .font(.caption)
+                    }
                 }
-                Spacer()
-                calendarPane
+                VStack(alignment: .trailing, spacing: 8) {
+                    legend
+                    Spacer(minLength: 8)
+                    calendarPane
+                }
+                .frame(width: 250)
             }
+            .frame(maxHeight: .infinity)
         }
         .padding(12)
         .onReceive(timer) { _ in refreshTick += 1; reloadNodes(); reloadBlock() }
-        .onChange(of: period) { _, _ in reloadNodes() }
-        .onChange(of: anchorDate) { _, _ in reloadNodes() }
+        .onChange(of: selStart) { _, _ in reloadNodes() }
+        .onChange(of: selEnd) { _, _ in reloadNodes() }
         .onChange(of: opOnly) { _, _ in reloadNodes() }
         .onChange(of: controller.journalRevision) { _, _ in reloadNodes(); reloadBlock() }
         .onAppear {
@@ -97,11 +106,38 @@ struct SpentView: View {
         }
     }
 
+    /// The journal query window for the current selection: start-of-day of the
+    /// first selected day, to start-of-day after the last (exclusive).
+    private var effectiveRange: (from: Date, to: Date) {
+        (selStart, selEnd.addingTimeInterval(86_400))
+    }
+
+    /// A preset button: set the selection to that period (relative to today) and
+    /// page the calendar to show it.
+    private func applyPreset(_ p: TimePeriod) {
+        let cal = Calendar.current
+        let (s, e) = p.range(anchor: Date(), now: Date())
+        selStart = cal.startOfDay(for: s)
+        selEnd = cal.startOfDay(for: e.addingTimeInterval(-1))
+        activePreset = p
+        calMonth = selEnd
+    }
+
+    /// The calendar reporting a hand-made contiguous day selection.
+    private func selectDays(_ range: ClosedRange<Date>) {
+        let cal = Calendar.current
+        selStart = cal.startOfDay(for: range.lowerBound)
+        selEnd = cal.startOfDay(for: range.upperBound)
+        activePreset = TimePeriod.matching(start: selStart,
+                                           endExclusive: selEnd.addingTimeInterval(86_400),
+                                           now: Date())
+    }
+
     /// Cached pie data. Was a computed property that ran a journal query +
     /// aggregation on EVERY body eval, and the view re-renders every second (the
     /// menu clock), so the pie re-queried the journal ~1Hz — the launch/idle slow.
     private func reloadNodes() {
-        let (from, to) = period.range(anchor: anchorDate, now: Date())
+        let (from, to) = effectiveRange
         let all = controller.spentNodes(from: from, to: to)
         let filtered = opOnly ? all.filter { !isLocalProject($0) } : all
         nodes = filtered.sorted { a, b in
@@ -136,14 +172,14 @@ struct SpentView: View {
         if calendarVisible {
             VStack(alignment: .trailing, spacing: 6) {
                 MonthCalendar(month: $calMonth,
-                              highlighted: period.range(anchor: anchorDate, now: Date()),
-                              today: Calendar.current.startOfDay(for: Date()), onPick: { day in
-                    anchorDate = day
-                }, onClose: {
-                    calendarVisible = false
-                }, width: calWidth)
-                Picker("", selection: $period) {
-                    ForEach(TimePeriod.allCases) { p in Text(p.rawValue).tag(p) }
+                              selStart: selStart, selEnd: selEnd,
+                              today: Calendar.current.startOfDay(for: Date()),
+                              onSelect: { selectDays($0) },
+                              onClose: { calendarVisible = false },
+                              width: calWidth)
+                Picker("", selection: Binding(get: { activePreset },
+                                              set: { if let p = $0 { applyPreset(p) } })) {
+                    ForEach(TimePeriod.allCases) { p in Text(p.rawValue).tag(p as TimePeriod?) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -153,7 +189,7 @@ struct SpentView: View {
             Button {
                 calendarVisible = true
             } label: {
-                Label(period.rawValue, systemImage: "calendar")
+                Label(activePreset?.rawValue ?? "Custom", systemImage: "calendar")
                     .font(.caption)
             }
             .buttonStyle(.borderless)
@@ -472,7 +508,7 @@ struct SpentView: View {
             let task = nodes[i].children[j]
             if let ref = task.ref {
                 reassignRow(label: "all \(task.label) (\(hm(task.seconds)))") { target in
-                    let (from, to) = period.range(anchor: anchorDate, now: Date())
+                    let (from, to) = effectiveRange
                     Task { await controller.reassignSpentTask(ref, from: from, to: to, to: target) }
                 }
             }
@@ -480,7 +516,7 @@ struct SpentView: View {
             && k < nodes[i].children[j].children.count:
             let app = nodes[i].children[j].children[k]
             reassignRow(label: "\(app.label) time (\(hm(app.seconds)))") { target in
-                let (from, to) = period.range(anchor: anchorDate, now: Date())
+                let (from, to) = effectiveRange
                 Task { await controller.reassignSpentApp(app.label, from: from, to: to, to: target) }
             }
         default:

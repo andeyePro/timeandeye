@@ -41,4 +41,15 @@ public enum TimePeriod: String, CaseIterable, Identifiable, Sendable {
             return (start, end)
         }
     }
+
+    /// If `[start, endExclusive)` exactly equals one preset's range anchored on
+    /// `now`, return that preset — so a hand-made calendar selection that happens
+    /// to be e.g. "this week" re-lights the Week button. Otherwise nil (custom).
+    public static func matching(start: Date, endExclusive: Date, now: Date,
+                                calendar: Calendar = .current) -> TimePeriod? {
+        allCases.first { p in
+            let r = p.range(anchor: now, now: now, calendar: calendar)
+            return r.start == start && r.end == endExclusive
+        }
+    }
 }

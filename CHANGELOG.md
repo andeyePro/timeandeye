@@ -2,6 +2,17 @@
 
 ## 2026-06-28
 
+- [x] **Calendar: selectable day-ranges + pie keeps full height** — the calendar
+  is now an arbitrary day-range selector: click one day, drag across a span, or
+  shift-click to extend (origin = the current selection's start). The pie shows
+  exactly the selected days; a hand-selection that happens to equal a preset
+  re-lights that preset button (new pure `TimePeriod.matching`, unit-checked),
+  otherwise the picker reads "Custom". Also reworked the layout so opening the
+  calendar no longer forces the pie up: the pie fills the full height on the left,
+  the legend + calendar share that height in the right column, and the total /
+  OpenProject-only controls overlay the pie's empty bottom-left corner. Dropped
+  the **Yesterday** preset and shortened "This week"/"This month" to "Week"/
+  "Month". 179 checks pass.
 - [x] **Pie highlight-calendar + no timeline focus-ring** — the whole timeline
   bar had picked up a blue selection ring (`.focusable()` draws a focus effect);
   added `.focusEffectDisabled()` so arrow-key focus stays but the ring is gone.
