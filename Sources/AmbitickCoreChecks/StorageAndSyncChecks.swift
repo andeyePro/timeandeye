@@ -436,6 +436,26 @@ func aiAssistChecks(_ c: Checks) {
         let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID])
         try expectEq(parsed.count, 1)
     }
+
+    c.check("pin-rule prompt carries the surface fields, grammar and advice") {
+        let prompt = AIAssist.pinRulePrompt(app: "Ghostty", title: "voting – nvim",
+                                            url: nil, advice: "key on the app")
+        try expect(prompt.contains("Ghostty"))
+        try expect(prompt.contains("voting – nvim"))
+        try expect(prompt.contains("(none)"), "nil url renders as (none)")
+        try expect(prompt.contains("contains"))
+        try expect(prompt.contains("matches"))
+        try expect(prompt.contains("key on the app"), "advice is included")
+    }
+
+    c.check("pin-rule reply cleaner strips fences and trailing prose") {
+        try expectEq(AIAssist.cleanRuleReply("```\napp is \"Ghostty\"\n```"),
+                     "app is \"Ghostty\"")
+        // Models sometimes add a note on a second line — keep only the rule.
+        try expectEq(AIAssist.cleanRuleReply("url contains \"op\"\nThis matches…"),
+                     "url contains \"op\"")
+        try expectEq(AIAssist.cleanRuleReply("  title is \"X\"  "), "title is \"X\"")
+    }
 }
 
 // MARK: - Settings (plan task 13)

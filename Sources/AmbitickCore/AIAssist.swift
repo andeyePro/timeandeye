@@ -46,6 +46,60 @@ public enum AIAssist {
         return lines.joined(separator: "\n")
     }
 
+    /// The default guidance seeded into the pin AI prompt — nudges the model
+    /// toward a robust rule rather than one keyed on a volatile window title.
+    public static let defaultPinAdvice =
+        "Prefer a stable title or URL pattern. If the title looks volatile " +
+        "(it has counts, timestamps, or document names that change), key on a " +
+        "more robust field, or suggest a setup change that would make it stable."
+
+    /// Build the clipboard prompt that asks an AI to write ONE pin rule (a boolean
+    /// expression in the app's grammar) for the given window. `advice` is the
+    /// editable guidance box (see `defaultPinAdvice`).
+    public static func pinRulePrompt(app: String, title: String?, url: String?,
+                                     advice: String) -> String {
+        var lines: [String] = []
+        lines.append("You are writing ONE matching rule for a macOS time-tracker.")
+        lines.append("The rule decides whether a window/tab is ALWAYS a particular task.")
+        lines.append("")
+        lines.append("The window I want to pin:")
+        lines.append("- app:   \(app)")
+        lines.append("- title: \(title ?? "(none)")")
+        lines.append("- url:   \(url ?? "(none)")")
+        lines.append("")
+        lines.append("Reply with a boolean expression in this grammar:")
+        lines.append("  fields:    app, title, url")
+        lines.append("  operators: is, contains, starts with, matches (regex)")
+        lines.append("  logic:     and, or, not, parentheses")
+        lines.append("  values are double-quoted, e.g.  title contains \"Inbox\"")
+        lines.append("  examples:  app is \"Ghostty\" and title contains \"voting\"")
+        lines.append("             url contains \"openproject\" and not title contains \"Sign in\"")
+        let trimmed = advice.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            lines.append("")
+            lines.append("Guidance: \(trimmed)")
+        }
+        lines.append("")
+        lines.append("Output ONLY the expression on a single line — no backticks, no explanation.")
+        return lines.joined(separator: "\n")
+    }
+
+    /// Clean an AI's pin-rule reply down to the single expression line: strips
+    /// ``` fences and takes the first non-empty line (models sometimes add a note).
+    public static func cleanRuleReply(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```") {
+            text = text
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let firstLine = text.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
+        return firstLine ?? text
+    }
+
     // Codable (not JSONSerialization) so Bool/Int are discriminated correctly
     // on Apple platforms, where NSNumber(1) bridges to Bool.
     private struct Response: Decodable {

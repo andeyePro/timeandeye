@@ -2,6 +2,17 @@
 
 ## 2026-06-28
 
+- [x] **Pin editor AI mode (#11 final phase)** — a fourth hamburger entry for
+  windows whose own app/title/url don't say which task they are. New Core builders
+  (unit-checked): `AIAssist.pinRulePrompt` assembles a prompt from the captured
+  fields + an editable guidance box (pre-seeded `defaultPinAdvice` nudging toward
+  a stable pattern over a volatile title), and `AIAssist.cleanRuleReply` strips
+  fences / trailing prose from the answer. The prompt is shown scrollable and
+  auto-copied; the pasted reply is parsed by the existing PredicateParser into an
+  ordinary **editable Expression rule** (↵ applies → review → ↵ pins), or shows
+  the parse error. A **Fix with AI** button on an Expression parse error hands the
+  failed rule into this mode. Controller gained `currentSurfaceFields()` and a
+  generic `copyToClipboard`. 181 checks pass; UI flow needs an on-device check.
 - [x] **Keyboard shortcuts across every surface + parity audit** — an Explore
   inventory confirmed every action already has a mouse path. Added ⌘-shortcuts to
   the daily-driver surfaces and put each chord in the control's tooltip and in

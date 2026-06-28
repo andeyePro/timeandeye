@@ -96,6 +96,13 @@ else. Click the pin button in the popover to open the pin editor.
   (`app is not "Ghostty"`, `url does not contain "github"`). Bare text with no
   field means "contains, in any field". A parse error shows in full above the
   buttons.
+- **AI** (via the hamburger menu) - for a window whose own app/title/url don't
+  obviously say which task it is. It builds a prompt from the captured fields plus
+  an editable guidance box (pre-seeded to prefer a stable pattern over a volatile
+  title), copies it to the clipboard for you to paste into any AI, and takes the
+  reply back: paste the rule it returns and ↵ turns it into an ordinary, editable
+  Expression rule (or shows a parse error). When a typed Expression won't parse,
+  a **Fix with AI** button hands the failed rule straight to this mode.
 - **Enter** pins. The **✕** (or esc) means "no pin here": it unpins when you
   opened on an existing pin, or drops a never-saved draft.
 

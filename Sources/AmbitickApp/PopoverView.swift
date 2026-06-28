@@ -23,12 +23,18 @@ struct PopoverView: View {
     // updates it in place instead of duplicating. nil = creating a new pin.
     @State private var pinEditingID: UUID?
     @FocusState private var pinFocused: Bool
-    // Hamburger modes: the visual blue/grey Components editor, or a typed
-    // boolean Expression. (AI mode lands in a later pass.)
-    enum PinMode { case components, expression }
+    // Hamburger modes: the visual blue/grey Components editor, a typed boolean
+    // Expression, or AI (copy a prompt, paste back a rule).
+    enum PinMode { case components, expression, ai }
     @State private var pinMode: PinMode = .components
     @State private var pinExpression = ""
     @State private var pinExprError: String?
+    // AI mode: editable guidance, the generated prompt (auto-copied), and the
+    // pasted-back reply that deserialises into an editable Expression rule.
+    @State private var pinAIAdvice = AIAssist.defaultPinAdvice
+    @State private var pinAIPrompt = ""
+    @State private var pinAIResponse = ""
+    @State private var pinAICopied = false
     // Advanced (geek) option: a manual priority that overrides specificity-based
     // precedence when several pins match. Off by default → nil priority, so an
     // ordinary pin behaves exactly as before. On → pinPriority (higher wins).
@@ -192,10 +198,10 @@ struct PopoverView: View {
 
     private var pinEditor: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if pinMode == .components {
-                componentsEditor
-            } else {
-                expressionEditor
+            switch pinMode {
+            case .components: componentsEditor
+            case .expression: expressionEditor
+            case .ai: aiEditor
             }
             priorityControl
             // Parse errors get their OWN full-width, wrapping line — not crammed
@@ -207,6 +213,14 @@ struct PopoverView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                // A parse error in Expression mode → hand the failed rule to AI.
+                if pinMode == .expression {
+                    Button { fixExpressionWithAI() } label: {
+                        Label("Fix with AI", systemImage: "sparkles").font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Build an AI prompt from this failed expression")
+                }
             }
             HStack(spacing: 6) {
                 Text(modeHint)
@@ -222,6 +236,9 @@ struct PopoverView: View {
                     }
                     Button { switchMode(.expression) } label: {
                         Label("Expression", systemImage: pinMode == .expression ? "checkmark" : "curlybraces")
+                    }
+                    Button { switchMode(.ai) } label: {
+                        Label("AI", systemImage: pinMode == .ai ? "checkmark" : "sparkles")
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal")
@@ -290,9 +307,75 @@ struct PopoverView: View {
 
     /// Footer mode help (the parse error has its own line above).
     private var modeHint: String {
-        pinMode == .components
-            ? "← wider · → narrower · click a part"
-            : "fields: app·title·url   ops: is·contains·starts with·matches   logic: and·or·not·( )"
+        switch pinMode {
+        case .components: return "← wider · → narrower · click a part"
+        case .expression: return "fields: app·title·url   ops: is·contains·starts with·matches   logic: and·or·not·( )"
+        case .ai: return "copy the prompt → paste the AI's reply → ↵ applies it as an editable rule"
+        }
+    }
+
+    /// AI mode: an editable guidance box, the generated prompt (scrollable,
+    /// auto-copied), and a paste-back that deserialises into an Expression rule.
+    private var aiEditor: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("guidance for the AI", text: $pinAIAdvice, axis: .vertical)
+                .textFieldStyle(.roundedBorder).font(.caption2).lineLimit(1...3)
+                .onChange(of: pinAIAdvice) { _, _ in buildAIPrompt() }
+            HStack {
+                Button { buildAIPrompt() } label: {
+                    Label(pinAICopied ? "Copied" : "Copy prompt", systemImage: "doc.on.doc")
+                        .font(.caption2)
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+            }
+            ScrollView {
+                Text(pinAIPrompt)
+                    .font(.system(.caption2, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: 72)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 4))
+            TextField("paste the AI's rule here, ↵ to apply", text: $pinAIResponse)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.caption, design: .monospaced))
+                .focused($pinFocused)
+                .onSubmit { applyAIResponse() }
+        }
+        .onAppear { if pinAIPrompt.isEmpty { buildAIPrompt() }; pinFocused = true }
+    }
+
+    /// Build the AI prompt from the current surface + guidance, and copy it.
+    private func buildAIPrompt() {
+        guard let f = controller.currentSurfaceFields() else { pinAIPrompt = ""; return }
+        pinAIPrompt = AIAssist.pinRulePrompt(app: f.app, title: f.title, url: f.url,
+                                             advice: pinAIAdvice)
+        controller.copyToClipboard(pinAIPrompt)
+        pinAICopied = true
+    }
+
+    /// Deserialise the pasted AI reply into an editable Expression rule (or show a
+    /// parse error). On success it flips to Expression mode so ↵ then pins.
+    private func applyAIResponse() {
+        let cleaned = AIAssist.cleanRuleReply(pinAIResponse)
+        guard !cleaned.isEmpty else { pinExprError = "Paste the AI's reply first."; return }
+        switch PredicateParser.parse(cleaned) {
+        case .success:
+            pinExpression = cleaned
+            pinExprError = nil
+            pinMode = .expression
+        case .failure(let error):
+            pinExprError = message(for: error)
+        }
+    }
+
+    /// Parse-error escape hatch: hand the failed expression to AI mode.
+    private func fixExpressionWithAI() {
+        pinAIAdvice = AIAssist.defaultPinAdvice +
+            " The expression \"\(pinExpression)\" didn't parse — return a corrected one."
+        pinExprError = nil
+        switchMode(.ai)
     }
 
     /// The typed boolean Expression editor.
@@ -318,7 +401,15 @@ struct PopoverView: View {
         pinExprError = nil
         pinPriorityOn = false
         pinPriority = 5
+        resetAIState()
         pinning = true
+    }
+
+    private func resetAIState() {
+        pinAIAdvice = AIAssist.defaultPinAdvice
+        pinAIPrompt = ""
+        pinAIResponse = ""
+        pinAICopied = false
     }
 
     /// Re-open the editor on an existing pin to adjust it. A Components pin opens
@@ -329,6 +420,7 @@ struct PopoverView: View {
         pinKind = draft.kind
         pinSegments = draft.segments
         pinExprError = nil
+        resetAIState()
         switch pin.rule {
         case .components(let scope):
             pinMode = .components
@@ -359,6 +451,7 @@ struct PopoverView: View {
         }
         pinExprError = nil
         pinMode = mode
+        if mode == .ai { buildAIPrompt() }
     }
 
     /// The current Components selection as an equivalent typed expression.
@@ -376,6 +469,9 @@ struct PopoverView: View {
     }
 
     private func commitPinning() {
+        // In AI mode ↵ applies the pasted reply (→ Expression for review); a
+        // second ↵ then pins it.
+        if pinMode == .ai { applyAIResponse(); return }
         guard case .tracking(.task(let ref), _) = controller.trackerState else { pinning = false; return }
         let priority = pinPriorityOn ? pinPriority : nil
         if pinMode == .expression {

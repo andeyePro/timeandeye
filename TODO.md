@@ -88,16 +88,15 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   NEEDS on-device verification that key-window shortcuts fire (built clean only).
   STANDING RULE going forward: every new command ships with a keyboard path, not
   just a button.
-- [ ] Pin editor AI mode (#11, remaining phase) — a fourth hamburger entry that
-  builds an AI prompt from the captured fields (app/title/url) + an editable
-  advice box (pre-seeded with the "prefer a stable title/URL pattern; if the
-  title looks volatile, suggest a more robust field or a setup change" nudge),
-  shows it scrollable, auto-copies it, and takes a paste-back that deserialises
-  into a normal editable Components/Expression rule (or shows an error). Builds
-  on the now-final rule format; the hamburger + Components + Expression shipped.
-  Also: offer "couldn't parse this — generate an AI prompt from it?" on a
-  parse-error tap, handing the failed expression to the AI mode as a starting
-  point.
+- [x] Pin editor AI mode (#11, DONE 2026-06-28). Fourth hamburger entry "AI":
+  `AIAssist.pinRulePrompt` builds a prompt from the captured app/title/url + an
+  editable guidance box (pre-seeded with the stable-pattern nudge,
+  `AIAssist.defaultPinAdvice`), shown scrollable and auto-copied; the paste-back
+  is cleaned (`AIAssist.cleanRuleReply`) and parsed by the existing
+  PredicateParser into an editable Expression rule (↵ applies → review → ↵ pins),
+  or shows the parse error. A "Fix with AI" button on an Expression parse error
+  hands the failed rule to AI mode. Core builders unit-checked (181 checks). UI
+  flow needs an on-device check (built clean only).
 - [!] Workspace layouts — CUT 2026-06-23 (UI removed; capture/apply code left
   dormant). As built it restored only window app + position/size, never content
   (Chrome tab/URL, terminal cwd), and multi-window/Spaces spawning was

@@ -1606,8 +1606,21 @@ public final class AppController: ObservableObject {
 
     public func copyAIPrompt() {
         let prompt = AIAssist.classificationPrompt(tasks: taskCache, segments: pendingReview)
+        copyToClipboard(prompt)
+    }
+
+    /// Put a string on the general pasteboard (the AI-assist flows copy a prompt
+    /// for the user to paste into the AI of their choice).
+    public func copyToClipboard(_ text: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(prompt, forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// The raw app / title / url of the current focus surface — the fields the
+    /// AI pin prompt is built from. nil when there's nothing focused.
+    public func currentSurfaceFields() -> (app: String, title: String?, url: String?)? {
+        guard let s = tracker.currentFocusSignal else { return nil }
+        return (s.app, s.windowTitle, s.tabURL)
     }
 
     public func ingestAIResponse(_ raw: String) -> String {
