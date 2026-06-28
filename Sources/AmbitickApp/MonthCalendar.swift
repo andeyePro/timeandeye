@@ -45,6 +45,8 @@ struct MonthCalendar: View {
         HStack {
             Button { page(-1) } label: { Image(systemName: "chevron.left") }
                 .buttonStyle(.borderless)
+                .keyboardShortcut("[", modifiers: .command)
+                .help("Previous month (⌘[)")
             Spacer()
             Text(month.formatted(.dateTime.month(.wide).year()))
                 .font(.caption).bold()
@@ -52,9 +54,11 @@ struct MonthCalendar: View {
             Button { page(1) } label: { Image(systemName: "chevron.right") }
                 .buttonStyle(.borderless)
                 .disabled(isCurrentMonthOrLater)
+                .keyboardShortcut("]", modifiers: .command)
+                .help("Next month (⌘])")
             Button(action: onClose) { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
-                .help("Hide the calendar")
+                .help("Hide the calendar (⌘⇧C)")
         }
         .font(.caption2)
     }

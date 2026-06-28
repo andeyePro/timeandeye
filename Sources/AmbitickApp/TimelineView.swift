@@ -307,20 +307,28 @@ struct TimelineView: View {
     private var header: some View {
         HStack {
             Button { pan(days: -1) } label: { Image(systemName: "chevron.left") }
-                .help("Back a day")
+                .keyboardShortcut("[", modifiers: .command)
+                .help("Back a day (⌘[)")
             Text(viewportLabel)
                 .font(.headline)
                 .frame(width: 168)
             Button { pan(days: 1) } label: { Image(systemName: "chevron.right") }
                 .disabled(viewEnd >= liveEdge)
-                .help("Forward a day")
+                .keyboardShortcut("]", modifiers: .command)
+                .help("Forward a day (⌘])")
             Spacer()
             Button { zoom(by: 1.5) } label: { Image(systemName: "minus.magnifyingglass") }
+                .keyboardShortcut("-", modifiers: .command)
+                .help("Zoom out (⌘−)")
             Button { zoom(by: 1 / 1.5) } label: { Image(systemName: "plus.magnifyingglass") }
+                .keyboardShortcut("=", modifiers: .command)
+                .help("Zoom in (⌘+)")
             Button("Block") { zoomToLatestBlock() }
-                .help("Zoom to the latest run of work")
+                .keyboardShortcut("b", modifiers: .command)
+                .help("Zoom to the latest run of work (⌘B)")
             Button("Today") { showToday() }
-                .help("Today, midnight to now")
+                .keyboardShortcut("0", modifiers: .command)
+                .help("Today, midnight to now (⌘0)")
             Text(totalText).font(.caption).foregroundStyle(.secondary)
             Spacer()
             // Cross-preview / navigation: today's pie + total. Click flips this
@@ -333,7 +341,8 @@ struct TimelineView: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            .help("Today's breakdown — click for the pie (⌃/right-click: 2nd window)")
+            .keyboardShortcut("\\", modifiers: .command)
+            .help("Today's breakdown — click for the pie, ⌘\\ to flip (⌃/right-click: 2nd window)")
             .contextMenu { Button("Open the pie in a 2nd window") { nav.openSecond(.spent) } }
             Text("today \(MenuTitle.text(elapsed: todayTotalSeconds, certainty: nil, showPercent: false))")
                 .font(.caption).foregroundStyle(.secondary)
@@ -828,6 +837,7 @@ struct TimelineView: View {
                 Button { editing = nil } label: { Image(systemName: "xmark.circle") }
                     .keyboardShortcut(.cancelAction)   // Esc cancels
                     .buttonStyle(.plain)
+                    .help("Close the editor without saving (esc)")
                 ColorPicker("", selection: Binding(
                     get: { Color(nsColor: controller.colour(for: editTask ?? session.task)) },
                     set: { controller.setColour(NSColor($0), for: editTask ?? session.task) }))
@@ -858,6 +868,7 @@ struct TimelineView: View {
                         Label(isNewEditing ? "Create" : "Save", systemImage: "checkmark.circle")
                     }
                     .keyboardShortcut(.defaultAction)   // Enter saves
+                    .help(isNewEditing ? "Create the slice (↵)" : "Save changes (↵)")
                 } else {
                     // Overlap pending: two ways to resolve it. Enter (default) /
                     // rightmost snaps the boundary to a whole-window edge so each
@@ -867,10 +878,12 @@ struct TimelineView: View {
                         Label("Exact time", systemImage: "clock")
                     }
                     .keyboardShortcut(.space, modifiers: [])
+                    .help("Keep the exact time you typed (space)")
                     Button { resolveOverlap(session, snapWindows: true) } label: {
                         Label("Snap to windows", systemImage: "rectangle.split.2x1")
                     }
                     .keyboardShortcut(.defaultAction)
+                    .help("Move the boundary to the nearest tracked-window edge (↵)")
                 }
                 if !isNewEditing, !isLive {
                     Button {
@@ -882,6 +895,8 @@ struct TimelineView: View {
                         Task { await controller.deleteTimelineSession(session) }
                         editing = nil
                     } label: { Label("Delete", systemImage: "trash") }
+                        .keyboardShortcut(.delete, modifiers: .command)
+                        .help("Delete this slice (⌘⌫)")
                 }
                 Spacer()
                 if !isNewEditing, !isLive {
@@ -1027,9 +1042,11 @@ struct TimelineView: View {
                     Button { stripPxPerSec = max(stripPxPerSec / 1.6, 0.2) } label: {
                         Image(systemName: "minus.magnifyingglass")
                     }
+                    .help("Zoom the window strip out")
                     Button { stripPxPerSec = min(stripPxPerSec * 1.6, 40) } label: {
                         Image(systemName: "plus.magnifyingglass")
                     }
+                    .help("Zoom the window strip in")
                 }
             }
             .buttonStyle(.plain)
@@ -1118,6 +1135,8 @@ struct TimelineView: View {
                     .textFieldStyle(.roundedBorder).font(.caption).frame(width: 150)
                 Button { selectedSpanIdx = [] } label: { Image(systemName: "xmark.circle") }
                     .buttonStyle(.plain)
+                    .help("Clear the window selection")
+                Text("⌘A all").font(.caption2).foregroundStyle(.tertiary)
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {

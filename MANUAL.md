@@ -26,8 +26,8 @@ At the top:
   not pinned, how certain Ambitick is.
 - **Pin chip** - when the surface is pinned you see a pin icon and the pinned
   scope. Click it to adjust or remove the pin.
-- **Pin button** (when not pinned), **Away** (keep tracking while you step away,
-  ⌘⇧L), and **Stop**.
+- **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step
+  away, ⌘⇧L), and **Stop** (⌘.).
 - **Note field** - a comment for the current task's time; where it goes is set in
   Settings (the time entry and/or the task's activity feed).
 
@@ -47,9 +47,9 @@ The task list:
 
 The footer:
 
-- **Time** - a live mini-pie of today's breakdown. Click it to open the Time
+- **Time** (⌘Y) - a live mini-pie of today's breakdown. Click it to open the Time
   window (see below).
-- **Review queue**, **Settings**, **Quit**.
+- **Review queue** (⌘U), **Settings** (⌘,), **Quit** (⌘Q).
 
 ## Auto-tracking and attribution
 
@@ -115,17 +115,19 @@ There is no separate switcher button: the cross-previews are the navigation.
   a slice** to flip to the timeline framed on (and editing) that exact slice;
   **click a gap or the "from" label** to open the timeline with nothing selected.
 
-To see both at once, **⌃-click (or right-click)** a preview - that opens the
-other view in a *second* Time window instead of flipping the current one.
+**⌘\\** flips between the two views from the keyboard. To see both at once,
+**⌃-click (or right-click)** a preview - that opens the other view in a *second*
+Time window instead of flipping the current one.
 
 ### Timeline view
 
 A continuous, absolute-time bar that pans and zooms freely, including across
 midnight. Day boundaries are marked with the date.
 
-- **Pan**: two-finger scroll, or the ‹ › buttons (a day at a time). **Zoom**:
-  pinch or the ± buttons - zoom homes in on the time under the cursor. **Block**
-  frames the latest run of work; **Today** shows midnight to now.
+- **Pan**: two-finger scroll, the ‹ › buttons, or ⌘[ / ⌘] (a day at a time).
+  **Zoom**: pinch, the ± buttons, or ⌘− / ⌘+ - zoom homes in on the time under the
+  cursor. **Block** (⌘B) frames the latest run of work; **Today** (⌘0) shows
+  midnight to now.
 - **Edit a slice**: click it to open the editor (task, start, end, duration,
   comment, colour). Drag a slice's edge handles to resize; dragging over a
   neighbour eats into it.
@@ -142,7 +144,8 @@ midnight. Day boundaries are marked with the date.
 
 ### Pie view
 
-- **Period** (today / week / ...), with an "OpenProject only" filter.
+- **Period** (Today ⌘1 / Week ⌘2 / Last 7 days ⌘3 / Month ⌘4), with an
+  "OpenProject only" filter (⌘⇧O) and a show/hide calendar (⌘⇧C).
 - A donut: projects in the inner ring, tasks in the outer. Hover to highlight,
   click to pin a selection; reassign time to another task from the bar.
 
@@ -168,10 +171,64 @@ midnight. Day boundaries are marked with the date.
 
 ## Keyboard
 
-- ⌘⇧L - I'm leaving my desk (away) / I'm back.
-- In the slice editor: Enter saves, Esc cancels.
-- In the timeline: delete / backspace removes the selected slice(s).
-- In the pin editor: ← / → widen / narrow, Enter pins, Esc unpins / closes.
+Every action can be done with the mouse. The everyday surfaces - the popover and
+the Time window - also have keyboard shortcuts, shown below and in each control's
+tooltip. Settings and the Review queue are standard macOS forms: move with **Tab**
+/ **⇧Tab**, toggle with **Space**, open pop-ups and steppers with the arrow keys
+(turn on *System Settings ▸ Keyboard ▸ Keyboard navigation* to Tab onto every
+control). Each shortcut works while that window (or the popover) is frontmost.
 
-Full keyboard-and-mouse parity across every surface is in progress (see
-`TODO.md`); every new command ships with a keyboard route.
+### Global (from any app)
+
+- **⌘⇧L** - I'm leaving my desk (away) / I'm back.
+- **⌘Z** - undo the last task switch (fold the current slice back to the previous
+  task).
+
+### Popover
+
+- **⌘T** - flip the list between Switch-to and Change-to.
+- **⌘P** - pin the current window/site (or, when pinned, open the pin editor).
+- **⌘.** - stop tracking. **⌘R** - resume the last task.
+- **⌘Z** - back to the previous task (same as the quiet ← button).
+- **↵** in the filter - pick the top task in the list.
+- **⌘↵** - claim the "you were away" idle gap as work.
+- **⌘Y** - open the Time window. **⌘U** - open the Review queue.
+- **⌘,** - Settings. **⌘Q** - quit Ambitick.
+
+### Pin editor
+
+- **← / →** - widen / narrow the pinned scope (Components mode).
+- **↵** - pin. **Esc** - no pin here (unpins an existing pin, or drops a draft).
+
+### Time window - both views
+
+- **⌘\\** - flip between the timeline and the pie.
+- **⌃-click** (or right-click) a preview - open the *other* view in a second
+  window instead of flipping.
+
+### Time window - timeline
+
+- **⌘[ / ⌘]** - pan back / forward a day.
+- **⌘− / ⌘+** - zoom out / in (zoom homes in on the time under the cursor).
+- **⌘B** - frame the latest block of work. **⌘0** - today, midnight to now.
+- **← / →** - select the previous / next slice; **⇧** extends the selection;
+  **↵** opens the editor on the selected slice.
+- **⌘-click / ⇧-click** - multi-select slices (toggle / range), like Finder.
+- **delete / backspace** - delete the selected slice(s).
+- In the slice editor: **↵** saves (when resolving an overlap, ↵ = *Snap to
+  windows*, **Space** = *Exact time*); **Esc** closes; **⌘⌫** deletes the slice.
+- In a slice's window strip: **⌘A** - select every window in the slice.
+
+### Time window - pie
+
+- **⌘1 / ⌘2 / ⌘3 / ⌘4** - period Today / Week / Last 7 days / Month.
+- **⌘⇧O** - toggle "OpenProject only". **⌘⇧C** - show / hide the calendar.
+- **⌘[ / ⌘]** - previous / next month in the calendar.
+- In the calendar: click a day to snap the period's width onto it; drag, or
+  shift-click, to select an arbitrary span.
+
+### Review queue
+
+- **⌘D** - mark the selection as "do not track".
+- **↵** in the task filter - assign the selection to the top task.
+- **⌘⇧C** - copy the AI prompt. **⌘↵** - apply a pasted AI response.

@@ -79,11 +79,13 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 
 ## Open
 
-- [ ] Full keyboard/mouse parity sweep (retrospective) — every action reachable
-  by BOTH mouse-only and keyboard-only. Done so far: delete/backspace + ARROW-KEY
-  slice navigation (←/→ move, ⇧ extend, Return edit) [2026-06-28]. Still mouse-only: slice selection/navigation
-  (arrow keys to move between slices, ⇧-arrow to extend), opening the editor,
-  task picker navigation, span-strip selection, pin editor open, day navigation.
+- [x] Full keyboard/mouse parity sweep (DONE 2026-06-28). Audited every
+  interactive control (Explore inventory): every action has a mouse path. Added
+  ⌘-shortcuts across the popover (⌘T/⌘P/⌘./⌘R/⌘Z/⌘Y/⌘U/⌘,/⌘Q, ↵ picks top task)
+  and the Time window (⌘\\ flip, ⌘[/⌘]/⌘−/⌘+/⌘B/⌘0 timeline, ⌘1–4/⌘⇧O/⌘⇧C pie,
+  ⌘⌫ delete-in-editor), plus Review (⌘D/⌘⇧C/⌘↵). Settings/Review forms use
+  standard Tab/Space/arrow navigation. Chords are in tooltips and MANUAL.md.
+  NEEDS on-device verification that key-window shortcuts fire (built clean only).
   STANDING RULE going forward: every new command ships with a keyboard path, not
   just a button.
 - [ ] Pin editor AI mode (#11, remaining phase) — a fourth hamburger entry that

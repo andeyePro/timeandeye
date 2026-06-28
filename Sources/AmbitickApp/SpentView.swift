@@ -82,6 +82,7 @@ struct SpentView: View {
                         Toggle("OpenProject only", isOn: $opOnly)
                             .toggleStyle(.checkbox)
                             .font(.caption)
+                            .help("Hide local / personal time (⌘⇧O)")
                     }
                 }
                 VStack(alignment: .trailing, spacing: 8) {
@@ -94,6 +95,7 @@ struct SpentView: View {
             .frame(maxHeight: .infinity)
         }
         .padding(12)
+        .background { shortcutKeys }
         .onReceive(timer) { _ in refreshTick += 1; reloadNodes(); reloadBlock() }
         .onChange(of: selStart) { _, _ in reloadNodes() }
         .onChange(of: selEnd) { _, _ in reloadNodes() }
@@ -175,6 +177,27 @@ struct SpentView: View {
 
     private var controlHeld: Bool { NSEvent.modifierFlags.contains(.control) }
 
+    // MARK: - Keyboard shortcuts
+
+    /// Hidden zero-opacity buttons that register the pie's keyboard shortcuts
+    /// while this view's window is key: ⌘\ flips to the timeline, ⌘1–4 pick the
+    /// period preset, ⌘⇧O toggles OpenProject-only, ⌘⇧C shows/hides the calendar.
+    private var shortcutKeys: some View {
+        Group {
+            Button("") { nav.switchTo(.timeline) }
+                .keyboardShortcut("\\", modifiers: .command)
+            Button("") { applyPreset(.today) }.keyboardShortcut("1", modifiers: .command)
+            Button("") { applyPreset(.thisWeek) }.keyboardShortcut("2", modifiers: .command)
+            Button("") { applyPreset(.last7) }.keyboardShortcut("3", modifiers: .command)
+            Button("") { applyPreset(.thisMonth) }.keyboardShortcut("4", modifiers: .command)
+            Button("") { opOnly.toggle() }.keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("") { calendarVisible.toggle() }.keyboardShortcut("c", modifiers: [.command, .shift])
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
     // MARK: - Calendar
 
     /// The closeable highlight-calendar plus its period picker, bottom-right.
@@ -200,6 +223,7 @@ struct SpentView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: calWidth)
+                .help("Period: Today ⌘1 · Week ⌘2 · Last 7 days ⌘3 · Month ⌘4")
             }
         } else {
             Button {

@@ -76,9 +76,10 @@ struct PopoverView: View {
                         Text(controller.currentTaskName()).font(.headline).lineLimit(2)
                     }
                     .buttonStyle(.plain)
+                    .keyboardShortcut("t", modifiers: .command)
                     .help(changeMode
-                          ? "In Change-to mode — click to switch to Switch-to (start a new session)"
-                          : "In Switch-to mode — click to switch to Change-to (relabel this session)")
+                          ? "In Change-to mode — click to switch to Switch-to mode, start a new session (⌘T)"
+                          : "In Switch-to mode — click to switch to Change-to mode, relabel this session (⌘T)")
                     Spacer()
                     // One-click "that switch was wrong": fold the current slice
                     // back onto the previous task. Deliberately light (non-bold)
@@ -90,7 +91,7 @@ struct PopoverView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help("Back to \(prev.subject) — moves the current slice onto it")
+                        .help("Back to \(prev.subject) — moves the current slice onto it (⌘Z)")
                     }
                 }
             } else {
@@ -115,7 +116,8 @@ struct PopoverView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.primary)   // white in dark mode, visible in light
-                        .help("Pinned — click to adjust the scope or unpin")
+                        .keyboardShortcut("p", modifiers: .command)
+                        .help("Pinned — click to adjust the scope or unpin (⌘P)")
                     } else {
                         Text("\(controller.elapsedText)  ·  \(Int((certainty * 100).rounded()))% certain")
                             .font(.caption)
@@ -128,7 +130,8 @@ struct PopoverView: View {
                             Image(systemName: "pin")
                         }
                         .buttonStyle(.plain)
-                        .help("Pin this window/site to the current task (always 100%)")
+                        .keyboardShortcut("p", modifiers: .command)
+                        .help("Pin this window/site to the current task, always 100% (⌘P)")
                     }
                     Button { controller.setAway(!controller.away) } label: {
                         Image(systemName: controller.away ? "figure.walk.motion" : "figure.walk")
@@ -143,7 +146,8 @@ struct PopoverView: View {
                         Image(systemName: "stop.circle.fill").foregroundStyle(.red)
                     }
                     .buttonStyle(.plain)
-                    .help("Stop tracking")
+                    .keyboardShortcut(".", modifiers: .command)
+                    .help("Stop tracking (⌘.)")
                 }
                 if CommentRouting.noteInputVisible(
                     toTrackedTime: controller.settings.commentToTrackedTime,
@@ -176,7 +180,8 @@ struct PopoverView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.green)
                         .font(.caption)
-                        .help("Restart the clock on the last tracked task")
+                        .keyboardShortcut("r", modifiers: .command)
+                        .help("Restart the clock on the last tracked task (⌘R)")
                     }
                 }
             }
@@ -424,10 +429,12 @@ struct PopoverView: View {
                         .font(.caption).lineLimit(2)
                 }
                 .buttonStyle(.borderedProminent)
-                .help("You were away — one tap counts the gap as that task. Ignore it and it stays a break.")
+                .keyboardShortcut(.return, modifiers: .command)
+                .help("You were away — one tap counts the gap as that task. Ignore it and it stays a break. (⌘↵)")
                 Spacer(minLength: 0)
                 Button { controller.dismissIdleGap() } label: { Image(systemName: "xmark.circle") }
                     .buttonStyle(.plain)
+                    .help("Dismiss — leave the gap as a break")
             }
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
@@ -454,6 +461,8 @@ struct PopoverView: View {
                     .font(.caption)
                     .frame(width: 120)
                     .focused($filterFocused)
+                    .onSubmit { pickFirstFiltered() }
+                    .help("Search every task; ↵ picks the top result")
             }
             // Default view: recent + likely first, then the rest of the ranked
             // set — all of it scrollable, so a task that isn't in the top picks
@@ -494,15 +503,28 @@ struct PopoverView: View {
         }
     }
 
+    /// Pick a task (switch or relabel, per mode). Shared by a row click and the
+    /// filter's ↵.
+    private func pick(_ task: WorkTask) {
+        if changeMode {
+            controller.changeCurrentTask(to: task.ref)
+            changeMode = false
+            filter = ""
+        } else {
+            controller.userPicked(task)
+        }
+    }
+
+    /// ↵ in the filter selects the top of the current list — keyboard route to
+    /// task selection without reaching for the mouse.
+    private func pickFirstFiltered() {
+        let shown = filter.isEmpty ? controller.fullPickList() : controller.searchTasks(filter)
+        if let first = shown.first { pick(first) }
+    }
+
     private func taskRow(_ task: WorkTask) -> some View {
         Button {
-            if changeMode {
-                controller.changeCurrentTask(to: task.ref)
-                changeMode = false
-                filter = ""
-            } else {
-                controller.userPicked(task)
-            }
+            pick(task)
         } label: {
             HStack {
                 Text(task.subject).lineLimit(1)
@@ -537,14 +559,16 @@ struct PopoverView: View {
                         .frame(width: 22, height: 22)
                 }
             }
-            .help("Time – today's breakdown; click for the timeline / pie")
+            .keyboardShortcut("y", modifiers: .command)
+            .help("Time – today's breakdown; click for the timeline / pie (⌘Y)")
             Button {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
                 Label("\(controller.pendingReview.count)", systemImage: "tray.full")
             }
-            .help("Review queue")
+            .keyboardShortcut("u", modifiers: .command)
+            .help("Review queue (⌘U)")
             Spacer()
             Button {
                 openWindow(id: "settings")
@@ -552,13 +576,15 @@ struct PopoverView: View {
             } label: {
                 Image(systemName: "gearshape")
             }
-            .help("Settings")
+            .keyboardShortcut(",", modifiers: .command)
+            .help("Settings (⌘,)")
             Button {
                 NSApp.terminate(nil)
             } label: {
                 Image(systemName: "xmark.circle")
             }
-            .help("Quit Ambitick")
+            .keyboardShortcut("q", modifiers: .command)
+            .help("Quit Ambitick (⌘Q)")
         }
         .buttonStyle(.plain)
         .font(.body)

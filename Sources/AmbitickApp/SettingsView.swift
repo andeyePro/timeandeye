@@ -39,6 +39,7 @@ struct SettingsView: View {
                         keySaved = true
                     }
                     .disabled(!canConnect)
+                    .help("Connect to OpenProject and load your tasks")
                     if keySaved { Text("Connected").font(.caption).foregroundStyle(.secondary) }
                 }
                 if let error = controller.lastError {

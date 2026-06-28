@@ -2,6 +2,17 @@
 
 ## 2026-06-28
 
+- [x] **Keyboard shortcuts across every surface + parity audit** — an Explore
+  inventory confirmed every action already has a mouse path. Added ⌘-shortcuts to
+  the daily-driver surfaces and put each chord in the control's tooltip and in
+  MANUAL.md's rewritten Keyboard section. Popover: ⌘T flip Switch/Change, ⌘P pin,
+  ⌘. stop, ⌘R resume, ⌘Z back, ⌘Y Time, ⌘U Review, ⌘, Settings, ⌘Q quit, ↵ in the
+  filter picks the top task, ⌘↵ claims the idle gap. Time window: ⌘\ flip
+  timeline/pie; timeline ⌘[ /⌘] pan, ⌘−/⌘+ zoom, ⌘B block, ⌘0 today, ⌘⌫ delete in
+  editor; pie ⌘1–4 period, ⌘⇧O OpenProject-only, ⌘⇧C calendar, ⌘[ /⌘] month.
+  Review: ⌘D do-not-track, ⌘⇧C copy prompt, ⌘↵ apply response, ↵ assigns top task.
+  Settings/Review forms stay on standard macOS Tab/Space/arrow navigation. Builds
+  clean; the key-window shortcut firing still needs an on-device check.
 - [x] **Calendar click snaps to the preset width; drag = custom** — a plain click
   re-anchors the active preset's width on the clicked day (Today → that one day,
   Week → that day's week, Last 7 days → 7 days ending on today's weekday, Month →

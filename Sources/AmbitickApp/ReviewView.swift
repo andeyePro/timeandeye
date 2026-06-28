@@ -80,7 +80,11 @@ struct ReviewView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                     .frame(width: 180)
+                    .onSubmit { if let t = filteredTasks().first { assign(.task(t.ref)) } }
+                    .help("Filter tasks; ↵ assigns the selection to the top result")
                 Button("Do not track") { assign(.doNotTrack) }
+                    .keyboardShortcut("d", modifiers: .command)
+                    .help("Mark the selection as not worked (⌘D)")
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
@@ -126,11 +130,15 @@ struct ReviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Button("Copy AI prompt") { controller.copyAIPrompt() }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .help("Copy the classification prompt to the clipboard (⌘⇧C)")
                 Button("Apply pasted response") {
                     aiStatus = controller.ingestAIResponse(aiResponse)
                     aiResponse = ""
                 }
                 .disabled(aiResponse.isEmpty)
+                .keyboardShortcut(.return, modifiers: .command)
+                .help("Apply the pasted AI JSON (⌘↵)")
                 Text(aiStatus).font(.caption2).foregroundStyle(.secondary)
             }
             TextEditor(text: $aiResponse)
