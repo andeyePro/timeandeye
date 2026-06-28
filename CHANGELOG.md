@@ -2,6 +2,11 @@
 
 ## 2026-06-28
 
+- [x] **Calendar click snaps to the preset width; drag = custom** — a plain click
+  re-anchors the active preset's width on the clicked day (Today → that one day,
+  Week → that day's week, Last 7 days → 7 days ending on today's weekday, Month →
+  that month). Dragging across days, or shift-clicking, makes an arbitrary
+  contiguous custom range instead. (Refines the entry below.)
 - [x] **Calendar: selectable day-ranges + pie keeps full height** — the calendar
   is now an arbitrary day-range selector: click one day, drag across a span, or
   shift-click to extend (origin = the current selection's start). The pie shows

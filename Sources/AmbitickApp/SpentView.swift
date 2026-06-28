@@ -123,6 +123,21 @@ struct SpentView: View {
         calMonth = selEnd
     }
 
+    /// A plain click on the calendar: re-anchor the active preset's width on that
+    /// day (Today → one day, Week → that day's week, etc). If already on a custom
+    /// selection, snap to just that single day.
+    private func snapToPreset(at day: Date) {
+        let cal = Calendar.current
+        if let p = activePreset {
+            let (s, e) = p.range(anchor: day, now: Date())
+            selStart = cal.startOfDay(for: s)
+            selEnd = cal.startOfDay(for: e.addingTimeInterval(-1))
+        } else {
+            selStart = cal.startOfDay(for: day)
+            selEnd = selStart
+        }
+    }
+
     /// The calendar reporting a hand-made contiguous day selection.
     private func selectDays(_ range: ClosedRange<Date>) {
         let cal = Calendar.current
@@ -174,6 +189,7 @@ struct SpentView: View {
                 MonthCalendar(month: $calMonth,
                               selStart: selStart, selEnd: selEnd,
                               today: Calendar.current.startOfDay(for: Date()),
+                              onSnap: { snapToPreset(at: $0) },
                               onSelect: { selectDays($0) },
                               onClose: { calendarVisible = false },
                               width: calWidth)

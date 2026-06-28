@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// A compact month grid for the Time-Pie. Days are selectable: click one day,
-/// drag across a span, or shift-click to extend the current selection. The swept
-/// contiguous range is reported back via `onSelect`; the shown range
-/// (`selStart...selEnd`, both start-of-day inclusive) is highlighted. Closeable
-/// via the header ✕.
+/// A compact month grid for the Time-Pie. A plain click on a day *snaps* (the
+/// active preset's width re-anchored on that day) via `onSnap`. Dragging across a
+/// span, or shift-clicking, reports an arbitrary contiguous range via `onSelect`.
+/// The shown range (`selStart...selEnd`, both start-of-day inclusive) is
+/// highlighted. Closeable via the header ✕.
 struct MonthCalendar: View {
     @Binding var month: Date
     /// Currently-selected days (start-of-day, inclusive both ends), highlighted.
@@ -12,12 +12,17 @@ struct MonthCalendar: View {
     let selEnd: Date
     /// Today (start-of-day): ringed for orientation, and the latest selectable day.
     let today: Date
+    /// A plain click on `day` — snap the active preset's width onto it.
+    let onSnap: (Date) -> Void
+    /// A dragged / shift-clicked contiguous span — a custom selection.
     let onSelect: (ClosedRange<Date>) -> Void
     let onClose: () -> Void
     var width: CGFloat = 232
 
     /// The day a drag/shift gesture is anchored on (nil between gestures).
     @State private var dragOrigin: Date?
+    /// Whether this gesture has become a multi-day / shift selection (vs a click).
+    @State private var dragMoved = false
     /// Each day-cell's frame in the grid's coordinate space, for hit-testing the
     /// drag location back to a day.
     @State private var cellFrames: [Date: CGRect] = [:]
@@ -79,7 +84,7 @@ struct MonthCalendar: View {
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
                 .onChanged { handleDrag(at: $0.location) }
-                .onEnded { _ in dragOrigin = nil }
+                .onEnded { _ in endDrag() }
         )
     }
 
@@ -110,17 +115,27 @@ struct MonthCalendar: View {
 
     // MARK: - Gesture → day selection
 
-    /// Map the drag/click location to a day and report the swept range. A bare
-    /// click (no movement) selects one day; dragging grows the range; holding ⇧
-    /// extends from the existing selection's start instead of the touched day.
+    /// Map the drag/click location to a day. A bare click (no movement, no ⇧)
+    /// resolves to a snap on release; dragging across days or holding ⇧ turns it
+    /// into a custom contiguous range (⇧ extends from the selection's start).
     private func handleDrag(at location: CGPoint) {
         guard let touched = dayAt(location) else { return }
         let day = min(touched, today)               // never select into the future
+        let shift = NSEvent.modifierFlags.contains(.shift)
         if dragOrigin == nil {
-            dragOrigin = NSEvent.modifierFlags.contains(.shift) ? selStart : day
+            dragOrigin = shift ? selStart : day
+            dragMoved = shift                       // ⇧ is a range op from the off
         }
         let origin = dragOrigin ?? day
-        onSelect(min(origin, day)...max(origin, day))
+        if day != origin { dragMoved = true }
+        if dragMoved { onSelect(min(origin, day)...max(origin, day)) }
+    }
+
+    /// On release: a gesture that never moved (and wasn't ⇧) is a plain click → snap.
+    private func endDrag() {
+        if !dragMoved, let origin = dragOrigin { onSnap(origin) }
+        dragOrigin = nil
+        dragMoved = false
     }
 
     private func dayAt(_ p: CGPoint) -> Date? {
