@@ -189,6 +189,21 @@ func attributorChecks(_ c: Checks) {
         try expectEq(r.best?.target, .task(.op(1)), "priority beats specificity")
     }
 
+    c.check("a pin's manual priority survives a Codable round-trip") {
+        // The popover persists pins as [Pin] and reopens the editor off the
+        // decoded value, so priority must survive encode/decode unchanged.
+        let pin = Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty"])),
+                      task: .op(1), priority: 7)
+        let data = try JSONEncoder().encode(pin)
+        let decoded = try JSONDecoder().decode(Pin.self, from: data)
+        try expectEq(decoded.priority, 7)
+        let plain = Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty"])),
+                        task: .op(1))
+        let decodedPlain = try JSONDecoder().decode(Pin.self,
+                                                    from: try JSONEncoder().encode(plain))
+        try expect(decodedPlain.priority == nil, "no priority must decode back to nil")
+    }
+
     c.check("an ordinary correction stays SOFT (0.95), not a pin") {
         let a = Attributor(instanceHost: host)
         let myPage = ActivitySignal(app: "Chrome", windowTitle: "My page",

@@ -727,17 +727,18 @@ public final class AppController: ObservableObject {
     /// 100 %. When `replacingID` is given (editing an existing pin) the same id
     /// is reused, so a changed scope updates in place instead of duplicating.
     public func commitPin(kind: PinScope.Kind, prefix: [String], to ref: TaskRef,
-                          replacingID: UUID? = nil) {
+                          replacingID: UUID? = nil, priority: Int? = nil) {
         guard !prefix.isEmpty else { return }
         commitPin(rule: .components(PinScope(kind: kind, prefix: prefix)),
-                  to: ref, replacingID: replacingID)
+                  to: ref, replacingID: replacingID, priority: priority)
     }
 
     /// Commit any pin rule (components OR a boolean expression) — the general
     /// path the Expression editor and the AI mode both feed into. `replacingID`
     /// reuses the id so editing updates in place instead of duplicating.
-    public func commitPin(rule: PinRule, to ref: TaskRef, replacingID: UUID? = nil) {
-        let pin = Pin(id: replacingID ?? UUID(), rule: rule, task: ref)
+    public func commitPin(rule: PinRule, to ref: TaskRef, replacingID: UUID? = nil,
+                          priority: Int? = nil) {
+        let pin = Pin(id: replacingID ?? UUID(), rule: rule, task: ref, priority: priority)
         attributor.upsert(pin)
         persistAssociations()
         tracker.reevaluate()   // lift the live session to 100% now, not on next focus

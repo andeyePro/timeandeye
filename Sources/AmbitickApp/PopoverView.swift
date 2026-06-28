@@ -29,6 +29,11 @@ struct PopoverView: View {
     @State private var pinMode: PinMode = .components
     @State private var pinExpression = ""
     @State private var pinExprError: String?
+    // Advanced (geek) option: a manual priority that overrides specificity-based
+    // precedence when several pins match. Off by default → nil priority, so an
+    // ordinary pin behaves exactly as before. On → pinPriority (higher wins).
+    @State private var pinPriorityOn = false
+    @State private var pinPriority = 5
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -187,6 +192,7 @@ struct PopoverView: View {
             } else {
                 expressionEditor
             }
+            priorityControl
             // Parse errors get their OWN full-width, wrapping line — not crammed
             // into the button row where they overlapped the icons.
             if let err = pinExprError {
@@ -252,6 +258,31 @@ struct PopoverView: View {
         .onAppear { pinFocused = true }
     }
 
+    /// Advanced (geek) priority control: a collapsed disclosure so it stays out
+    /// of the way. Open it, flip the toggle on, and a stepper sets the manual
+    /// priority (higher wins ties against looser/less-specific pins). Off → nil,
+    /// i.e. ordinary specificity-then-recency precedence.
+    private var priorityControl: some View {
+        DisclosureGroup {
+            HStack(spacing: 6) {
+                Toggle("Manual priority", isOn: $pinPriorityOn)
+                    .toggleStyle(.checkbox)
+                    .font(.caption2)
+                if pinPriorityOn {
+                    Stepper(value: $pinPriority, in: 1...100) {
+                        Text("\(pinPriority)").font(.caption2).monospacedDigit()
+                    }
+                    .fixedSize()
+                }
+                Spacer(minLength: 0)
+            }
+            .help("Higher priority wins when several pins match the same window — overrides the usual most-specific-wins rule.")
+        } label: {
+            Text("Advanced").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .font(.caption2)
+    }
+
     /// Footer mode help (the parse error has its own line above).
     private var modeHint: String {
         pinMode == .components
@@ -280,6 +311,8 @@ struct PopoverView: View {
         pinMode = .components
         pinExpression = ""
         pinExprError = nil
+        pinPriorityOn = false
+        pinPriority = 5
         pinning = true
     }
 
@@ -300,6 +333,13 @@ struct PopoverView: View {
             pinMode = .expression
             pinCount = draft.defaultCount
             pinExpression = PredicateParser.string(from: predicate)
+        }
+        if let p = pin.priority {
+            pinPriorityOn = true
+            pinPriority = p
+        } else {
+            pinPriorityOn = false
+            pinPriority = 5
         }
         pinEditingID = pin.id
         pinning = true
@@ -332,18 +372,19 @@ struct PopoverView: View {
 
     private func commitPinning() {
         guard case .tracking(.task(let ref), _) = controller.trackerState else { pinning = false; return }
+        let priority = pinPriorityOn ? pinPriority : nil
         if pinMode == .expression {
             switch PredicateParser.parse(pinExpression) {
             case .success(let predicate):
                 controller.commitPin(rule: .expression(predicate), to: ref,
-                                     replacingID: pinEditingID)
+                                     replacingID: pinEditingID, priority: priority)
             case .failure(let error):
                 pinExprError = message(for: error)
                 return   // keep the editor open so the user can fix it
             }
         } else {
             controller.commitPin(kind: pinKind, prefix: Array(pinSegments.prefix(pinCount)),
-                                 to: ref, replacingID: pinEditingID)
+                                 to: ref, replacingID: pinEditingID, priority: priority)
         }
         pinning = false
         pinEditingID = nil
