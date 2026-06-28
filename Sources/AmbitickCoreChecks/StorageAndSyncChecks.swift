@@ -441,6 +441,24 @@ func aiAssistChecks(_ c: Checks) {
 // MARK: - Settings (plan task 13)
 
 func settingsChecks(_ c: Checks) {
+    c.check("JSONFileStore backs up each save and recovers the latest value from a corrupt main") {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("settings.json")
+        let store = JSONFileStore<AmbitickSettings>(url: url)
+        try store.save(AmbitickSettings(opBaseURL: "https://op.example.com"))
+        try store.save(AmbitickSettings(opBaseURL: "https://op2.example.com"))  // bak mirrors latest
+        try Data("{ not valid json".utf8).write(to: url)                        // corrupt the main
+        try expectEq(try store.load()?.opBaseURL, "https://op2.example.com",
+                     "recovers the LATEST value from .bak instead of throwing")
+        try expect(FileManager.default.fileExists(atPath: url.appendingPathExtension("corrupt").path),
+                   "the corrupt file is preserved, not silently lost")
+        // A save after corruption restores a good main + bak again.
+        try store.save(AmbitickSettings(opBaseURL: "https://op3.example.com"))
+        try expectEq(try store.load()?.opBaseURL, "https://op3.example.com")
+    }
+
     c.check("defaults") {
         let s = AmbitickSettings(opBaseURL: "https://op.example.com")
         try expectEq(s.certaintyAutoPushThreshold, 0.8)

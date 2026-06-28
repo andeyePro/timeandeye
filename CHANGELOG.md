@@ -2,6 +2,15 @@
 
 ## 2026-06-28
 
+- [x] **Settings can no longer be silently wiped (data-safety)** — `JSONFileStore`
+  treated any unreadable file as "use empty defaults", and the first settings
+  change then atomically OVERWROTE the file with those defaults — so one bad read
+  of `settings.json` lost the instance URL, local tasks, colours, etc. (with no
+  backup). Now every save mirrors the just-written good file to a `.bak`; `load`
+  recovers the latest value from `.bak` if the main file is corrupt and preserves
+  the bad file as `.corrupt` (nothing silently lost). Applies to all four stores
+  (settings, learning, primed, pins). +2 checks. (The API key was never affected
+  — it's a separate file.)
 - [x] **Stop NEW OP duplicates at the real source: serialise sync** — duplicates
   were STILL appearing because `syncIfEnabled` had no re-entrancy guard, yet it's
   fired from ~7 places (every slice flush, the 60 s timer, every timeline edit).

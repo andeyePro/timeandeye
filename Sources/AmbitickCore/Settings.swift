@@ -182,14 +182,40 @@ public final class JSONFileStore<Value: Codable> {
         self.url = url
     }
 
+    private var backupURL: URL { url.appendingPathExtension("bak") }
+
+    /// Decode the main file; if it is present but UNREADABLE, preserve it as
+    /// `.corrupt` (so nothing is silently lost) and fall back to the last-good
+    /// `.bak`. A genuinely-absent file returns nil (first run). This stops a
+    /// single bad read from leading the caller to default-then-overwrite.
     public func load() throws -> Value? {
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return try JSONDecoder().decode(Value.self, from: Data(contentsOf: url))
+        do {
+            if let value = try decodeFile(url) { return value }
+        } catch {
+            let corrupt = url.appendingPathExtension("corrupt")
+            try? FileManager.default.removeItem(at: corrupt)
+            try? FileManager.default.copyItem(at: url, to: corrupt)
+            if let recovered = try? decodeFile(backupURL) { return recovered }
+            throw error
+        }
+        // Main absent — a backup may still hold the last-good copy.
+        return try? decodeFile(backupURL) ?? nil
+    }
+
+    private func decodeFile(_ u: URL) throws -> Value? {
+        guard FileManager.default.fileExists(atPath: u.path) else { return nil }
+        return try JSONDecoder().decode(Value.self, from: Data(contentsOf: u))
     }
 
     public func save(_ value: Value) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        try JSONEncoder().encode(value).write(to: url, options: .atomic)
+        let data = try JSONEncoder().encode(value)
+        try data.write(to: url, options: .atomic)
+        // Mirror the just-written (known-good) file as the backup, so load() can
+        // recover the LATEST value if the main is later corrupted — and so a
+        // corrupt main can never become the backup.
+        try? FileManager.default.removeItem(at: backupURL)
+        try? FileManager.default.copyItem(at: url, to: backupURL)
     }
 }
