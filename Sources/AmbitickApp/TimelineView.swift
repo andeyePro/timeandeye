@@ -412,6 +412,7 @@ struct TimelineView: View {
         // editor's text fields take their own focus when active, so they keep
         // their keystrokes; clicking the bar re-takes focus (below).
         .focusable()
+        .focusEffectDisabled()   // keep key focus for arrows, but no blue focus ring round the whole bar
         .focused($barFocused)
         // Keyboard navigation over slices. Left/right move the selection to the
         // previous/next slice (by start time); ⇧ extends a contiguous range;
