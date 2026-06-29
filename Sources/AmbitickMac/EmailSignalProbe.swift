@@ -36,23 +36,43 @@ public enum EmailSignalProbe {
         guard AXIsProcessTrusted() else { return nil }
         guard let app = targetBrowser() else { return nil }
         let appEl = AXUIElementCreateApplication(app.processIdentifier)
-        var win: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appEl, kAXFocusedWindowAttribute as CFString, &win) == .success,
-              let window = win else {
+
+        // Chromium browsers (and Electron apps) keep their renderer accessibility
+        // tree OFF until an assistive technology asks for it — so the web page is
+        // invisible to AX and only the window chrome shows. Setting
+        // AXManualAccessibility on the app element is the documented opt-in; Chrome
+        // then builds the page tree (asynchronously, hence the retry below).
+        AXUIElementSetAttributeValue(appEl, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+
+        func snapshot() -> (count: Int, texts: [String], contexts: [String])? {
+            var win: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(appEl, kAXFocusedWindowAttribute as CFString, &win) == .success,
+                  let window = win else { return nil }
+            var texts: [String] = []
+            var contexts: [String] = []
+            var count = 0
+            // swiftlint:disable:next force_cast
+            walk(window as! AXUIElement, depth: 0, count: &count, texts: &texts, contexts: &contexts)
+            return (count, texts, contexts)
+        }
+
+        // First pass; if it's only chrome (tree not built yet), wait briefly and
+        // retry once so it's usually a single click.
+        var snap = snapshot()
+        if (snap?.count ?? 0) < 200 {
+            usleep(600_000)
+            snap = snapshot() ?? snap
+        }
+        guard let s = snap else {
             return Result(app: app.localizedName ?? "?", nodesScanned: 0,
                           truncated: false, candidates: [], contexts: [])
         }
-        var texts: [String] = []
-        var contexts: [String] = []
-        var count = 0
-        // swiftlint:disable:next force_cast
-        walk(window as! AXUIElement, depth: 0, count: &count, texts: &texts, contexts: &contexts)
-        let blob = texts.joined(separator: "\n")
+        let blob = s.texts.joined(separator: "\n")
         return Result(app: app.localizedName ?? "?",
-                      nodesScanned: count,
-                      truncated: count >= maxNodes,
+                      nodesScanned: s.count,
+                      truncated: s.count >= maxNodes,
                       candidates: EmailSignal.addresses(in: blob),
-                      contexts: Array(contexts.prefix(60)))
+                      contexts: Array(s.contexts.prefix(60)))
     }
 
     private static func targetBrowser() -> NSRunningApplication? {

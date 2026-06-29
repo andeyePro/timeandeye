@@ -1633,8 +1633,12 @@ public final class AppController: ObservableObject {
         guard let r = EmailSignalProbe.probeFrontBrowser() else {
             return "No running browser found (Chrome / Opera / Brave / Safari)."
         }
-        var out = "Browser: \(r.app)\nNodes scanned: \(r.nodesScanned)\(r.truncated ? " (capped)" : "")\n\n"
-        out += "Email addresses found (\(r.candidates.count)):\n"
+        var out = "Browser: \(r.app)\nNodes scanned: \(r.nodesScanned)\(r.truncated ? " (capped)" : "")\n"
+        if r.nodesScanned < 200 {
+            out += "(Looks like only the window chrome — Chrome's page accessibility " +
+                   "tree may still be building. Click Probe again in a second.)\n"
+        }
+        out += "\nEmail addresses found (\(r.candidates.count)):\n"
         out += r.candidates.isEmpty ? "  (none)\n"
             : r.candidates.map { "  • \($0)" }.joined(separator: "\n") + "\n"
         out += "\nNodes containing '@' (role | text):\n"
