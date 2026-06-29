@@ -1644,6 +1644,9 @@ public final class AppController: ObservableObject {
         out += "\nNodes containing '@' (role | text):\n"
         out += r.contexts.isEmpty ? "  (none)"
             : r.contexts.map { "  \($0)" }.joined(separator: "\n")
+        // The better browser channel: read the DOM via page JavaScript.
+        out += "\n\n— Page JavaScript channel —\n"
+        out += EmailSignalProbe.chromeDOMProbe()
         copyToClipboard(out)
         return out
     }

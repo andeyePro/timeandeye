@@ -75,6 +75,48 @@ public enum EmailSignalProbe {
                       contexts: Array(s.contexts.prefix(60)))
     }
 
+    /// AppleScript app name for a Chromium-family bundle id (the JS probe channel).
+    private static func chromeAppName(_ bundleID: String) -> String? {
+        switch bundleID {
+        case "com.google.Chrome": return "Google Chrome"
+        case "com.operasoftware.Opera": return "Opera"
+        case "com.brave.Browser": return "Brave Browser"
+        default: return nil
+        }
+    }
+
+    /// The robust browser channel: run a tiny read-only JS snippet in the active
+    /// tab via Apple Events (same pipe as the URL read) and dump the sender /
+    /// recipient spans the page exposes. Needs Chrome ▸ View ▸ Developer ▸ "Allow
+    /// JavaScript from Apple Events" (off by default).
+    public static func chromeDOMProbe() -> String {
+        guard let app = targetBrowser(),
+              let bid = app.bundleIdentifier, let appName = chromeAppName(bid) else {
+            return "JS probe: front browser is not Chromium (Chrome/Opera/Brave)."
+        }
+        // Single-quoted JS + String.fromCharCode(10) for newlines → no double
+        // quotes to escape through AppleScript. Gmail tags sender/recipient spans
+        // with email/name attributes; className (e.g. gD = sender, g2 = recipient)
+        // helps us spot which is the sender.
+        let nl = "String.fromCharCode(10)"
+        let js = "(function(){var s=[];try{document.querySelectorAll('[email]')"
+            + ".forEach(function(e){var v=(e.getAttribute('name')||'')+' <'+e.getAttribute('email')"
+            + "+'> .'+(e.className||'').slice(0,24);if(s.indexOf(v)<0)s.push(v);});}"
+            + "catch(err){return 'JSERR '+err;}"
+            + "return 'TITLE: '+document.title+\(nl)+'[email] nodes: '+s.length+\(nl)"
+            + "+s.slice(0,30).join(\(nl));})()"
+        let source = "tell application \"\(appName)\" to execute active tab of front window javascript \"\(js)\""
+        var error: NSDictionary?
+        let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error = error {
+            let msg = (error["NSAppleScriptErrorMessage"] as? String) ?? "\(error)"
+            return "JS probe error: \(msg)\n" +
+                   "(If it says JavaScript is off: Chrome ▸ View ▸ Developer ▸ " +
+                   "Allow JavaScript from Apple Events.)"
+        }
+        return result?.stringValue ?? "JS probe: empty result."
+    }
+
     private static func targetBrowser() -> NSRunningApplication? {
         let running = NSWorkspace.shared.runningApplications
         if let active = running.first(where: {
