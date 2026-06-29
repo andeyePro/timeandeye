@@ -94,17 +94,21 @@ public enum EmailSignalProbe {
               let bid = app.bundleIdentifier, let appName = chromeAppName(bid) else {
             return "JS probe: front browser is not Chromium (Chrome/Opera/Brave)."
         }
-        // Single-quoted JS + String.fromCharCode(10) for newlines → no double
-        // quotes to escape through AppleScript. Gmail tags sender/recipient spans
-        // with email/name attributes; className (e.g. gD = sender, g2 = recipient)
-        // helps us spot which is the sender.
-        let nl = "String.fromCharCode(10)"
-        let js = "(function(){var s=[];try{document.querySelectorAll('[email]')"
-            + ".forEach(function(e){var v=(e.getAttribute('name')||'')+' <'+e.getAttribute('email')"
-            + "+'> .'+(e.className||'').slice(0,24);if(s.indexOf(v)<0)s.push(v);});}"
-            + "catch(err){return 'JSERR '+err;}"
-            + "return 'TITLE: '+document.title+\(nl)+'[email] nodes: '+s.length+\(nl)"
-            + "+s.slice(0,30).join(\(nl));})()"
+        // Single-quoted JS + String.fromCharCode(10) for newlines, no backslashes
+        // → nothing to escape through AppleScript. A blanket [email] query is
+        // polluted by the inbox-list rows (.yP), which Gmail keeps in the DOM with
+        // a thread open. So probe SEVERAL scoped selectors and report each, to find
+        // the one that isolates the OPEN conversation's sender (likely .gD /
+        // data-hovercard-id) vs recipients (.g2) vs the list (.yP).
+        let js = "(function(){var L=String.fromCharCode(10);"
+            + "function d(sel){var a=[];document.querySelectorAll(sel).forEach(function(e){"
+            + "var em=e.getAttribute('email')||e.getAttribute('data-hovercard-id')||'';"
+            + "var nm=(e.getAttribute('name')||e.textContent||'').trim().slice(0,28);"
+            + "a.push(nm+' <'+em+'>');});return sel+' ['+a.length+']: '+a.slice(0,6).join(' || ');}"
+            + "try{return 'hash: '+location.hash+L+'TITLE: '+document.title+L"
+            + "+d('.gD')+L+d('.g2')+L+d('[data-hovercard-id]')+L"
+            + "+'.yP(list) count: '+document.querySelectorAll('.yP').length;}"
+            + "catch(err){return 'JSERR '+err;}})()"
         let source = "tell application \"\(appName)\" to execute active tab of front window javascript \"\(js)\""
         var error: NSDictionary?
         let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
