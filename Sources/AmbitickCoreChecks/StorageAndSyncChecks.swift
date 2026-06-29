@@ -495,6 +495,31 @@ func aiAssistChecks(_ c: Checks) {
         try expectEq(mine.map(\.email), ["r.naismith@harborlane.example"])
         try expectEq(EmailSignal.domain(of: "r.naismith@harborlane.example"), "harborlane.example")
     }
+
+    c.check("email match ladder: most-specific level wins, user order re-tunes") {
+        let ctx = EmailContext(system: .gmail,
+                               sender: "r.naismith@harborlane.example",
+                               senderDomain: "harborlane.example",
+                               subject: "RE: Insurance Renewals")
+        let domainRule = EmailRule(level: .senderDomain, value: "harborlane.example", target: .op(1))
+        let subjRule = EmailRule(level: .subject, value: "Insurance Renewals", target: .op(2))
+        let sysRule = EmailRule(level: .emailSystem, value: "", target: .op(9))
+        // Subject (most specific) beats domain beats system, by default.
+        try expectEq(EmailMatcher.match(ctx, rules: [sysRule, domainRule, subjRule])?.target, .op(2))
+        try expectEq(EmailMatcher.match(ctx, rules: [sysRule, domainRule])?.target, .op(1))
+        try expectEq(EmailMatcher.match(ctx, rules: [sysRule])?.target, .op(9))
+        try expectNil(EmailMatcher.match(ctx, rules: []))
+        // A pin beats a learned rule at the SAME level.
+        let learnedDom = EmailRule(level: .senderDomain, value: "harborlane.example", target: .op(1))
+        let pinnedDom = EmailRule(level: .senderDomain, value: "harborlane.example", target: .op(5), pinned: true)
+        try expectEq(EmailMatcher.match(ctx, rules: [learnedDom, pinnedDom])?.target, .op(5))
+        // Re-tuning the order (sender above subject) flips precedence.
+        let senderRule = EmailRule(level: .sender, value: "r.naismith@harborlane.example", target: .op(7))
+        let custom: [EmailMatchLevel] = [.emailSystem, .senderDomain, .subject, .sender]
+        try expectEq(EmailMatcher.match(ctx, rules: [subjRule, senderRule], order: custom)?.target, .op(7))
+        // Subject matches by substring (handles RE:/Fwd: prefixes); non-match → nil.
+        try expectNil(EmailMatcher.match(ctx, rules: [EmailRule(level: .subject, value: "Payroll", target: .op(3))]))
+    }
 }
 
 // MARK: - Settings (plan task 13)

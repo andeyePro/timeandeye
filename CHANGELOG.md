@@ -2,6 +2,14 @@
 
 ## 2026-06-29
 
+- [x] **Email→task precedence ladder (user-editable backbone)** — the shared
+  most-specific-wins ladder both the auto-learner and the pin will resolve
+  through. New pure, unit-checked Core: `EmailMatchLevel` (emailSystem <
+  senderDomain < sender < subject, general→specific), `EmailContext`, `EmailRule`
+  (learned or pinned; a pin beats a learned rule at the same level), and
+  `EmailMatcher.match` (most-specific matching level wins; subject matches by
+  substring so RE:/Fwd: prefixes don't break it). The order persists in settings
+  (`emailMatchOrder`, tolerant-decoded) so the user can retune it. 185 checks pass.
 - [x] **Gmail sender extraction: channel + recipe found, typed foundation** —
   on-device probing settled the approach. Chrome keeps its renderer accessibility
   tree off (AXManualAccessibility didn't wake it — two ~65-node reads), so the

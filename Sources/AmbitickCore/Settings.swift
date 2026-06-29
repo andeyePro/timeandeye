@@ -88,6 +88,9 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     public var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
     public var taskColours: [String: String]
+    /// The email→task specificity ladder (general → specific); the most specific
+    /// matching rule wins. User-reorderable.
+    public var emailMatchOrder: [EmailMatchLevel]
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -113,7 +116,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 lastViewedTimeView: TimeView = .timeline,
                 lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
-                taskColours: [String: String] = [:]) {
+                taskColours: [String: String] = [:],
+                emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
@@ -139,6 +143,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.lockOnLeave = lockOnLeave
         self.localTasks = localTasks
         self.taskColours = taskColours
+        self.emailMatchOrder = emailMatchOrder
     }
 
     /// Tolerant decoding: new fields fall back to their defaults instead of
@@ -171,6 +176,9 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
         localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
         taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours
+        // Tolerate an old/empty ladder; fall back to the default order.
+        let order = try c.decodeIfPresent([EmailMatchLevel].self, forKey: .emailMatchOrder) ?? defaults.emailMatchOrder
+        emailMatchOrder = order.isEmpty ? defaults.emailMatchOrder : order
     }
 }
 
