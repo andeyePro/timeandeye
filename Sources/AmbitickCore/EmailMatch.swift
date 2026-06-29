@@ -1,51 +1,54 @@
 import Foundation
 
 /// The user-editable specificity ladder for email→task matching. Several rules
-/// can match one message (its system, the sender's domain, the sender, words in
-/// the subject); the MOST SPECIFIC matching rule wins. The order is a setting so
-/// the user can retune it; `defaultOrder` is general → specific.
+/// can match one message (its system, the correspondent's domain, the
+/// correspondent, words in the subject); the MOST SPECIFIC matching rule wins.
+/// The order is a setting so the user can retune it; `defaultOrder` is general →
+/// specific.
+///
+/// "Correspondent" is the OTHER party, in either direction: the sender of an
+/// inbound message, or the recipient(s) of one you sent. So a rule learned from a
+/// mail you received from a company also fires on a mail you send to it.
 public enum EmailMatchLevel: String, CaseIterable, Codable, Sendable {
-    case emailSystem    // "all mail in this system" — the broad catch-all
-    case senderDomain   // e.g. harborlane.example
-    case sender         // e.g. r.naismith@harborlane.example
-    case subject        // e.g. contains "Insurance Renewals" — most specific
+    case emailSystem          // "all mail in this system" — the broad catch-all
+    case correspondentDomain  // e.g. harborlane.example
+    case correspondent        // e.g. r.naismith@harborlane.example
+    case subject              // e.g. contains "Insurance Renewals" — most specific
 
     /// Low (general) → high (specific). The last element wins ties of presence.
     public static let defaultOrder: [EmailMatchLevel] =
-        [.emailSystem, .senderDomain, .sender, .subject]
+        [.emailSystem, .correspondentDomain, .correspondent, .subject]
 
     public var label: String {
         switch self {
         case .emailSystem: return "Email system"
-        case .senderDomain: return "Sender domain"
-        case .sender: return "Sender"
+        case .correspondentDomain: return "Correspondent domain"
+        case .correspondent: return "Correspondent"
         case .subject: return "Subject"
         }
     }
 }
 
-/// What we know about the focused email, normalised for matching. Built from the
-/// recipe read (sender/recipients) + the title/subject + the detected system.
+/// What we know about the focused email, normalised for matching. The
+/// correspondents are the external parties (sender+recipients minus yourself) —
+/// see `EmailSignal.counterparties`. Addresses are stored lowercased.
 public struct EmailContext: Equatable, Sendable {
     public let system: EmailSystem
-    public let sender: String?        // primary external sender address
-    public let senderDomain: String?
+    public let correspondents: [String]
     public let subject: String?
 
-    public init(system: EmailSystem, sender: String?, senderDomain: String?, subject: String?) {
+    public init(system: EmailSystem, correspondents: [String], subject: String?) {
         self.system = system
-        self.sender = sender
-        self.senderDomain = senderDomain
+        self.correspondents = correspondents.map { $0.lowercased() }
         self.subject = subject
     }
 
-    public func value(for level: EmailMatchLevel) -> String? {
-        switch level {
-        case .emailSystem: return system == .unknown ? nil : system.rawValue
-        case .senderDomain: return senderDomain
-        case .sender: return sender
-        case .subject: return subject
+    public var correspondentDomains: [String] {
+        var seen = Set<String>(); var out: [String] = []
+        for c in correspondents {
+            if let d = EmailSignal.domain(of: c), seen.insert(d).inserted { out.append(d) }
         }
+        return out
     }
 }
 
@@ -66,16 +69,15 @@ public struct EmailRule: Equatable, Codable, Sendable {
     }
 
     public func matches(_ context: EmailContext) -> Bool {
+        let v = value.lowercased()
         switch level {
         case .emailSystem:
             // Empty value = any system; else the named system must match.
-            return value.isEmpty || value.caseInsensitiveCompare(context.system.rawValue) == .orderedSame
-        case .senderDomain:
-            guard let d = context.senderDomain else { return false }
-            return value.caseInsensitiveCompare(d) == .orderedSame
-        case .sender:
-            guard let s = context.sender else { return false }
-            return value.caseInsensitiveCompare(s) == .orderedSame
+            return value.isEmpty || v == context.system.rawValue.lowercased()
+        case .correspondentDomain:
+            return context.correspondentDomains.contains(v)
+        case .correspondent:
+            return context.correspondents.contains(v)
         case .subject:
             guard let subj = context.subject, !value.isEmpty else { return false }
             return subj.range(of: value, options: .caseInsensitive) != nil

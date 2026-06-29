@@ -498,10 +498,10 @@ func aiAssistChecks(_ c: Checks) {
 
     c.check("email match ladder: most-specific level wins, user order re-tunes") {
         let ctx = EmailContext(system: .gmail,
-                               sender: "r.naismith@harborlane.example",
-                               senderDomain: "harborlane.example",
+                               correspondents: ["r.naismith@harborlane.example",
+                                                "t.calder@harborlane.example"],
                                subject: "RE: Insurance Renewals")
-        let domainRule = EmailRule(level: .senderDomain, value: "harborlane.example", target: .op(1))
+        let domainRule = EmailRule(level: .correspondentDomain, value: "harborlane.example", target: .op(1))
         let subjRule = EmailRule(level: .subject, value: "Insurance Renewals", target: .op(2))
         let sysRule = EmailRule(level: .emailSystem, value: "", target: .op(9))
         // Subject (most specific) beats domain beats system, by default.
@@ -510,15 +510,28 @@ func aiAssistChecks(_ c: Checks) {
         try expectEq(EmailMatcher.match(ctx, rules: [sysRule])?.target, .op(9))
         try expectNil(EmailMatcher.match(ctx, rules: []))
         // A pin beats a learned rule at the SAME level.
-        let learnedDom = EmailRule(level: .senderDomain, value: "harborlane.example", target: .op(1))
-        let pinnedDom = EmailRule(level: .senderDomain, value: "harborlane.example", target: .op(5), pinned: true)
+        let learnedDom = EmailRule(level: .correspondentDomain, value: "harborlane.example", target: .op(1))
+        let pinnedDom = EmailRule(level: .correspondentDomain, value: "harborlane.example", target: .op(5), pinned: true)
         try expectEq(EmailMatcher.match(ctx, rules: [learnedDom, pinnedDom])?.target, .op(5))
-        // Re-tuning the order (sender above subject) flips precedence.
-        let senderRule = EmailRule(level: .sender, value: "r.naismith@harborlane.example", target: .op(7))
-        let custom: [EmailMatchLevel] = [.emailSystem, .senderDomain, .subject, .sender]
-        try expectEq(EmailMatcher.match(ctx, rules: [subjRule, senderRule], order: custom)?.target, .op(7))
+        // Re-tuning the order (correspondent above subject) flips precedence.
+        let cpRule = EmailRule(level: .correspondent, value: "r.naismith@harborlane.example", target: .op(7))
+        let custom: [EmailMatchLevel] = [.emailSystem, .correspondentDomain, .subject, .correspondent]
+        try expectEq(EmailMatcher.match(ctx, rules: [subjRule, cpRule], order: custom)?.target, .op(7))
         // Subject matches by substring (handles RE:/Fwd: prefixes); non-match → nil.
         try expectNil(EmailMatcher.match(ctx, rules: [EmailRule(level: .subject, value: "Payroll", target: .op(3))]))
+    }
+
+    c.check("correspondent matching is direction-agnostic (sent vs received)") {
+        // Same company (Rae), whether he's the sender (inbound) or a recipient
+        // of a mail you sent (outbound) — one domain rule covers both.
+        let rule = EmailRule(level: .correspondentDomain, value: "harborlane.example", target: .op(1))
+        let inbound = EmailContext(system: .gmail, correspondents: ["r.naismith@harborlane.example"],
+                                   subject: "Quote")
+        let outbound = EmailContext(system: .gmail, correspondents: ["t.calder@harborlane.example"],
+                                    subject: "Re: Quote")
+        try expectEq(EmailMatcher.match(inbound, rules: [rule])?.target, .op(1))
+        try expectEq(EmailMatcher.match(outbound, rules: [rule])?.target, .op(1))
+        try expectEq(inbound.correspondentDomains, ["harborlane.example"])
     }
 }
 
