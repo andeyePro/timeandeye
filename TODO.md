@@ -145,6 +145,31 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
     — the system derives where the sender lives from the AX tree, or makes a
     SYSTEM-REQUESTED AI call (reuse the AI-assist clipboard flow / future API) to
     locate it, then remembers the per-client hint. Prototype = (b) below.
+  Architecture (refined 2026-06-29):
+  • Detect-and-dispatch: identify the system from URL host (webmail) / bundle id
+    (native); look up its recipe in a recipe store and apply it as a TARGETED read.
+  • A recipe is a SELECTOR (role + From/Sender label + focused-message
+    disambiguator + version), NOT the probe output — the probe yields candidate
+    addresses, not which one is the sender, so learning a new system is
+    probe → LABEL → store-recipe, never probe → store.
+  • Cheap validate-on-use runs EVERY time (did the recipe resolve to exactly one
+    plausible address?); only a FAILURE triggers the expensive re-learn (the else).
+    Handles webmail redesigns + localized "From" labels via self-heal.
+  • Ranked candidates: score each address by sender-likeness (proximity to a
+    From/Sender label, header-link role > body static-text, top-of-header position,
+    NOT the account's own/self address, NOT in the recipient row, inside the
+    focused/expanded message). Above a confidence threshold → use the top silently;
+    below → show the ranked list and ask "which is the sender?" (one tap hardens the
+    recipe). Mirrors the existing auto-push-above-certainty model.
+  • "Ask AI" whole-diagnostics button: hand the full AX dump to the model to pick
+    the sender AND emit a reusable selector (clipboard flow now, API later).
+  • Distribution: SHIP a bundled recipe pack (offline, zero setup) covering the top
+    providers up to diminishing returns (Gmail, OWA, Apple Mail, Outlook, Proton,
+    Yahoo, Fastmail…); auto-detect — NO setup checklist (friction + goes stale).
+    Add BACKGROUND recipe-pack updates so a provider redesign is fixed centrally
+    for everyone without an app release (recipes are data, not code → low risk,
+    validation guards). Monitoring for a "new/unknown client" is then free: it's
+    the same detect step → gentle "want me to learn your mail here?" nudge.
 - [ ] (b, IN PROGRESS 2026-06-29) Gmail AX sender probe: a dev diagnostic that
   walks the focused browser window's AX tree and reports candidate sender strings
   (email-like text + role/context), so we can see what's robustly extractable
