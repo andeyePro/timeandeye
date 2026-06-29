@@ -456,6 +456,17 @@ func aiAssistChecks(_ c: Checks) {
                      "url contains \"op\"")
         try expectEq(AIAssist.cleanRuleReply("  title is \"X\"  "), "title is \"X\"")
     }
+
+    c.check("email-address extraction: distinct, ordered, case-insensitive dedupe") {
+        let blob = """
+        Re: Emergency flea — from Taylor <taylor@fermentory.example>
+        to martin@andeye.com, MARTIN@andeye.com; cc a.b+tag@sub.example.co.uk
+        not-an-email @ nope, plain text, https://mail.google.com/#x
+        """
+        try expectEq(EmailSignal.addresses(in: blob),
+                     ["taylor@fermentory.example", "martin@andeye.com", "a.b+tag@sub.example.co.uk"])
+        try expectEq(EmailSignal.addresses(in: "no addresses here"), [])
+    }
 }
 
 // MARK: - Settings (plan task 13)

@@ -123,6 +123,33 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   default stays featherweight (full AX-tree walks are heavy — must not regress
   Mac performance). Not all apps expose AX content; detect and tell the user.
   - 2026-06-24
+- [ ] Email SENDER as a first-class signal (the big Gmail flaw, 2026-06-29).
+  Root cause: capture only sees app/title/url, and a Gmail browser tab title is
+  `<subject> – <account> – Mail`, URL is `/mail/u/0/#<volatile-hash>` — the
+  SENDER, the most useful "which task" key for mail, is in NEITHER. Both a
+  by-account pin (too broad) and a by-subject pin (too narrow) are forced
+  compromises. Fix = a new captured signal, not a new operator:
+  • Read sender (and ideally the focused-message from-row) via a TARGETED AX read
+    (extends the "look inside" `content` work above; on-demand, not a tree crawl).
+  • Expose it BOTH as a learner feature (auto-attribution keys on sender with no
+    pin) AND as a pin field `from`/`sender`.
+  • Specificity ordering: when pinned, SUBJECT trumps SENDER (more specific), so a
+    subject match outranks a sender match in precedence.
+  • New `any` field: `any contains "X"` (and bare keyword) must search across ALL
+    fields — app/title/url AND the new sender/content — not just the original three.
+  • Do this for ALL major email systems (Gmail, Apple Mail, Outlook desktop +
+    OWA, Proton, Fastmail, Yahoo, …) via SMART GENERALISATIONS, not N hand-coded
+    scrapers. Native clients (Apple Mail/Outlook) often expose sender in the
+    window title/AX already — easy; browser webmail is the hard case.
+  • Self-learning: an unknown/new email client should be assessable automatically
+    — the system derives where the sender lives from the AX tree, or makes a
+    SYSTEM-REQUESTED AI call (reuse the AI-assist clipboard flow / future API) to
+    locate it, then remembers the per-client hint. Prototype = (b) below.
+- [ ] (b, IN PROGRESS 2026-06-29) Gmail AX sender probe: a dev diagnostic that
+  walks the focused browser window's AX tree and reports candidate sender strings
+  (email-like text + role/context), so we can see what's robustly extractable
+  before committing an extractor. Core email-address extraction is pure/tested;
+  the AX traversal is Mac-only and needs an on-device run.
 - [ ] Pin rules — AI "fix this pin": from a pin that should have matched a
   window but didn't, regenerate the AI prompt including the failing rule + that
   window's fields + a free-text complaint, so the model corrects it. Iterative

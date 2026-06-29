@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var scanned = false
     @State private var expandedDup: Set<Int> = []
     @State private var expandAllDup = false
+    @State private var senderProbe = ""
 
     var body: some View {
         Form {
@@ -203,6 +204,25 @@ struct SettingsView: View {
                 Text("Finds OP entries duplicated at the same task + minute. Click a group to see every difference between its entries; the survivor is the richest, the rest are deleted (their comments folded into the survivor) and your journal re-points to the survivor. Open any entry in OpenProject to check anything not shown here (e.g. custom fields) before deleting. Confirm each.")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(dupActions) { act in dupRow(act) }
+            }
+
+            Section("Diagnostics (dev)") {
+                Button("Probe email sender (front browser)") {
+                    senderProbe = controller.probeEmailSender()
+                }
+                .help("Walks the focused browser window's Accessibility tree and lists the email addresses it can see, with each node's role. Result is also copied to the clipboard.")
+                Text("Open the email you'd want to pin in your browser, then click. Paste the result back so we can design a robust sender extractor. (Whole-tree crawl — diagnostic only, not how the shipped feature will work.)")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !senderProbe.isEmpty {
+                    ScrollView {
+                        Text(senderProbe)
+                            .font(.system(.caption2, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 160)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+                }
             }
 
             Section("About") {

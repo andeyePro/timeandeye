@@ -1623,6 +1623,27 @@ public final class AppController: ObservableObject {
         return (s.app, s.windowTitle, s.tabURL)
     }
 
+    /// Dev diagnostic: probe the front browser's AX tree for sender candidates,
+    /// format a report, and copy it to the clipboard. Drives the email-sender
+    /// signal design (TODO 2026-06-29).
+    public func probeEmailSender() -> String {
+        guard AXIsProcessTrusted() else {
+            return "Accessibility permission not granted — System Settings ▸ Privacy ▸ Accessibility."
+        }
+        guard let r = EmailSignalProbe.probeFrontBrowser() else {
+            return "No running browser found (Chrome / Opera / Brave / Safari)."
+        }
+        var out = "Browser: \(r.app)\nNodes scanned: \(r.nodesScanned)\(r.truncated ? " (capped)" : "")\n\n"
+        out += "Email addresses found (\(r.candidates.count)):\n"
+        out += r.candidates.isEmpty ? "  (none)\n"
+            : r.candidates.map { "  • \($0)" }.joined(separator: "\n") + "\n"
+        out += "\nNodes containing '@' (role | text):\n"
+        out += r.contexts.isEmpty ? "  (none)"
+            : r.contexts.map { "  \($0)" }.joined(separator: "\n")
+        copyToClipboard(out)
+        return out
+    }
+
     public func ingestAIResponse(_ raw: String) -> String {
         do {
             let assignments = try AIAssist.parseResponse(

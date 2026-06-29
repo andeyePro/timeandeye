@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-06-29
+
+- [x] **Email-sender signal: backlog item + Gmail AX probe (prototype)** — logged
+  the root flaw (capture only sees app/title/url; a Gmail tab exposes subject +
+  account but never the sender, the most useful "which task" key) as a defined
+  TODO: sender as a captured signal + learner feature + pin `from` field, subject
+  trumps sender in specificity, a new `any` field spanning all fields, done across
+  all major email systems via smart generalisations with self-learning (system- or
+  AI-derived per-client hints). Started the prototype: `EmailSignal.addresses`
+  (pure email extraction, unit-checked) + `EmailSignalProbe` (bounded AX walk of
+  the front browser's focused window) behind a Settings ▸ Diagnostics button that
+  reports the email-like strings and their AX roles and copies them to the
+  clipboard — so we design the real extractor from live data. AX walk is Mac-only;
+  needs an on-device run. 182 checks pass.
+
 ## 2026-06-28
 
 - [x] **Pin editor AI mode (#11 final phase)** — a fourth hamburger entry for
