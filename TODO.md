@@ -170,11 +170,21 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
     for everyone without an app release (recipes are data, not code → low risk,
     validation guards). Monitoring for a "new/unknown client" is then free: it's
     the same detect step → gentle "want me to learn your mail here?" nudge.
-- [ ] (b, IN PROGRESS 2026-06-29) Gmail AX sender probe: a dev diagnostic that
-  walks the focused browser window's AX tree and reports candidate sender strings
-  (email-like text + role/context), so we can see what's robustly extractable
-  before committing an extractor. Core email-address extraction is pure/tested;
-  the AX traversal is Mac-only and needs an on-device run.
+- [ ] (b, 2026-06-29) Gmail sender extraction — CHANNEL + RECIPE FOUND.
+  Chrome's renderer AX tree stays off (AXManualAccessibility didn't wake it), so
+  the channel is page JavaScript over Apple Events (needs Chrome ▸ View ▸
+  Developer ▸ Allow JavaScript from Apple Events). Validated Gmail recipe:
+  `.gD` = open-message sender, `.g2` = recipients (a blanket `[email]`/
+  `[data-hovercard-id]` query is polluted by the ~100+ inbox-list `.yP` rows Gmail
+  keeps in the DOM). Gmail names your own address "me", so counterparties fall out
+  cleanly. Foundation shipped: `EmailSystem` (detect + per-system selectors),
+  `EmailSignal.Party`/`counterparties`/`domain` (pure, tested),
+  `EmailSignalProbe.frontBrowserParties` (recipe-driven), surfaced in the
+  Diagnostics probe. REMAINING to make it a real signal: thread sender/
+  counterparty into the ActivitySignal + learner feature + pin `from` field; pick
+  which message's sender in a multi-message thread; derive own-domains from
+  settings/accounts; validate-on-use + recipe store/pack; other providers'
+  selectors (OWA/Proton/Yahoo/Fastmail) + native clients.
 - [ ] Pin rules — AI "fix this pin": from a pin that should have matched a
   window but didn't, regenerate the AI prompt including the failing rule + that
   window's fields + a free-text complaint, so the model corrects it. Iterative

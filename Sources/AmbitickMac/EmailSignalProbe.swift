@@ -85,40 +85,79 @@ public enum EmailSignalProbe {
         }
     }
 
-    /// The robust browser channel: run a tiny read-only JS snippet in the active
-    /// tab via Apple Events (same pipe as the URL read) and dump the sender /
-    /// recipient spans the page exposes. Needs Chrome ▸ View ▸ Developer ▸ "Allow
-    /// JavaScript from Apple Events" (off by default).
-    public static func chromeDOMProbe() -> String {
+    public struct Parties {
+        public let system: EmailSystem
+        public let senders: [EmailSignal.Party]
+        public let recipients: [EmailSignal.Party]
+        public let error: String?
+    }
+
+    /// The robust browser channel: detect the email system from the active tab,
+    /// run its sender/recipient DOM recipe via Apple Events, and return the typed
+    /// parties. Needs Chrome ▸ View ▸ Developer ▸ "Allow JavaScript from Apple
+    /// Events" (off by default).
+    public static func frontBrowserParties() -> Parties? {
         guard let app = targetBrowser(),
               let bid = app.bundleIdentifier, let appName = chromeAppName(bid) else {
-            return "JS probe: front browser is not Chromium (Chrome/Opera/Brave)."
+            return nil
         }
-        // Single-quoted JS + String.fromCharCode(10) for newlines, no backslashes
-        // → nothing to escape through AppleScript. A blanket [email] query is
-        // polluted by the inbox-list rows (.yP), which Gmail keeps in the DOM with
-        // a thread open. So probe SEVERAL scoped selectors and report each, to find
-        // the one that isolates the OPEN conversation's sender (likely .gD /
-        // data-hovercard-id) vs recipients (.g2) vs the list (.yP).
-        let js = "(function(){var L=String.fromCharCode(10);"
-            + "function d(sel){var a=[];document.querySelectorAll(sel).forEach(function(e){"
-            + "var em=e.getAttribute('email')||e.getAttribute('data-hovercard-id')||'';"
-            + "var nm=(e.getAttribute('name')||e.textContent||'').trim().slice(0,28);"
-            + "a.push(nm+' <'+em+'>');});return sel+' ['+a.length+']: '+a.slice(0,6).join(' || ');}"
-            + "try{return 'hash: '+location.hash+L+'TITLE: '+document.title+L"
-            + "+d('.gD')+L+d('.g2')+L+d('[data-hovercard-id]')+L"
-            + "+'.yP(list) count: '+document.querySelectorAll('.yP').length;}"
-            + "catch(err){return 'JSERR '+err;}})()"
+        guard let urlStr = activeTabURL(appName: appName),
+              let host = URL(string: urlStr)?.host else {
+            return Parties(system: .unknown, senders: [], recipients: [],
+                           error: "Couldn't read the active tab URL.")
+        }
+        let system = EmailSystem.detect(urlHost: host)
+        guard let sSel = system.senderSelector, let rSel = system.recipientSelector else {
+            return Parties(system: system, senders: [], recipients: [],
+                           error: "No recipe for this system yet (host: \(host)).")
+        }
+        let (raw, jsError) = runJS(appName: appName, js: partiesJS(sender: sSel, recipient: rSel))
+        if let jsError {
+            return Parties(system: system, senders: [], recipients: [],
+                           error: jsError + "  (If JS is off: Chrome ▸ View ▸ Developer ▸ Allow JavaScript from Apple Events.)")
+        }
+        let parts = (raw ?? "").components(separatedBy: "\u{1e}")
+        return Parties(system: system,
+                       senders: parseParties(parts.first ?? ""),
+                       recipients: parseParties(parts.count > 1 ? parts[1] : ""),
+                       error: nil)
+    }
+
+    /// Read-only JS that dumps `name<TAB>email` lines for the sender selector and
+    /// the recipient selector, separated by a record-separator char. Single quotes
+    /// + fromCharCode → nothing to escape through AppleScript.
+    private static func partiesJS(sender: String, recipient: String) -> String {
+        "(function(){var T=String.fromCharCode(9),L=String.fromCharCode(10);"
+        + "function g(sel){var a=[];document.querySelectorAll(sel).forEach(function(e){"
+        + "var em=e.getAttribute('email')||e.getAttribute('data-hovercard-id')||'';"
+        + "var nm=(e.getAttribute('name')||e.textContent||'').trim();"
+        + "if(em)a.push(nm+T+em);});return a.join(L);}"
+        + "return g('\(sender)')+String.fromCharCode(30)+g('\(recipient)');})()"
+    }
+
+    private static func parseParties(_ block: String) -> [EmailSignal.Party] {
+        block.split(separator: "\n").compactMap { line in
+            let f = String(line).components(separatedBy: "\t")
+            guard f.count == 2, !f[1].isEmpty else { return nil }
+            return EmailSignal.Party(name: f[0], email: f[1])
+        }
+    }
+
+    private static func activeTabURL(appName: String) -> String? {
+        let source = "tell application \"\(appName)\" to get URL of active tab of front window"
+        var error: NSDictionary?
+        let r = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        return error == nil ? r?.stringValue : nil
+    }
+
+    private static func runJS(appName: String, js: String) -> (value: String?, error: String?) {
         let source = "tell application \"\(appName)\" to execute active tab of front window javascript \"\(js)\""
         var error: NSDictionary?
-        let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        let r = NSAppleScript(source: source)?.executeAndReturnError(&error)
         if let error = error {
-            let msg = (error["NSAppleScriptErrorMessage"] as? String) ?? "\(error)"
-            return "JS probe error: \(msg)\n" +
-                   "(If it says JavaScript is off: Chrome ▸ View ▸ Developer ▸ " +
-                   "Allow JavaScript from Apple Events.)"
+            return (nil, (error["NSAppleScriptErrorMessage"] as? String) ?? "\(error)")
         }
-        return result?.stringValue ?? "JS probe: empty result."
+        return (r?.stringValue ?? "", nil)
     }
 
     private static func targetBrowser() -> NSRunningApplication? {

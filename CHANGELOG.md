@@ -2,6 +2,21 @@
 
 ## 2026-06-29
 
+- [x] **Gmail sender extraction: channel + recipe found, typed foundation** —
+  on-device probing settled the approach. Chrome keeps its renderer accessibility
+  tree off (AXManualAccessibility didn't wake it — two ~65-node reads), so the
+  channel is **page JavaScript over Apple Events**. A blanket `[email]` query was
+  polluted by the 100+ inbox-list `.yP` rows Gmail keeps in the DOM; the validated
+  recipe is **`.gD` = open-message sender, `.g2` = recipients**, and since Gmail
+  names your own address "me" the external counterparty falls out cleanly (e.g.
+  the broker's `@harborlane.example`). Shipped the typed foundation: `EmailSystem`
+  (host detection + per-system selectors), `EmailSignal.Party` /
+  `counterparties` / `domain` (pure, unit-checked), and
+  `EmailSignalProbe.frontBrowserParties` (recipe-driven), all surfaced in the
+  Settings ▸ Diagnostics probe (now shows System / Sender / Recipients /
+  Counterparties / domains). 184 checks pass. Still to wire: sender/counterparty
+  into the ActivitySignal + learner + pin `from` field, validation/self-heal, and
+  more providers.
 - [x] **Email-sender signal: backlog item + Gmail AX probe (prototype)** — logged
   the root flaw (capture only sees app/title/url; a Gmail tab exposes subject +
   account but never the sender, the most useful "which task" key) as a defined

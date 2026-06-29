@@ -5,6 +5,46 @@ import Foundation
 /// walk of a webmail window yields). Pure, so it's unit-checkable; the platform
 /// AX traversal that feeds it lives in AmbitickMac.
 public enum EmailSignal {
+    /// A named address from a message header (sender or recipient).
+    public struct Party: Equatable, Sendable {
+        public let name: String
+        public let email: String
+        public init(name: String, email: String) {
+            self.name = name
+            self.email = email
+        }
+    }
+
+    /// The external correspondents on a message: sender + recipient parties with
+    /// YOURSELF removed. Gmail names your own address "me", so that's dropped;
+    /// also drops anything in `ownAddresses` / `ownDomains`. First-seen order,
+    /// de-duplicated by address. This is the strong "which task" signal — the
+    /// other party (and especially their domain) usually identifies the work.
+    public static func counterparties(senders: [Party], recipients: [Party],
+                                      ownAddresses: Set<String> = [],
+                                      ownDomains: Set<String> = []) -> [Party] {
+        let own = Set(ownAddresses.map { $0.lowercased() })
+        let ownD = Set(ownDomains.map { $0.lowercased() })
+        var seen = Set<String>()
+        var out: [Party] = []
+        for p in senders + recipients {
+            let email = p.email.lowercased()
+            if email.isEmpty { continue }
+            if p.name.trimmingCharacters(in: .whitespaces).lowercased() == "me" { continue }
+            if own.contains(email) { continue }
+            if let d = domain(of: email), ownD.contains(d) { continue }
+            if seen.insert(email).inserted { out.append(p) }
+        }
+        return out
+    }
+
+    /// The domain part of an email address, lowercased (nil if malformed).
+    public static func domain(of email: String) -> String? {
+        guard let at = email.firstIndex(of: "@") else { return nil }
+        let d = email[email.index(after: at)...]
+        return d.isEmpty ? nil : String(d).lowercased()
+    }
+
     /// Every distinct email address in `text`, in first-seen order
     /// (case-insensitively de-duplicated).
     public static func addresses(in text: String) -> [String] {

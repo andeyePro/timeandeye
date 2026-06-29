@@ -1644,9 +1644,24 @@ public final class AppController: ObservableObject {
         out += "\nNodes containing '@' (role | text):\n"
         out += r.contexts.isEmpty ? "  (none)"
             : r.contexts.map { "  \($0)" }.joined(separator: "\n")
-        // The better browser channel: read the DOM via page JavaScript.
-        out += "\n\n— Page JavaScript channel —\n"
-        out += EmailSignalProbe.chromeDOMProbe()
+        // The real channel: detect the system + run its DOM recipe.
+        out += "\n\n— Recipe channel (page JavaScript) —\n"
+        if let p = EmailSignalProbe.frontBrowserParties() {
+            out += "System: \(p.system.rawValue)\n"
+            if let e = p.error { out += "Error: \(e)\n" }
+            func fmt(_ ps: [EmailSignal.Party]) -> String {
+                ps.isEmpty ? "(none)" : ps.map { "\($0.name) <\($0.email)>" }.joined(separator: ", ")
+            }
+            out += "Sender: \(fmt(p.senders))\n"
+            out += "Recipients: \(fmt(p.recipients))\n"
+            let others = EmailSignal.counterparties(senders: p.senders, recipients: p.recipients)
+            out += "Counterparties (you removed): \(fmt(others))\n"
+            let domains = Set(others.compactMap { EmailSignal.domain(of: $0.email) })
+                .sorted().joined(separator: ", ")
+            out += "Counterparty domains: \(domains.isEmpty ? "(none)" : domains)"
+        } else {
+            out += "Front app is not a supported browser."
+        }
         copyToClipboard(out)
         return out
     }

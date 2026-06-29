@@ -467,6 +467,34 @@ func aiAssistChecks(_ c: Checks) {
                      ["taylor@fermentory.example", "martin@andeye.com", "a.b+tag@sub.example.co.uk"])
         try expectEq(EmailSignal.addresses(in: "no addresses here"), [])
     }
+
+    c.check("email system detection from host") {
+        try expectEq(EmailSystem.detect(urlHost: "mail.google.com"), .gmail)
+        try expectEq(EmailSystem.detect(urlHost: "outlook.office.com"), .outlookWeb)
+        try expectEq(EmailSystem.detect(urlHost: "mail.proton.me"), .proton)
+        try expectEq(EmailSystem.detect(urlHost: "example.com"), .unknown)
+        try expectEq(EmailSystem.detect(urlHost: nil), .unknown)
+        try expect(EmailSystem.gmail.senderSelector == ".gD")
+        try expect(EmailSystem.gmail.recipientSelector == ".g2")
+        try expect(!EmailSystem.outlookWeb.hasRecipe, "no recipe yet for OWA")
+    }
+
+    c.check("counterparties drop self ('me', own addr/domain), keep the other party") {
+        // The validated Insurance-Renewals shape: sender Rae, recipients me + Tess.
+        let senders = [EmailSignal.Party(name: "Rae Naismith", email: "r.naismith@harborlane.example")]
+        let recips = [EmailSignal.Party(name: "me", email: "martin@andeye.com"),
+                      EmailSignal.Party(name: "Tess", email: "t.calder@harborlane.example")]
+        let others = EmailSignal.counterparties(senders: senders, recipients: recips)
+        try expectEq(others.map(\.email),
+                     ["r.naismith@harborlane.example", "t.calder@harborlane.example"])
+        // Own-domain removal also works when you sent the last reply (sender = you).
+        let mine = EmailSignal.counterparties(
+            senders: [EmailSignal.Party(name: "Martin", email: "martin@andeye.com")],
+            recipients: [EmailSignal.Party(name: "Rae", email: "r.naismith@harborlane.example")],
+            ownDomains: ["andeye.com"])
+        try expectEq(mine.map(\.email), ["r.naismith@harborlane.example"])
+        try expectEq(EmailSignal.domain(of: "r.naismith@harborlane.example"), "harborlane.example")
+    }
 }
 
 // MARK: - Settings (plan task 13)
