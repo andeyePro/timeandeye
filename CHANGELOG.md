@@ -2,6 +2,11 @@
 
 ## 2026-06-30
 
+- [!] **Email capture REVERTED same day — it froze tracking.** The capture below
+  ran a synchronous Chrome AppleScript/JS call on the 2s sensor-poll thread; in
+  Gmail every email switch is an email URL, so every poll blocked, the sampler
+  stalled, focus switches went unrecorded and time lumped onto the last task. Pulled
+  the call from the hot path (the engine stays, inert). Must be redone async/off-main.
 - [x] **Email auto-learner goes live: capture populates correspondents** — the
   sampler now, on a surface change to a recognised webmail MESSAGE, runs the page
   recipe and attaches the external correspondents (sender+recipients minus self,
