@@ -562,15 +562,23 @@ func settingsChecks(_ c: Checks) {
         // "senderDomain"/"sender", and a bogus timeViewOpenMode). Decoding must
         // survive, preserve opBaseURL, and fall back to defaults for the bad enums
         // — NOT throw and lose the whole file (which logs the user out of OP).
+        // Includes a renamed enum (emailMatchOrder/timeViewOpenMode) AND a
+        // type-mismatched field (menuTaskChars as a string) — every one must drop
+        // to its default WITHOUT failing the whole file.
         let json = """
         {"opBaseURL":"https://op.example.com",
          "emailMatchOrder":["emailSystem","senderDomain","sender","subject"],
-         "timeViewOpenMode":"someFutureMode"}
+         "timeViewOpenMode":"someFutureMode",
+         "menuTaskChars":"not-a-number",
+         "certaintyAutoPushThreshold":0.42}
         """
         let s = try JSONDecoder().decode(AmbitickSettings.self, from: Data(json.utf8))
-        try expectEq(s.opBaseURL, "https://op.example.com", "OP URL survives the bad enums")
+        let defs = AmbitickSettings(opBaseURL: "")
+        try expectEq(s.opBaseURL, "https://op.example.com", "OP URL survives the bad fields")
         try expectEq(s.emailMatchOrder, EmailMatchLevel.defaultOrder, "bad ladder → default order")
-        try expectEq(s.timeViewOpenMode, AmbitickSettings(opBaseURL: "").timeViewOpenMode)
+        try expectEq(s.timeViewOpenMode, defs.timeViewOpenMode, "bad enum → default")
+        try expectEq(s.menuTaskChars, defs.menuTaskChars, "type-mismatched field → default")
+        try expectEq(s.certaintyAutoPushThreshold, 0.42, "good fields still decode normally")
     }
 
     c.check("defaults") {

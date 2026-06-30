@@ -146,46 +146,53 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.emailMatchOrder = emailMatchOrder
     }
 
-    /// Tolerant decoding: new fields fall back to their defaults instead of
-    /// failing the whole settings file when an older settings.json is loaded.
+    /// Tolerant decoding: EVERY field falls back to its default for an absent OR
+    /// malformed/renamed value, so no single corrupt field can throw and take the
+    /// whole settings file (and with it the OP URL) down. This has bitten twice
+    /// (a renamed enum rawValue both times) — `try ... ?? default` only catches a
+    /// nil, NOT a thrown decode, so each field must swallow its own throw.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = AmbitickSettings(opBaseURL: "")
-        opBaseURL = try c.decodeIfPresent(String.self, forKey: .opBaseURL) ?? defaults.opBaseURL
-        certaintyAutoPushThreshold = try c.decodeIfPresent(Double.self, forKey: .certaintyAutoPushThreshold) ?? defaults.certaintyAutoPushThreshold
-        colourLow = try c.decodeIfPresent(String.self, forKey: .colourLow) ?? defaults.colourLow
-        colourHigh = try c.decodeIfPresent(String.self, forKey: .colourHigh) ?? defaults.colourHigh
-        showPercent = try c.decodeIfPresent(Bool.self, forKey: .showPercent) ?? defaults.showPercent
-        defaultActivityID = try c.decodeIfPresent(Int.self, forKey: .defaultActivityID) ?? defaults.defaultActivityID
-        activityOverrides = try c.decodeIfPresent([TaskRef: Int].self, forKey: .activityOverrides) ?? defaults.activityOverrides
-        autoComment = try c.decodeIfPresent(Bool.self, forKey: .autoComment) ?? defaults.autoComment
-        commentToTrackedTime = try c.decodeIfPresent(Bool.self, forKey: .commentToTrackedTime) ?? defaults.commentToTrackedTime
-        commentToTask = try c.decodeIfPresent(Bool.self, forKey: .commentToTask) ?? defaults.commentToTask
-        trackLeisureLocally = try c.decodeIfPresent(Bool.self, forKey: .trackLeisureLocally) ?? defaults.trackLeisureLocally
-        statusOrder = try c.decodeIfPresent([String].self, forKey: .statusOrder) ?? defaults.statusOrder
-        primeDwellSeconds = try c.decodeIfPresent(Double.self, forKey: .primeDwellSeconds) ?? defaults.primeDwellSeconds
-        minSegmentSeconds = try c.decodeIfPresent(Double.self, forKey: .minSegmentSeconds) ?? defaults.minSegmentSeconds
-        switchGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .switchGraceSeconds) ?? defaults.switchGraceSeconds
-        sleepGraceSeconds = try c.decodeIfPresent(Double.self, forKey: .sleepGraceSeconds) ?? defaults.sleepGraceSeconds
-        idleBackfillWindowSeconds = try c.decodeIfPresent(Double.self, forKey: .idleBackfillWindowSeconds) ?? defaults.idleBackfillWindowSeconds
-        menuTaskChars = try c.decodeIfPresent(Int.self, forKey: .menuTaskChars) ?? defaults.menuTaskChars
-        systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
-        popoverDefaultsToChangeMode = try c.decodeIfPresent(Bool.self, forKey: .popoverDefaultsToChangeMode) ?? defaults.popoverDefaultsToChangeMode
-        // Enum-typed fields decode LENIENTLY: an unknown/renamed rawValue must
-        // drop to the default, never throw and take the whole settings file (and
-        // with it the OP URL) down. `try` only short-circuits a thrown decode;
-        // `??` alone catches nil but NOT a throw.
-        timeViewOpenMode = ((try? c.decodeIfPresent(TimeViewOpenMode.self, forKey: .timeViewOpenMode)) ?? nil) ?? defaults.timeViewOpenMode
-        lastViewedTimeView = ((try? c.decodeIfPresent(TimeView.self, forKey: .lastViewedTimeView)) ?? nil) ?? defaults.lastViewedTimeView
-        lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
-        localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
-        taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours
+        opBaseURL = c.lenient(.opBaseURL, or: defaults.opBaseURL)
+        certaintyAutoPushThreshold = c.lenient(.certaintyAutoPushThreshold, or: defaults.certaintyAutoPushThreshold)
+        colourLow = c.lenient(.colourLow, or: defaults.colourLow)
+        colourHigh = c.lenient(.colourHigh, or: defaults.colourHigh)
+        showPercent = c.lenient(.showPercent, or: defaults.showPercent)
+        defaultActivityID = ((try? c.decodeIfPresent(Int.self, forKey: .defaultActivityID)) ?? nil) ?? defaults.defaultActivityID
+        activityOverrides = c.lenient(.activityOverrides, or: defaults.activityOverrides)
+        autoComment = c.lenient(.autoComment, or: defaults.autoComment)
+        commentToTrackedTime = c.lenient(.commentToTrackedTime, or: defaults.commentToTrackedTime)
+        commentToTask = c.lenient(.commentToTask, or: defaults.commentToTask)
+        trackLeisureLocally = c.lenient(.trackLeisureLocally, or: defaults.trackLeisureLocally)
+        statusOrder = c.lenient(.statusOrder, or: defaults.statusOrder)
+        primeDwellSeconds = c.lenient(.primeDwellSeconds, or: defaults.primeDwellSeconds)
+        minSegmentSeconds = c.lenient(.minSegmentSeconds, or: defaults.minSegmentSeconds)
+        switchGraceSeconds = c.lenient(.switchGraceSeconds, or: defaults.switchGraceSeconds)
+        sleepGraceSeconds = c.lenient(.sleepGraceSeconds, or: defaults.sleepGraceSeconds)
+        idleBackfillWindowSeconds = c.lenient(.idleBackfillWindowSeconds, or: defaults.idleBackfillWindowSeconds)
+        menuTaskChars = c.lenient(.menuTaskChars, or: defaults.menuTaskChars)
+        systemNotifications = c.lenient(.systemNotifications, or: defaults.systemNotifications)
+        popoverDefaultsToChangeMode = c.lenient(.popoverDefaultsToChangeMode, or: defaults.popoverDefaultsToChangeMode)
+        timeViewOpenMode = c.lenient(.timeViewOpenMode, or: defaults.timeViewOpenMode)
+        lastViewedTimeView = c.lenient(.lastViewedTimeView, or: defaults.lastViewedTimeView)
+        lockOnLeave = c.lenient(.lockOnLeave, or: defaults.lockOnLeave)
+        localTasks = c.lenient(.localTasks, or: defaults.localTasks)
+        taskColours = c.lenient(.taskColours, or: defaults.taskColours)
         // Decode the ladder as raw strings and map known levels, so a renamed /
         // unknown level can never throw (which would wipe the whole file). Only a
         // COMPLETE, valid order is honoured; anything else → the default order.
         let rawOrder = ((try? c.decodeIfPresent([String].self, forKey: .emailMatchOrder)) ?? nil) ?? []
         let mapped = rawOrder.compactMap { EmailMatchLevel(rawValue: $0) }
         emailMatchOrder = Set(mapped) == Set(EmailMatchLevel.allCases) ? mapped : defaults.emailMatchOrder
+    }
+}
+
+private extension KeyedDecodingContainer {
+    /// Decode `key`, returning `fallback` for an absent OR malformed/renamed value.
+    /// Swallows the throw so one corrupt field can't fail the whole container.
+    func lenient<T: Decodable>(_ key: Key, or fallback: T) -> T {
+        ((try? decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback
     }
 }
 

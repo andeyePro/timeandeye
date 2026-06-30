@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-30
+
+- [x] **Settings file is now wipe-proof — the OP URL survives any rebuild** —
+  root-cause fix for the recurring "rebuild deleted my OP URL" bug. The settings
+  decoder fell over whenever ONE field couldn't be read (twice now: a renamed enum
+  rawValue), because `try decodeIfPresent(...) ?? default` rethrows a *throw* (it
+  only catches nil); the whole file then failed to load, collapsed to an
+  empty-URL default, and the next save persisted that over the real file. Now
+  EVERY field decodes through a `lenient` helper that swallows its own throw and
+  falls back to that field's default — so a renamed/removed/type-changed field can
+  never take the file (or the OP URL) down again. Regression test covers a renamed
+  enum, a wrong-typed field, and a good field together. NB you'll need to re-enter
+  the URL once (the already-damaged file has it blank); after that it persists.
+
 ## 2026-06-29
 
 - [x] **Email→task precedence ladder (user-editable backbone)** — the shared
