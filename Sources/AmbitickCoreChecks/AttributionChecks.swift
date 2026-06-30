@@ -269,6 +269,50 @@ func attributorChecks(_ c: Checks) {
         try expectEq(r.best?.target, .task(.op(2)))
         try expectClose(r.certainty, 1.0)
     }
+
+    func mail(_ correspondents: [String], subject: String) -> ActivitySignal {
+        ActivitySignal(app: "Google Chrome", windowTitle: subject,
+                       tabURL: "https://mail.google.com/mail/u/0/#inbox/x",
+                       timestamp: now, correspondents: correspondents, emailSubject: subject)
+    }
+
+    c.check("email rule: learned from a correction, then auto-attributes by domain") {
+        let a = Attributor(instanceHost: host)
+        // External correspondents only (the capture removes self upstream).
+        let s = mail(["r.naismith@harborlane.example", "t.calder@harborlane.example"],
+                     subject: "RE: Insurance Renewals")
+        try expect(a.emailRuleMatch(s) == nil, "nothing learned yet")
+        a.confirm(s, task: .op(1))                       // user files it under Insurance
+        // Org domain → another person at the same company auto-attributes.
+        let s2 = mail(["a.broker@harborlane.example"], subject: "New quote")
+        try expectEq(a.emailRuleMatch(s2)?.target, .op(1))
+        let r = a.attribute(s2, tasks: tasks, now: now)
+        try expectEq(r.best?.target, .task(.op(1)))
+        try expectClose(r.certainty, Attributor.inferredCeiling)
+    }
+
+    c.check("email rule: shared webmail learns the person, not the whole domain") {
+        let a = Attributor(instanceHost: host)
+        a.confirm(mail(["alice@gmail.com"], subject: "hi"), task: .op(2))
+        try expect(a.emailRuleMatch(mail(["bob@gmail.com"], subject: "x")) == nil,
+                   "a different gmail person must NOT inherit it")
+        try expectEq(a.emailRuleMatch(mail(["alice@gmail.com"], subject: "y"))?.target, .op(2))
+    }
+
+    c.check("non-email signals carry no context and never match an email rule") {
+        let a = Attributor(instanceHost: host)
+        a.confirm(mail(["x@org.com"], subject: "s"), task: .op(1))
+        try expect(EmailContext.from(ActivitySignal(app: "Ghostty", timestamp: now)) == nil)
+        try expect(a.emailRuleMatch(ActivitySignal(app: "Ghostty", timestamp: now)) == nil)
+    }
+
+    c.check("ActivitySignal decodes pre-email-fields JSON without the new keys") {
+        let json = #"{"app":"Ghostty","timestamp":12345}"#
+        let s = try JSONDecoder().decode(ActivitySignal.self, from: Data(json.utf8))
+        try expectEq(s.app, "Ghostty")
+        try expect(s.correspondents == nil)
+        try expect(s.emailSubject == nil)
+    }
 }
 
 // MARK: - MinuteResolver (plan task 7)

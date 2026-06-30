@@ -50,6 +50,17 @@ public struct EmailContext: Equatable, Sendable {
         }
         return out
     }
+
+    /// Build a context from a focus signal, or nil if it carries no email info
+    /// (the common case — only email surfaces have correspondents/subject). The
+    /// system is detected from the tab URL host.
+    public static func from(_ signal: ActivitySignal) -> EmailContext? {
+        let correspondents = signal.correspondents ?? []
+        guard !correspondents.isEmpty || (signal.emailSubject?.isEmpty == false) else { return nil }
+        let host = signal.tabURL.flatMap { URL(string: $0)?.host }
+        return EmailContext(system: EmailSystem.detect(urlHost: host),
+                            correspondents: correspondents, subject: signal.emailSubject)
+    }
 }
 
 /// One email→task rule, learned (from a correction) or pinned (explicit). `value`

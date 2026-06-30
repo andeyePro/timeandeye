@@ -2,6 +2,20 @@
 
 ## 2026-06-30
 
+- [x] **Email auto-learner engine (Core, wired, zero live change yet)** — the
+  correction→rule learner that drives email attribution. `ActivitySignal` now
+  carries optional `correspondents` + `emailSubject` (optional → old journalled
+  signals still decode, round-trip-tested). `Attributor` gained learned
+  `emailRules` + the `emailMatchOrder`: a confirmation on an email surface learns
+  a rule conservatively (an org domain generalises to the whole company; a shared
+  webmail address — gmail/outlook/icloud/… — stays per-person), and a matching
+  rule then auto-attributes via a new `.emailRule` source (caps 0.95, below a pin
+  / OP-URL), resolved most-specific-first through the user's ladder. Rules persist
+  in `emailrules.json`; the why-panel explains the new source. Because the Mac
+  capture doesn't populate `correspondents` yet, production behaviour is
+  unchanged — but the whole engine is unit-tested (learn-by-domain, shared-webmail
+  per-person, non-email signals ignored). 191 checks pass. Next: the perf-gated
+  Mac capture that fills `correspondents` and flips it live.
 - [x] **Settings file is now wipe-proof — the OP URL survives any rebuild** —
   root-cause fix for the recurring "rebuild deleted my OP URL" bug. The settings
   decoder fell over whenever ONE field couldn't be read (twice now: a renamed enum

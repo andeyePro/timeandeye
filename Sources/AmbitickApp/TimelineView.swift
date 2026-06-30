@@ -1236,6 +1236,7 @@ struct TimelineView: View {
         case .pin:           return "pinned (100%)"
         case .opTaskURL:     return "OpenProject task URL in the tab"
         case .opTaskTitle:   return "OpenProject id in the title"
+        case .emailRule:     return "a learned email correspondent → task rule"
         case .pendingPrime:  return "a just-opened OP task primed it"
         case .primedSurface: return "remembered from a past correction"
         case .ranked:        return "learned associations + status/recency priors"

@@ -27,6 +27,7 @@ public struct AttributionExplanation: Equatable, Sendable {
         case pin                 // an explicit user pin (100%)
         case opTaskURL           // a work-package URL in the tab
         case opTaskTitle         // a work-package id in the window title / app
+        case emailRule           // a learned email correspondent/domain/subject → task rule
         case pendingPrime        // a just-opened OP task priming the next surface
         case primedSurface       // a remembered surface→task (a past correction)
         case ranked              // learned associations + status/recency priors
@@ -81,6 +82,13 @@ public final class Attributor {
     /// match, the most specific wins (manual `priority` first, then leaf count,
     /// then most-recently-added). See `Pin` / `PinRule`.
     public var pins: [Pin] = []
+    /// Learned email correspondent→task rules (the auto-learner's deterministic
+    /// ladder). Populated by corrections on email surfaces; matched most-specific
+    /// first per `emailMatchOrder`. Caps at 0.95 like any inferred source.
+    public var emailRules: [EmailRule] = []
+    /// The user-editable specificity order the email ladder resolves through
+    /// (mirrors the setting; defaults general→specific).
+    public var emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder
 
     public init(instanceHost: String, learning: LearningStore = LearningStore(),
                 ranker: TaskRanker = TaskRanker()) {
@@ -117,6 +125,17 @@ public final class Attributor {
                 return Attribution(best: c, ranked: [c])
             }
         }
+        // A learned email rule (correspondent / domain / subject → task) outranks
+        // the soft primes and the ranker — you've effectively taught "mail from X
+        // is task Y". Still an inferred source, so it caps at 0.95, below a pin /
+        // OP-URL.
+        if let rule = emailRuleMatch(signal) {
+            var ranked = scored(signal, tasks: tasks, now: now)
+            ranked.removeAll { $0.target == .task(rule.target) }
+            let c = Candidate(target: .task(rule.target), score: Self.inferredCeiling)
+            ranked.insert(c, at: 0)
+            return Attribution(best: c, ranked: ranked)
+        }
         let surface = Surface(signal: signal)
         var ranked = scored(signal, tasks: tasks, now: now)
         if let pending = pendingPrime, pending.surface == surface {
@@ -147,9 +166,41 @@ public final class Attributor {
         }
     }
 
+    /// The learned email rule covering this signal, if any (nil for non-email
+    /// surfaces or when no rule matches).
+    public func emailRuleMatch(_ signal: ActivitySignal) -> EmailRule? {
+        guard !emailRules.isEmpty, let ctx = EmailContext.from(signal) else { return nil }
+        return EmailMatcher.match(ctx, rules: emailRules, order: emailMatchOrder)
+    }
+
+    /// Shared webmail domains carry no task meaning (everyone is @gmail.com), so a
+    /// correction there learns the specific CORRESPONDENT, not the domain.
+    static let sharedWebmailDomains: Set<String> = [
+        "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+        "yahoo.com", "ymail.com", "icloud.com", "me.com", "aol.com", "proton.me",
+        "protonmail.com", "gmx.com", "mail.com",
+    ]
+
+    /// Conservatively learn an email rule from a correction: an org domain
+    /// generalises to the whole company; a shared-webmail correspondent stays
+    /// per-person. Replaces any existing rule with the same level+value.
+    public func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef) {
+        guard let ctx = EmailContext.from(signal), let cp = ctx.correspondents.first else { return }
+        let level: EmailMatchLevel
+        let value: String
+        if let domain = EmailSignal.domain(of: cp), !Self.sharedWebmailDomains.contains(domain) {
+            level = .correspondentDomain; value = domain
+        } else {
+            level = .correspondent; value = cp
+        }
+        emailRules.removeAll { $0.level == level && $0.value.caseInsensitiveCompare(value) == .orderedSame && !$0.pinned }
+        emailRules.append(EmailRule(level: level, value: value, target: task))
+    }
+
     /// Explicit user confirmation (popover click + return, or any direct pick).
     public func confirm(_ signal: ActivitySignal, task: TaskRef) {
         learnSurface(signal, to: task, weight: 2)
+        learnEmailRule(signal, to: task)
     }
 
     /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
@@ -166,6 +217,7 @@ public final class Attributor {
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
             primedSurfaces[surface] = t
+            learnEmailRule(signal, to: t)
         } else {
             primedSurfaces[surface] = nil
         }
@@ -255,6 +307,10 @@ public final class Attributor {
                 return .init(source: .opTaskTitle, chosen: .task(.op(id)), chosenScore: Self.inferredCeiling,
                              lines: [], features: feats)
             }
+        }
+        if let rule = emailRuleMatch(signal) {
+            return .init(source: .emailRule, chosen: .task(rule.target), chosenScore: Self.inferredCeiling,
+                         lines: scoredComponents(signal, tasks: tasks, now: now), features: feats)
         }
         let lines = scoredComponents(signal, tasks: tasks, now: now)
         let surface = Surface(signal: signal)

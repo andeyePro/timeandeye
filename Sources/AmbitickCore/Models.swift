@@ -47,13 +47,22 @@ public struct ActivitySignal: Equatable, Codable, Sendable {
     public var windowTitle: String?
     public var tabURL: String?
     public var timestamp: Date
+    /// Email correspondents (sender + recipients minus self) when the surface is a
+    /// detected email message — the Mac capture fills these via the page recipe.
+    /// Optional so old journalled signals (which lack the keys) still decode.
+    public var correspondents: [String]?
+    /// The email subject, when known.
+    public var emailSubject: String?
 
     public init(app: String, windowTitle: String? = nil, tabURL: String? = nil,
-                timestamp: Date) {
+                timestamp: Date, correspondents: [String]? = nil,
+                emailSubject: String? = nil) {
         self.app = app
         self.windowTitle = windowTitle
         self.tabURL = tabURL
         self.timestamp = timestamp
+        self.correspondents = correspondents
+        self.emailSubject = emailSubject
     }
 }
 

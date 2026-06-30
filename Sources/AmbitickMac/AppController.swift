@@ -137,6 +137,7 @@ public final class AppController: ObservableObject {
         didSet {
             try? settingsStore.save(settings)
             Notifier.enabled = settings.systemNotifications
+            attributor.emailMatchOrder = settings.emailMatchOrder
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
             // Local-task edits (rename / project / leisure / add / remove) flow
             // straight into the live cache so every list, the timeline and the
@@ -153,6 +154,7 @@ public final class AppController: ObservableObject {
     private let learningStore: JSONFileStore<LearningStore>
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
     private let pinsStore: JSONFileStore<[Pin]>
+    private let emailRulesStore: JSONFileStore<[EmailRule]>
     private var client: OPClient?
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
@@ -193,6 +195,7 @@ public final class AppController: ObservableObject {
         learningStore = JSONFileStore<LearningStore>(url: dir.appendingPathComponent("learning.json"))
         primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
         pinsStore = JSONFileStore<[Pin]>(url: dir.appendingPathComponent("pins.json"))
+        emailRulesStore = JSONFileStore<[EmailRule]>(url: dir.appendingPathComponent("emailrules.json"))
         let loadedSettings = (try? settingsStore.load().flatMap { $0 })
             ?? AmbitickSettings(opBaseURL: "")
         settings = loadedSettings
@@ -206,6 +209,10 @@ public final class AppController: ObservableObject {
                                 ranker: TaskRanker(config: RankingConfig(statusOrder: loadedSettings.statusOrder)))
         if let primed = (try? primedStore.load()).flatMap({ $0 }) {
             attributor.primedSurfaces = primed
+        }
+        attributor.emailMatchOrder = loadedSettings.emailMatchOrder
+        if let rules = (try? emailRulesStore.load()).flatMap({ $0 }) {
+            attributor.emailRules = rules
         }
         if let pins = (try? pinsStore.load()).flatMap({ $0 }) {
             attributor.pins = pins
@@ -738,6 +745,7 @@ public final class AppController: ObservableObject {
         try? learningStore.save(attributor.learning)
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
+        try? emailRulesStore.save(attributor.emailRules)
     }
 
     /// The full broad→narrow identity of the current focus surface plus the
