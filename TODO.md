@@ -170,6 +170,15 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
     for everyone without an app release (recipes are data, not code → low risk,
     validation guards). Monitoring for a "new/unknown client" is then free: it's
     the same detect step → gentle "want me to learn your mail here?" nudge.
+- [ ] Email auto-learner — Core engine + Mac capture SHIPPED 2026-06-30 (needs
+  on-device validation). Correcting an email's task learns an EmailRule (org
+  domain → company, shared webmail → person); matching mail auto-attributes via
+  the `.emailRule` source through the user's ladder. REMAINING for the full
+  feature: explicit pin via `from`/`sender`/`subject` + `any` fields in the
+  expression grammar; Settings UI to reorder the ladder; more provider selectors
+  (OWA/Proton/Yahoo/Fastmail) + native clients; validate-on-use / self-heal +
+  recipe pack with background updates; multi-message-thread sender choice;
+  derive own-domains from settings (beyond the "me" heuristic).
 - [ ] (b, 2026-06-29) Gmail sender extraction — CHANNEL + RECIPE FOUND.
   Chrome's renderer AX tree stays off (AXManualAccessibility didn't wake it), so
   the channel is page JavaScript over Apple Events (needs Chrome ▸ View ▸
