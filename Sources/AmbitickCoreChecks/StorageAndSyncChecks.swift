@@ -494,6 +494,11 @@ func aiAssistChecks(_ c: Checks) {
             ownDomains: ["andeye.com"])
         try expectEq(mine.map(\.email), ["r.naismith@harborlane.example"])
         try expectEq(EmailSignal.domain(of: "r.naismith@harborlane.example"), "harborlane.example")
+        // Subject from a Gmail tab title (strips the " - account - Mail" tail).
+        try expectEq(EmailSignal.subject(fromTitle:
+            "RE: Insurance Renewals - martin@andeye.com - andeye Mail"), "RE: Insurance Renewals")
+        try expectNil(EmailSignal.subject(fromTitle: nil))
+        try expectEq(EmailSignal.subject(fromTitle: "No dashes here"), "No dashes here")
     }
 
     c.check("email match ladder: most-specific level wins, user order re-tunes") {

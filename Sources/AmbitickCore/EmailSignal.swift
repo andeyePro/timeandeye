@@ -38,6 +38,14 @@ public enum EmailSignal {
         return out
     }
 
+    /// Best-effort subject from a webmail browser/tab title, which is typically
+    /// "<subject> - <account> - <Provider> Mail" — take the part before " - ".
+    public static func subject(fromTitle title: String?) -> String? {
+        guard let t = title?.trimmingCharacters(in: .whitespaces), !t.isEmpty else { return nil }
+        if let r = t.range(of: " - ") { return String(t[..<r.lowerBound]) }
+        return t
+    }
+
     /// The domain part of an email address, lowercased (nil if malformed).
     public static func domain(of email: String) -> String? {
         guard let at = email.firstIndex(of: "@") else { return nil }

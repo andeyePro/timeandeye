@@ -2,6 +2,16 @@
 
 ## 2026-06-30
 
+- [x] **Email auto-learner goes live: capture populates correspondents** — the
+  sampler now, on a surface change to a recognised webmail MESSAGE, runs the page
+  recipe and attaches the external correspondents (sender+recipients minus self,
+  via the "me" heuristic) and subject to the `ActivitySignal`. It fires only on an
+  email-URL surface change — non-email focuses pay just a host check, so no
+  hot-loop cost (the per-poll URL read was already there). With the engine below,
+  this makes it end-to-end: correct an email's task once → mail from that
+  org-domain (or that person, for shared webmail) auto-attributes. `EmailSignal.
+  subject(fromTitle:)` parses the subject off the tab title (unit-checked). NEEDS
+  on-device validation (perf on thread-switch + that correspondents populate).
 - [x] **Email auto-learner engine (Core, wired, zero live change yet)** — the
   correction→rule learner that drives email attribution. `ActivitySignal` now
   carries optional `correspondents` + `emailSubject` (optional → old journalled

@@ -101,9 +101,27 @@ public final class SensorHub {
         let key = "\(appName)|\(title ?? "")|\(url ?? "")"
         if key != lastSurfaceKey {
             lastSurfaceKey = key
+            let (correspondents, subject) = emailContext(forURL: url, title: title)
             onEvent(.focus(ActivitySignal(app: appName, windowTitle: title,
-                                          tabURL: url, timestamp: now)))
+                                          tabURL: url, timestamp: now,
+                                          correspondents: correspondents, emailSubject: subject)))
         }
+    }
+
+    /// When the focused surface is a recognised webmail MESSAGE, read the external
+    /// correspondents (sender + recipients minus self) and the subject via the
+    /// page recipe. Runs ONLY on a surface change to an email URL — rarer than the
+    /// per-poll URL read already on this path — so it adds no hot-loop cost. Empty
+    /// (→ nil) for the inbox list, an unsupported provider, or if page JS is off.
+    private func emailContext(forURL url: String?, title: String?)
+        -> (correspondents: [String]?, subject: String?) {
+        guard let url, EmailSystem.detect(urlHost: URL(string: url)?.host).hasRecipe,
+              let parties = EmailSignalProbe.frontBrowserParties(), parties.error == nil
+        else { return (nil, nil) }
+        let others = EmailSignal.counterparties(senders: parties.senders,
+                                                recipients: parties.recipients)
+        guard !others.isEmpty else { return (nil, nil) }
+        return (others.map { $0.email }, EmailSignal.subject(fromTitle: title))
     }
 
     private func focusedWindowTitle(pid: pid_t) -> String? {
