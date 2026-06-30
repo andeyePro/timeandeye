@@ -556,6 +556,23 @@ func settingsChecks(_ c: Checks) {
         try expectEq(try store.load()?.opBaseURL, "https://op3.example.com")
     }
 
+    c.check("unknown/renamed enum values must NOT wipe the settings file (keeps the OP URL)") {
+        // Regression: a settings.json written by an older build can carry enum
+        // rawValues that a later build renamed (here emailMatchOrder's old
+        // "senderDomain"/"sender", and a bogus timeViewOpenMode). Decoding must
+        // survive, preserve opBaseURL, and fall back to defaults for the bad enums
+        // — NOT throw and lose the whole file (which logs the user out of OP).
+        let json = """
+        {"opBaseURL":"https://op.example.com",
+         "emailMatchOrder":["emailSystem","senderDomain","sender","subject"],
+         "timeViewOpenMode":"someFutureMode"}
+        """
+        let s = try JSONDecoder().decode(AmbitickSettings.self, from: Data(json.utf8))
+        try expectEq(s.opBaseURL, "https://op.example.com", "OP URL survives the bad enums")
+        try expectEq(s.emailMatchOrder, EmailMatchLevel.defaultOrder, "bad ladder → default order")
+        try expectEq(s.timeViewOpenMode, AmbitickSettings(opBaseURL: "").timeViewOpenMode)
+    }
+
     c.check("defaults") {
         let s = AmbitickSettings(opBaseURL: "https://op.example.com")
         try expectEq(s.certaintyAutoPushThreshold, 0.8)

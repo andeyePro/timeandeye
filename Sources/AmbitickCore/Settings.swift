@@ -171,14 +171,21 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         menuTaskChars = try c.decodeIfPresent(Int.self, forKey: .menuTaskChars) ?? defaults.menuTaskChars
         systemNotifications = try c.decodeIfPresent(Bool.self, forKey: .systemNotifications) ?? defaults.systemNotifications
         popoverDefaultsToChangeMode = try c.decodeIfPresent(Bool.self, forKey: .popoverDefaultsToChangeMode) ?? defaults.popoverDefaultsToChangeMode
-        timeViewOpenMode = try c.decodeIfPresent(TimeViewOpenMode.self, forKey: .timeViewOpenMode) ?? defaults.timeViewOpenMode
-        lastViewedTimeView = try c.decodeIfPresent(TimeView.self, forKey: .lastViewedTimeView) ?? defaults.lastViewedTimeView
+        // Enum-typed fields decode LENIENTLY: an unknown/renamed rawValue must
+        // drop to the default, never throw and take the whole settings file (and
+        // with it the OP URL) down. `try` only short-circuits a thrown decode;
+        // `??` alone catches nil but NOT a throw.
+        timeViewOpenMode = ((try? c.decodeIfPresent(TimeViewOpenMode.self, forKey: .timeViewOpenMode)) ?? nil) ?? defaults.timeViewOpenMode
+        lastViewedTimeView = ((try? c.decodeIfPresent(TimeView.self, forKey: .lastViewedTimeView)) ?? nil) ?? defaults.lastViewedTimeView
         lockOnLeave = try c.decodeIfPresent(Bool.self, forKey: .lockOnLeave) ?? defaults.lockOnLeave
         localTasks = try c.decodeIfPresent([LocalTaskDef].self, forKey: .localTasks) ?? defaults.localTasks
         taskColours = try c.decodeIfPresent([String: String].self, forKey: .taskColours) ?? defaults.taskColours
-        // Tolerate an old/empty ladder; fall back to the default order.
-        let order = try c.decodeIfPresent([EmailMatchLevel].self, forKey: .emailMatchOrder) ?? defaults.emailMatchOrder
-        emailMatchOrder = order.isEmpty ? defaults.emailMatchOrder : order
+        // Decode the ladder as raw strings and map known levels, so a renamed /
+        // unknown level can never throw (which would wipe the whole file). Only a
+        // COMPLETE, valid order is honoured; anything else → the default order.
+        let rawOrder = ((try? c.decodeIfPresent([String].self, forKey: .emailMatchOrder)) ?? nil) ?? []
+        let mapped = rawOrder.compactMap { EmailMatchLevel(rawValue: $0) }
+        emailMatchOrder = Set(mapped) == Set(EmailMatchLevel.allCases) ? mapped : defaults.emailMatchOrder
     }
 }
 
