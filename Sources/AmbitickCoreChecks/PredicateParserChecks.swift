@@ -125,4 +125,35 @@ func predicateParserChecks(_ c: Checks) {
             throw CheckFailure(description: "an unknown verb after 'does' must not parse as a leaf")
         }
     }
+
+    c.check("email fields: from/sender synonyms, subject, any") {
+        try expectEq(try parsed("from contains \"harborlane.example\""),
+                     .leaf(field: .sender, op: .contains, value: "harborlane.example"))
+        try expectEq(try parsed("sender contains \"harborlane.example\""),
+                     .leaf(field: .sender, op: .contains, value: "harborlane.example"))
+        try expectEq(try parsed("subject contains \"renewal\""),
+                     .leaf(field: .subject, op: .contains, value: "renewal"))
+        try expectEq(try parsed("any contains \"foo\""),
+                     .leaf(field: .any, op: .contains, value: "foo"))
+        let email = ActivitySignal(
+            app: "Mail", windowTitle: "Re: renewal",
+            tabURL: nil, timestamp: now,
+            correspondents: ["jane@harborlane.example"],
+            emailSubject: "policy renewal")
+        try expect(try parsed("from contains \"harborlane.example\"").evaluate(email))
+        try expect(try parsed("subject contains \"renewal\"").evaluate(email))
+    }
+
+    c.check("bare text now also spans email correspondents + subject") {
+        let email = ActivitySignal(
+            app: "Mail", windowTitle: "Re: renewal",
+            tabURL: nil, timestamp: now,
+            correspondents: ["jane@harborlane.example"],
+            emailSubject: "policy renewal")
+        let p = try parsed("harborlane")
+        try expectEq(p, PredicateParser.anyFieldContains("harborlane"))
+        try expectEq(p, .leaf(field: .any, op: .contains, value: "harborlane"))
+        try expect(p.evaluate(email), "bare keyword now hits a correspondent")
+        try expect(try parsed("policy").evaluate(email), "bare keyword hits the subject too")
+    }
 }

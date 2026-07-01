@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-01
+
+- [x] **Batch (drafted by subagents, integrated serially): pin grammar, smarter
+  search, ladder-reorder UI.** (1) Expression pins gained `from`/`sender` (match
+  the email correspondents), `subject`, and `any` fields; `PinField` is now
+  multi-valued (a leaf matches if ANY value matches) and bare keyword text spans
+  correspondents + subject too — so `from contains "harborlane.example"` pins all
+  mail to/from a company. (2) Task filter is learning-backed: `LearningStore.
+  learnedValues(for:)` feeds `FuzzyMatch.filter`, so typing "voting" finds the
+  task you always work in a voting window even when its OP subject never says the
+  word (gated at substring-or-better so weak subsequence noise can't leak in).
+  (3) A Settings "Email → task matching" section reorders the specificity ladder
+  via chevrons. Also confirmed the Review window already creates named local
+  tasks. 199 checks pass; the two Core patches are fully unit-tested, the two UI
+  bits need an on-device look.
+
 ## 2026-06-30
 
 - [!] **Email capture REVERTED same day — it froze tracking.** The capture below

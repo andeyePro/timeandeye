@@ -309,7 +309,7 @@ struct PopoverView: View {
     private var modeHint: String {
         switch pinMode {
         case .components: return "← wider · → narrower · click a part"
-        case .expression: return "fields: app·title·url   ops: is·contains·starts with·matches   logic: and·or·not·( )"
+        case .expression: return "fields: app·title·url·from·subject·any   ops: is·contains·starts with·matches   logic: and·or·not·( )"
         case .ai: return "copy the prompt → paste the AI's reply → ↵ applies it as an editable rule"
         }
     }

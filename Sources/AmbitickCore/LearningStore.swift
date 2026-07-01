@@ -89,4 +89,19 @@ public struct LearningStore: Codable, Equatable, Sendable {
         let total = max(totals[target] ?? 0, 0)
         return total > 0 ? c / total : 0
     }
+
+    /// The learned feature *values* (of the given kinds) positively associated
+    /// with `target` — the window-title tokens / hosts / apps you've confirmed
+    /// while on this task. Powers learning-backed task search: a task you always
+    /// do in a "voting" window has learned titleToken "voting", so typing
+    /// "voting" can find it even when its OP subject never says the word. Only
+    /// strictly-positive associations count, so a value corrected away drops out.
+    public func learnedValues(for target: Target,
+                              kinds: Set<Feature.Kind> = [.titleToken, .urlHost, .app]) -> [String] {
+        var out: Set<String> = []
+        for (feature, targets) in counts where kinds.contains(feature.kind) {
+            if (targets[target] ?? 0) > 0 { out.insert(feature.value) }
+        }
+        return out.sorted()
+    }
 }

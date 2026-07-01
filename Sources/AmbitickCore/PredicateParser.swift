@@ -45,11 +45,11 @@ public enum PredicateParser {
         }
     }
 
-    /// "Any field contains" sugar, as an explicit OR over the observable fields.
+    /// "Any field contains" sugar: a single `any` leaf, which spans app, title,
+    /// url, subject and every email correspondent (see `PinField.any`). Renders
+    /// back to `any contains "…"`, so bare text now round-trips cleanly.
     public static func anyFieldContains(_ value: String) -> Predicate {
-        .or([.leaf(field: .app, op: .contains, value: value),
-             .leaf(field: .title, op: .contains, value: value),
-             .leaf(field: .url, op: .contains, value: value)])
+        .leaf(field: .any, op: .contains, value: value)
     }
 
     // MARK: Render
@@ -276,6 +276,9 @@ private extension PinField {
         case "app": self = .app
         case "title": self = .title
         case "url": self = .url
+        case "sender", "from": self = .sender
+        case "subject": self = .subject
+        case "any": self = .any
         default: return nil
         }
     }

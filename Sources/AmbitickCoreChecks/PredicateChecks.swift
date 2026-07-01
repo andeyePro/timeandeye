@@ -58,4 +58,27 @@ func predicateChecks(_ c: Checks) {
         try expectEq(back, rule)
         try expect(back.matches(sig))
     }
+
+    c.check("email fields: sender/subject/any extraction and matching") {
+        let email = ActivitySignal(
+            app: "Mail", windowTitle: "Re: renewal — Inbox",
+            tabURL: nil, timestamp: now,
+            correspondents: ["Jane Doe <jane@harborlane.example>", "martin@example.com"],
+            emailSubject: "Re: policy renewal")
+        try expect(Predicate.leaf(field: .sender, op: .contains, value: "harborlane.example").evaluate(email))
+        try expect(!Predicate.leaf(field: .sender, op: .contains, value: "example.com").evaluate(email))
+        try expect(Predicate.leaf(field: .subject, op: .contains, value: "renewal").evaluate(email))
+        try expect(Predicate.leaf(field: .any, op: .contains, value: "harborlane").evaluate(email), "any reaches a correspondent")
+        try expect(Predicate.leaf(field: .any, op: .contains, value: "renewal").evaluate(email), "any reaches the subject")
+        try expect(Predicate.leaf(field: .any, op: .contains, value: "Mail").evaluate(email), "any still reaches app")
+        try expectEq(PinField.subject.value(of: email), "Re: policy renewal")
+        try expectEq(PinField.sender.values(of: email).count, 2)
+    }
+
+    c.check("nil correspondents/subject don't match and don't crash") {
+        try expect(!Predicate.leaf(field: .sender, op: .contains, value: "anyone").evaluate(sig), "nil correspondents → no match")
+        try expect(!Predicate.leaf(field: .subject, op: .contains, value: "anything").evaluate(sig), "nil subject → no match")
+        try expectEq(PinField.sender.values(of: sig), [String](), "nil correspondents → empty value list")
+        try expect(Predicate.leaf(field: .any, op: .contains, value: "Ambitick").evaluate(sig), "any spans title even with no email fields")
+    }
 }

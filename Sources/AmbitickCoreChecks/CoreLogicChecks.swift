@@ -87,6 +87,24 @@ func learningStoreChecks(_ c: Checks) {
         try expectEq(back.scores(for: ghostty, among: [taskA, taskB]),
                      store.scores(for: ghostty, among: [taskA, taskB]))
     }
+
+    c.check("learnedValues returns positively-associated values, excludes hour") {
+        var store = LearningStore()
+        store.learn(ghostty, target: taskA)   // app=ghostty, titleToken=ambitick, hourOfDay=N
+        let vals = store.learnedValues(for: taskA)
+        try expect(vals.contains("ambitick"), "learned titleToken surfaced")
+        try expect(vals.contains("ghostty"), "learned app surfaced")
+        try expect(!vals.contains(where: { Int($0) != nil }), "hourOfDay value not returned")
+        try expect(store.learnedValues(for: taskB).isEmpty, "unrelated target has none")
+    }
+
+    c.check("learnedValues drops a value corrected away (net weight <= 0)") {
+        var store = LearningStore()
+        store.learn(steam, target: taskA)              // titleToken=library on A
+        store.correct(steam, from: taskA, to: taskB)   // -1 from A, +2 to B
+        try expect(!store.learnedValues(for: taskA).contains("library"), "corrected-away value gone")
+        try expect(store.learnedValues(for: taskB).contains("library"), "now associated with B")
+    }
 }
 
 // MARK: - FuzzyMatch
@@ -114,6 +132,27 @@ func fuzzyMatchChecks(_ c: Checks) {
     c.check("empty query passes everything through unchanged") {
         let tasks = [task("a"), task("b")]
         try expectEq(FuzzyMatch.filter(tasks, query: "  ").map(\.subject), ["a", "b"])
+    }
+
+    c.check("learned association finds a task with zero subject overlap") {
+        let governance = WorkTask(ref: .op(7), subject: "Q3 governance", status: "Open")
+        let timesheets = WorkTask(ref: .op(8), subject: "Timesheets", status: "Open")
+        let learned: (TaskRef) -> [String] = { $0 == .op(7) ? ["voting", "client-work"] : [] }
+        let hits = FuzzyMatch.filter([governance, timesheets], query: "voting",
+                                     learnedValues: learned)
+        try expect(hits.contains { $0.subject == "Q3 governance" },
+                   "learned titleToken 'voting' surfaces the task")
+        try expect(!hits.contains { $0.subject == "Timesheets" },
+                   "unrelated task with no learned match is excluded")
+    }
+
+    c.check("a weak subsequence-only learned hit does not admit an off-topic task") {
+        let governance = WorkTask(ref: .op(7), subject: "Q3 governance", status: "Open")
+        // "vtng" is a subsequence of "voting" (score 1) but not a substring —
+        // too weak to pull in a task whose visible text doesn't match at all.
+        let learned: (TaskRef) -> [String] = { $0 == .op(7) ? ["voting"] : [] }
+        try expect(FuzzyMatch.filter([governance], query: "vtng",
+                                     learnedValues: learned).isEmpty)
     }
 }
 

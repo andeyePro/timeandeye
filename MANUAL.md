@@ -91,11 +91,14 @@ else. Click the pin button in the popover to open the pin editor.
   terminal window keeps matching even when the terminal prepends its mode to the
   title.
 - **Expression** (via the hamburger menu) - a typed boolean rule. Fields: `app`,
-  `title`, `url`. Operators: `is`, `contains`, `starts with`, `matches` (regex).
-  Logic: `and`, `or`, `not`, parentheses. Negation reads naturally too
-  (`app is not "Ghostty"`, `url does not contain "github"`). Bare text with no
-  field means "contains, in any field". A parse error shows in full above the
-  buttons.
+  `title`, `url`, `sender` (alias `from`), `subject`, `any`. Operators: `is`,
+  `contains`, `starts with`, `matches` (regex). Logic: `and`, `or`, `not`,
+  parentheses. Negation reads naturally too (`app is not "Ghostty"`, `url does
+  not contain "github"`). `from`/`sender` match the email correspondents and
+  `subject` the email subject (so `from contains "harborlane.example"` pins all
+  mail to/from that company); `any` — and bare text with no field — searches
+  every field including the correspondents and subject. A parse error shows in
+  full above the buttons.
 - **AI** (via the hamburger menu) - for a window whose own app/title/url don't
   obviously say which task it is. It builds a prompt from the captured fields plus
   an editable guidance box (pre-seeded to prefer a stable pattern over a volatile

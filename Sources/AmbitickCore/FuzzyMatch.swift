@@ -25,14 +25,29 @@ public enum FuzzyMatch {
         return 0
     }
 
-    /// Filter + rank tasks by subject and project.
-    public static func filter(_ tasks: [WorkTask], query: String) -> [WorkTask] {
+    /// Filter + rank tasks by subject and project, and — when `learnedValues` is
+    /// supplied — by the words the learner has associated with each task
+    /// (confirmed window-title tokens / hosts / apps). A task ranks by the best of
+    /// its subject, project, and learned-value scores, so a query that hits a
+    /// learned token surfaces the task even with zero subject overlap ("voting"
+    /// finds the "Q3 governance" task you always do in a voting window).
+    ///
+    /// Learned matches are gated at substring-or-better (score >= 2): a mere
+    /// subsequence hit on a learned token is too weak to admit a task whose
+    /// visible text doesn't match at all. `learnedValues` defaults to none, so
+    /// existing callers keep pure subject/project behaviour.
+    public static func filter(_ tasks: [WorkTask], query: String,
+                              learnedValues: (TaskRef) -> [String] = { _ in [] }) -> [WorkTask] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return tasks }
         return tasks
             .map { task -> (WorkTask, Int) in
-                let s = max(score(query, in: task.subject),
-                            score(query, in: task.project ?? ""))
-                return (task, s)
+                let textScore = max(score(query, in: task.subject),
+                                    score(query, in: task.project ?? ""))
+                let learnedScore = learnedValues(task.ref)
+                    .map { score(query, in: $0) }
+                    .filter { $0 >= 2 }
+                    .max() ?? 0
+                return (task, max(textScore, learnedScore))
             }
             .filter { $0.1 > 0 }
             .sorted { $0.1 > $1.1 }

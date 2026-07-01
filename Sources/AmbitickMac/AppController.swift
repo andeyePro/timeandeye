@@ -1210,8 +1210,14 @@ public final class AppController: ObservableObject {
     }
 
     /// Forgiving search over the full ranked task list.
+    /// Forgiving search over the full ranked task list. Also matches a task by
+    /// the words the learner has associated with it (e.g. "voting" finds the task
+    /// you always work in a "voting" window, whatever its OP subject says).
     public func searchTasks(_ query: String) -> [WorkTask] {
-        FuzzyMatch.filter(fullPickList(), query: query)
+        let learning = attributor.learning
+        return FuzzyMatch.filter(fullPickList(), query: query) {
+            learning.learnedValues(for: .task($0))
+        }
     }
 
     /// Sorted, de-duplicated window (focus-span) edges in [from, to] — the

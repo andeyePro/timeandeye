@@ -5,14 +5,31 @@ import Foundation
 /// only) the active tab URL, nothing inside the page. A `content` case will be
 /// added if/when opt-in "look inside" apps land (see TODO).
 public enum PinField: String, Codable, Sendable, CaseIterable {
-    case app, title, url
+    case app, title, url, sender, subject, any
 
-    public func value(of signal: ActivitySignal) -> String {
+    /// The string(s) this field exposes on a signal. Most fields are
+    /// single-valued; `sender` (the email correspondents) is a list, and `any`
+    /// spans every observable string — app, title, url, subject and every
+    /// correspondent. A leaf matches when ANY of these values matches. A nil
+    /// `correspondents` yields `[]` (no match, no crash); a nil `emailSubject`
+    /// yields `[""]`, which never matches a non-empty query.
+    public func values(of signal: ActivitySignal) -> [String] {
         switch self {
-        case .app:   return signal.app
-        case .title: return signal.windowTitle ?? ""
-        case .url:   return signal.tabURL ?? ""
+        case .app:     return [signal.app]
+        case .title:   return [signal.windowTitle ?? ""]
+        case .url:     return [signal.tabURL ?? ""]
+        case .sender:  return signal.correspondents ?? []
+        case .subject: return [signal.emailSubject ?? ""]
+        case .any:
+            return [signal.app, signal.windowTitle ?? "", signal.tabURL ?? "",
+                    signal.emailSubject ?? ""] + (signal.correspondents ?? [])
         }
+    }
+
+    /// A single representative value (the first), retained for callers/tests
+    /// that want one string. Multi-valued matching goes through `values(of:)`.
+    public func value(of signal: ActivitySignal) -> String {
+        values(of: signal).first ?? ""
     }
 }
 
@@ -51,7 +68,7 @@ public indirect enum Predicate: Codable, Equatable, Sendable {
 
     public func evaluate(_ signal: ActivitySignal) -> Bool {
         switch self {
-        case .leaf(let f, let op, let v): return op.test(f.value(of: signal), v)
+        case .leaf(let f, let op, let v): return f.values(of: signal).contains { op.test($0, v) }
         case .and(let ps): return ps.allSatisfy { $0.evaluate(signal) }
         case .or(let ps):  return ps.contains { $0.evaluate(signal) }
         case .not(let p):  return !p.evaluate(signal)

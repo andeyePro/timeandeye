@@ -174,9 +174,10 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   on-device validation). Correcting an email's task learns an EmailRule (org
   domain → company, shared webmail → person); matching mail auto-attributes via
   the `.emailRule` source through the user's ladder. Settings UI to reorder the
-  ladder SHIPPED 2026-07-01 (chevrons in "Email → task matching"). REMAINING for
-  the full feature: explicit pin via `from`/`sender`/`subject` + `any` fields in
-  the expression grammar; more provider selectors
+  ladder SHIPPED 2026-07-01 (chevrons in "Email → task matching"). Explicit pin
+  via `from`/`sender`/`subject` + `any` fields in the expression grammar SHIPPED
+  2026-07-01 (PinField multi-valued; bare text now spans correspondents+subject).
+  REMAINING for the full feature: more provider selectors
   (OWA/Proton/Yahoo/Fastmail) + native clients; validate-on-use / self-heal +
   recipe pack with background updates; multi-message-thread sender choice;
   derive own-domains from settings (beyond the "me" heuristic).
@@ -209,8 +210,12 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 - [ ] Standalone 'comment to task' storage: persist notes against the local
   task in SQLite as a timestamped list (the standalone half of the comment
   toggles already shipped for OP). - 2026-06-22
-- [ ] Semantic task search in filters (find "voting" Ghostty's task without
-  knowing its OP subject; substring filter is not enough) - Martin 2026-06-12
+- [x] Semantic-ish task search (DONE 2026-07-01): `searchTasks` now also matches a
+  task by the words the learner has associated with it — `LearningStore.
+  learnedValues(for:)` (titleToken/urlHost/app) fed into `FuzzyMatch.filter` via a
+  closure, gated at substring-or-better. So "voting" finds the task you always do
+  in a voting window even when its OP subject never says it. Not LLM-semantic, but
+  covers the real case. Unit-checked.
 - [x] Named local-only tasks creatable from the Review window (DONE — already
   present: the "…or new non-OpenProject task" field + "Create & assign" button →
   addLocalTask, verified 2026-07-01). Leisure flag not exposed there (minor).
