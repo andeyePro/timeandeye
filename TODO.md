@@ -256,8 +256,21 @@ and recorded rather than fixed blind:
 - [x] Named local-only tasks creatable from the Review window (DONE — already
   present: the "…or new non-OpenProject task" field + "Create & assign" button →
   addLocalTask, verified 2026-07-01). Leisure flag not exposed there (minor).
-- [ ] iOS companion app (manual 2-tap tracking; Core is ready). DECIDED
-  2026-07-01: it lives IN THIS REPO, not a new one. Rationale: the iOS app is a
+- [ ] iOS companion app (manual 2-tap tracking; Core is ready). ROLE (Martin,
+  2026-07-01): iOS senses nothing (no cross-app observation on iOS, ever — per
+  the design spec); the app is a SECOND SCREEN + REMOTE: show what's being
+  tracked now, one-tap switch/change, and one-tap manual tracking when away
+  from the Mac. Realtime channel PROPOSAL (undecided): CloudKit private DB —
+  the Mac stays the single journal owner; iOS mirrors a small live-state
+  record (current task, certainty, today's totals, ranked pick list) and
+  writes COMMAND records (switch/stop/manual slice) that the Mac folds into
+  the journal (the "entered via a secondary app" window kind already exists in
+  the model). Works away from home (the whole point), no server to run, free
+  tier ample, offline commands queue and merge on Mac wake. Alternative
+  rejected for v1: LAN Bonjour/WebSocket to the menu-bar app (instant but dead
+  off-LAN); OP-as-rendezvous (breaks standalone, and the backend shouldn't see
+  second-by-second state). DECIDED 2026-07-01: it lives IN THIS REPO, not a
+  new one. Rationale: the iOS app is a
   thin SwiftUI shell over AmbitickCore, and pre-1.0 Core API churns weekly — a
   separate repo forces either a tag-per-change SPM dance or fragile local-path
   references, and every cross-cutting change becomes two PRs. In-repo, one
