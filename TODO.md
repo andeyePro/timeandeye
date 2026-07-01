@@ -234,5 +234,14 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 - [x] True global hotkey for "I'm leaving my desk" (DONE 2026-06-28) (currently ⌘⇧L works when
   Ambitick/its popover is key; a global RegisterEventHotKey would fire from
   any app).
+- [ ] Ambiguous web pages (no clear purpose in URL/title) — POLICY (proposed
+  2026-07-01, awaiting Martin's steer sticky-vs-review). Treat the URL HOST as a
+  first-class domain signal, the web sibling of the email correspondent-domain
+  ladder: one correction generalises the whole host (github.com → task). When
+  nothing matches (no pin/OP/learned host): be STICKY — keep the current task and
+  read low-certainty (red), rather than yanking onto the top ranked guess; a
+  sustained unknown page surfaces a one-tap "this site → task" (which learns the
+  host). Truly transient pages (new tab, a search) keep the prior task / a
+  don't-switch host list. Fold "web host" in as another ladder level later.
 - [ ] Martin to verify: timeline edits write back correctly to OpenProject and
   no data (windows etc.) is lost across edit/merge/split/reassign.
