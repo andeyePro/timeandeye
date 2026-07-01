@@ -1727,6 +1727,27 @@ public final class AppController: ObservableObject {
         backend?.taskURL(id: id)
     }
 
+    /// The journal for a period rendered as CSV or Markdown — the standalone
+    /// way OUT of Ambitick (invoicing, records) with or without a backend.
+    public enum TimesheetFormat { case csv, markdown }
+    public func timesheetExport(period: TimePeriod, format: TimesheetFormat) -> String {
+        let now = Date()
+        let range = period.range(anchor: now, now: now)
+        let sessions = ((try? journal.sessions(from: range.start, to: range.end)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        let resolve: TimesheetExport.NameResolver = { [weak self] ref in
+            if let t = self?.taskCache.first(where: { $0.ref == ref }) {
+                return (t.subject, t.project)
+            }
+            if case .op(let id) = ref { return ("Task #\(id)", nil) }
+            return ("(deleted local task)", nil)
+        }
+        switch format {
+        case .csv: return TimesheetExport.csv(sessions: sessions, names: resolve)
+        case .markdown: return TimesheetExport.markdown(sessions: sessions, names: resolve)
+        }
+    }
+
     /// The connected backend's name for UI copy ("OpenProject", "Xero"); nil
     /// when standalone.
     public var backendName: String? { backend?.displayName }

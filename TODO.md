@@ -62,10 +62,11 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   `AppController` backend-agnostic; Attributor recognizer hook done; standalone
   = nil backend (no SyncEngine exists → can't silently mark-push into a void).
   `RemoteEntryID`/`TimeActivity`/`RemoteTimeEntry` typealiases mark the Xero
-  widening points (entry ids → String GUIDs). REMAINING sub-slices: TimesheetExport
-  (CSV/Markdown), task_comments table (standalone comment storage),
-  open-in-backend right-click, project-slug matching. Plugin loader stays
-  deferred; Xero adapter = one `TaskBackend` conformer + settings pane.
+  widening points (entry ids → String GUIDs). TimesheetExport (CSV/Markdown +
+  Settings ▸ Maintenance copy buttons) DONE 2026-07-01. REMAINING sub-slices:
+  task_comments table (standalone comment storage), open-in-backend
+  right-click (taskWebURL helper exists), project-slug matching. Plugin loader
+  stays deferred; Xero adapter = one `TaskBackend` conformer + settings pane.
 
 ## New-batch features (Martin, 2026-06-27)
 

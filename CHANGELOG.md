@@ -2,6 +2,14 @@
 
 ## 2026-07-01
 
+- [x] **Timesheet export (standalone slice of Rank 9).** New pure-Core
+  `TimesheetExport`: a period's sessions as RFC-4180 CSV
+  (`date,start,end,duration,project,task,comment`) or day-grouped Markdown with
+  per-day + grand totals. Settings ▸ Maintenance gains an "Export timesheet"
+  row (period picker + Copy CSV / Copy Markdown via the clipboard); works with
+  or without a connected backend — the standalone way OUT of Ambitick for
+  invoicing. 4 new checks (203 total green).
+
 - [x] **Backend seam (TODO Rank 9 core): `TaskBackend` protocol; OpenProject
   moves behind `OPBackend`.** New Core protocol `TaskBackend` (task list, time
   entries, task comments, `taskURL`, capability flag `supportsActivities`) plus

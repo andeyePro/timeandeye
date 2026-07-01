@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var expandedDup: Set<Int> = []
     @State private var expandAllDup = false
     @State private var senderProbe = ""
+    @State private var exportPeriod: TimePeriod = .thisWeek
+    @State private var exportCopied = false
 
     var body: some View {
         Form {
@@ -208,6 +210,27 @@ struct SettingsView: View {
                 Text("Finds OP entries duplicated at the same task + minute. Click a group to see every difference between its entries; the survivor is the richest, the rest are deleted (their comments folded into the survivor) and your journal re-points to the survivor. Open any entry in OpenProject to check anything not shown here (e.g. custom fields) before deleting. Confirm each.")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(dupActions) { act in dupRow(act) }
+                HStack {
+                    Picker("Export timesheet", selection: $exportPeriod) {
+                        ForEach(TimePeriod.allCases) { p in Text(p.rawValue).tag(p) }
+                    }
+                    .frame(maxWidth: 260)
+                    Button("Copy CSV") {
+                        controller.copyToClipboard(
+                            controller.timesheetExport(period: exportPeriod, format: .csv))
+                        exportCopied = true
+                    }
+                    Button("Copy Markdown") {
+                        controller.copyToClipboard(
+                            controller.timesheetExport(period: exportPeriod, format: .markdown))
+                        exportCopied = true
+                    }
+                    if exportCopied {
+                        Text("Copied").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Copies the period's tracked time (all tasks, local included) to the clipboard — paste into a spreadsheet (CSV) or an email/invoice note (Markdown). Works with or without a connected backend.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Email → task matching") {
