@@ -256,11 +256,19 @@ and recorded rather than fixed blind:
 - [x] Named local-only tasks creatable from the Review window (DONE — already
   present: the "…or new non-OpenProject task" field + "Create & assign" button →
   addLocalTask, verified 2026-07-01). Leisure flag not exposed there (minor).
-- [ ] iOS companion app (manual 2-tap tracking; Core is ready). ROLE (Martin,
-  2026-07-01): iOS senses nothing (no cross-app observation on iOS, ever — per
-  the design spec); the app is a SECOND SCREEN + REMOTE: show what's being
-  tracked now, one-tap switch/change, and one-tap manual tracking when away
-  from the Mac. Realtime channel PROPOSAL (undecided): CloudKit private DB —
+- [ ] iOS app (Core is ready). ROLE (Martin, 2026-07-01, revised same day):
+  iOS senses no other apps (impossible on iOS, ever — per the design spec),
+  but the app is NOT companion-only: it must stand alone as the best manual
+  time tracker on the iOS store (and best value), with the Mac app as a
+  superpower on top, so iOS-only users are first-class. iOS-legal "sensors"
+  replace window-watching as the USP: location, calendar events, Focus modes
+  and time-of-day feed the SAME Core attribution ladder + learner (arrive at
+  the studio → the studio task surfaces; meeting in the calendar → offer it
+  as a slice). Plus Live Activity lock-screen timer with one-tap switch,
+  interactive widgets, Watch complication, App Intents/Shortcuts, and direct
+  OpenProject/Xero push (no iOS tracker does OP today). Second-screen + remote
+  for Mac users: show what's tracked now, one-tap switch/change, one-tap
+  manual tracking away from the Mac. Realtime channel PROPOSAL (undecided): CloudKit private DB —
   the Mac stays the single journal owner; iOS mirrors a small live-state
   record (current task, certainty, today's totals, ranked pick list) and
   writes COMMAND records (switch/stop/manual slice) that the Mac folds into
@@ -280,6 +288,32 @@ and recorded rather than fixed blind:
   referencing the local package at `../`; Core stays AppKit/UIKit-free as the
   spec requires. Revisit a split only if release cadences genuinely diverge
   post-release — and try release branches before a repo split even then.
+  RE-EXAMINED 2026-07-01 with iOS-standalone in scope: same answer,
+  reinforced — an iOS-only user connecting to OP/Xero runs OPBackend/Core
+  directly, so Core is the shared product on both platforms. The eventual
+  free/paid split is by SPM MODULE, not by repo: if Pro backends go
+  closed-source, they move to a private `ambitick-pro` package the release
+  builds depend on — the TaskBackend seam makes that a clean lift.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 - [ ] Safari, then Opera tab URLs; Chrome-PWA AppleScript support
 - [ ] In-app onboarding flow (user 2)
 - [ ] OP project-slug matching for the in-OP-without-task-id rule
