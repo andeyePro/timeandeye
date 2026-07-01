@@ -1,11 +1,16 @@
 # Ambitick
 
-Automatic time tracking for OpenProject. A macOS menu-bar app that watches
-which window, app or browser tab is active and attributes the time to the most
-likely OpenProject work package ("task"), learning from your confirmations so
-prompts reduce over time. Local-first: a SQLite journal on your Mac is the
-source of truth; nothing leaves the machine except pushes to your own OP
-instance (and the optional copy-paste AI assist you trigger yourself).
+Automatic time tracking against your project-management tool's tasks. A macOS
+menu-bar app that watches which window, app or browser tab is active and
+attributes the time to the most likely task, learning from your confirmations
+so prompts reduce over time. Local-first: a SQLite journal on your Mac is the
+source of truth; nothing leaves the machine except pushes to your own backend
+(and the optional copy-paste AI assist you trigger yourself).
+
+Backends plug in behind a seam (`TaskBackend`): **OpenProject** is fully
+supported today, **Xero** is next, and **standalone** (no backend at all)
+works now — local tasks, full timeline/pie, CSV/Markdown timesheet export
+from Settings ▸ Maintenance.
 
 Day-to-day usage: **[MANUAL.md](MANUAL.md)**. Spec:
 `docs/superpowers/specs/2026-06-10-ambitick-design.md`. Status: v0.1 pre-alpha.
@@ -107,10 +112,12 @@ non-work time land there instead of stopping the clock.
 
 ## Architecture
 
-- `AmbitickCore` – platform-independent engine: attribution (OP URL ≈ 100%,
+- `AmbitickCore` – platform-independent engine: attribution (task URL ≈ 100%,
   task-priming, learned associations, ranking priors), dominant-minute session
-  resolution, journal protocol, OP client, sync, AI-assist, settings. No
-  AppKit; the future iOS companion reuses it unchanged.
+  resolution, journal protocol, the `TaskBackend` seam (OpenProject behind
+  `OPBackend`; Xero next; standalone = no backend), sync, timesheet export,
+  AI-assist, settings. No AppKit; the iOS companion (planned in this repo, as
+  an `ios/` Xcode project) reuses it unchanged.
 - `AmbitickMac` – SQLite journal (raw sqlite3, no deps), Keychain, sensors
   (NSWorkspace, Accessibility window titles, browser tabs via Apple Events,
   idle, sleep/wake, mic-in-use), app controller.

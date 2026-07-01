@@ -256,7 +256,17 @@ and recorded rather than fixed blind:
 - [x] Named local-only tasks creatable from the Review window (DONE — already
   present: the "…or new non-OpenProject task" field + "Create & assign" button →
   addLocalTask, verified 2026-07-01). Leisure flag not exposed there (minor).
-- [ ] iOS companion app (manual 2-tap tracking; Core is ready)
+- [ ] iOS companion app (manual 2-tap tracking; Core is ready). DECIDED
+  2026-07-01: it lives IN THIS REPO, not a new one. Rationale: the iOS app is a
+  thin SwiftUI shell over AmbitickCore, and pre-1.0 Core API churns weekly — a
+  separate repo forces either a tag-per-change SPM dance or fragile local-path
+  references, and every cross-cutting change becomes two PRs. In-repo, one
+  commit updates Core and both shells, and the one check suite guards both.
+  Shape: an `ios/` Xcode project (App Store needs signing/provisioning that
+  plain SwiftPM can't do; the CLT-only make-app.sh trick is Mac-specific)
+  referencing the local package at `../`; Core stays AppKit/UIKit-free as the
+  spec requires. Revisit a split only if release cadences genuinely diverge
+  post-release — and try release branches before a repo split even then.
 - [ ] Safari, then Opera tab URLs; Chrome-PWA AppleScript support
 - [ ] In-app onboarding flow (user 2)
 - [ ] OP project-slug matching for the in-OP-without-task-id rule
