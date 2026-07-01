@@ -416,6 +416,36 @@ func sessionTrackerChecks(_ c: Checks) {
         }
     }
 
+    c.check("liveSliceOwner: an excursion's display does not own the open slice's clock") {
+        // The "11m Studi" bug: during a grace-pending switch the display shows
+        // the new task, but liveSliceStart still spans the OLD task's slice —
+        // pairing them showed the old elapsed under the new name. The owner
+        // must stay the outgoing task until commit, revert to it on return,
+        // and move to the new task once the switch commits.
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        try expectEq(tracker.liveSliceOwner, .task(.op(1)))
+
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "display should follow to op(2)")
+        }
+        try expectEq(tracker.liveSliceOwner, .task(.op(1)),
+                     "pending switch: the open slice still belongs to op(1)")
+
+        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))     // revert
+        try expectEq(tracker.liveSliceOwner, .task(.op(1)))
+
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 200)))   // pending again
+        tracker.handle(.input(t(265)))   // held past the 60 s slice floor → commits
+        try expectEq(tracker.liveSliceOwner, .task(.op(2)),
+                     "committed switch: the new task owns the slice")
+    }
+
     c.check("sustained switch commits and grace-period time goes to the new task") {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []

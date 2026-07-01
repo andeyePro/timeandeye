@@ -2,6 +2,19 @@
 
 ## 2026-07-01
 
+- [x] **Menu clock: excursions no longer wear the old slice's elapsed ("11m
+  Studi").** Since the 06-27 banked-under-count fix, the clock took
+  `max(now − liveSliceStart, banked+running)` — correct for the task that owns
+  the open slice, wrong during a grace-pending switch, where the display
+  already follows the NEW task but `liveSliceStart` still spans the OLD task's
+  slice: the menu bar paired the new task's name with the old task's clock.
+  New `SessionTracker.liveSliceOwner` (the outgoing task until commit); the
+  controller only applies the live-slice clock when the displayed task owns
+  the slice, so an excursion shows its own visit time (what would post if the
+  switch commits — the documented semantics). Found live by Martin right after
+  the fable2 build swap; root-caused from the debug log (healthy pipeline,
+  display-only). 1 new check; 206 green.
+
 - [x] **Efficiency pass (from the fable2 whole-repo review).** (1) The 1 Hz
   `elapsedText` republish is now change-gated like its neighbours — it fired
   `objectWillChange` on the shared controller every second while tracking,

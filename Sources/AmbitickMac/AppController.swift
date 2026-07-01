@@ -636,8 +636,14 @@ public final class AppController: ObservableObject {
             // INCLUDING sub-grace excursion windows that reverted back to this
             // task — so it recovers re-tagged seconds the per-visit banked figure
             // drops; banked+running is the fallback when no live slice is open.
+            // ONLY when the displayed task owns the open slice, though: during
+            // a grace-pending switch the display already follows the new task,
+            // and pairing it with the old slice's clock showed the old task's
+            // elapsed under the new task's name. An excursion shows its own
+            // visit clock (what would post if the switch commits).
+            let ownsSlice = tracker.liveSliceOwner == target
             let elapsed = MenuTitle.displayedElapsed(
-                liveSliceStart: tracker.liveSliceStart,
+                liveSliceStart: ownsSlice ? tracker.liveSliceStart : nil,
                 bankedFallback: bankedElapsed[target, default: 0],
                 running: running, now: now)
             let body = MenuTitle.text(elapsed: elapsed, certainty: certainty,

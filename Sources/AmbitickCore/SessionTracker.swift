@@ -114,6 +114,18 @@ public final class SessionTracker {
         (spans.map(\.start) + [currentStart].compactMap { $0 }).min()
     }
 
+    /// The task the OPEN slice currently belongs to. During a grace-pending
+    /// switch the DISPLAY (trackerState) follows the new task instantly, but
+    /// the slice — and therefore `liveSliceStart`'s clock — still belongs to
+    /// the task being left until the switch commits. The menu clock checks
+    /// this so it never pairs the old slice's elapsed with the new task's
+    /// name ("11m Studi" while the 11m is the Ambitick slice).
+    public var liveSliceOwner: Target? {
+        if let p = pendingSwitch { return p.from }
+        if case .tracking(let target, _) = state { return target }
+        return nil
+    }
+
     public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
         self.attributor = attributor
