@@ -206,6 +206,25 @@ struct SettingsView: View {
                 ForEach(dupActions) { act in dupRow(act) }
             }
 
+            Section("Email → task matching") {
+                Text("When a message matches several rules, the most specific wins. Order is general (top) → specific (bottom); the bottom-most matching level takes precedence.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(Array(controller.settings.emailMatchOrder.enumerated()), id: \.element) { i, level in
+                    HStack {
+                        Text("\(i + 1). \(level.label)")
+                        Spacer()
+                        Button { moveEmailLevel(i, by: -1) } label: { Image(systemName: "chevron.up") }
+                            .buttonStyle(.borderless).disabled(i == 0)
+                            .help("More general")
+                        Button { moveEmailLevel(i, by: 1) } label: { Image(systemName: "chevron.down") }
+                            .buttonStyle(.borderless)
+                            .disabled(i == controller.settings.emailMatchOrder.count - 1)
+                            .help("More specific")
+                    }
+                    .font(.callout)
+                }
+            }
+
             Section("Diagnostics (dev)") {
                 Button("Probe email sender (front browser)") {
                     senderProbe = controller.probeEmailSender()
@@ -234,6 +253,15 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .textSelection(.enabled)   // every label copyable, to share text not screenshots
         .padding(8)
+    }
+
+    /// Reorder the email-matching specificity ladder (persists via settings didSet).
+    private func moveEmailLevel(_ i: Int, by delta: Int) {
+        var order = controller.settings.emailMatchOrder
+        let j = i + delta
+        guard order.indices.contains(i), order.indices.contains(j) else { return }
+        order.swapAt(i, j)
+        controller.settings.emailMatchOrder = order
     }
 
     // MARK: - Duplicate reconcile rows

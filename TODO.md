@@ -173,9 +173,10 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 - [ ] Email auto-learner — Core engine + Mac capture SHIPPED 2026-06-30 (needs
   on-device validation). Correcting an email's task learns an EmailRule (org
   domain → company, shared webmail → person); matching mail auto-attributes via
-  the `.emailRule` source through the user's ladder. REMAINING for the full
-  feature: explicit pin via `from`/`sender`/`subject` + `any` fields in the
-  expression grammar; Settings UI to reorder the ladder; more provider selectors
+  the `.emailRule` source through the user's ladder. Settings UI to reorder the
+  ladder SHIPPED 2026-07-01 (chevrons in "Email → task matching"). REMAINING for
+  the full feature: explicit pin via `from`/`sender`/`subject` + `any` fields in
+  the expression grammar; more provider selectors
   (OWA/Proton/Yahoo/Fastmail) + native clients; validate-on-use / self-heal +
   recipe pack with background updates; multi-message-thread sender choice;
   derive own-domains from settings (beyond the "me" heuristic).
@@ -210,9 +211,9 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   toggles already shipped for OP). - 2026-06-22
 - [ ] Semantic task search in filters (find "voting" Ghostty's task without
   knowing its OP subject; substring filter is not enough) - Martin 2026-06-12
-- [ ] Named local-only leisure/non-OP tasks creatable from the Review window
-  (subagent didn't draft this one; do directly). Settings already creates named
-  local tasks; Review needs the same affordance.
+- [x] Named local-only tasks creatable from the Review window (DONE — already
+  present: the "…or new non-OpenProject task" field + "Create & assign" button →
+  addLocalTask, verified 2026-07-01). Leisure flag not exposed there (minor).
 - [ ] iOS companion app (manual 2-tap tracking; Core is ready)
 - [ ] Safari, then Opera tab URLs; Chrome-PWA AppleScript support
 - [ ] In-app onboarding flow (user 2)
