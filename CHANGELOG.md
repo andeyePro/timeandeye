@@ -2,6 +2,24 @@
 
 ## 2026-07-01
 
+- [x] **Backend seam (TODO Rank 9 core): `TaskBackend` protocol; OpenProject
+  moves behind `OPBackend`.** New Core protocol `TaskBackend` (task list, time
+  entries, task comments, `taskURL`, capability flag `supportsActivities`) plus
+  `BackendPageRecognizer` (task-page/URL/title recognition for attribution).
+  `OPBackend` wraps `OPClient` and owns every OP quirk — the startTime-422
+  fallback moved here from `SyncEngine` (and now persists across syncs instead
+  of resetting each run, since the controller holds one backend instance);
+  `SyncEngine` is backend-agnostic. `Attributor` consults a recognizer (default
+  = OP built from `instanceHost`, injected by the backend on connect) instead
+  of calling `OPURLParser` directly. `AppController` talks only to
+  `any TaskBackend`; standalone = nil backend (explicitly NOT a silent no-op
+  sink: with no backend no SyncEngine exists, so nothing can be marked pushed
+  without going anywhere). `RemoteEntryID`/`TimeActivity`/`RemoteTimeEntry`
+  typealiases mark the spots that widen when Xero lands (entry ids become
+  String GUIDs — one-line alias flip, compiler-guided). UI: activity picker
+  hides for backends without activities; "open in OP" URLs come from the
+  backend. 199 checks green; behaviour-preserving by design.
+
 - [x] **Batch (drafted by subagents, integrated serially): pin grammar, smarter
   search, ladder-reorder UI.** (1) Expression pins gained `from`/`sender` (match
   the email correspondents), `subject`, and `any` fields; `PinField` is now

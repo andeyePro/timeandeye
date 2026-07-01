@@ -65,6 +65,12 @@ public struct AttributionExplanation: Equatable, Sendable {
 public final class Attributor {
     /// Mutable so the app can apply a changed OP URL without a relaunch.
     public var instanceHost: String
+    /// Override for non-OP backends; nil = the default OP recognizer built
+    /// from `instanceHost`. Standalone: `NoPageRecognizer()`.
+    public var customRecognizer: BackendPageRecognizer?
+    private var recognizer: BackendPageRecognizer {
+        customRecognizer ?? OPPageRecognizer(instanceHost: instanceHost)
+    }
     public private(set) var learning: LearningStore
     private let ranker: TaskRanker
 
@@ -111,7 +117,7 @@ public final class Attributor {
             ranked.insert(c, at: 0)
             return Attribution(best: c, ranked: ranked)
         }
-        if let url = signal.tabURL, let id = OPURLParser.taskID(in: url, instanceHost: instanceHost) {
+        if let url = signal.tabURL, let id = recognizer.taskID(inURL: url) {
             lastOpenedOPTask = .op(id)
             let c = Candidate(target: .task(.op(id)), score: Self.inferredCeiling)
             return Attribution(best: c, ranked: [c])
@@ -119,7 +125,7 @@ public final class Attributor {
         // No URL (e.g. OP as a Chrome PWA): the WP id may be in the window
         // title — or in the app name, which PWAs set to the page title.
         for text in [signal.windowTitle, signal.app].compactMap({ $0 }) {
-            if let id = OPURLParser.taskID(inTitle: text) {
+            if let id = recognizer.taskID(inTitle: text) {
                 lastOpenedOPTask = .op(id)
                 let c = Candidate(target: .task(.op(id)), score: Self.inferredCeiling)
                 return Attribution(best: c, ranked: [c])
@@ -151,11 +157,11 @@ public final class Attributor {
     /// SessionTracker calls this when a surface has held focus beyond the
     /// prime-dwell threshold. Consumes lastOpenedOPTask ("immediately following").
     public func noteDwell(_ signal: ActivitySignal) {
-        if let url = signal.tabURL, OPURLParser.taskID(in: url, instanceHost: instanceHost) != nil {
+        if let url = signal.tabURL, recognizer.taskID(inURL: url) != nil {
             return
         }
         for text in [signal.windowTitle, signal.app].compactMap({ $0 })
-        where OPURLParser.taskID(inTitle: text) != nil {
+        where recognizer.taskID(inTitle: text) != nil {
             return   // an OP page itself never becomes a primed working surface
         }
         guard let task = lastOpenedOPTask else { return }
@@ -269,13 +275,13 @@ public final class Attributor {
         let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets)
         let priors = tasks.map { ranker.score($0, at: now, learning: learning) }
         let maxPrior = max(priors.max() ?? 1, 0.001)
-        // On an OP PROJECT page without a task id, trust the ranking outright
-        // (spec: "most appropriate task in that project"); other OP pages
-        // (My time tracking, admin, ...) must not hijack attribution.
-        let opURL = signal.tabURL.flatMap(URL.init(string:))
-        let onOPProjectPage = opURL?.host == instanceHost
-            && opURL?.path.contains("/projects/") == true
-        let priorWeight = onOPProjectPage ? 0.65 : 0.2
+        // On a backend PROJECT page without a task id, trust the ranking
+        // outright (spec: "most appropriate task in that project"); other
+        // backend pages (My time tracking, admin, ...) must not hijack
+        // attribution.
+        let onProjectPage = signal.tabURL.flatMap(URL.init(string:))
+            .map(recognizer.isProjectPage) == true
+        let priorWeight = onProjectPage ? 0.65 : 0.2
         var out: [AttributionExplanation.Line] = []
         for (task, prior) in zip(tasks, priors) {
             let learnedPart = 0.7 * (learned[.task(task.ref)] ?? 0)
@@ -298,12 +304,12 @@ public final class Attributor {
             return .init(source: .pin, chosen: .task(pin.task), chosenScore: 1.0,
                          lines: [], features: feats)
         }
-        if let url = signal.tabURL, OPURLParser.taskID(in: url, instanceHost: instanceHost) != nil {
+        if let url = signal.tabURL, recognizer.taskID(inURL: url) != nil {
             return .init(source: .opTaskURL, chosen: bestURLTarget(signal), chosenScore: Self.inferredCeiling,
                          lines: [], features: feats)
         }
         for text in [signal.windowTitle, signal.app].compactMap({ $0 }) {
-            if let id = OPURLParser.taskID(inTitle: text) {
+            if let id = recognizer.taskID(inTitle: text) {
                 return .init(source: .opTaskTitle, chosen: .task(.op(id)), chosenScore: Self.inferredCeiling,
                              lines: [], features: feats)
             }
@@ -328,7 +334,7 @@ public final class Attributor {
 
     private func bestURLTarget(_ signal: ActivitySignal) -> Target? {
         guard let url = signal.tabURL,
-              let id = OPURLParser.taskID(in: url, instanceHost: instanceHost) else { return nil }
+              let id = recognizer.taskID(inURL: url) else { return nil }
         return .task(.op(id))
     }
 }

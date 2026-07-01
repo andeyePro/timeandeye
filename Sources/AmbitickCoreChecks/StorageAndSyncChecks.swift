@@ -278,9 +278,9 @@ func syncEngineChecks(_ c: Checks) async {
     func makeWorld() -> (SyncEngine, InMemoryJournalStore, MockTransport) {
         let journal = InMemoryJournalStore()
         let transport = MockTransport()
-        let client = OPClient(baseURL: URL(string: "https://op.example.com")!,
-                              apiKey: "k", transport: transport)
-        return (SyncEngine(journal: journal, client: client), journal, transport)
+        let backend = OPBackend(baseURL: URL(string: "https://op.example.com")!,
+                                apiKey: "k", transport: transport)
+        return (SyncEngine(journal: journal, backend: backend), journal, transport)
     }
 
     await c.check("pushes eligible and marks") {
@@ -629,8 +629,8 @@ func endToEndChecks(_ c: Checks) async {
         let journal = InMemoryJournalStore()
         let transport = MockTransport()
         transport.responses = [(201, "{}")]
-        let client = OPClient(baseURL: URL(string: "https://op.example.com")!,
-                              apiKey: "k", transport: transport)
+        let backend = OPBackend(baseURL: URL(string: "https://op.example.com")!,
+                                apiKey: "k", transport: transport)
         let attributor = Attributor(instanceHost: "op.example.com")
         let tracker = SessionTracker(attributor: attributor,
                                      config: TrackerConfig()) { tasks }
@@ -661,7 +661,7 @@ func endToEndChecks(_ c: Checks) async {
                    "confirm lifts the in-flight span; got \(sessions[0].certainty)")
 
         // 5. sync pushes exactly one PT0H20M entry
-        let engine = SyncEngine(journal: journal, client: client)
+        let engine = SyncEngine(journal: journal, backend: backend)
         let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
                                                    includeComments: true)
         try expectEq(pushed, 1)

@@ -139,12 +139,13 @@ func run() async throws {
     }
 
     // 4. Real push.
-    let client = OPClient(baseURL: baseURL, apiKey: apiKey, transport: URLSessionTransport())
-    let engine = SyncEngine(journal: journal, client: client)
+    let backend = OPBackend(baseURL: baseURL, apiKey: apiKey, transport: URLSessionTransport())
+    backend.onDebug = { print("BACKEND DEBUG: \($0)") }
+    let engine = SyncEngine(journal: journal, backend: backend)
     engine.onDebug = { print("SYNC DEBUG: \($0)") }
     let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: true)
     guard pushed == 1 else { fail("expected 1 pushed entry, got \(pushed)") }
-    guard engine.startTimesSupported else { fail("instance rejected startTime") }
+    guard backend.startTimesSupported else { fail("instance rejected startTime") }
 
     // 5. Read back what OP stored.
     // Client-side filtering: the server-side work-package filter name varies

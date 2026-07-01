@@ -62,9 +62,9 @@ func syncIdempotencyChecks(_ c: Checks) async {
         let journal = FailingMarkJournalStore(InMemoryJournalStore(),
                                               failOnMarkCalls: failOnMarkCalls)
         let transport = MockTransport()
-        let client = OPClient(baseURL: URL(string: "https://op.example.com")!,
-                              apiKey: "k", transport: transport)
-        return (SyncEngine(journal: journal, client: client), journal, transport)
+        let backend = OPBackend(baseURL: URL(string: "https://op.example.com")!,
+                                apiKey: "k", transport: transport)
+        return (SyncEngine(journal: journal, backend: backend), journal, transport)
     }
 
     await c.check("markPushed failure after a good POST deletes the OP entry, no duplicate on retry") {

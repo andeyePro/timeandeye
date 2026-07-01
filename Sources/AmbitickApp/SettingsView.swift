@@ -51,13 +51,17 @@ struct SettingsView: View {
                          : "Connected as \(controller.connectedAs ?? "unknown user") – \(controller.taskCache.count) tasks loaded")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Picker("Default activity",
-                       selection: Binding(
-                        get: { controller.settings.defaultActivityID ?? -1 },
-                        set: { controller.settings.defaultActivityID = $0 == -1 ? nil : $0 })) {
-                    Text("–").tag(-1)
-                    ForEach(controller.activities, id: \.id) { a in
-                        Text(a.name).tag(a.id)
+                // Activity types are a backend concept (OP has them, others may
+                // not); hide the picker when there are none to choose.
+                if !controller.activities.isEmpty {
+                    Picker("Default activity",
+                           selection: Binding(
+                            get: { controller.settings.defaultActivityID ?? -1 },
+                            set: { controller.settings.defaultActivityID = $0 == -1 ? nil : $0 })) {
+                        Text("–").tag(-1)
+                        ForEach(controller.activities, id: \.id) { a in
+                            Text(a.name).tag(a.id)
+                        }
                     }
                 }
             }
@@ -329,8 +333,7 @@ struct SettingsView: View {
     }
 
     private func openInOP(_ wp: Int) {
-        let base = controller.settings.opBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
-        if let url = URL(string: "\(base)/work_packages/\(wp)") { openURL(url) }
+        if let url = controller.taskWebURL(id: wp) { openURL(url) }
     }
 
     /// The single non-work catch-all, expressed as a one-of selection over the

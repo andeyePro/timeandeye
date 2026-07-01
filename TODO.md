@@ -56,12 +56,16 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   settings in the same commit; one-line comment that the pins.json migration is
   a self-terminating one-shot. (One owner for the Core window-helper extraction
   — rides this or rank 7, not duplicated.)
-- [ ] Rank 9 — backend seam (`TaskBackend`/`TimeSink`) + standalone mode, NEW
-  branch: pure-Core slices first (TimesheetExport, task_comments table), then a
-  behaviour-preserving protocol refactor (NullBackend must NOT silently become a
-  no-op sink on misconfig; keep the typed-422 fallback), Attributor hook last.
-  Absorbs the standalone TODO sub-items (local comment storage, open-in-backend,
-  project-slug). Plugin loader stays deferred.
+- [x] Rank 9 — backend seam CORE DONE 2026-07-01 (branch fable2): `TaskBackend`
+  protocol + `BackendPageRecognizer` in Core; OP behind `OPBackend` (owns the
+  typed-422 fallback, which now persists across syncs); `SyncEngine` and
+  `AppController` backend-agnostic; Attributor recognizer hook done; standalone
+  = nil backend (no SyncEngine exists → can't silently mark-push into a void).
+  `RemoteEntryID`/`TimeActivity`/`RemoteTimeEntry` typealiases mark the Xero
+  widening points (entry ids → String GUIDs). REMAINING sub-slices: TimesheetExport
+  (CSV/Markdown), task_comments table (standalone comment storage),
+  open-in-backend right-click, project-slug matching. Plugin loader stays
+  deferred; Xero adapter = one `TaskBackend` conformer + settings pane.
 
 ## New-batch features (Martin, 2026-06-27)
 
@@ -200,11 +204,11 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   window but didn't, regenerate the AI prompt including the failing rule + that
   window's fields + a free-text complaint, so the model corrects it. Iterative
   refine on top of the one-shot AI pin flow. - 2026-06-24
-- [ ] Backend seam + standalone mode: extract a `TaskBackend`/`TimeSink`
-  protocol, move OpenProject behind it in-process, and make "no backend" the
-  null implementation so Ambitick runs standalone — local task list with CRUD,
-  no-op sync, hidden activity types, CSV/Markdown timesheet export. Plugin
-  loader deferred until a second backend exists. New branch. - 2026-06-22
+- [x] Backend seam + standalone mode (protocol half DONE 2026-07-01, see Rank 9
+  above): `TaskBackend` extracted, OP behind it in-process, standalone = nil
+  backend, activity picker hidden when the backend has none. Still open from
+  this item: CSV/Markdown timesheet export (next), standalone comment storage.
+  Plugin loader deferred until a second backend exists. - 2026-06-22
 - [ ] Right-click 'Open in <backend>' (task URL from the connector); standalone
   → 'Open task' showing the timestamped comment list. - 2026-06-22
 - [ ] Standalone 'comment to task' storage: persist notes against the local

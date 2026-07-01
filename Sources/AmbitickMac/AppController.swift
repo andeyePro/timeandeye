@@ -118,7 +118,7 @@ public final class AppController: ObservableObject {
     @Published public private(set) var menuColour = NSColor.systemGray
     @Published public private(set) var taskCache: [WorkTask] = []
     @Published public private(set) var pendingReview: [ReviewSegment] = []
-    @Published public private(set) var activities: [OPTimeActivity] = []
+    @Published public private(set) var activities: [TimeActivity] = []
     @Published public private(set) var lastPrompt: TrackerPrompt?
     /// An idle stretch that defaulted to "break" (untracked). A single tap in
     /// the popover claims it as the task you were on — no timeline needed. It
@@ -155,7 +155,9 @@ public final class AppController: ObservableObject {
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
     private let pinsStore: JSONFileStore<[Pin]>
     private let emailRulesStore: JSONFileStore<[EmailRule]>
-    private var client: OPClient?
+    /// The connected task backend (OpenProject today; Xero next). nil =
+    /// standalone / unconfigured — nothing syncs, everything tracks locally.
+    private var backend: (any TaskBackend)?
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
     /// System-wide ⌘⇧L "Away" toggle (Carbon RegisterEventHotKey). The
@@ -471,12 +473,13 @@ public final class AppController: ObservableObject {
     /// Every dead-end here reports WHY via lastError — silent guards cost a
     /// debugging round-trip on 2026-06-11.
     private func rebuildClient() {
-        client = nil
+        backend = nil
         connectedAs = nil
         let raw = settings.opBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         attributor.instanceHost = URL(string: raw)?.host ?? ""
+        attributor.customRecognizer = nil
         guard !raw.isEmpty else {
-            lastError = nil   // unconfigured is not an error
+            lastError = nil   // unconfigured is not an error: standalone mode
             return
         }
         guard let url = URL(string: raw), let scheme = url.scheme,
@@ -495,7 +498,10 @@ public final class AppController: ObservableObject {
             lastError = "No API key yet – open Settings (gear icon) and add your OpenProject API key"
             return
         }
-        client = OPClient(baseURL: url, apiKey: key, transport: URLSessionTransport())
+        let op = OPBackend(baseURL: url, apiKey: key, transport: URLSessionTransport())
+        op.onDebug = { DebugLog.write("backend: \($0)") }
+        backend = op
+        attributor.customRecognizer = op.pageRecognizer
         lastError = nil
     }
 
@@ -898,12 +904,12 @@ public final class AppController: ObservableObject {
     /// attached this is a no-op today; standalone storage lands with the
     /// backend-seam refactor (a local timestamped comment list).
     private func postTaskComment(wpID: Int, note: String) async {
-        guard let client else { return }
+        guard let backend else { return }
         do {
-            try await client.addWorkPackageComment(id: wpID, text: note)
-            DebugLog.write("posted task comment to WP #\(wpID)")
+            try await backend.addTaskComment(taskID: wpID, text: note)
+            DebugLog.write("posted task comment to task #\(wpID)")
         } catch {
-            lastError = "OP task comment failed: \(error)"
+            lastError = "\(backend.displayName) task comment failed: \(error)"
         }
     }
 
@@ -1072,7 +1078,6 @@ public final class AppController: ObservableObject {
 
     /// One reusable ISO-8601 formatter for OP pushes — it was allocated per
     /// push in several paths (allocating a formatter is not cheap).
-    private static let iso8601 = ISO8601DateFormatter()
 
     /// A slice the timeline should frame + open when it next appears — set when
     /// you click a slice in the pie window's mini-timeline. The timeline consumes
@@ -1096,10 +1101,10 @@ public final class AppController: ObservableObject {
     /// richest-survivor reconcile against the journal. Empty when not connected
     /// or nothing duplicated.
     public func findDuplicateActions(daysBack: Int = 90) async -> [ReconcileAction] {
-        guard let client else { return [] }
+        guard let backend else { return [] }
         let to = Date()
         let from = to.addingTimeInterval(-Double(daysBack) * 86_400)
-        let entries = (try? await client.listTimeEntries(from: from, to: to)) ?? []
+        let entries = (try? await backend.listTimeEntries(from: from, to: to)) ?? []
         let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
         return DuplicateReconcile.plan(entries: entries, sessions: sessions)
@@ -1109,12 +1114,12 @@ public final class AppController: ObservableObject {
     /// survivor, delete the duplicates, and re-point the journal slices so future
     /// edits still PATCH the right entry. Nothing is lost.
     public func applyReconcile(_ action: ReconcileAction) async {
-        guard let client else { return }
+        guard let backend else { return }
         if let merged = action.mergedComment {
-            try? await client.updateTimeEntryComment(id: action.survivorID, comment: merged)
+            try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
         }
         for id in action.deleteIDs {
-            try? await client.deleteTimeEntry(id: id)
+            try? await backend.deleteTimeEntry(id: id)
         }
         for sid in action.repointSessionIDs {
             if var s = try? journal.session(id: sid) {
@@ -1378,8 +1383,8 @@ public final class AppController: ObservableObject {
         // id, and let sync recreate under the new task. Also teach the
         // attributor so the same surface stops mis-filing in future.
         if let previous, previous.task != session.task {
-            if let oldEntry = previous.opTimeEntryID, let client {
-                try? await client.deleteTimeEntry(id: oldEntry)
+            if let oldEntry = previous.opTimeEntryID, let backend {
+                try? await backend.deleteTimeEntry(id: oldEntry)
             }
             session.opTimeEntryID = nil
             session.pushedToOP = false
@@ -1393,17 +1398,16 @@ public final class AppController: ObservableObject {
         }
         try? journal.update(session)
         if case .op(let wpID) = session.task, let entryID = session.opTimeEntryID,
-           let client {
+           let backend {
             do {
-                try await client.updateTimeEntry(
-                    id: entryID, workPackageID: wpID, start: session.start,
+                try await backend.updateTimeEntry(
+                    id: entryID, taskID: wpID, start: session.start,
                     duration: session.end.timeIntervalSince(session.start),
                     activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
-                    comment: session.comment,
-                    startTime: Self.iso8601.string(from: session.start))
-                DebugLog.write("timeline edit pushed to OP entry \(entryID)")
+                    comment: session.comment)
+                DebugLog.write("timeline edit pushed to backend entry \(entryID)")
             } catch {
-                lastError = "OP update failed: \(error)"
+                lastError = "\(backend.displayName) update failed: \(error)"
             }
         } else if previous?.task != session.task {
             await syncIfEnabled()   // reassigned: push under the new task
@@ -1451,8 +1455,8 @@ public final class AppController: ObservableObject {
             }
         }
         try? journal.deleteSession(session.id)
-        if let entryID = session.opTimeEntryID, let client {
-            try? await client.deleteTimeEntry(id: entryID)
+        if let entryID = session.opTimeEntryID, let backend {
+            try? await backend.deleteTimeEntry(id: entryID)
         }
         updateJournalSummary()
     }
@@ -1474,8 +1478,8 @@ public final class AppController: ObservableObject {
         for var session in sessions where session.id != Self.liveSessionID {
             // Re-creating under the new task is simpler and more reliable than
             // PATCHing the work-package link.
-            if let entryID = session.opTimeEntryID, let client {
-                try? await client.deleteTimeEntry(id: entryID)
+            if let entryID = session.opTimeEntryID, let backend {
+                try? await backend.deleteTimeEntry(id: entryID)
             }
             session.task = task
             session.opTimeEntryID = nil
@@ -1551,7 +1555,7 @@ public final class AppController: ObservableObject {
         let survivors = Set(merged.map(\.id))
         for o in original where !survivors.contains(o.id) {
             try? journal.deleteSession(o.id)
-            if let e = o.opTimeEntryID, let client { try? await client.deleteTimeEntry(id: e) }
+            if let e = o.opTimeEntryID, let backend { try? await backend.deleteTimeEntry(id: e) }
         }
         for m in merged where original.first(where: { $0.id == m.id }) != m {
             var survivor = m
@@ -1561,21 +1565,20 @@ public final class AppController: ObservableObject {
             // duplicate the log. Patch + mark handled; leave only never-pushed
             // survivors for sync to create fresh.
             if case .op(let wpID) = survivor.task, let entryID = survivor.opTimeEntryID,
-               let client {
+               let backend {
                 do {
-                    try await client.updateTimeEntry(
-                        id: entryID, workPackageID: wpID, start: survivor.start,
+                    try await backend.updateTimeEntry(
+                        id: entryID, taskID: wpID, start: survivor.start,
                         duration: survivor.end.timeIntervalSince(survivor.start),
                         activityID: settings.activityOverrides[survivor.task] ?? settings.defaultActivityID,
-                        comment: survivor.comment,
-                        startTime: Self.iso8601.string(from: survivor.start))
+                        comment: survivor.comment)
                     survivor.pushedToOP = true   // updated in place; don't re-create
-                    DebugLog.write("coalesce patched OP entry \(entryID)")
+                    DebugLog.write("coalesce patched backend entry \(entryID)")
                 } catch {
                     // Keep it handled rather than risk a duplicate; the stale
                     // entry can be re-synced by a later edit.
                     survivor.pushedToOP = true
-                    lastError = "OP merge-update failed: \(error)"
+                    lastError = "\(backend.displayName) merge-update failed: \(error)"
                 }
             }
             try? journal.update(survivor)
@@ -1718,8 +1721,18 @@ public final class AppController: ObservableObject {
         (try? APIKeyStore.loadAPIKey())?.isEmpty == false
     }
 
+    /// The backend's web page for a remote task ("Open in OpenProject" etc.);
+    /// nil when standalone or the backend has no task pages.
+    public func taskWebURL(id: Int) -> URL? {
+        backend?.taskURL(id: id)
+    }
+
+    /// The connected backend's name for UI copy ("OpenProject", "Xero"); nil
+    /// when standalone.
+    public var backendName: String? { backend?.displayName }
+
     public func refreshTasks() async {
-        guard let client else {
+        guard let backend else {
             if lastError == nil, !settings.opBaseURL.isEmpty {
                 lastError = "Not connected – check OP URL and API key in Settings"
             }
@@ -1727,13 +1740,13 @@ public final class AppController: ObservableObject {
         }
         do {
             if connectedAs == nil {
-                connectedAs = try? await client.fetchMe()
+                connectedAs = try? await backend.fetchMe()
             }
             // Carry recency over the refresh: lastConfirmedAt lives only in
             // the cache and a wholesale replace was silently dropping it.
             let recency = Dictionary(uniqueKeysWithValues:
                 taskCache.compactMap { task in task.lastConfirmedAt.map { (task.ref, $0) } })
-            var fetched = try await client.fetchTasks()
+            var fetched = try await backend.fetchTasks()
             for i in fetched.indices {
                 if let last = recency[fetched[i].ref] {
                     fetched[i].lastConfirmedAt = max(fetched[i].lastConfirmedAt ?? .distantPast, last)
@@ -1746,27 +1759,27 @@ public final class AppController: ObservableObject {
             }
             applyJournalRecency()   // durable recency, not just this session's
 
-            if activities.isEmpty {
-                activities = (try? await client.fetchActivities()) ?? []
+            if activities.isEmpty, backend.supportsActivities {
+                activities = (try? await backend.fetchActivities()) ?? []
                 if settings.defaultActivityID == nil {
                     settings.defaultActivityID = activities.first?.id
                 }
             }
             lastError = nil
         } catch {
-            lastError = "OP fetch failed: \(error)"
+            lastError = "\(backend.displayName) fetch failed: \(error)"
         }
     }
 
     public func syncIfEnabled() async {
-        guard let client else { return }
+        guard let backend else { return }
         // Non-reentrant: if a push is already in flight, just ask it to run once
         // more when it finishes (a concurrent run would re-POST the same session
-        // across its network await — duplicate OP entries).
+        // across its network await — duplicate backend entries).
         if syncing { syncRequested = true; return }
         syncing = true
         defer { syncing = false }
-        let engine = SyncEngine(journal: journal, client: client)
+        let engine = SyncEngine(journal: journal, backend: backend)
         engine.onDebug = { DebugLog.write("sync: \($0)") }
         repeat {
             syncRequested = false
@@ -1776,12 +1789,12 @@ public final class AppController: ObservableObject {
                     defaultActivityID: settings.defaultActivityID,   // nil = OP's default
                     activityOverrides: settings.activityOverrides,
                     includeComments: settings.autoComment)
-                if pushed > 0 { DebugLog.write("pushed \(pushed) entries to OP") }
-                if !engine.startTimesSupported {
+                if pushed > 0 { DebugLog.write("pushed \(pushed) entries to \(backend.displayName)") }
+                if let op = backend as? OPBackend, !op.startTimesSupported {
                     lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
                 }
             } catch {
-                lastError = "OP push failed: \(error)"
+                lastError = "\(backend.displayName) push failed: \(error)"
             }
         } while syncRequested
         updateJournalSummary()
