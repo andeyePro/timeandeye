@@ -591,6 +591,9 @@ public final class AppController: ObservableObject {
                 await self?.syncIfEnabled()   // retry path for failed/late pushes
             }
         }
+        // Nothing here is deadline-sensitive to the second: let the OS batch
+        // the wakeup with others (checkpointTimer below already does).
+        taskRefreshTimer?.tolerance = 5
         // Tight crash-safety cadence: checkpointLive itself no-ops unless we're
         // .tracking, so a stopped app does nothing here. The 5 s tolerance lets
         // the OS batch this with other timer fires — no extra wakeups.
@@ -641,8 +644,11 @@ public final class AppController: ObservableObject {
                                       showPercent: settings.showPercent)
             // Elapsed WITHOUT the task name — the popover already shows the task
             // as its headline, so menuText (which carries the name for the menu
-            // bar) would duplicate it there.
-            elapsedText = body
+            // bar) would duplicate it there. MUST be change-gated like its
+            // neighbours: an unconditional assign fires objectWillChange at
+            // 1 Hz, re-rendering every open window (timeline, pie, settings)
+            // every second, 24/7, even where elapsedText is never shown.
+            if force || elapsedText != body { elapsedText = body }
             // menuTaskChars == 0 → withTaskName returns the body unchanged (off).
             newText = MenuTitle.withTaskName(name(of: target), chars: settings.menuTaskChars,
                                              body: body)
@@ -717,10 +723,9 @@ public final class AppController: ObservableObject {
     /// task's last-tracked time from it and take the later of that and any
     /// in-memory value.
     private func applyJournalRecency() {
-        var lastEnd: [TaskRef: Date] = [:]
-        for s in ((try? journal.allSessions()) ?? []) where s.id != Self.liveCheckpointID {
-            lastEnd[s.task] = max(lastEnd[s.task] ?? .distantPast, s.end)
-        }
+        // Aggregate query, NOT allSessions(): this runs on the 60 s refresh,
+        // and a full-table decode here grows without bound with history.
+        let lastEnd = (try? journal.latestEndByTask(excluding: [Self.liveCheckpointID])) ?? [:]
         for i in taskCache.indices {
             if let l = lastEnd[taskCache[i].ref] {
                 taskCache[i].lastConfirmedAt =

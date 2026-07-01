@@ -61,6 +61,9 @@ public final class SensorHub {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.poll()
         }
+        // Focus sampling doesn't care about sub-second phase; tolerance lets
+        // the OS coalesce this wakeup with the mic poll (same cadence).
+        pollTimer?.tolerance = 0.5
         poll()
     }
 
@@ -166,6 +169,7 @@ final class MicMonitor {
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.check()
         }
+        timer?.tolerance = 0.5   // coalesces with the focus poll's wakeup
     }
 
     func stop() {

@@ -67,7 +67,6 @@ struct TimelineView: View {
     @State private var editTask: TaskRef?
     @State private var conflicts: [Session] = []
     @State private var filter = ""
-    @State private var refreshTick = 0
     @State private var pinchBaseSpan: TimeInterval?
     /// The date under the pinch start + its screen fraction, held fixed for the
     /// whole gesture so a pinch zooms around the cursor, not the centre.
@@ -128,7 +127,7 @@ struct TimelineView: View {
         // bar, which re-renders the editor subtree and steals focus from the
         // h:mm field you just clicked — the intermittent "it didn't go blue, so
         // I couldn't tell I could type" bug. Pause the tick during an edit.
-        .onReceive(timer) { _ in if editing == nil { refreshTick += 1; reloadSessions(); reloadTodayPreview() } }
+        .onReceive(timer) { _ in if editing == nil { reloadSessions(); reloadTodayPreview() } }
         // Cache invalidation: viewport moved out of the loaded range, or the
         // journal mutated (revision bumps on every edit, even same-duration).
         .onChange(of: viewStart) { _, _ in reloadIfNeeded() }

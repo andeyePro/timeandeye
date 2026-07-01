@@ -173,15 +173,37 @@ public final class SQLiteJournalStore: JournalStore {
     }
 
     public func markPushed(_ id: UUID, opTimeEntryID: Int?) throws {
-        var sessions: [Session] = []
-        try query("SELECT json FROM sessions WHERE id = ?",
-                  bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-            sessions.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
+        // One critical section for the whole read-modify-write: the lock is
+        // recursive, so the inner query/save re-acquisitions are free. Without
+        // this, a main-actor update() can interleave between our read and our
+        // save (sync runs off-main after its network await) and get overwritten.
+        try locked {
+            var sessions: [Session] = []
+            try query("SELECT json FROM sessions WHERE id = ?",
+                      bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
+                sessions.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
+            }
+            guard var session = sessions.first else { return }
+            session.pushedToOP = true
+            session.opTimeEntryID = opTimeEntryID
+            try save(session)
         }
-        guard var session = sessions.first else { return }
-        session.pushedToOP = true
-        session.opTimeEntryID = opTimeEntryID
-        try save(session)
+    }
+
+    public func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
+        // GROUP BY the JSON task key in SQL so durable recency never decodes
+        // the whole table (it used to, once a minute, growing with history).
+        var out: [TaskRef: Date] = [:]
+        let notIn = excluding.isEmpty ? "" : " WHERE id NOT IN ("
+            + excluding.map { "'\($0.uuidString)'" }.joined(separator: ",") + ")"
+        try query("SELECT json_extract(json, '$.task'), MAX(end) FROM sessions\(notIn) GROUP BY 1") { stmt in
+            guard let text = sqlite3_column_text(stmt, 0) else { return }
+            if let ref = try? self.decoder.decode(TaskRef.self,
+                                                  from: Data(String(cString: text).utf8)) {
+                out[ref] = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1))
+            }
+        }
+        return out
     }
 
     public func sessions(from: Date, to: Date) throws -> [Session] {
@@ -293,16 +315,19 @@ public final class SQLiteJournalStore: JournalStore {
     }
 
     public func assign(_ segmentIDs: [UUID], to target: Target?) throws {
-        for id in segmentIDs {
-            var segments: [ReviewSegment] = []
-            try query("SELECT json FROM review_segments WHERE id = ?",
-                      bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-                segments.append(try self.decoder.decode(ReviewSegment.self,
-                                                        from: self.jsonColumn(stmt, 0)))
+        // Single critical section across the batch (see markPushed).
+        try locked {
+            for id in segmentIDs {
+                var segments: [ReviewSegment] = []
+                try query("SELECT json FROM review_segments WHERE id = ?",
+                          bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
+                    segments.append(try self.decoder.decode(ReviewSegment.self,
+                                                            from: self.jsonColumn(stmt, 0)))
+                }
+                guard var segment = segments.first else { continue }
+                segment.assigned = target
+                try save(segment)
             }
-            guard var segment = segments.first else { continue }
-            segment.assigned = target
-            try save(segment)
         }
     }
 }

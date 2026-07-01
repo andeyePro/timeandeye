@@ -2,6 +2,21 @@
 
 ## 2026-07-01
 
+- [x] **Efficiency pass (from the fable2 whole-repo review).** (1) The 1 Hz
+  `elapsedText` republish is now change-gated like its neighbours — it fired
+  `objectWillChange` on the shared controller every second while tracking,
+  re-rendering EVERY open window (timeline, pie, settings) at 1 Hz, 24/7; the
+  single largest energy leak found. (2) Durable recency no longer decodes the
+  whole sessions table once a minute: new `JournalStore.latestEndByTask
+  (excluding:)` aggregates in SQL (`json_extract` + `GROUP BY` + `MAX(end)`).
+  (3) `markPushed`/`assign` read-modify-writes now hold the store lock across
+  the whole critical section (an off-main sync could interleave with a
+  main-actor edit of the same row between their two lock acquisitions —
+  last-writer-wins data loss). (4) Dead `refreshTick` state removed from
+  Timeline/Spent (it forced a redundant extra body invalidation per poll).
+  (5) Timer tolerances on the 60 s refresh and both 2 s pollers so the OS
+  coalesces wakeups. 2 new store-conformance checks; 205 green.
+
 - [x] **Timesheet export (standalone slice of Rank 9).** New pure-Core
   `TimesheetExport`: a period's sessions as RFC-4180 CSV
   (`date,start,end,duration,project,task,comment`) or day-grouped Markdown with

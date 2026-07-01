@@ -82,6 +82,38 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
   Possible polish: richer mini-pie (task rings); only-one-monitor if two timeline
   windows are open at once (currently two timelines would double-pan - uncommon).
 
+## Review findings parked for an on-device session (fable2 review, 2026-07-01)
+
+These need live verification (UI feel / sensor timing), so they were reviewed
+and recorded rather than fixed blind:
+
+- [ ] Sensor poll runs the Chrome-tab AppleScript + AX title read synchronously
+  on the main actor every 2 s (Sensors.swift poll). Same hazard class as the
+  2026-06-30 email-capture freeze, just lower probability (a hung/modal Chrome
+  stalls tracking AND the UI). Fix = move poll() off the main run loop or fetch
+  URL/title on a background queue and feed results back as events. Needs
+  on-device soak — the email capture revert proves this path bites.
+- [ ] `fullPickList()`/`searchTasks()` (full ranker sort + fuzzy filter) are
+  called inside SwiftUI `body` at several sites (PopoverView switchList,
+  Timeline reassign/editor pickers, Spent reassign row, Review assign bar) —
+  re-ran per render. The 1 Hz republish fix removes the worst trigger; the
+  remaining cost is per-genuine-render. Proper fix: cache the ranked list in
+  @State keyed on journalRevision/taskCache/filter, or one shared TaskPickerBar
+  component (also collapses 4 near-duplicate filter-bar implementations).
+- [ ] Two open timeline windows cross-pan: the app-global scroll monitor gates
+  on `keyWindow?.identifier == "timeline"`, which both windows share. Gate on
+  the window instance captured at install instead. (Known TODO, now with root
+  cause.)
+- [ ] Spent pie selection is positional (`project(i)`/`task(i,j)`) into a
+  re-sorted `nodes` array — a background reload while a wedge is pinned can
+  silently retarget the pin to whichever task now sits at that index. Key the
+  selection by TaskRef/label instead.
+- [ ] AppController (1,9xx lines) hides three extractable units: the timeline/
+  journal editing block (~575 lines, no AppKit — could move toward Core as a
+  TimelineEditor), sync orchestration (~100 lines, `SyncCoordinator`), and the
+  pure `UndoStack`. Mechanical, but big diffs — do when the file next fights
+  back.
+
 ## Open
 
 - [x] Full keyboard/mouse parity sweep (DONE 2026-06-28). Audited every

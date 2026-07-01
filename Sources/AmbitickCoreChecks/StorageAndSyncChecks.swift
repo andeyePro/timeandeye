@@ -82,6 +82,27 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
                                     to: t0.addingTimeInterval(100_000)).count, 0)
     }
 
+    c.check("latestEndByTask aggregates per task and honours exclusions") {
+        let s = make()
+        let a = session(0.9)                                        // op(1), t0..t0+600
+        let later = Session(task: .op(1), start: t0.addingTimeInterval(1000),
+                            end: t0.addingTimeInterval(1600), certainty: 0.9)
+        let other = session(0.7, task: .op(2))
+        let checkpoint = Session(task: .op(1), start: t0.addingTimeInterval(9000),
+                                 end: t0.addingTimeInterval(9600), certainty: 0.9)
+        try s.save(a)
+        try s.save(later)
+        try s.save(other)
+        try s.save(checkpoint)
+        let all = try s.latestEndByTask(excluding: [])
+        try expectEq(all[.op(1)], checkpoint.end)
+        try expectEq(all[.op(2)], other.end)
+        // Excluding the live-checkpoint row must fall back to the real slices.
+        let real = try s.latestEndByTask(excluding: [checkpoint.id])
+        try expectEq(real[.op(1)], later.end)
+        try expectEq(real.count, 2)
+    }
+
     c.check("spans round-trip with range query") {
         let s = make()
         let signal = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: t0)

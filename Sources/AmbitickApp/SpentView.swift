@@ -31,7 +31,6 @@ struct SpentView: View {
     @State private var hover: Selection = .none
     @State private var pinned: Selection = .none
     @State private var opOnly = false
-    @State private var refreshTick = 0
 
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -96,7 +95,7 @@ struct SpentView: View {
         }
         .padding(12)
         .background { shortcutKeys }
-        .onReceive(timer) { _ in refreshTick += 1; reloadNodes(); reloadBlock() }
+        .onReceive(timer) { _ in reloadNodes(); reloadBlock() }
         .onChange(of: selStart) { _, _ in reloadNodes() }
         .onChange(of: selEnd) { _, _ in reloadNodes() }
         .onChange(of: opOnly) { _, _ in reloadNodes() }

@@ -15,6 +15,10 @@ public protocol JournalStore {
     func pushedCount() throws -> Int
     /// Sessions overlapping [from, to), oldest first — the timeline's feed.
     func sessions(from: Date, to: Date) throws -> [Session]
+    /// Each task's most recent session end (minus `excluding`, e.g. the live
+    /// checkpoint row) — the durable-recency feed. An aggregate query, so it
+    /// must never decode the whole table.
+    func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date]
     /// Sessions eligible for OP push: certainty >= threshold, not yet pushed,
     /// and on an `.op` task (local-only tasks never push).
     func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session]
@@ -63,6 +67,14 @@ public final class InMemoryJournalStore: JournalStore {
 
     public func sessions(from: Date, to: Date) throws -> [Session] {
         sessions.filter { $0.end > from && $0.start < to }.sorted { $0.start < $1.start }
+    }
+
+    public func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
+        var out: [TaskRef: Date] = [:]
+        for s in sessions where !excluding.contains(s.id) {
+            out[s.task] = max(out[s.task] ?? .distantPast, s.end)
+        }
+        return out
     }
 
     public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {

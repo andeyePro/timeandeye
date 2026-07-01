@@ -42,6 +42,9 @@ final class FailingMarkJournalStore: JournalStore {
     func sessionCount() throws -> Int { try inner.sessionCount() }
     func pushedCount() throws -> Int { try inner.pushedCount() }
     func sessions(from: Date, to: Date) throws -> [Session] { try inner.sessions(from: from, to: to) }
+    func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
+        try inner.latestEndByTask(excluding: excluding)
+    }
     func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         try inner.sessions(needingPushAtOrAbove: threshold)
     }
