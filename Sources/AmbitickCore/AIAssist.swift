@@ -27,7 +27,9 @@ public enum AIAssist {
         lines.append("")
         lines.append("TASKS (id: subject [project, status]):")
         for t in tasks {
-            if case .op(let id) = t.ref {
+            // Every remote task (OP int or GUID backend); .local stays out of
+            // scope for AI classification, as before.
+            if let id = t.ref.backendTaskID {
                 lines.append("#\(id): \(t.subject) [\(t.project ?? "-"), \(t.status)]")
             }
         }
@@ -40,7 +42,7 @@ public enum AIAssist {
         lines.append("")
         lines.append("""
         Reply with ONLY this JSON, no prose:
-        {"assignments": [{"segment": "<uuid>", "task": <task id number or "do-not-track">}]}
+        {"assignments": [{"segment": "<uuid>", "task": <task id (number or quoted string) or "do-not-track">}]}
         Use "do-not-track" for segments that are clearly not work on any listed task.
         """)
         return lines.joined(separator: "\n")
@@ -111,24 +113,29 @@ public enum AIAssist {
     }
 
     private enum TaskValue: Decodable {
-        case id(Int)
+        case id(String)          // an OP int or a GUID, normalised to String
         case doNotTrack
 
         init(from decoder: Decoder) throws {
             let c = try decoder.singleValueContainer()
             if let n = try? c.decode(Int.self) {
-                self = .id(n)
-            } else if let s = try? c.decode(String.self), s == "do-not-track" {
-                self = .doNotTrack
+                self = .id(String(n))
+            } else if let s = try? c.decode(String.self) {
+                self = s == "do-not-track" ? .doNotTrack : .id(s)
             } else {
                 throw DecodingError.dataCorruptedError(
-                    in: c, debugDescription: "task must be an integer id or \"do-not-track\"")
+                    in: c, debugDescription: "task must be an id (number or string) or \"do-not-track\"")
             }
         }
     }
 
+    /// `taskRefByID` maps `TaskRef.backendTaskID` strings back to refs —
+    /// build it from the live task cache. Ids the model hallucinated are
+    /// SKIPPED like unknown segment uuids (never fabricate a task ref: the
+    /// old blind `.op(n)` mapping could invent a nonexistent work package).
     public static func parseResponse(_ raw: String,
-                                     validSegmentIDs: Set<UUID>) throws -> [Assignment] {
+                                     validSegmentIDs: Set<UUID>,
+                                     taskRefByID: [String: TaskRef]) throws -> [Assignment] {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         // Tolerate ```json fences that chat UIs love to add.
         if text.hasPrefix("```") {
@@ -156,9 +163,18 @@ public enum AIAssist {
             guard let id = UUID(uuidString: entry.segment),
                   validSegmentIDs.contains(id) else { return nil }
             switch entry.task {
-            case .id(let n): return Assignment(segmentID: id, target: .task(.op(n)))
+            case .id(let key):
+                guard let ref = taskRefByID[key] else { return nil }
+                return Assignment(segmentID: id, target: .task(ref))
             case .doNotTrack: return Assignment(segmentID: id, target: .doNotTrack)
             }
         }
+    }
+
+    /// The lookup `parseResponse` needs, from the live task cache.
+    public static func taskRefLookup(_ tasks: [WorkTask]) -> [String: TaskRef] {
+        Dictionary(uniqueKeysWithValues: tasks.compactMap { t in
+            t.ref.backendTaskID.map { ($0, t.ref) }
+        })
     }
 }

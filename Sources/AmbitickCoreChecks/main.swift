@@ -86,6 +86,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("License", licenseChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
+    ("SyncEngineOwnership", syncEngineOwnershipChecks),
     ("JournalSyncer", journalSyncerChecks),
     ("OPClient", opClientChecks),
     ("SyncEngine", syncEngineChecks),

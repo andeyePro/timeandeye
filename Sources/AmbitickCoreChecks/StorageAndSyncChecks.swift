@@ -53,6 +53,15 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.sessions(needingPushAtOrAbove: 1.01), [])   // the "101%" setting
     }
 
+    c.check(".remote sessions are push-eligible; latestEndByTask keys them") {
+        let s = make()
+        let xero = session(0.9, task: .remote("guid-1"))
+        try s.save(xero)
+        try s.save(session(0.99, task: .local(UUID())))
+        try expectEq(try s.sessions(needingPushAtOrAbove: 0.8), [xero])
+        try expectEq(try s.latestEndByTask(excluding: [])[.remote("guid-1")], xero.end)
+    }
+
     c.check("mark pushed records the backend entry id") {
         let s = make()
         let a = session(0.9)
@@ -414,6 +423,66 @@ func syncEngineChecks(_ c: Checks) async {
     }
 }
 
+// MARK: - SyncEngine × GUID backends (TaskRef.remote migration)
+
+/// Minimal GUID-keyed backend: owns .remote only, records what it's asked to
+/// create — the shape the Xero conformer takes.
+final class StubGUIDBackend: TaskBackend {
+    var created: [(taskID: String, comment: String?)] = []
+    var displayName: String { "Stub" }
+    var pageRecognizer: BackendPageRecognizer { NoPageRecognizer() }
+    var supportsActivities: Bool { false }
+    func owns(_ ref: TaskRef) -> Bool {
+        if case .remote = ref { return true }
+        return false
+    }
+    func fetchTasks() async throws -> [WorkTask] { [] }
+    func fetchMe() async throws -> String { "" }
+    func fetchActivities() async throws -> [TimeActivity] { [] }
+    func taskURL(id: String) -> URL? { nil }
+    func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
+                         activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
+        created.append((taskID, comment))
+        return "entry-guid-\(created.count)"
+    }
+    func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
+                         duration: TimeInterval, activityID: Int?, comment: String?) async throws {}
+    func updateEntryComment(id: RemoteEntryID, comment: String) async throws {}
+    func deleteTimeEntry(id: RemoteEntryID) async throws {}
+    func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] { [] }
+    func addTaskComment(taskID: String, text: String) async throws {}
+}
+
+func syncEngineOwnershipChecks(_ c: Checks) async {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+
+    await c.check("a .remote session pushes to its GUID backend and marks with the GUID entry id") {
+        let journal = InMemoryJournalStore()
+        let backend = StubGUIDBackend()
+        try journal.save(Session(task: .remote("task-guid-9"), start: t0,
+                                 end: t0.addingTimeInterval(1800), certainty: 0.95))
+        let pushed = try await SyncEngine(journal: journal, backend: backend)
+            .pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pushed, 1)
+        try expectEq(backend.created.first?.taskID, "task-guid-9",
+                     "the GUID travels verbatim")
+        try expectEq(try journal.allSessions().first?.opTimeEntryID, "entry-guid-1")
+    }
+
+    await c.check("ownership guard: an eligible .op session is SKIPPED by a GUID backend — not pushed, not marked") {
+        let journal = InMemoryJournalStore()
+        let backend = StubGUIDBackend()
+        try journal.save(Session(task: .op(42), start: t0,
+                                 end: t0.addingTimeInterval(1800), certainty: 0.95))
+        let pushed = try await SyncEngine(journal: journal, backend: backend)
+            .pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pushed, 0)
+        try expectEq(backend.created.count, 0)
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8).count, 1,
+                     "stays queued for ITS backend — never silently marked")
+    }
+}
+
 // MARK: - AIAssist (plan task 12)
 
 func aiAssistChecks(_ c: Checks) {
@@ -434,34 +503,49 @@ func aiAssistChecks(_ c: Checks) {
         try expect(prompt.contains("do-not-track"))
     }
 
-    c.check("parses valid response") {
+    // The id→ref lookup parseResponse resolves through (built from the task
+    // cache in production; ids the model invents are skipped, not fabricated).
+    let lookup: [String: TaskRef] = ["1": .op(1), "2": .op(2),
+                                     "g-42": .remote("g-42")]
+
+    c.check("parses valid response — int, GUID string, and do-not-track") {
         let json = """
         {"assignments": [
           {"segment": "\(segID.uuidString)", "task": 1},
+          {"segment": "\(segID.uuidString)", "task": "g-42"},
           {"segment": "\(segID.uuidString)", "task": "do-not-track"}
         ]}
         """
-        let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID])
+        let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID],
+                                                taskRefByID: lookup)
         try expectEq(parsed, [
             AIAssist.Assignment(segmentID: segID, target: .task(.op(1))),
+            AIAssist.Assignment(segmentID: segID, target: .task(.remote("g-42"))),
             AIAssist.Assignment(segmentID: segID, target: .doNotTrack),
         ])
     }
 
-    c.check("skips unknown segments, rejects garbage") {
+    c.check("skips unknown segments AND unknown task ids, rejects garbage") {
         // A stray/hallucinated uuid must NOT throw away the whole batch — it is
         // skipped and the matching assignments still apply.
         let mixed = try AIAssist.parseResponse(
             #"{"assignments": [{"segment": "\#(UUID().uuidString)", "task": 1}, {"segment": "\#(segID.uuidString)", "task": 2}]}"#,
-            validSegmentIDs: [segID])
+            validSegmentIDs: [segID], taskRefByID: lookup)
         try expectEq(mixed, [AIAssist.Assignment(segmentID: segID, target: .task(.op(2)))])
+        // A hallucinated TASK id is skipped too — the old blind .op(n) mapping
+        // could fabricate a nonexistent work package.
+        let ghost = try AIAssist.parseResponse(
+            #"{"assignments": [{"segment": "\#(segID.uuidString)", "task": 999}]}"#,
+            validSegmentIDs: [segID], taskRefByID: lookup)
+        try expectEq(ghost, [])
         try expectThrows("non-JSON must throw") {
-            _ = try AIAssist.parseResponse("not json", validSegmentIDs: [segID])
+            _ = try AIAssist.parseResponse("not json", validSegmentIDs: [segID],
+                                           taskRefByID: lookup)
         }
         try expectThrows("boolean task must throw") {
             _ = try AIAssist.parseResponse(
                 #"{"assignments": [{"segment": "\#(segID.uuidString)", "task": true}]}"#,
-                validSegmentIDs: [segID])
+                validSegmentIDs: [segID], taskRefByID: lookup)
         }
     }
 
@@ -471,8 +555,22 @@ func aiAssistChecks(_ c: Checks) {
         {"assignments": [{"segment": "\(segID.uuidString)", "task": 1}]}
         ```
         """
-        let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID])
+        let parsed = try AIAssist.parseResponse(json, validSegmentIDs: [segID],
+                                                taskRefByID: lookup)
         try expectEq(parsed.count, 1)
+    }
+
+    c.check("classificationPrompt lists remote GUID tasks; taskRefLookup round-trips") {
+        let mixed = tasks + [WorkTask(ref: .remote("guid-7"), subject: "Xero job",
+                                      project: "Client", status: "ACTIVE"),
+                             WorkTask(ref: .local(UUID()), subject: "Chess", status: "Leisure")]
+        let prompt = AIAssist.classificationPrompt(tasks: mixed, segments: segments)
+        try expect(prompt.contains("#guid-7: Xero job"), "GUID tasks listed")
+        try expect(!prompt.contains("Chess"), ".local stays out of AI scope")
+        let built = AIAssist.taskRefLookup(mixed)
+        try expectEq(built["guid-7"], .remote("guid-7"))
+        try expectEq(built["1"], .op(1))
+        try expectEq(built.count, 2, ".local contributes no key")
     }
 
     c.check("pin-rule prompt carries the surface fields, grammar and advice") {
@@ -651,6 +749,8 @@ func settingsChecks(_ c: Checks) {
         var s = AmbitickSettings(opBaseURL: "https://op.example.com")
         s.defaultActivityID = 4
         s.activityOverrides[.op(42)] = 9
+        s.activityOverrides[.remote("guid-x")] = 3          // .remote keys survive
+        s.taskColours[TaskRef.remote("guid-x").storageKey] = "#123456"
         try store.save(s)
         try expectEq(try store.load(), s)
     }

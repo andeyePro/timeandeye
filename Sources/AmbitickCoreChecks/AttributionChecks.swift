@@ -23,6 +23,28 @@ func attributorChecks(_ c: Checks) {
         try expectClose(result.certainty, 0.95)
     }
 
+    c.check("a GUID-backend recognizer attributes and dwell-primes .remote refs") {
+        struct StubRecognizer: BackendPageRecognizer {
+            func taskRef(inURL urlString: String) -> TaskRef? {
+                urlString.contains("xero") ? .remote("g-1") : nil
+            }
+            func taskRef(inTitle title: String) -> TaskRef? { nil }
+            func isProjectPage(_ url: URL) -> Bool { false }
+        }
+        let a = Attributor(instanceHost: host)
+        a.customRecognizer = StubRecognizer()
+        let xeroPage = ActivitySignal(app: "Chrome", windowTitle: "Job",
+                                      tabURL: "https://go.xero.com/projects/x",
+                                      timestamp: now)
+        let result = a.attribute(xeroPage, tasks: tasks, now: now)
+        try expectEq(result.best?.target, .task(.remote("g-1")))
+        try expectClose(result.certainty, 0.95)
+        // Dwell-priming carries the .remote ref to the working surface.
+        a.noteDwell(ghostty)
+        let pending = a.attribute(ghostty, tasks: tasks, now: now)
+        try expectEq(pending.best?.target, .task(.remote("g-1")))
+    }
+
     c.check("priming flow: open -> dwell -> confirm") {
         let a = Attributor(instanceHost: host)
         _ = a.attribute(opPage(1), tasks: tasks, now: now)

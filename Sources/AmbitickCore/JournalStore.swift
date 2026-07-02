@@ -19,8 +19,8 @@ public protocol JournalStore {
     /// checkpoint row) — the durable-recency feed. An aggregate query, so it
     /// must never decode the whole table.
     func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date]
-    /// Sessions eligible for OP push: certainty >= threshold, not yet pushed,
-    /// and on an `.op` task (local-only tasks never push).
+    /// Sessions eligible for backend push: certainty >= threshold, not yet
+    /// pushed, and on a remote (.op / .remote) task (local-only never push).
     func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session]
     func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws
     /// Timeline edits: replace the stored session (matched by id).
@@ -84,7 +84,7 @@ public final class InMemoryJournalStore: JournalStore {
 
     public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         sessions.filter { session in
-            guard case .op = session.task else { return false }
+            guard session.task.isRemote else { return false }
             return !session.pushedToOP && session.certainty >= threshold
         }
     }

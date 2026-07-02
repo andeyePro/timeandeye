@@ -23,7 +23,11 @@ public final class SyncEngine {
                              includeComments: Bool) async throws -> Int {
         var pushed = 0
         for session in try journal.sessions(needingPushAtOrAbove: threshold) {
-            guard case .op(let taskID) = session.task else { continue }
+            // Ownership guard: an .op session must never push to Xero (nor
+            // vice versa). Un-owned sessions stay queued for their backend —
+            // skipped silently, never marked pushed.
+            guard backend.owns(session.task),
+                  let taskID = session.task.backendTaskID else { continue }
             let duration = session.end.timeIntervalSince(session.start)
             if duration < 60 {
                 // Too short for a backend entry (OP would round it to PT0H0M);

@@ -174,6 +174,23 @@ func sqliteSyncStampingChecks(_ c: Checks) {
         try expectEq(try store.revision(id: early.id)?.hlc, stamp, "idempotent")
     }
 
+    c.check("is_op column semantics FROZEN: 1 = remote/pushable (.op AND .remote), 0 = .local") {
+        let store = try makeStore()
+        let opS = session()
+        let remoteS = Session(task: .remote("g-1"), start: t0,
+                              end: t0.addingTimeInterval(600), certainty: 0.9)
+        let localS = Session(task: .local(UUID()), start: t0,
+                             end: t0.addingTimeInterval(600), certainty: 0.9)
+        try store.save(opS)
+        try store.save(remoteS)
+        try store.save(localS)
+        // The raw column, not query behaviour — the freeze is the contract.
+        for (id, want) in [(opS.id, 1), (remoteS.id, 1), (localS.id, 0)] {
+            let got = try store.rawIsOPColumn(id: id)
+            try expectEq(got, want, "is_op for \(id)")
+        }
+    }
+
     c.check("tombstone GC: purges old synced tombstones only") {
         let store = try makeStore()
         store.clock = makeClock()

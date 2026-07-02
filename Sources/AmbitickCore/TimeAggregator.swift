@@ -56,8 +56,7 @@ public enum TimeAggregator {
     }
 
     private static func fallbackLabel(_ ref: TaskRef) -> String {
-        if case .op(let id) = ref { return "WP #\(id)" }
-        return "Local task"
+        ref.fallbackLabel
     }
 
     /// App-level breakdown: spans attributed to this task, clipped to its

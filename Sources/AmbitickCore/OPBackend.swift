@@ -25,6 +25,11 @@ public final class OPBackend: TaskBackend {
 
     public var displayName: String { "OpenProject" }
     public var supportsActivities: Bool { true }
+
+    public func owns(_ ref: TaskRef) -> Bool {
+        if case .op = ref { return true }
+        return false
+    }
     public var pageRecognizer: BackendPageRecognizer {
         OPPageRecognizer(instanceHost: baseURL.host ?? "")
     }
@@ -41,11 +46,11 @@ public final class OPBackend: TaskBackend {
         try await client.fetchActivities()
     }
 
-    public func taskURL(id: Int) -> URL? {
-        baseURL.appendingPathComponent("work_packages/\(id)")
+    public func taskURL(id: String) -> URL? {
+        Int(id).map { baseURL.appendingPathComponent("work_packages/\($0)") }
     }
 
-    /// OP entry ids are ints; the seam speaks String (Xero uses GUIDs).
+    /// OP entry/task ids are ints; the seam speaks String (Xero uses GUIDs).
     /// A non-numeric id here can only mean cross-backend corruption — surface
     /// it, never silently no-op.
     private func opID(_ id: RemoteEntryID) throws -> Int {
@@ -55,11 +60,19 @@ public final class OPBackend: TaskBackend {
         return n
     }
 
-    public func createTimeEntry(taskID: Int, start: Date, duration: TimeInterval,
+    private func opTaskID(_ id: String) throws -> Int {
+        guard let n = Int(id) else {
+            throw OPClientError.malformedResponse("non-numeric OP task id '\(id)'")
+        }
+        return n
+    }
+
+    public func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
                                 activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
+        let wpID = try opTaskID(taskID)
         do {
             return try await client.createTimeEntry(
-                workPackageID: taskID, start: start, duration: duration,
+                workPackageID: wpID, start: start, duration: duration,
                 activityID: activityID, comment: comment,
                 startTime: startTimesSupported
                     ? Self.timeFormatter.string(from: start) : nil).map(String.init)
@@ -69,17 +82,17 @@ public final class OPBackend: TaskBackend {
             onDebug("422 with startTime, retrying without. body: \(body.prefix(300))")
             startTimesSupported = false
             return try await client.createTimeEntry(
-                workPackageID: taskID, start: start, duration: duration,
+                workPackageID: wpID, start: start, duration: duration,
                 activityID: activityID, comment: comment, startTime: nil).map(String.init)
         }
     }
 
-    public func updateTimeEntry(id: RemoteEntryID, taskID: Int, start: Date,
+    public func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
                                 duration: TimeInterval, activityID: Int?,
                                 comment: String?) async throws {
         try await client.updateTimeEntry(
-            id: opID(id), workPackageID: taskID, start: start, duration: duration,
-            activityID: activityID, comment: comment,
+            id: opID(id), workPackageID: try opTaskID(taskID), start: start,
+            duration: duration, activityID: activityID, comment: comment,
             startTime: startTimesSupported ? Self.timeFormatter.string(from: start) : nil)
     }
 
@@ -95,8 +108,8 @@ public final class OPBackend: TaskBackend {
         try await client.listTimeEntries(from: from, to: to)
     }
 
-    public func addTaskComment(taskID: Int, text: String) async throws {
-        try await client.addWorkPackageComment(id: taskID, text: text)
+    public func addTaskComment(taskID: String, text: String) async throws {
+        try await client.addWorkPackageComment(id: try opTaskID(taskID), text: text)
     }
 }
 
@@ -109,12 +122,12 @@ public struct OPPageRecognizer: BackendPageRecognizer {
         self.instanceHost = instanceHost
     }
 
-    public func taskID(inURL urlString: String) -> Int? {
-        OPURLParser.taskID(in: urlString, instanceHost: instanceHost)
+    public func taskRef(inURL urlString: String) -> TaskRef? {
+        OPURLParser.taskID(in: urlString, instanceHost: instanceHost).map(TaskRef.op)
     }
 
-    public func taskID(inTitle title: String) -> Int? {
-        OPURLParser.taskID(inTitle: title)
+    public func taskRef(inTitle title: String) -> TaskRef? {
+        OPURLParser.taskID(inTitle: title).map(TaskRef.op)
     }
 
     public func isProjectPage(_ url: URL) -> Bool {

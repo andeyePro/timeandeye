@@ -2,6 +2,21 @@
 
 ## 2026-07-02
 
+- [x] **`TaskRef.remote(String)` — GUID backends are first-class (255 checks
+  green).** Executed docs/superpowers/specs/2026-07-02-taskref-remote-plan.md
+  : additive third case, so
+  every existing journal row / pin / email rule / primed surface decodes
+  byte-identically — the wire format is now FROZEN by checks. The seam speaks
+  String task ids (OP converts at its edge); backends declare `owns(_:)` and
+  the SyncEngine skips un-owned eligible sessions silently (an .op session
+  can never push to Xero — it waits for its own backend). `is_op` column
+  keeps its name, means "remote/pushable". Recognizers return TaskRefs.
+  AIAssist's reply grammar accepts GUID strings and now resolves ids through
+  the live task cache — which also fixes a latent bug where a hallucinated
+  id fabricated a nonexistent `.op` task. DuplicateReconcile stays OP-only
+  (TODO'd). SEQUENCING: this ships one Community release before any GUID
+  backend mints `.remote` refs (older builds can't decode the new case).
+
 - [x] **Open-core app shape: the SwiftUI layer is now the `AmbitickUI`
   library; `AmbitickApp` is a three-line Community wrapper.** New
   `AmbitickScenes.body(controller:)` (@MainActor SceneBuilder) carries the

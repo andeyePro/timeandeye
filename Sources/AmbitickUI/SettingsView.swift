@@ -381,7 +381,9 @@ struct SettingsView: View {
     }
 
     private func openInOP(_ wp: Int) {
-        if let url = controller.taskWebURL(id: wp) { openURL(url) }
+        // OPTimeEntry.workPackageID is genuinely an Int (OP API side); the
+        // seam speaks String.
+        if let url = controller.taskWebURL(id: String(wp)) { openURL(url) }
     }
 
     /// The single non-work catch-all, expressed as a one-of selection over the

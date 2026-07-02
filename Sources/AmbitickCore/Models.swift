@@ -4,11 +4,40 @@ public enum Ambitick {
     public static let version = "0.1.0"
 }
 
-/// Identity of a task. `.op` = OpenProject work package; `.local` = Ambitick-only
-/// (leisure tracking etc.), never pushed to OP.
+/// Identity of a task. `.op` = OpenProject work package; `.remote` = a task
+/// in a GUID-keyed backend (Xero), id stored verbatim (the conformer
+/// normalises case); `.local` = Ambitick-only (leisure tracking etc.), never
+/// pushed. Additive cases only: the JSON wire shape of existing rows is
+/// frozen by checks.
 public enum TaskRef: Hashable, Codable, Sendable {
     case op(Int)
+    case remote(String)
     case local(UUID)
+}
+
+public extension TaskRef {
+    /// The id string a backend call needs: "\(n)" for .op, the GUID for
+    /// .remote, nil for .local (local tasks never push).
+    var backendTaskID: String? {
+        switch self {
+        case .op(let id): return String(id)
+        case .remote(let id): return id
+        case .local: return nil
+        }
+    }
+
+    /// True for tasks that live in a remote backend — the push-eligibility
+    /// test and the SQLite `is_op` column's real meaning.
+    var isRemote: Bool { backendTaskID != nil }
+
+    /// Label of last resort when the task cache has no subject for the ref.
+    var fallbackLabel: String {
+        switch self {
+        case .op(let id): return "WP #\(id)"
+        case .remote(let id): return "Task \(id.prefix(8))…"
+        case .local: return "Local task"
+        }
+    }
 }
 
 /// What a stretch of time can be attributed to.

@@ -15,11 +15,11 @@ public typealias RemoteTimeEntry = OPTimeEntry
 /// titles — the attribution engine's "you are looking at task N right now"
 /// hook. Standalone mode recognises nothing.
 public protocol BackendPageRecognizer: Sendable {
-    /// The task id when `urlString` is one of the backend's task pages.
-    func taskID(inURL urlString: String) -> Int?
+    /// The task when `urlString` is one of the backend's task pages.
+    func taskRef(inURL urlString: String) -> TaskRef?
     /// Fallback for surfaces with no readable URL (backend opened as a PWA):
-    /// the task id embedded in a window title / app name, if recognisable.
-    func taskID(inTitle title: String) -> Int?
+    /// the task embedded in a window title / app name, if recognisable.
+    func taskRef(inTitle title: String) -> TaskRef?
     /// True when the URL is a project-scoped page on the backend with no task
     /// id — the ranker then trusts its priors harder ("the most appropriate
     /// task in that project").
@@ -40,6 +40,10 @@ public protocol TaskBackend: AnyObject {
     /// Whether the backend has per-entry activity types (drives the Settings
     /// pickers; false hides them).
     var supportsActivities: Bool { get }
+    /// Whether this ref belongs to this backend — an `.op` session must never
+    /// push to Xero, nor vice versa. Un-owned eligible sessions are skipped
+    /// silently (they push when their backend reconnects), never marked.
+    func owns(_ ref: TaskRef) -> Bool
 
     // MARK: Task list
     func fetchTasks() async throws -> [WorkTask]
@@ -48,15 +52,17 @@ public protocol TaskBackend: AnyObject {
     func fetchMe() async throws -> String
     func fetchActivities() async throws -> [TimeActivity]
     /// The task's web page, for "Open in <backend>".
-    func taskURL(id: Int) -> URL?
+    func taskURL(id: String) -> URL?
 
     // MARK: Time entries
     /// Creates an entry and returns its id (nil when the backend replies
     /// without one). The backend owns its own encoding quirks — e.g. OP's
     /// startTime 422 fallback lives in the OP conformer, not the SyncEngine.
-    func createTimeEntry(taskID: Int, start: Date, duration: TimeInterval,
+    /// Task ids are String (the `TaskRef.backendTaskID` form): OP converts to
+    /// Int at its edge, GUID backends use them verbatim.
+    func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
                          activityID: Int?, comment: String?) async throws -> RemoteEntryID?
-    func updateTimeEntry(id: RemoteEntryID, taskID: Int, start: Date,
+    func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
                          duration: TimeInterval, activityID: Int?,
                          comment: String?) async throws
     func updateEntryComment(id: RemoteEntryID, comment: String) async throws
@@ -68,14 +74,14 @@ public protocol TaskBackend: AnyObject {
     // MARK: Comments
     /// Post a note to the task itself (OP: the work package's activity feed),
     /// where it is findable — not buried on a single time entry.
-    func addTaskComment(taskID: Int, text: String) async throws
+    func addTaskComment(taskID: String, text: String) async throws
 }
 
 /// A recognizer that never matches — standalone, and any backend whose pages
 /// carry no task identity.
 public struct NoPageRecognizer: BackendPageRecognizer {
     public init() {}
-    public func taskID(inURL urlString: String) -> Int? { nil }
-    public func taskID(inTitle title: String) -> Int? { nil }
+    public func taskRef(inURL urlString: String) -> TaskRef? { nil }
+    public func taskRef(inTitle title: String) -> TaskRef? { nil }
     public func isProjectPage(_ url: URL) -> Bool { false }
 }

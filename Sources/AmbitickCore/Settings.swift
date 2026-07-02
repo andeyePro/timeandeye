@@ -31,6 +31,7 @@ public extension TaskRef {
     var storageKey: String {
         switch self {
         case .op(let id): return "op:\(id)"
+        case .remote(let id): return "remote:\(id)"
         case .local(let uuid): return "local:\(uuid.uuidString)"
         }
     }

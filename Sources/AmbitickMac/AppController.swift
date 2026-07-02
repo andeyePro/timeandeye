@@ -430,8 +430,8 @@ public final class AppController: ObservableObject {
                 self.manualNote = ""
             }
             try? self.journal.save(s)
-            if let taskNote, case .op(let wpID) = s.task {
-                Task { await self.postTaskComment(wpID: wpID, note: taskNote) }
+            if let taskNote {
+                Task { await self.postTaskComment(ref: s.task, note: taskNote) }
             }
             // Tracked time counts as recency: the task you just worked on
             // belongs at the top of every pick list.
@@ -778,8 +778,7 @@ public final class AppController: ObservableObject {
         case .doNotTrack: return "Do not track"
         case .task(let ref):
             if let t = taskCache.first(where: { $0.ref == ref }) { return t.subject }
-            if case .op(let id) = ref { return "WP #\(id)" }
-            return "Leisure"
+            return ref.isRemote ? ref.fallbackLabel : "Leisure"
         }
     }
 
@@ -978,11 +977,13 @@ public final class AppController: ObservableObject {
     /// 'comment to task' notes are findable on the task itself. With no backend
     /// attached this is a no-op today; standalone storage lands with the
     /// backend-seam refactor (a local timestamped comment list).
-    private func postTaskComment(wpID: Int, note: String) async {
-        guard let backend else { return }
+    private func postTaskComment(ref: TaskRef, note: String) async {
+        // Ownership guard: never post an .op note to Xero or vice versa; a
+        // .local ref has no backendTaskID and drops out here too.
+        guard let backend, backend.owns(ref), let taskID = ref.backendTaskID else { return }
         do {
-            try await backend.addTaskComment(taskID: wpID, text: note)
-            DebugLog.write("posted task comment to task #\(wpID)")
+            try await backend.addTaskComment(taskID: taskID, text: note)
+            DebugLog.write("posted task comment to task #\(taskID)")
         } catch {
             lastError = "\(backend.displayName) task comment failed: \(error)"
         }
@@ -1477,11 +1478,11 @@ public final class AppController: ObservableObject {
         }
         try? journal.update(session)
         try? journal.escalateOrigin(session.id, to: .edited)
-        if case .op(let wpID) = session.task, let entryID = session.opTimeEntryID,
-           let backend {
+        if let backend, backend.owns(session.task),
+           let taskID = session.task.backendTaskID, let entryID = session.opTimeEntryID {
             do {
                 try await backend.updateTimeEntry(
-                    id: entryID, taskID: wpID, start: session.start,
+                    id: entryID, taskID: taskID, start: session.start,
                     duration: session.end.timeIntervalSince(session.start),
                     activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
                     comment: session.comment)
@@ -1645,11 +1646,12 @@ public final class AppController: ObservableObject {
             // extent — `pushEligible` only ever *creates*, so a re-push would
             // duplicate the log. Patch + mark handled; leave only never-pushed
             // survivors for sync to create fresh.
-            if case .op(let wpID) = survivor.task, let entryID = survivor.opTimeEntryID,
-               let backend {
+            if let backend, backend.owns(survivor.task),
+               let taskID = survivor.task.backendTaskID,
+               let entryID = survivor.opTimeEntryID {
                 do {
                     try await backend.updateTimeEntry(
-                        id: entryID, taskID: wpID, start: survivor.start,
+                        id: entryID, taskID: taskID, start: survivor.start,
                         duration: survivor.end.timeIntervalSince(survivor.start),
                         activityID: settings.activityOverrides[survivor.task] ?? settings.defaultActivityID,
                         comment: survivor.comment)
@@ -1767,7 +1769,8 @@ public final class AppController: ObservableObject {
     public func ingestAIResponse(_ raw: String) -> String {
         do {
             let assignments = try AIAssist.parseResponse(
-                raw, validSegmentIDs: Set(pendingReview.map(\.id)))
+                raw, validSegmentIDs: Set(pendingReview.map(\.id)),
+                taskRefByID: AIAssist.taskRefLookup(taskCache))
             for a in assignments {
                 assignReview([a.segmentID], to: a.target)
             }
@@ -1804,7 +1807,7 @@ public final class AppController: ObservableObject {
 
     /// The backend's web page for a remote task ("Open in OpenProject" etc.);
     /// nil when standalone or the backend has no task pages.
-    public func taskWebURL(id: Int) -> URL? {
+    public func taskWebURL(id: String) -> URL? {
         backend?.taskURL(id: id)
     }
 
@@ -1820,7 +1823,7 @@ public final class AppController: ObservableObject {
             if let t = self?.taskCache.first(where: { $0.ref == ref }) {
                 return (t.subject, t.project)
             }
-            if case .op(let id) = ref { return ("Task #\(id)", nil) }
+            if ref.isRemote { return (ref.fallbackLabel, nil) }
             return ("(deleted local task)", nil)
         }
         switch format {

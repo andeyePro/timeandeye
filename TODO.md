@@ -116,6 +116,13 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Generalise duplicate-reconcile beyond OP (2026-07-02, from the
+  TaskRef.remote migration): `DuplicateReconcile` is structurally OP-only
+  (`OPTimeEntry.workPackageID: Int`, `listTimeEntries` returns OP-shaped
+  entries). A GUID backend needs its own read-back comparison (or a
+  generic RemoteTimeEntry with String task ids). Deliberately left as-is in
+  the migration — reconcile is a maintenance tool, not the tracking path.
+
 - [ ] iCloud quota stewardship (Martin, 2026-07-02). Reality check first: the
   synced journal is TINY — a slice is a few hundred bytes, heavy tracking is
   ~50k slices/year ≈ 15–25 MB/year in the user's CloudKit private DB, and the

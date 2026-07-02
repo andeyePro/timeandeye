@@ -163,8 +163,10 @@ public final class SQLiteJournalStore: JournalStore {
                   let jsonString = String(data: json, encoding: .utf8) else {
                 throw StoreError.encode
             }
-            var isOP = 0
-            if case .op = session.task { isOP = 1 }
+            // is_op: 1 = remote/pushable task (.op OR .remote), 0 = .local.
+            // Column name is historic; renaming would force a table rewrite
+            // for zero behaviour gain.
+            let isOP = session.task.isRemote ? 1 : 0
             var stmt: OpaquePointer?
             let sql = """
             INSERT OR REPLACE INTO sessions
@@ -590,6 +592,17 @@ extension SQLiteJournalStore: RevisionStore {
     func saveClockState() {
         guard let clock, let data = try? encoder.encode(clock.last) else { return }
         setSyncStateData("clock", data)
+    }
+
+    /// Checks-only raw accessor: freezes the is_op column contract
+    /// (1 = remote/pushable, 0 = local) independent of query behaviour.
+    public func rawIsOPColumn(id: UUID) throws -> Int {
+        var out = -1
+        try query("SELECT is_op FROM sessions WHERE id = ?",
+                  bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
+            out = Int(sqlite3_column_int(stmt, 0))
+        }
+        return out
     }
 
     /// Tombstone GC (sync design: retain ≥ 90 days). Only tombstones the
