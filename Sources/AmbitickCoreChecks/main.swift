@@ -71,6 +71,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("SessionSync", sessionSyncChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
+    ("JournalSyncer", journalSyncerChecks),
     ("OPClient", opClientChecks),
     ("SyncEngine", syncEngineChecks),
     ("SyncIdempotency", syncIdempotencyChecks),

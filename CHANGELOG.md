@@ -2,6 +2,18 @@
 
 ## 2026-07-02
 
+- [x] **Sync orchestration: `JournalSyncer` + `SyncTransport`/`RevisionStore`
+  seams (5 checks, 222 total green).** The replica sync cycle (pull → HLC
+  receive → record-LWW apply → push dirty → clear) is pure Core, driven in
+  checks by a `MockSyncServer` that reuses the same `SessionMerge` LWW.
+  Proven scenarios: two offline replicas converge to identical raw sets and
+  views; conflicting whole-record edits resolve to the later HLC on both
+  sides; tombstones travel and a later edit resurrects; push echoes are
+  idempotent (no duplicates, nothing left dirty, no re-push of clean
+  records); a dirty local that wins LWW survives the pull and propagates.
+  Remaining for real sync: SQLite adoption of `RevisionStore` + controller
+  stamping (origin/HLC per mutation path), then the thin CloudKit transport.
+
 - [x] **Sync foundation: design doc + pure-Core HLC/merge engine (11 checks,
   217 total green).** Decision (Martin): multi-master journal from day one —
   iOS-only users have no Mac to own it. New
