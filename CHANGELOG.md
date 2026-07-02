@@ -2,6 +2,17 @@
 
 ## 2026-07-02
 
+- [x] **Open-core app shape: the SwiftUI layer is now the `AmbitickUI`
+  library; `AmbitickApp` is a three-line Community wrapper.** New
+  `AmbitickScenes.body(controller:)` (@MainActor SceneBuilder) carries the
+  MenuBarExtra + all windows; the private repo's Pro executable becomes the
+  same thin wrapper plus paid-backend registration. `AmbitickMac`/`AmbitickUI`
+  exported as library products for the pro package to depend on. Behaviour
+  identical (bindings on the Time windows constructed explicitly — a static
+  SceneBuilder has no `$controller`). the build bridge now cleans the remote
+  Sources tree before syncing (tar never deletes, so moved files ghosted).
+  245 checks green.
+
 - [x] **Controller sync wiring + CloudKit transport skeleton (245 checks
   green).** New `escalateOrigin` on the journal protocol: deliberate user
   actions promote a slice's cross-device authority (timeline edit/reassign →

@@ -5,14 +5,22 @@ let package = Package(
     name: "Ambitick",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "AmbitickCore", targets: ["AmbitickCore"])
+        .library(name: "AmbitickCore", targets: ["AmbitickCore"]),
+        // The pro repo's executable wraps these two (plus its paid backends).
+        .library(name: "AmbitickMac", targets: ["AmbitickMac"]),
+        .library(name: "AmbitickUI", targets: ["AmbitickUI"]),
     ],
     targets: [
         .target(name: "AmbitickCore"),
         // macOS-only layer: SQLite journal, Keychain, sensors, app controller.
         .target(name: "AmbitickMac", dependencies: ["AmbitickCore"]),
-        // The menu-bar app itself (wrapped into Ambitick.app by scripts/make-app.sh).
-        .executableTarget(name: "AmbitickApp", dependencies: ["AmbitickCore", "AmbitickMac"]),
+        // The whole SwiftUI layer as a LIBRARY, so app flavours are thin
+        // wrappers: Community (below) and the private Pro executable both
+        // return AmbitickScenes.body(controller:).
+        .target(name: "AmbitickUI", dependencies: ["AmbitickCore", "AmbitickMac"]),
+        // The Community menu-bar app (wrapped into Ambitick.app by scripts/make-app.sh).
+        .executableTarget(name: "AmbitickApp",
+                          dependencies: ["AmbitickCore", "AmbitickMac", "AmbitickUI"]),
         // Check harness instead of a test target: the build Mac has Command
         // Line Tools only (no XCTest / Swift Testing). Run: swift run AmbitickCoreChecks
         .executableTarget(name: "AmbitickCoreChecks",
