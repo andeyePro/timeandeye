@@ -39,6 +39,18 @@ func supportDirMigrationChecks(_ c: Checks) {
                    "legacy dir GONE — dual dirs would fork the journal")
     }
 
+    c.check("the API key survives the rename migration (regression: 'No API key yet')") {
+        let base = tempBase()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let legacy = base.appendingPathComponent("Ambitick")
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try Data("sekrit".utf8).write(to: legacy.appendingPathComponent("op-api-key"))
+        let dir = AppSupport.directory(under: base)   // migrates
+        let key = try Data(contentsOf: APIKeyStore.fileURL(in: dir))
+        try expectEq(String(data: key, encoding: .utf8), "sekrit",
+                     "key travels with the folder AND the lookup follows it")
+    }
+
     c.check("migration is one-shot: existing andeye dir wins, legacy untouched") {
         let base = tempBase()
         defer { try? FileManager.default.removeItem(at: base) }

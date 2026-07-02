@@ -14,10 +14,17 @@ import Foundation
 /// same directory, so this matches the existing on-disk posture. No keychain,
 /// no prompt. Renamed from `KeychainStore` so the name stops implying a keychain.
 public enum APIKeyStore {
+    /// Resolves through AppSupport so the key follows the data-home rename
+    /// migration (hardcoding "Ambitick" here caused the post-rename
+    /// "No API key yet" bug — the key had moved with the folder, the lookup
+    /// hadn't).
     private static func fileURL() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Ambitick")
-            .appendingPathComponent("op-api-key")
+        fileURL(in: AppSupport.directory())
+    }
+
+    /// Exposed for the migration regression check (temp-dir based).
+    public static func fileURL(in dir: URL) -> URL {
+        dir.appendingPathComponent("op-api-key")
     }
 
     public static func saveAPIKey(_ key: String) throws {

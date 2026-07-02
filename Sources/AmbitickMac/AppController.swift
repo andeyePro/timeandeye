@@ -180,24 +180,14 @@ public final class AppController: ObservableObject {
     private var visitSolid = false
 
     public static func supportDirectory() -> URL {
-        supportDirectory(under: FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask)[0])
+        AppSupport.directory()
     }
 
-    /// The app's data home is `andeye/`; installs that predate the rename
-    /// hold everything (journal.sqlite, settings, learning, pins…) in
-    /// `Ambitick/`. One-shot migration: MOVE (never copy — dual dirs would
-    /// fork the journal) the old dir into place when the new one is absent.
-    /// Pure function of `base` so the checks exercise it against temp dirs.
-    /// nonisolated: file-system only, no controller state.
+    /// Forwarder kept for the checks' temp-dir exercises; the logic (and the
+    /// rename migration) lives in AmbitickStore.AppSupport so EVERY on-disk
+    /// consumer shares it (see the post-rename API-key bug).
     public nonisolated static func supportDirectory(under base: URL) -> URL {
-        let dir = base.appendingPathComponent("andeye")
-        let legacy = base.appendingPathComponent("Ambitick")
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacy.path) {
-            try? fm.moveItem(at: legacy, to: dir)
-        }
-        return dir
+        AppSupport.directory(under: base)
     }
 
     public init() {

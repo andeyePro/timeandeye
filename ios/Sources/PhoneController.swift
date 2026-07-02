@@ -29,9 +29,7 @@ public final class PhoneController: ObservableObject {
     private let ranker = TaskRanker()
 
     public init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory,
-                                           in: .userDomainMask)[0]
-            .appendingPathComponent("andeye")
+        let dir = AppSupport.directory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         settingsStore = JSONFileStore<AmbitickSettings>(
             url: dir.appendingPathComponent("settings.json"))
