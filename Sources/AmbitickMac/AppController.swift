@@ -127,6 +127,10 @@ public final class AppController: ObservableObject {
     @Published public private(set) var lastError: String?
     @Published public private(set) var journalSummary = ""
     @Published public private(set) var connectedAs: String?
+    /// The validated licence, or nil for Community (no key / bad key / expired
+    /// — `licenseProblem` says which). Pro builds gate paid backends on this.
+    @Published public private(set) var license: License?
+    @Published public private(set) var licenseProblem: String?
     /// The speech-bubble note: replaces the auto comment on sessions closing
     /// while it is set; cleared when tracking stops.
     /// The speech-bubble note. NOT @Published: binding a TextField to a
@@ -139,6 +143,7 @@ public final class AppController: ObservableObject {
             Notifier.enabled = settings.systemNotifications
             attributor.emailMatchOrder = settings.emailMatchOrder
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
+            if oldValue.licenseKey != settings.licenseKey { revalidateLicense() }
             // Local-task edits (rename / project / leisure / add / remove) flow
             // straight into the live cache so every list, the timeline and the
             // pie reflect them at once.
@@ -246,8 +251,38 @@ public final class AppController: ObservableObject {
         }
         wireTracker()
         rebuildClient()
+        revalidateLicense()
         taskCache = localWorkTasks()   // locals exist before OP ever connects
         applyJournalRecency()          // recency survives the relaunch
+    }
+
+    /// Community when nil. Verification is offline (embedded public key);
+    /// an expired subscription key reports itself rather than silently
+    /// downgrading with no explanation.
+    private func revalidateLicense() {
+        guard let key = settings.licenseKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty else {
+            license = nil
+            licenseProblem = nil
+            return
+        }
+        switch LicenseVerifier.production.validate(key) {
+        case .success(let l):
+            license = l
+            licenseProblem = nil
+        case .failure(let e):
+            license = nil
+            switch e {
+            case .expired(let date):
+                licenseProblem = "Licence expired \(date.formatted(date: .abbreviated, time: .omitted))"
+            case .malformed:
+                licenseProblem = "That doesn't look like an Ambitick licence key"
+            case .badSignature:
+                licenseProblem = "Licence key failed verification"
+            case .unsupported:
+                licenseProblem = "Licensing unavailable on this platform"
+            }
+        }
     }
 
     /// User-defined non-OP tasks rendered as first-class tasks.

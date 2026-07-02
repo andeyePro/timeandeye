@@ -83,6 +83,7 @@ let suites: [(String, (Checks) -> Void)] = [
         }
     }),
     ("SQLiteSyncStamping", sqliteSyncStampingChecks),
+    ("License", licenseChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("JournalSyncer", journalSyncerChecks),

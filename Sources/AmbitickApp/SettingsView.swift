@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var senderProbe = ""
     @State private var exportPeriod: TimePeriod = .thisWeek
     @State private var exportCopied = false
+    @State private var licenseKeyField = ""
 
     var body: some View {
         Form {
@@ -186,6 +187,30 @@ struct SettingsView: View {
                        isOn: $controller.settings.lockOnLeave)
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
+            }
+
+            Section("Licence") {
+                if let l = controller.license {
+                    Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"
+                         + (l.expires.map { " · renews \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""))
+                        .font(.caption)
+                } else {
+                    Text("Community (free) — everything you see is fully functional. A licence adds paid backends (Xero…).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                HStack {
+                    TextField("Paste licence key", text: $licenseKeyField)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Apply") {
+                        controller.settings.licenseKey =
+                            licenseKeyField.isEmpty ? nil : licenseKeyField
+                        licenseKeyField = ""
+                    }
+                    .disabled(licenseKeyField.isEmpty && controller.settings.licenseKey == nil)
+                }
+                if let problem = controller.licenseProblem {
+                    Text(problem).font(.caption).foregroundStyle(.red)
+                }
             }
 
             Section("Maintenance") {

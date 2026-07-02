@@ -2,6 +2,18 @@
 
 ## 2026-07-02
 
+- [x] **Licensing rail (5 checks, 244 total green).** Core `License` /
+  `LicenseTier` (plus/pro/premium/enterprise; Community = no licence, fully
+  functional) with offline Ed25519 verification of `AMBI1.<payload>.<sig>`
+  keys (dot-separated JWT-style; base64url payload is canonical sorted-keys
+  JSON). Checks cover tamper (payload-swap upgrade attack), keygen (foreign
+  private key), expiry vs perpetual, garbage inputs, whitespace tolerance.
+  The production PUBLIC key is embedded; the private key + generator live
+  only in the pro staging area (gitignored) pending the ambitick-pro repo.
+  Settings gains a Licence section (paste key, tier/licensee/renewal status,
+  problem line — an expired key explains itself rather than silently
+  downgrading); controller revalidates on key change.
+
 - [x] **RemoteEntryID widened Int → String (Xero-ready; 239 checks green).**
   The seam's entry id is now String (OP: ints, Xero: GUIDs); `OPBackend`
   converts at its edge and surfaces a non-numeric id as an error instead of

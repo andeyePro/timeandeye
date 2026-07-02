@@ -91,6 +91,9 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     /// The email→task specificity ladder (general → specific); the most specific
     /// matching rule wins. User-reorderable.
     public var emailMatchOrder: [EmailMatchLevel]
+    /// The pasted licence key (a signed token, not a secret — safe in the
+    /// settings file). nil/invalid = Community tier, fully functional.
+    public var licenseKey: String?
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -117,7 +120,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:],
-                emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder) {
+                emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
+                licenseKey: String? = nil) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
@@ -144,6 +148,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.localTasks = localTasks
         self.taskColours = taskColours
         self.emailMatchOrder = emailMatchOrder
+        self.licenseKey = licenseKey
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -185,6 +190,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         let rawOrder = ((try? c.decodeIfPresent([String].self, forKey: .emailMatchOrder)) ?? nil) ?? []
         let mapped = rawOrder.compactMap { EmailMatchLevel(rawValue: $0) }
         emailMatchOrder = Set(mapped) == Set(EmailMatchLevel.allCases) ? mapped : defaults.emailMatchOrder
+        licenseKey = ((try? c.decodeIfPresent(String.self, forKey: .licenseKey)) ?? nil) ?? defaults.licenseKey
     }
 }
 
