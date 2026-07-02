@@ -680,7 +680,7 @@ struct PopoverView: View {
                 Image(systemName: "xmark.circle")
             }
             .keyboardShortcut("q", modifiers: .command)
-            .help("Quit Ambitick (⌘Q)")
+            .help("Quit andeye (⌘Q)")
         }
         .buttonStyle(.plain)
         .font(.body)

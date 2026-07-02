@@ -2,6 +2,17 @@
 
 ## 2026-07-02
 
+- [x] **Rename phase 1 executed: the app IS andeye now (261 checks green).**
+  Data home migrates `Application Support/Ambitick` → `andeye` via a checked
+  one-shot MOVE (fresh-install / move-with-contents / one-shot semantics all
+  covered); debug log → andeye-debug.log; make-app.sh builds andeye.app
+  (bundle id com.andeye.mac, "andeye Dev" signing identity, quits/retires
+  pre-rename installs); window titles + popover copy renamed; README/MANUAL
+  swept (repo URL + module names deliberately keep the working name — see
+  the rename plan's phase 2). NOTE FOR THE NEXT BUILD: new bundle id + new
+  signing identity = macOS treats it as a new app — Accessibility and
+  Automation get granted ONCE more.
+
 - [x] **Seam: `supportsTaskComments` capability (255 checks green).** Xero
   Projects has no task-comment endpoint; rather than erroring per note, the
   controller now skips comment-to-task for backends that declare false (the

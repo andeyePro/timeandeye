@@ -1,4 +1,7 @@
-# Ambitick
+# andeye
+
+(The original working name was **Ambitick** — it survives in the repo URL
+and module names.)
 
 Automatic time tracking against your project-management tool's tasks. A macOS
 menu-bar app that watches which window, app or browser tab is active and
@@ -22,7 +25,7 @@ Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
 ```bash
 git clone https://github.com/Ambitick/Ambitick.git
 cd Ambitick
-./scripts/make-app.sh          # builds release binary, wraps it as Ambitick.app
+./scripts/make-app.sh          # builds release binary, wraps it as andeye.app
 ```
 
 Run the checks (no XCTest needed – plain executable):
@@ -33,12 +36,12 @@ swift run AmbitickCoreChecks   # expect: TOTAL: N passed, 0 failed
 
 ## First-run setup
 
-1. **Launch**: right-click `Ambitick.app` → Open (it is ad-hoc signed, not
+1. **Launch**: right-click `andeye.app` → Open (it is ad-hoc signed, not
    notarized). A grey dot + `–` appears in the menu bar.
 2. **Accessibility** (window titles): System Settings → Privacy & Security →
-   Accessibility → enable Ambitick. The app prompts on first launch.
+   Accessibility → enable andeye. The app prompts on first launch.
 3. **Automation → browser** (tab URLs): the first time Chrome/Opera/Brave is
-   frontmost, macOS asks "Ambitick wants to control Google Chrome" → Allow.
+   frontmost, macOS asks "andeye wants to control Google Chrome" → Allow.
 4. **Connect OpenProject**: menu-bar dot → Settings → enter your instance URL
    and an API key (OP: Account settings → Access tokens → API). The key goes
    to the macOS Keychain, the task list loads, and the instance's activity
@@ -49,7 +52,7 @@ swift run AmbitickCoreChecks   # expect: TOTAL: N passed, 0 failed
 
 ## Nomenclature
 
-Ambitick records time in a small hierarchy — these are the words used in the
+andeye records time in a small hierarchy — these are the words used in the
 UI, this README, and the code:
 
 - **Slice** — one contiguous stretch of time tracked to a single task. A slice

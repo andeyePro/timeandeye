@@ -25,7 +25,7 @@ public enum AmbitickScenes {
         .menuBarExtraStyle(.window)
 
         // One Time window — timeline or pie, flipped in place (click a preview).
-        Window("Ambitick Time", id: "time") {
+        Window("andeye Time", id: "time") {
             TimeContainer(controller: controller,
                           view: Binding(get: { controller.timeWindowView },
                                         set: { controller.timeWindowView = $0 }),
@@ -35,7 +35,7 @@ public enum AmbitickScenes {
 
         // The optional second Time window (control/right-click a preview), so you
         // can see both views at once.
-        Window("Ambitick Time · 2nd view", id: "time2") {
+        Window("andeye Time · 2nd view", id: "time2") {
             TimeContainer(controller: controller,
                           view: Binding(get: { controller.timeWindow2View },
                                         set: { controller.timeWindow2View = $0 }),
@@ -43,12 +43,12 @@ public enum AmbitickScenes {
         }
         .defaultSize(width: 980, height: 460)
 
-        Window("Ambitick Review", id: "review") {
+        Window("andeye Review", id: "review") {
             ReviewView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 640, height: 420)
 
-        Window("Ambitick Settings", id: "settings") {
+        Window("andeye Settings", id: "settings") {
             SettingsView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 460, height: 480)

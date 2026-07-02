@@ -1,6 +1,6 @@
-# Ambitick - User Manual
+# andeye - User Manual
 
-Ambitick is a macOS menu-bar app that tracks where your time goes and files it
+andeye is a macOS menu-bar app that tracks where your time goes and files it
 against your OpenProject work packages (it calls them "tasks") automatically. It
 watches which window, app or browser tab is in front, attributes the time to the
 most likely task, and learns from your corrections so it asks less over time.
@@ -12,7 +12,7 @@ This manual covers day-to-day use. For building and first-run setup see
 
 ## The menu-bar popover
 
-Click the Ambitick icon in the menu bar to open the popover. The icon itself
+Click the andeye icon in the menu bar to open the popover. The icon itself
 shows the current elapsed time, and a small coloured dot whose colour reflects
 how certain the attribution is (red = uncertain, green = certain).
 
@@ -23,7 +23,7 @@ At the top:
   below). A quiet "← <previous task>" button appears beside it when the last
   switch looks wrong - one click folds the current slice back onto that task.
 - **Elapsed + certainty** - the time on the current contiguous session and, when
-  not pinned, how certain Ambitick is.
+  not pinned, how certain andeye is.
 - **Pin chip** - when the surface is pinned you see a pin icon and the pinned
   scope. Click it to adjust or remove the pin.
 - **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step
@@ -53,7 +53,7 @@ The footer:
 
 ## Auto-tracking and attribution
 
-Every time the front window, app or tab changes, Ambitick scores the candidate
+Every time the front window, app or tab changes, andeye scores the candidate
 tasks and tracks the best one. Sources, strongest first:
 
 1. An explicit **pin** (always 100%).
@@ -203,7 +203,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **↵** in the filter - pick the top task in the list.
 - **⌘↵** - claim the "you were away" idle gap as work.
 - **⌘Y** - open the Time window. **⌘U** - open the Review queue.
-- **⌘,** - Settings. **⌘Q** - quit Ambitick.
+- **⌘,** - Settings. **⌘Q** - quit andeye.
 
 ### Pin editor
 

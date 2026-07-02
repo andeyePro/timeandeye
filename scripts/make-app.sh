@@ -1,24 +1,26 @@
 #!/bin/bash
-# Build Ambitick.app from the SwiftPM executable.
+# Build andeye.app from the SwiftPM executable.
 # Run on the Mac, from the repo root:  ./scripts/make-app.sh [output-dir]
 set -euo pipefail
 
 OUT="${1:-.}"
-APP="$OUT/Ambitick.app"
+APP="$OUT/andeye.app"
 # With no output-dir arg we INSTALL into /Applications (where launchers —
 # Raycast, Spotlight — find it) and relaunch. A running instance must quit
 # first: replacing a running bundle in place can kill it mid-execution
 # (the "menu bar icon disappeared" deaths).
 INSTALL=0
 [ $# -eq 0 ] && INSTALL=1
-if pgrep -xq Ambitick; then
+# Quit whichever name is running (pre-rename installs are "Ambitick").
+if pgrep -xq andeye || pgrep -xq Ambitick; then
     if [ "$INSTALL" = 1 ]; then
-        echo "Quitting running Ambitick to replace it…"
+        echo "Quitting running app to replace it…"
+        osascript -e 'quit app "andeye"' 2>/dev/null || true
         osascript -e 'quit app "Ambitick"' 2>/dev/null || true
-        for _ in $(seq 1 10); do pgrep -xq Ambitick || break; sleep 0.5; done
+        for _ in $(seq 1 10); do (pgrep -xq andeye || pgrep -xq Ambitick) || break; sleep 0.5; done
     else
-        APP="$OUT/Ambitick+.app"
-        echo "NOTE: Ambitick is running; building to $APP - quit the old one and rename to swap."
+        APP="$OUT/andeye+.app"
+        echo "NOTE: app is running; building to $APP - quit the old one and rename to swap."
     fi
 fi
 
@@ -27,28 +29,28 @@ BIN="$(swift build -c release --show-bin-path)/AmbitickApp"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$BIN" "$APP/Contents/MacOS/Ambitick"
+cp "$BIN" "$APP/Contents/MacOS/andeye"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key><string>org.example.ambitick</string>
-    <key>CFBundleName</key><string>Ambitick</string>
-    <key>CFBundleDisplayName</key><string>Ambitick</string>
-    <key>CFBundleExecutable</key><string>Ambitick</string>
+    <key>CFBundleIdentifier</key><string>com.andeye.mac</string>
+    <key>CFBundleName</key><string>andeye</string>
+    <key>CFBundleDisplayName</key><string>andeye</string>
+    <key>CFBundleExecutable</key><string>andeye</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Ambitick reads the active browser tab URL to attribute time to the right task.</string>
+    <string>andeye reads the active browser tab URL to attribute time to the right task.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Ambitick observes whether the microphone is in use (call detection); it never records audio.</string>
+    <string>andeye observes whether the microphone is in use (call detection); it never records audio.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Ambitick talks to your own OpenProject instance, which may be on your local network.</string>
+    <string>andeye talks to your own backend instance, which may be on your local network.</string>
     <!-- v0.1: user-entered OP URLs may be plain http on a LAN/NAS; without
          this exception ATS silently blocks every request from a bundled app. -->
     <key>NSAppTransportSecurity</key>
@@ -67,7 +69,7 @@ BUILD_STAMP="$(date '+%Y-%m-%d %H:%M')"
 # Stable signing identity: ad-hoc signing changes the app's identity every
 # build, which silently invalidates TCC grants (Accessibility, Automation)
 # each time. A persistent self-signed cert keeps grants across rebuilds.
-IDENTITY="Ambitick Dev"
+IDENTITY="andeye Dev"
 KC="$HOME/ambitick-dev.keychain-db"
 KCPASS="ambitick-build"
 ensure_identity() {
@@ -85,7 +87,7 @@ distinguished_name = dn
 x509_extensions = ext
 prompt = no
 [dn]
-CN = Ambitick Dev
+CN = andeye Dev
 [ext]
 keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,codeSigning
@@ -126,8 +128,8 @@ echo "Built $APP"
 # this the freshly-built app sits in the repo while launchers keep opening the
 # old /Applications copy.
 if [ "$INSTALL" = 1 ]; then
-    DEST="/Applications/Ambitick.app"
-    rm -rf "$DEST"
+    DEST="/Applications/andeye.app"
+    rm -rf "$DEST" "/Applications/Ambitick.app"   # retire the pre-rename install
     ditto "$APP" "$DEST"          # preserves the signature + bundle structure
     echo "Installed to $DEST"
     open "$DEST"
