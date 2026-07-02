@@ -104,10 +104,12 @@ and recorded rather than fixed blind:
   on `keyWindow?.identifier == "timeline"`, which both windows share. Gate on
   the window instance captured at install instead. (Known TODO, now with root
   cause.)
-- [ ] Spent pie selection is positional (`project(i)`/`task(i,j)`) into a
+- [x] Spent pie selection is positional (`project(i)`/`task(i,j)`) into a
   re-sorted `nodes` array — a background reload while a wedge is pinned can
   silently retarget the pin to whichever task now sits at that index. Key the
-  selection by TaskRef/label instead.
+  selection by TaskRef/label instead. (DONE 2026-07-02 — PieGeometry in Core,
+  label-keyed Selection + resolve(), checked. On-device: confirm hover/pin
+  feel unchanged.)
 - [ ] AppController (1,9xx lines) hides three extractable units: the timeline/
   journal editing block (~575 lines, no AppKit — could move toward Core as a
   TimelineEditor), sync orchestration (~100 lines, `SyncCoordinator`), and the
@@ -123,12 +125,10 @@ and recorded rather than fixed blind:
   assignment — what an acquirer's diligence prefers); add CONTRIBUTING.md +
   enforcement (PR check) in the same commit that makes the repo public. Zero
   urgency until the publish moment, blocking at it.
-- [ ] Generalise duplicate-reconcile beyond OP (2026-07-02, from the
-  TaskRef.remote migration): `DuplicateReconcile` is structurally OP-only
-  (`OPTimeEntry.workPackageID: Int`, `listTimeEntries` returns OP-shaped
-  entries). A GUID backend needs its own read-back comparison (or a
-  generic RemoteTimeEntry with String task ids). Deliberately left as-is in
-  the migration — reconcile is a maintenance tool, not the tracking path.
+- [x] Generalise duplicate-reconcile beyond OP (2026-07-02, from the
+  TaskRef.remote migration). (DONE 2026-07-02, 11c6d0a — RemoteTimeEntry is
+  a real Core struct with String ids; ReconcileAction backend-neutral;
+  OPBackend converts at its edge.)
 
 - [ ] iCloud quota stewardship (Martin, 2026-07-02). Reality check first: the
   synced journal is TINY — a slice is a few hundred bytes, heavy tracking is

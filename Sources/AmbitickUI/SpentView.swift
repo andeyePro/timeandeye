@@ -34,12 +34,10 @@ struct SpentView: View {
 
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
-    enum Selection: Equatable {
-        case none
-        case project(Int)
-        case task(Int, Int)
-        case app(Int, Int, Int)
-    }
+    /// Label-keyed (PieGeometry.Selection), so a pinned wedge follows its node
+    /// when a background reload re-sorts `nodes` instead of silently
+    /// retargeting to whatever now sits at the old index.
+    private typealias Selection = PieGeometry.Selection
 
     @State private var reassignFilter = ""
 
@@ -256,44 +254,26 @@ struct SpentView: View {
         MenuTitle.text(elapsed: seconds, certainty: nil, showPercent: false)
     }
 
-    private func angles(for children: [TimeAggregator.Node], total: TimeInterval,
-                        within range: (Double, Double)? = nil) -> [(Double, Double)] {
-        let (lo, hi) = range ?? (-90, 270)
-        let span = hi - lo
-        var cursor = lo
-        return children.map { node in
-            let sweep = total > 0 ? span * node.seconds / total : 0
-            defer { cursor += sweep }
-            return (cursor, cursor + sweep)
-        }
-    }
-
     private var active: Selection { pinned == .none ? hover : pinned }
 
-    // MARK: - Geometry (scales with the window)
+    /// The active selection resolved against the CURRENT nodes array (nil when
+    /// nothing is selected or its node vanished in a reload).
+    private var resolved: PieGeometry.Resolved? { PieGeometry.resolve(active, in: nodes) }
 
-    private struct Metrics {
-        let r1: CGFloat
-        let hole: CGFloat
-        let gap: CGFloat
-        let ringWidth: CGFloat
-
-        init(side: CGFloat) {
-            r1 = side * 0.30
-            hole = side * 0.10
-            gap = max(side * 0.012, 3)
-            ringWidth = side * 0.085
-        }
-
-        var outerMost: CGFloat { r1 + gap * 2 + ringWidth * 2 }
+    /// True when the active selection IS the task at index `j` of the expanded
+    /// project (not its parent-of-an-app case).
+    private func isActiveTask(_ j: Int) -> Bool {
+        if case .task = active { return resolved?.task == j }
+        return false
     }
 
     // MARK: - Pie
 
     private func pie(in size: CGSize) -> some View {
         let side = min(size.width, size.height)
-        let m = Metrics(side: side)
-        let projectAngles = angles(for: nodes, total: totalSeconds)
+        let m = PieGeometry.Metrics(side: side)
+        let projectAngles = PieGeometry.angles(weights: nodes.map(\.seconds),
+                                               total: totalSeconds)
         return Canvas { context, canvasSize in
             let centre = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
             for (i, node) in nodes.enumerated() {
@@ -327,10 +307,11 @@ struct SpentView: View {
                 let (p0, p1) = projectAngles[pi]
                 let local = isLocalProject(nodes[pi])
                 let tasks = nodes[pi].children
-                let taskAngles = angles(for: tasks, total: nodes[pi].seconds, within: (p0, p1))
+                let taskAngles = PieGeometry.angles(weights: tasks.map(\.seconds),
+                                                    total: nodes[pi].seconds, within: (p0, p1))
                 for (j, task) in tasks.enumerated() {
                     let (a0, a1) = taskAngles[j]
-                    let highlighted = active == .task(pi, j)
+                    let highlighted = isActiveTask(j)
                     let outer = m.r1 + m.gap + m.ringWidth + (highlighted ? 3 : 0)
                     ring(context, centre: centre, inner: m.r1 + m.gap, outer: outer,
                          from: a0, to: a1,
@@ -350,7 +331,8 @@ struct SpentView: View {
                     // (e.g. all Ambitick work in Ghostty) fills 100% of the
                     // task arc — span coverage is partial, the task total isn't.
                     let appTotal = apps.reduce(0.0) { $0 + $1.seconds }
-                    let appAngles = angles(for: apps, total: appTotal, within: (t0, t1))
+                    let appAngles = PieGeometry.angles(weights: apps.map(\.seconds),
+                                                       total: appTotal, within: (t0, t1))
                     for (k, app) in apps.enumerated() {
                         let (a0, a1) = appAngles[k]
                         let appColour = taskColour(tasks[tj]).opacity(k % 2 == 0 ? 0.85 : 0.55)
@@ -440,19 +422,18 @@ struct SpentView: View {
 
     private func drawCentreLabel(_ context: GraphicsContext, _ centre: CGPoint) {
         let (title, seconds): (String, TimeInterval)
-        switch active {
-        case .none:
-            (title, seconds) = ("total", totalSeconds)
-        case .project(let i) where i < nodes.count:
-            (title, seconds) = (nodes[i].label, nodes[i].seconds)
-        case .task(let i, let j) where i < nodes.count && j < nodes[i].children.count:
-            let t = nodes[i].children[j]
-            (title, seconds) = (t.label, t.seconds)
-        case .app(let i, let j, let k) where i < nodes.count && j < nodes[i].children.count
-            && k < nodes[i].children[j].children.count:
-            let a = nodes[i].children[j].children[k]
-            (title, seconds) = (a.label, a.seconds)
-        default:
+        if let r = resolved {
+            let project = nodes[r.project]
+            if let ti = r.task, let ai = r.app {
+                let a = project.children[ti].children[ai]
+                (title, seconds) = (a.label, a.seconds)
+            } else if let ti = r.task {
+                let t = project.children[ti]
+                (title, seconds) = (t.label, t.seconds)
+            } else {
+                (title, seconds) = (project.label, project.seconds)
+            }
+        } else {
             (title, seconds) = ("total", totalSeconds)
         }
         let pct = totalSeconds > 0 ? Int((seconds / totalSeconds * 100).rounded()) : 0
@@ -479,87 +460,70 @@ struct SpentView: View {
     // MARK: - Hit testing (contiguous bands: no dead zone between rings, so
     // travelling wedge -> task arc -> app arc never collapses the expansion)
 
-    private func hitTest(_ point: CGPoint, size: CGSize, metrics m: Metrics) -> Selection {
+    private func hitTest(_ point: CGPoint, size: CGSize,
+                         metrics m: PieGeometry.Metrics) -> Selection {
         let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-        let dx = point.x - centre.x
-        let dy = point.y - centre.y
-        let r = sqrt(dx * dx + dy * dy)
-        var angle = atan2(dy, dx) * 180 / .pi
-        if angle < -90 { angle += 360 }
-        let projectAngles = angles(for: nodes, total: totalSeconds)
-
-        if r <= m.r1 + 3 {
-            for (i, (a0, a1)) in projectAngles.enumerated() where angle >= a0 && angle < a1 {
-                return .project(i)
+        let angle = PieGeometry.polarAngle(dx: point.x - centre.x, dy: point.y - centre.y)
+        let r = hypot(point.x - centre.x, point.y - centre.y)
+        let projectAngles = PieGeometry.angles(weights: nodes.map(\.seconds),
+                                               total: totalSeconds)
+        switch PieGeometry.band(radius: r, metrics: m) {
+        case .wedge:
+            guard let i = PieGeometry.index(at: angle, in: projectAngles) else { return .none }
+            return .project(nodes[i].label)
+        case .taskRing:
+            guard let pi = activeProjectIndex() else { return .none }
+            let project = nodes[pi]
+            let taskAngles = PieGeometry.angles(weights: project.children.map(\.seconds),
+                                                total: project.seconds,
+                                                within: projectAngles[pi])
+            if let j = PieGeometry.index(at: angle, in: taskAngles) {
+                return .task(project.label, project.children[j].label)
             }
-            return .none
-        }
-        guard let pi = activeProjectIndex(), pi < nodes.count else { return .none }
-        let (p0, p1) = projectAngles[pi]
-        if r <= m.r1 + m.gap + m.ringWidth + 3 {
-            let taskAngles = angles(for: nodes[pi].children, total: nodes[pi].seconds,
-                                    within: (p0, p1))
-            for (j, (a0, a1)) in taskAngles.enumerated() where angle >= a0 && angle < a1 {
-                return .task(pi, j)
-            }
-            return .project(pi)        // ring band, off-arc: keep the expansion
-        }
-        if r <= m.outerMost + 3, let tj = activeTaskIndex(), tj < nodes[pi].children.count {
-            let apps = nodes[pi].children[tj].children
-            guard !apps.isEmpty else { return active }
-            let taskAngles = angles(for: nodes[pi].children, total: nodes[pi].seconds,
-                                    within: (p0, p1))
-            let (t0, t1) = taskAngles[tj]
-            let appTotal = apps.reduce(0.0) { $0 + $1.seconds }
-            let appAngles = angles(for: apps, total: appTotal, within: (t0, t1))
-            for (k, (a0, a1)) in appAngles.enumerated() where angle >= a0 && angle < a1 {
-                return .app(pi, tj, k)
+            return .project(project.label)   // ring band, off-arc: keep the expansion
+        case .appRing:
+            guard let pi = activeProjectIndex(), let tj = activeTaskIndex() else { return .none }
+            let project = nodes[pi]
+            let task = project.children[tj]
+            guard !task.children.isEmpty else { return active }
+            let taskAngles = PieGeometry.angles(weights: project.children.map(\.seconds),
+                                                total: project.seconds,
+                                                within: projectAngles[pi])
+            let appTotal = task.children.reduce(0.0) { $0 + $1.seconds }
+            let appAngles = PieGeometry.angles(weights: task.children.map(\.seconds),
+                                               total: appTotal, within: taskAngles[tj])
+            if let k = PieGeometry.index(at: angle, in: appAngles) {
+                return .app(project.label, task.label, task.children[k].label)
             }
             return active
-        }
-        return .none
-    }
-
-    private func activeProjectIndex() -> Int? {
-        switch active {
-        case .project(let i): return i
-        case .task(let i, _): return i
-        case .app(let i, _, _): return i
-        case .none: return nil
+        case .outside:
+            return .none
         }
     }
 
-    private func activeTaskIndex() -> Int? {
-        switch active {
-        case .task(_, let j): return j
-        case .app(_, let j, _): return j
-        default: return nil
-        }
-    }
+    private func activeProjectIndex() -> Int? { resolved?.project }
+
+    private func activeTaskIndex() -> Int? { resolved?.task }
 
     // MARK: - Colours / labels
 
     // MARK: - Reassign (click a pinned task/app → move that time)
 
     @ViewBuilder private var reassignBar: some View {
-        switch pinned {
-        case .task(let i, let j) where i < nodes.count && j < nodes[i].children.count:
-            let task = nodes[i].children[j]
-            if let ref = task.ref {
+        if let r = PieGeometry.resolve(pinned, in: nodes), let ti = r.task {
+            let task = nodes[r.project].children[ti]
+            if let ai = r.app {
+                let app = task.children[ai]
+                reassignRow(label: "\(app.label) time (\(hm(app.seconds)))") { target in
+                    let (from, to) = effectiveRange
+                    Task { await controller.reassignSpentApp(app.label, from: from, to: to, to: target) }
+                }
+            } else if let ref = task.ref {
                 reassignRow(label: "all \(task.label) (\(hm(task.seconds)))") { target in
                     let (from, to) = effectiveRange
                     Task { await controller.reassignSpentTask(ref, from: from, to: to, to: target) }
                 }
             }
-        case .app(let i, let j, let k) where i < nodes.count && j < nodes[i].children.count
-            && k < nodes[i].children[j].children.count:
-            let app = nodes[i].children[j].children[k]
-            reassignRow(label: "\(app.label) time (\(hm(app.seconds)))") { target in
-                let (from, to) = effectiveRange
-                Task { await controller.reassignSpentApp(app.label, from: from, to: to, to: target) }
-            }
-        default:
-            EmptyView()
         }
     }
 
@@ -640,7 +604,7 @@ struct SpentView: View {
                 ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
                     let local = isLocalProject(node)
                     Button {
-                        pinned = pinned == .project(i) ? .none : .project(i)
+                        pinned = pinned == .project(node.label) ? .none : .project(node.label)
                     } label: {
                         HStack(spacing: 6) {
                             swatch(colour(project: node, index: i),
@@ -661,7 +625,7 @@ struct SpentView: View {
                     if activeProjectIndex() == i {
                         ForEach(Array(node.children.enumerated()), id: \.offset) { j, task in
                             HStack(spacing: 6) {
-                                swatch(taskColour(task), marked: active == .task(i, j),
+                                swatch(taskColour(task), marked: isActiveTask(j),
                                        local: local, size: 9)
                                 Text(task.label).lineLimit(1)
                                 Spacer()
@@ -669,7 +633,7 @@ struct SpentView: View {
                             }
                             .font(.caption2)
                             .padding(.leading, 14)
-                            .background(active == .task(i, j)
+                            .background(isActiveTask(j)
                                 ? Color.accentColor.opacity(0.12) : .clear)
                         }
                     }

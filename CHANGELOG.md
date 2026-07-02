@@ -2,6 +2,25 @@
 
 ## 2026-07-02
 
+- [x] **PieGeometry extracted to Core + label-keyed pie selection (277 checks
+  green).** The Time Spent donut's pure geometry (slice-angle layout, polar
+  normalisation, radial band hit model, metrics) moved from SpentView into
+  `AmbitickCore.PieGeometry` with 10 checks, sharable with the iOS pie.
+  Fixes the parked fable2 review finding: hover/pin selection was positional
+  (`project(i)`/`task(i,j)`) into a re-sorted nodes array, so a background
+  reload while a wedge was pinned could silently retarget the pin — selection
+  is now keyed by node labels and resolved against the current array each
+  render (a vanished node clears the pin instead of retargeting; regression
+  check covers the re-sort survival).
+
+- [x] **Duplicate reconcile generalised beyond OP (267 checks green,
+  11c6d0a).** `RemoteTimeEntry` is a real Core struct with String ids (was a
+  typealias to OP's Int-id shape); `ReconcileAction` is backend-neutral
+  (String taskID, RemoteEntryID survivor/deletes); OPBackend converts at its
+  edge; journal matching goes through `task.backendTaskID`, so the duplicate
+  scan works for any backend that can list entries. Closes the TODO left
+  open by the TaskRef.remote migration.
+
 - [x] **Rename phase 1 executed: the app IS andeye now (261 checks green).**
   Data home migrates `Application Support/Ambitick` → `andeye` via a checked
   one-shot MOVE (fresh-install / move-with-contents / one-shot semantics all
