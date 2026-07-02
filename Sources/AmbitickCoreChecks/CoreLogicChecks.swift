@@ -47,6 +47,31 @@ func learningStoreChecks(_ c: Checks) {
         try expect(feats.contains(Feature(.urlPath, "docs.google.com/document")))
     }
 
+    c.check("backend text never becomes a learned feature (Xero T&Cs compliance freeze)") {
+        // Xero API data must never train/enhance any model. The learner's
+        // features must come only from the SENSOR signal; the backend task's
+        // subject/project (API data) must not appear anywhere in the
+        // persisted model — the task GUID may (it's a class label/reference).
+        let xeroSubject = "XERO-API-SOURCED-PROJECT-TITLE-9Z7Q"
+        let xeroTask = WorkTask(ref: .remote("guid-compliance-1"),
+                                subject: xeroSubject, project: "Xero Client Co",
+                                status: "ACTIVE")
+        var store = LearningStore()
+        // Full learn cycle against the Xero task from an ordinary sensor signal.
+        store.learn(ghostty, target: .task(xeroTask.ref), weight: 2)
+        store.correct(steam, from: .task(xeroTask.ref), to: .task(.op(1)))
+        let json = String(data: try JSONEncoder().encode(store), encoding: .utf8)!
+        try expect(!json.contains(xeroSubject), "API-sourced subject leaked into the model")
+        try expect(!json.contains("Xero Client Co"), "API-sourced project leaked into the model")
+        try expect(json.contains("guid-compliance-1"),
+                   "the ref IS present — as a label, which is the documented boundary")
+        // And the feature extractor structurally cannot see task metadata:
+        // its only input is the sensor ActivitySignal.
+        let feats = LearningStore.features(from: ghostty).map(\.value)
+        try expect(!feats.contains { $0.contains("xero") },
+                   "no backend-derived feature values from a non-Xero signal")
+    }
+
     c.check("learned signal outscores unlearned") {
         var store = LearningStore()
         store.learn(ghostty, target: taskA)

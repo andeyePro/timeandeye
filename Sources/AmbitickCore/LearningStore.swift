@@ -15,6 +15,15 @@ public struct Feature: Hashable, Codable, Sendable {
 /// Naive-Bayes-style association store. Counts (feature, target) co-occurrences
 /// from confirmations/corrections and scores signals against candidate targets.
 /// Pure value type; persist with JSONFileStore.
+///
+/// COMPLIANCE INVARIANT (Xero T&Cs, Dec 2025: API data must never train,
+/// fine-tune, adapt or enhance any AI/ML/predictive model): features derive
+/// EXCLUSIVELY from sensor-observed `ActivitySignal` fields (what is on the
+/// user's own screen) — backend-sourced text (task subjects, project names,
+/// contacts fetched via any API) must NEVER be added as a feature. Target
+/// keys hold TaskRefs (opaque ids used as class labels, i.e. references, not
+/// trained-on content). Frozen by the "backend text never becomes a learned
+/// feature" check.
 public struct LearningStore: Codable, Equatable, Sendable {
     private var counts: [Feature: [Target: Double]] = [:]
     private var totals: [Target: Double] = [:]
