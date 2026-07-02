@@ -2,6 +2,20 @@
 
 ## 2026-07-02
 
+- [x] **Session-sticky categorisation — your word holds for the day (300
+  checks green).** Martin's 23:27 report: composing an email, every
+  leave-and-return re-ran the inference ladder and an older email rule
+  re-took the slice for the wrong project. Now any explicit assignment
+  (popover pick, review assign, timeline edit, do-not-track) records a
+  `SessionSticky` keyed on the email's normalised subject (re:/fwd:
+  stripped — a draft's window title mutates while typing, the subject
+  doesn't), falling back to correspondent set, then focus surface. In the
+  ladder it sits directly below explicit pins and above everything
+  inferred (URL recognition, email rules, primes, ranker), expires at the
+  local day boundary (the durable email rule the same assignment teaches
+  takes over), and the why-panel names it. 10 checks incl. the verbatim
+  report scenario.
+
 - [x] **iOS engine moved into the checked package (290 checks green).**
   PhoneController left ios/ (where nothing compiles it until Xcode) for a
   new platform-neutral `AmbitickPhone` target: SwiftUI import dropped for

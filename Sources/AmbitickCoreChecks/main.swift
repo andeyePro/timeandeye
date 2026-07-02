@@ -69,6 +69,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("DuplicateReconcile", duplicateReconcileChecks),
     ("TimePeriod", timePeriodChecks),
     ("PieGeometry", pieGeometryChecks),
+    ("SessionSticky", sessionStickyChecks),
     ("TimesheetExport", timesheetExportChecks),
     ("JournalPrune", journalPruneChecks),
     ("HLC", hlcChecks),

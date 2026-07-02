@@ -1233,6 +1233,7 @@ struct TimelineView: View {
     private func whyLabel(_ s: AttributionExplanation.Source) -> String {
         switch s {
         case .pin:           return "pinned (100%)"
+        case .sessionSticky: return "you categorised this today (sticky until midnight)"
         case .opTaskURL:     return "OpenProject task URL in the tab"
         case .opTaskTitle:   return "OpenProject id in the title"
         case .emailRule:     return "a learned email correspondent → task rule"

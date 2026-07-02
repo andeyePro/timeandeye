@@ -1,5 +1,36 @@
 import Foundation
 
+/// The user's explicit categorisation of a context, sticky for the rest of the
+/// LOCAL DAY. Fixes Martin's 2026-07-02 report: typing an email, every
+/// leave-and-return re-ran the inferred ladder and an older email rule
+/// re-took the slice — "if you're working on one email and you categorise it,
+/// that should take precedence over anything else, at least within that one
+/// session". A sticky outranks every INFERRED source (email rules, primes,
+/// URL recognition, ranker); only an explicit pin (1.0, standing law) sits
+/// above it. Ephemeral by design: dies at end of day or app relaunch.
+public struct SessionSticky: Equatable, Sendable {
+    public enum Key: Equatable, Sendable {
+        /// Email thread identity: the normalised subject (re:/fwd: stripped,
+        /// lowercased). Chosen over the raw Surface because a draft's window
+        /// title mutates as you type — the subject is what stays put.
+        case emailSubject(String)
+        /// Subject-less email: the correspondent set.
+        case correspondents(Set<String>)
+        /// Any non-email context: the focus surface.
+        case surface(Surface)
+    }
+    public var key: Key
+    public var target: Target
+    /// Start of the local day it was created; valid only that day.
+    public var day: Date
+
+    public init(key: Key, target: Target, day: Date) {
+        self.key = key
+        self.target = target
+        self.day = day
+    }
+}
+
 public struct Candidate: Equatable, Sendable {
     public var target: Target
     public var score: Double
@@ -25,6 +56,7 @@ public struct Attribution: Equatable, Sendable {
 public struct AttributionExplanation: Equatable, Sendable {
     public enum Source: String, Sendable, Equatable {
         case pin                 // an explicit user pin (100%)
+        case sessionSticky       // the user categorised this context today
         case opTaskURL           // a work-package URL in the tab
         case opTaskTitle         // a work-package id in the window title / app
         case emailRule           // a learned email correspondent/domain/subject → task rule
@@ -95,6 +127,9 @@ public final class Attributor {
     /// The user-editable specificity order the email ladder resolves through
     /// (mirrors the setting; defaults general→specific).
     public var emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder
+    /// Today's explicit categorisations, by context (see SessionSticky).
+    /// Deliberately not persisted — a sticky is a same-day working decision.
+    public private(set) var sessionStickies: [SessionSticky] = []
 
     public init(instanceHost: String, learning: LearningStore = LearningStore(),
                 ranker: TaskRanker = TaskRanker()) {
@@ -114,6 +149,16 @@ public final class Attributor {
             var ranked = scored(signal, tasks: tasks, now: now)
             ranked.removeAll { $0.target == .task(pin.task) }
             let c = Candidate(target: .task(pin.task), score: 1.0)
+            ranked.insert(c, at: 0)
+            return Attribution(best: c, ranked: ranked)
+        }
+        // The user categorised THIS context today: their word beats every
+        // inferred source below (URL, email rules, primes, ranker) so a
+        // leave-and-return can never silently re-allocate the slice.
+        if let sticky = stickyMatch(for: signal, now: now) {
+            var ranked = scored(signal, tasks: tasks, now: now)
+            ranked.removeAll { $0.target == sticky.target }
+            let c = Candidate(target: sticky.target, score: Self.inferredCeiling)
             ranked.insert(c, at: 0)
             return Attribution(best: c, ranked: ranked)
         }
@@ -172,6 +217,56 @@ public final class Attributor {
         }
     }
 
+    // MARK: - Session stickies
+
+    /// The sticky covering this signal today, if any. Prunes expired entries
+    /// as a side effect (they are dead weight once the day rolls over).
+    public func stickyMatch(for signal: ActivitySignal, now: Date) -> SessionSticky? {
+        sessionStickies.removeAll { !Calendar.current.isDate(now, inSameDayAs: $0.day) }
+        let key = Self.stickyKey(for: signal)
+        return sessionStickies.last { $0.key == key }
+    }
+
+    private func recordSticky(_ signal: ActivitySignal, target: Target, now: Date) {
+        let key = Self.stickyKey(for: signal)
+        sessionStickies.removeAll { $0.key == key }
+        sessionStickies.append(SessionSticky(
+            key: key, target: target, day: Calendar.current.startOfDay(for: now)))
+    }
+
+    /// The most stable identity available for the context: an email keys on
+    /// its normalised subject (a draft's window title mutates while you type,
+    /// the subject doesn't), then its correspondent set; anything else keys
+    /// on the focus surface.
+    static func stickyKey(for signal: ActivitySignal) -> SessionSticky.Key {
+        if let ctx = EmailContext.from(signal) {
+            if let subj = normalisedSubject(ctx.subject), !subj.isEmpty {
+                return .emailSubject(subj)
+            }
+            if !ctx.correspondents.isEmpty {
+                return .correspondents(Set(ctx.correspondents))
+            }
+        }
+        return .surface(Surface(signal: signal))
+    }
+
+    /// Lowercase, trimmed, reply/forward prefixes stripped (repeatedly, so
+    /// "Re: Fwd: X" and "X" collapse to the same thread key).
+    static func normalisedSubject(_ subject: String?) -> String? {
+        guard var t = subject?.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        var stripped = true
+        while stripped {
+            stripped = false
+            for prefix in ["re:", "fwd:", "fw:", "aw:"] where t.hasPrefix(prefix) {
+                t = String(t.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                stripped = true
+            }
+        }
+        return t
+    }
+
     /// The learned email rule covering this signal, if any (nil for non-email
     /// surfaces or when no rule matches).
     public func emailRuleMatch(_ signal: ActivitySignal) -> EmailRule? {
@@ -204,7 +299,8 @@ public final class Attributor {
     }
 
     /// Explicit user confirmation (popover click + return, or any direct pick).
-    public func confirm(_ signal: ActivitySignal, task: TaskRef) {
+    public func confirm(_ signal: ActivitySignal, task: TaskRef, now: Date = Date()) {
+        recordSticky(signal, target: .task(task), now: now)
         learnSurface(signal, to: task, weight: 2)
         learnEmailRule(signal, to: task)
     }
@@ -219,7 +315,8 @@ public final class Attributor {
 
     /// Review-window or prompt assignment, including "Do not track". Always a
     /// SOFT prime (caps at 0.95) — explicit 100 % pinning goes through `pin`.
-    public func assign(_ signal: ActivitySignal, target: Target) {
+    public func assign(_ signal: ActivitySignal, target: Target, now: Date = Date()) {
+        recordSticky(signal, target: target, now: now)
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
             primedSurfaces[surface] = t
@@ -303,6 +400,12 @@ public final class Attributor {
         if let pin = matchingPin(for: signal) {
             return .init(source: .pin, chosen: .task(pin.task), chosenScore: 1.0,
                          lines: [], features: feats)
+        }
+        if let sticky = stickyMatch(for: signal, now: now) {
+            return .init(source: .sessionSticky, chosen: sticky.target,
+                         chosenScore: Self.inferredCeiling,
+                         lines: scoredComponents(signal, tasks: tasks, now: now),
+                         features: feats)
         }
         if let url = signal.tabURL, recognizer.taskRef(inURL: url) != nil {
             return .init(source: .opTaskURL, chosen: bestURLTarget(signal), chosenScore: Self.inferredCeiling,
