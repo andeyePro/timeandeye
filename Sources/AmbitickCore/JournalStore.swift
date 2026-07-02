@@ -41,12 +41,19 @@ public protocol JournalStore {
     /// Window-level activity detail for the timeline's zoom strip.
     func save(_ span: FocusSpan) throws
     func spans(from: Date, to: Date) throws -> [FocusSpan]
+
+    /// Standalone comment-to-task storage: notes for tasks whose backend has
+    /// no comment endpoint (Xero), no backend at all, or a `.local` task —
+    /// the note must never silently vanish. Timestamped, newest last.
+    func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws
+    func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)]
 }
 
 public final class InMemoryJournalStore: JournalStore {
     private var sessions: [Session] = []
     private var segments: [ReviewSegment] = []
     private var allSpans: [FocusSpan] = []
+    private var comments: [String: [(date: Date, text: String)]] = [:]
 
     public init() {}
 
@@ -129,5 +136,13 @@ public final class InMemoryJournalStore: JournalStore {
         for i in segments.indices where ids.contains(segments[i].id) {
             segments[i].assigned = target
         }
+    }
+
+    public func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
+        comments[ref.storageKey, default: []].append((date, text))
+    }
+
+    public func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
+        (comments[ref.storageKey] ?? []).sorted { $0.date < $1.date }
     }
 }

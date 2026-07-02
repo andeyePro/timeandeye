@@ -74,6 +74,15 @@ public final class SQLiteJournalStore: JournalStore {
         try? exec("ALTER TABLE sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
         try? exec("ALTER TABLE sessions ADD COLUMN dirty INTEGER NOT NULL DEFAULT 0")
         try exec("CREATE TABLE IF NOT EXISTS sync_state (key TEXT PRIMARY KEY, value BLOB)")
+        // Standalone comment-to-task storage (keyed by TaskRef.storageKey).
+        try exec("""
+        CREATE TABLE IF NOT EXISTS task_comments (
+            task_key TEXT NOT NULL,
+            created REAL NOT NULL,
+            text TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS task_comments_key ON task_comments(task_key, created)
+        """)
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
@@ -545,6 +554,36 @@ extension SQLiteJournalStore: RevisionStore {
                 _ = sqlite3_step(stmt)
             }
         }
+    }
+
+    // MARK: - Task comments (standalone comment-to-task)
+
+    public func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                db, "INSERT INTO task_comments (task_key, created, text) VALUES (?,?,?)",
+                -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, ref.storageKey, -1, Self.transient)
+            sqlite3_bind_double(stmt, 2, date.timeIntervalSince1970)
+            sqlite3_bind_text(stmt, 3, text, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+        }
+    }
+
+    public func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
+        var out: [(Date, String)] = []
+        try query("SELECT created, text FROM task_comments WHERE task_key = ? ORDER BY created",
+                  bind: { sqlite3_bind_text($0, 1, ref.storageKey, -1, Self.transient) }) { stmt in
+            let text = sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? ""
+            out.append((Date(timeIntervalSince1970: sqlite3_column_double(stmt, 0)), text))
+        }
+        return out
     }
 
     // MARK: sync_state helpers (device id, clock persistence)

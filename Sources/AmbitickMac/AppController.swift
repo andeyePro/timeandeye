@@ -978,18 +978,22 @@ public final class AppController: ObservableObject {
     /// attached this is a no-op today; standalone storage lands with the
     /// backend-seam refactor (a local timestamped comment list).
     private func postTaskComment(ref: TaskRef, note: String) async {
-        // Ownership guard: never post an .op note to Xero or vice versa; a
-        // .local ref has no backendTaskID and drops out here too. Backends
-        // without task comments (Xero) skip silently — the note still lives
-        // on the time entry per the user's other toggle.
-        guard let backend, backend.supportsTaskComments,
-              backend.owns(ref), let taskID = ref.backendTaskID else { return }
-        do {
-            try await backend.addTaskComment(taskID: taskID, text: note)
-            DebugLog.write("posted task comment to task #\(taskID)")
-        } catch {
-            lastError = "\(backend.displayName) task comment failed: \(error)"
+        // Backend path when it exists (ownership-guarded: never an .op note
+        // to Xero or vice versa); EVERY other case — .local task, standalone,
+        // a backend without task comments, or a failed post — lands in the
+        // journal's task_comments store instead of vanishing.
+        if let backend, backend.supportsTaskComments,
+           backend.owns(ref), let taskID = ref.backendTaskID {
+            do {
+                try await backend.addTaskComment(taskID: taskID, text: note)
+                DebugLog.write("posted task comment to task #\(taskID)")
+                return
+            } catch {
+                lastError = "\(backend.displayName) task comment failed: \(error) — kept locally"
+            }
         }
+        try? journal.saveTaskComment(ref, text: note, at: Date())
+        DebugLog.write("stored local task comment for \(ref.storageKey)")
     }
 
     public func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {

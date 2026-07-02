@@ -129,6 +129,18 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(real.count, 2)
     }
 
+    c.check("task comments store per ref, ordered, isolated between refs") {
+        let s = make()
+        try s.saveTaskComment(.local(UUID()), text: "elsewhere", at: t0)
+        let ref = TaskRef.remote("g-1")
+        try s.saveTaskComment(ref, text: "second", at: t0.addingTimeInterval(60))
+        try s.saveTaskComment(ref, text: "first", at: t0)
+        let got = try s.taskComments(for: ref)
+        try expectEq(got.map(\.text), ["first", "second"], "chronological")
+        try expectEq(got.first?.date, t0)
+        try expectEq(try s.taskComments(for: .op(9)).count, 0)
+    }
+
     c.check("spans round-trip with range query") {
         let s = make()
         let signal = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: t0)

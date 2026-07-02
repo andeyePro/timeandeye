@@ -58,6 +58,12 @@ final class FailingMarkJournalStore: JournalStore {
     func assign(_ segmentIDs: [UUID], to target: Target?) throws { try inner.assign(segmentIDs, to: target) }
     func save(_ span: FocusSpan) throws { try inner.save(span) }
     func spans(from: Date, to: Date) throws -> [FocusSpan] { try inner.spans(from: from, to: to) }
+    func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
+        try inner.saveTaskComment(ref, text: text, at: date)
+    }
+    func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
+        try inner.taskComments(for: ref)
+    }
 }
 
 func syncIdempotencyChecks(_ c: Checks) async {
