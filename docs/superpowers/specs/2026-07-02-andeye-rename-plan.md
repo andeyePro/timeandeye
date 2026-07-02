@@ -17,7 +17,7 @@ developers see (cheap to defer, decide at FOSS-publish).
 | Signing identity | "Ambitick Dev" (ad-hoc stable) | new "andeye Dev" identity; replaced anyway by Developer ID |
 | **Application Support dir** | `~/Library/Application Support/Ambitick/` (journal.sqlite, settings, learning, pins…) | **THE ONE DATA-RISK ITEM**: on first andeye launch, if the andeye dir is absent and the Ambitick dir exists, MOVE it (rename, not copy) then proceed. One-shot, checked by a Mac-layer test. Do NOT leave dual dirs. |
 | Debug log | `/Users/Shared/ambitick-debug.log` | `/Users/Shared/andeye-debug.log` (no migration; old file just goes stale) |
-| URL scheme | `ambitick://xero-callback` (pro) | PRO flips to `andeye://` (already announced); main has no scheme today |
+| URL scheme | none needed | Xero uses a loopback redirect (localhost:53017, PRO-side listener) — custom schemes were never registrable; main has no scheme today |
 | Licence keys | `ANDE1.` prefix | DONE 2026-07-02 (flipped before any real key) |
 | README/MANUAL/docs | Ambitick throughout | copy sweep; keep one "formerly Ambitick" line for search |
 | OP integration runner | scratch WP #224 naming only | cosmetic, leave |
