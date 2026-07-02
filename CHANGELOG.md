@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-02
+
+- [x] **Sync foundation: design doc + pure-Core HLC/merge engine (11 checks,
+  217 total green).** Decision (Martin): multi-master journal from day one —
+  iOS-only users have no Mac to own it. New
+  `docs/superpowers/specs/2026-07-02-sync-design.md`: every device holds a
+  full SQLite replica; the raw revision set is the synced truth; overlap
+  resolution is a DERIVED, deterministic view (never persisted/pushed — the
+  one way LWW could diverge); one backend-pusher lease per account. Code:
+  `HLC` hybrid logical clock (monotonic tick, causality-preserving receive,
+  1 h drift cap), `SessionRevision` (hlc + origin + tombstone),
+  `SessionMerge` — record LWW (newer delete beats edit, newer edit
+  resurrects) + the overlap ladder (edited > manual > auto; ties by HLC;
+  middle overlaps keep the loser's larger side; covered slices surface
+  deleted). Convergence checked commutative and arrival-order independent.
+  CloudKit is a thin transport adapter later (needs the Apple signing
+  identity).
+
 ## 2026-07-01
 
 - [x] **Menu clock: excursions no longer wear the old slice's elapsed ("11m

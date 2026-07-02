@@ -67,6 +67,8 @@ let suites: [(String, (Checks) -> Void)] = [
     ("DuplicateReconcile", duplicateReconcileChecks),
     ("TimePeriod", timePeriodChecks),
     ("TimesheetExport", timesheetExportChecks),
+    ("HLC", hlcChecks),
+    ("SessionSync", sessionSyncChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("OPClient", opClientChecks),
