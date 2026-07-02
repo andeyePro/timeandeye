@@ -20,6 +20,8 @@ targets:
         product: AmbitickCore
       - package: Ambitick
         product: AmbitickStore
+      - package: Ambitick
+        product: AmbitickPhone
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.andeye.ios

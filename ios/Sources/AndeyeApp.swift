@@ -1,4 +1,5 @@
 import SwiftUI
+import AmbitickPhone
 
 @main
 struct AndeyeApp: App {

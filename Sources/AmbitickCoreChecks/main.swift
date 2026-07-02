@@ -90,6 +90,7 @@ let suites: [(String, (Checks) -> Void)] = [
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),
+    ("PhoneController", phoneControllerChecks),
     ("SyncEngineOwnership", syncEngineOwnershipChecks),
     ("JournalSyncer", journalSyncerChecks),
     ("OPClient", opClientChecks),
@@ -109,18 +110,16 @@ for (name, suite) in suites {
     totalFailed += f
 }
 
-let semaphore = DispatchSemaphore(value: 0)
-Task {
-    for (name, suite) in asyncSuites {
-        let c = Checks(name)
-        await suite(c)
-        let (p, f) = c.finish()
-        totalPassed += p
-        totalFailed += f
-    }
-    semaphore.signal()
+// Top-level await (SE-0343) instead of a semaphore-blocked Task: blocking
+// the main thread deadlocks any check that hops to the MainActor (the
+// PhoneController suite does — its subject is @MainActor).
+for (name, suite) in asyncSuites {
+    let c = Checks(name)
+    await suite(c)
+    let (p, f) = c.finish()
+    totalPassed += p
+    totalFailed += f
 }
-semaphore.wait()
 
 print("TOTAL: \(totalPassed) passed, \(totalFailed) failed")
 exit(totalFailed == 0 ? 0 : 1)

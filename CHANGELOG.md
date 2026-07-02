@@ -2,6 +2,18 @@
 
 ## 2026-07-02
 
+- [x] **iOS engine moved into the checked package (290 checks green).**
+  PhoneController left ios/ (where nothing compiles it until Xcode) for a
+  new platform-neutral `AmbitickPhone` target: SwiftUI import dropped for
+  Combine, data home + clock injectable. Eight new checks cover the manual
+  tracker's behaviour — sub-30s taps discarded, slices journalled, live
+  slice surviving app death and resuming on relaunch, switch = stop+start,
+  local-task dedupe, fuzzy pick list, todaysTotal, CSV export. Only the
+  SwiftUI shell in ios/ now waits for a machine with Xcode. Fixed en route:
+  the check harness drove async suites from a semaphore-blocked main
+  thread, which deadlocked any check hopping to the MainActor — now
+  top-level await (SE-0343).
+
 - [x] **Licence landed: AGPL-3.0 + CLA (Martin's call, 15:03 BST).** LICENSE
   is the verbatim SPDX AGPL-3.0-only text; CLA.md is an ICLA-style agreement
   granting andeye Ltd rights broad enough to dual-license the proprietary
