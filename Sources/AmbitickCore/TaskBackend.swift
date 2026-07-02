@@ -40,6 +40,10 @@ public protocol TaskBackend: AnyObject {
     /// Whether the backend has per-entry activity types (drives the Settings
     /// pickers; false hides them).
     var supportsActivities: Bool { get }
+    /// Whether notes can be posted to the task itself (OP: activity feed —
+    /// yes; Xero Projects: no such endpoint). False = the controller skips
+    /// comment-to-task rather than erroring per note.
+    var supportsTaskComments: Bool { get }
     /// Whether this ref belongs to this backend — an `.op` session must never
     /// push to Xero, nor vice versa. Un-owned eligible sessions are skipped
     /// silently (they push when their backend reconnects), never marked.

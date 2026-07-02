@@ -979,8 +979,11 @@ public final class AppController: ObservableObject {
     /// backend-seam refactor (a local timestamped comment list).
     private func postTaskComment(ref: TaskRef, note: String) async {
         // Ownership guard: never post an .op note to Xero or vice versa; a
-        // .local ref has no backendTaskID and drops out here too.
-        guard let backend, backend.owns(ref), let taskID = ref.backendTaskID else { return }
+        // .local ref has no backendTaskID and drops out here too. Backends
+        // without task comments (Xero) skip silently — the note still lives
+        // on the time entry per the user's other toggle.
+        guard let backend, backend.supportsTaskComments,
+              backend.owns(ref), let taskID = ref.backendTaskID else { return }
         do {
             try await backend.addTaskComment(taskID: taskID, text: note)
             DebugLog.write("posted task comment to task #\(taskID)")

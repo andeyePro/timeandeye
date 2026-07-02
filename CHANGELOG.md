@@ -2,6 +2,11 @@
 
 ## 2026-07-02
 
+- [x] **Seam: `supportsTaskComments` capability (255 checks green).** Xero
+  Projects has no task-comment endpoint; rather than erroring per note, the
+  controller now skips comment-to-task for backends that declare false (the
+  note still lands on the time entry). OP declares true.
+
 - [x] **`TaskRef.remote(String)` — GUID backends are first-class (255 checks
   green).** Executed docs/superpowers/specs/2026-07-02-taskref-remote-plan.md
   : additive third case, so

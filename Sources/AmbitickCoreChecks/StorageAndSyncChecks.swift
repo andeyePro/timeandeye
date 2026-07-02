@@ -432,6 +432,7 @@ final class StubGUIDBackend: TaskBackend {
     var displayName: String { "Stub" }
     var pageRecognizer: BackendPageRecognizer { NoPageRecognizer() }
     var supportsActivities: Bool { false }
+    var supportsTaskComments: Bool { false }
     func owns(_ ref: TaskRef) -> Bool {
         if case .remote = ref { return true }
         return false

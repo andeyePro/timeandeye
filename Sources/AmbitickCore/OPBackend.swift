@@ -25,6 +25,7 @@ public final class OPBackend: TaskBackend {
 
     public var displayName: String { "OpenProject" }
     public var supportsActivities: Bool { true }
+    public var supportsTaskComments: Bool { true }
 
     public func owns(_ ref: TaskRef) -> Bool {
         if case .op = ref { return true }
