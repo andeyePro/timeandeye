@@ -164,13 +164,15 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
     public var certainty: Double
     public var pushedToOP: Bool
     public var comment: String?
-    /// The OP time entry this session became, so timeline edits can PATCH
-    /// (or delete) the remote entry. Optional decodes as nil for old rows.
-    public var opTimeEntryID: Int?
+    /// The backend time entry this session became, so timeline edits can
+    /// PATCH (or delete) the remote entry. WIDENED 2026-07-02 from Int to
+    /// String (OP ids are ints, Xero's are GUIDs); the JSON key keeps its
+    /// historic name and legacy Int rows decode via the custom init below.
+    public var opTimeEntryID: RemoteEntryID?
 
     public init(id: UUID = UUID(), task: TaskRef, start: Date, end: Date,
                 certainty: Double, pushedToOP: Bool = false, comment: String? = nil,
-                opTimeEntryID: Int? = nil) {
+                opTimeEntryID: RemoteEntryID? = nil) {
         self.id = id
         self.task = task
         self.start = start
@@ -179,6 +181,26 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
         self.pushedToOP = pushedToOP
         self.comment = comment
         self.opTimeEntryID = opTimeEntryID
+    }
+
+    /// Custom decode ONLY for the widened entry id: journalled rows written
+    /// before 2026-07-02 hold an Int. Everything else is standard; encoding
+    /// stays synthesized (always writes the String form).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        task = try c.decode(TaskRef.self, forKey: .task)
+        start = try c.decode(Date.self, forKey: .start)
+        end = try c.decode(Date.self, forKey: .end)
+        certainty = try c.decode(Double.self, forKey: .certainty)
+        pushedToOP = try c.decode(Bool.self, forKey: .pushedToOP)
+        comment = try c.decodeIfPresent(String.self, forKey: .comment)
+        if let s = try? c.decodeIfPresent(String.self, forKey: .opTimeEntryID) {
+            opTimeEntryID = s
+        } else {
+            opTimeEntryID = ((try? c.decodeIfPresent(Int.self, forKey: .opTimeEntryID)) ?? nil)
+                .map(String.init)
+        }
     }
 }
 

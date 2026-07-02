@@ -2,6 +2,15 @@
 
 ## 2026-07-02
 
+- [x] **RemoteEntryID widened Int → String (Xero-ready; 239 checks green).**
+  The seam's entry id is now String (OP: ints, Xero: GUIDs); `OPBackend`
+  converts at its edge and surfaces a non-numeric id as an error instead of
+  silently no-opping. `Session.opTimeEntryID` widens with a custom decode so
+  every pre-widening journal row (Int in the JSON) still reads — covered by a
+  legacy-decode regression check — while encoding always writes the String
+  form. DuplicateReconcile keeps Int on the OP-API side and compares via
+  String at the journal boundary.
+
 - [x] **SQLite journal becomes a sync replica (15 checks, 237 total green).**
   The sessions table now carries the revision meta (HLC triplet, origin,
   deleted, dirty) beside the row; `SQLiteJournalStore` conforms to

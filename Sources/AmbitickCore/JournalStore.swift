@@ -22,7 +22,7 @@ public protocol JournalStore {
     /// Sessions eligible for OP push: certainty >= threshold, not yet pushed,
     /// and on an `.op` task (local-only tasks never push).
     func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session]
-    func markPushed(_ id: UUID, opTimeEntryID: Int?) throws
+    func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws
     /// Timeline edits: replace the stored session (matched by id).
     func update(_ session: Session) throws
     func deleteSession(_ id: UUID) throws
@@ -84,7 +84,7 @@ public final class InMemoryJournalStore: JournalStore {
         }
     }
 
-    public func markPushed(_ id: UUID, opTimeEntryID: Int?) throws {
+    public func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
         guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[i].pushedToOP = true
         sessions[i].opTimeEntryID = opTimeEntryID

@@ -1,9 +1,8 @@
 import Foundation
 
-/// A time entry's id in the connected backend (OP time entry id today).
-/// Kept as a typealias so widening to String (Xero uses GUIDs) is a one-line
-/// change with compiler-guided fix-ups at every use site.
-public typealias RemoteEntryID = Int
+/// A time entry's id in the connected backend. String because backends
+/// disagree (OP: ints, Xero: GUIDs); the OP conformer converts at its edge.
+public typealias RemoteEntryID = String
 
 /// A backend "activity" type attached to time entries (OP: Development,
 /// Management, ...). Backends without the concept return [].

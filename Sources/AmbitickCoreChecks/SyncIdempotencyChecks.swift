@@ -29,7 +29,7 @@ final class FailingMarkJournalStore: JournalStore {
         self.failOnMarkCalls = failOnMarkCalls
     }
 
-    func markPushed(_ id: UUID, opTimeEntryID: Int?) throws {
+    func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
         markCalls += 1
         if failOnMarkCalls.contains(markCalls) { throw MarkFailed() }
         try inner.markPushed(id, opTimeEntryID: opTimeEntryID)
@@ -104,7 +104,7 @@ func syncIdempotencyChecks(_ c: Checks) async {
                      "one create per sync; the failed-then-deleted entry is not double-counted")
         try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8).count, 0,
                      "retry marks the session pushed")
-        try expectEq(try journal.allSessions().first?.opTimeEntryID, 978,
+        try expectEq(try journal.allSessions().first?.opTimeEntryID, "978",
                      "journal records the surviving OP entry id")
     }
 

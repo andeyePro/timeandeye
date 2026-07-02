@@ -53,14 +53,31 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.sessions(needingPushAtOrAbove: 1.01), [])   // the "101%" setting
     }
 
-    c.check("mark pushed records the OP entry id") {
+    c.check("mark pushed records the backend entry id") {
         let s = make()
         let a = session(0.9)
         try s.save(a)
-        try s.markPushed(a.id, opTimeEntryID: 977)
+        try s.markPushed(a.id, opTimeEntryID: "977")
         try expectEq(try s.sessions(needingPushAtOrAbove: 0.8), [])
         try expectEq(try s.allSessions().first?.pushedToOP, true)
-        try expectEq(try s.allSessions().first?.opTimeEntryID, 977)
+        try expectEq(try s.allSessions().first?.opTimeEntryID, "977")
+    }
+
+    c.check("legacy journal rows with an Int entry id decode to the widened String") {
+        let json = """
+        {"id":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","task":{"op":{"_0":42}},
+         "start":1750000000,"end":1750000600,"certainty":0.9,
+         "pushedToOP":true,"opTimeEntryID":977}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let s = try decoder.decode(Session.self, from: Data(json.utf8))
+        try expectEq(s.opTimeEntryID, "977", "pre-widening Int id survives")
+        // And the widened form round-trips.
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        let re = try decoder.decode(Session.self, from: encoder.encode(s))
+        try expectEq(re, s)
     }
 
     c.check("update, delete, day query") {

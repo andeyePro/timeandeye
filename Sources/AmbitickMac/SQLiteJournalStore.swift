@@ -257,7 +257,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func markPushed(_ id: UUID, opTimeEntryID: Int?) throws {
+    public func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
         // One critical section for the whole read-modify-write: the lock is
         // recursive, so the inner query/save re-acquisitions are free. Without
         // this, a main-actor update() can interleave between our read and our

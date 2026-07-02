@@ -102,11 +102,11 @@ func sqliteSyncStampingChecks(_ c: Checks) {
         try store.save(s2)
         let before = try unwrap(try store.revision(id: s2.id)).hlc
         try store.clearDirty([try unwrap(try store.revision(id: s2.id))])
-        try store.markPushed(s2.id, opTimeEntryID: 977)
+        try store.markPushed(s2.id, opTimeEntryID: "977")
         let after = try unwrap(try store.revision(id: s2.id))
         try expect(before < after.hlc)
         try expect(try store.dirtyRevisionIDs().contains(s2.id))
-        try expectEq(after.session.opTimeEntryID, 977)
+        try expectEq(after.session.opTimeEntryID, "977")
     }
 
     c.check("no clock: behaviour unchanged — hard delete, nothing enters the sync world") {

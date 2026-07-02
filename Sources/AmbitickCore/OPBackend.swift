@@ -45,6 +45,16 @@ public final class OPBackend: TaskBackend {
         baseURL.appendingPathComponent("work_packages/\(id)")
     }
 
+    /// OP entry ids are ints; the seam speaks String (Xero uses GUIDs).
+    /// A non-numeric id here can only mean cross-backend corruption — surface
+    /// it, never silently no-op.
+    private func opID(_ id: RemoteEntryID) throws -> Int {
+        guard let n = Int(id) else {
+            throw OPClientError.malformedResponse("non-numeric OP entry id '\(id)'")
+        }
+        return n
+    }
+
     public func createTimeEntry(taskID: Int, start: Date, duration: TimeInterval,
                                 activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
         do {
@@ -52,7 +62,7 @@ public final class OPBackend: TaskBackend {
                 workPackageID: taskID, start: start, duration: duration,
                 activityID: activityID, comment: comment,
                 startTime: startTimesSupported
-                    ? Self.timeFormatter.string(from: start) : nil)
+                    ? Self.timeFormatter.string(from: start) : nil).map(String.init)
         } catch OPClientError.httpStatus(422, let body) where startTimesSupported {
             // Diagnose, don't just survive: WHY did OP refuse the timed
             // entry? (Overlap validation, feature off, ...)
@@ -60,7 +70,7 @@ public final class OPBackend: TaskBackend {
             startTimesSupported = false
             return try await client.createTimeEntry(
                 workPackageID: taskID, start: start, duration: duration,
-                activityID: activityID, comment: comment, startTime: nil)
+                activityID: activityID, comment: comment, startTime: nil).map(String.init)
         }
     }
 
@@ -68,17 +78,17 @@ public final class OPBackend: TaskBackend {
                                 duration: TimeInterval, activityID: Int?,
                                 comment: String?) async throws {
         try await client.updateTimeEntry(
-            id: id, workPackageID: taskID, start: start, duration: duration,
+            id: opID(id), workPackageID: taskID, start: start, duration: duration,
             activityID: activityID, comment: comment,
             startTime: startTimesSupported ? Self.timeFormatter.string(from: start) : nil)
     }
 
     public func updateEntryComment(id: RemoteEntryID, comment: String) async throws {
-        try await client.updateTimeEntryComment(id: id, comment: comment)
+        try await client.updateTimeEntryComment(id: opID(id), comment: comment)
     }
 
     public func deleteTimeEntry(id: RemoteEntryID) async throws {
-        try await client.deleteTimeEntry(id: id)
+        try await client.deleteTimeEntry(id: opID(id))
     }
 
     public func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {

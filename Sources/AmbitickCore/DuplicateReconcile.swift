@@ -93,7 +93,7 @@ public enum DuplicateReconcile {
             let wp = group[0].workPackageID
             let mk = minuteKey(group[0].start)
             let dm = durMin(group[0].durationSeconds)
-            let ids = Set(group.map(\.id))
+            let ids = Set(group.map { String($0.id) })
             // How many of these are REAL, per the journal (the source of truth):
             // slices linked to one of the entries, or matching task+minute+
             // duration. The journal decides the count, so this stays safe even
@@ -127,8 +127,9 @@ public enum DuplicateReconcile {
             let mergedText = merged.joined(separator: "; ")
             let mergedComment = (mergedText.isEmpty || mergedText == (survivor.comment ?? "")) ? nil : mergedText
             let deleteIDs = deletes.map(\.id)
+            let deleteIDStrings = Set(deleteIDs.map(String.init))
             let repoint = sessions
-                .filter { s in s.opTimeEntryID.map { deleteIDs.contains($0) } ?? false }
+                .filter { s in s.opTimeEntryID.map { deleteIDStrings.contains($0) } ?? false }
                 .map(\.id)
             actions.append(ReconcileAction(
                 workPackageID: wp, start: survivor.start, survivorID: survivor.id,

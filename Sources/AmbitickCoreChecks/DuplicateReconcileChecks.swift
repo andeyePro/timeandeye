@@ -10,7 +10,7 @@ func duplicateReconcileChecks(_ c: Checks) {
     }
     func session(task: TaskRef = .op(5), start: Date, opID: Int? = nil) -> Session {
         var s = Session(task: task, start: start, end: start.addingTimeInterval(600), certainty: 0.95)
-        s.opTimeEntryID = opID
+        s.opTimeEntryID = opID.map(String.init)
         return s
     }
 
