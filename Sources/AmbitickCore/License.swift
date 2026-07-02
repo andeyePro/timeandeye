@@ -58,9 +58,11 @@ public struct LicenseVerifier: Sendable {
         self.publicKey = publicKey
     }
 
-    /// The production signing identity (generated 2026-07-02).
+    /// The production signing identity — ROTATED 2026-07-02 (Martin minted
+    /// the pair himself; private key lives only in Apple Passwords). The
+    /// first pair was retired unused after transiting a plaintext file.
     public static let production = LicenseVerifier(
-        publicKey: Data(base64Encoded: "EV1yqS6xkRLkf6wirhnNdiT7bdZr9nkn57y3CVijjWM=")!)
+        publicKey: Data(base64Encoded: "hGcCOyMchBHEdj3xgNJJplJQwv1oK+Gseju7ZaCnf1w=")!)
 
     public static let keyPrefix = "ANDE1"   // flipped from AMBI1 with the andeye naming call, 2026-07-02 — BEFORE any real key was issued
 
