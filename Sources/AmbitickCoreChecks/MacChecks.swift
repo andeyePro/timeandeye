@@ -11,6 +11,50 @@ func sqliteJournalChecks(_ c: Checks) {
     }
 }
 
+func supportDirMigrationChecks(_ c: Checks) {
+    func tempBase() -> URL {
+        let u = FileManager.default.temporaryDirectory
+            .appendingPathComponent("andeye-migrate-\(UUID().uuidString)")
+        try! FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
+
+    c.check("fresh install: andeye dir, no legacy involved") {
+        let base = tempBase()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dir = AppController.supportDirectory(under: base)
+        try expectEq(dir.lastPathComponent, "andeye")
+    }
+
+    c.check("legacy Ambitick dir MOVES (not copies) with its contents intact") {
+        let base = tempBase()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let legacy = base.appendingPathComponent("Ambitick")
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try Data("journal-bytes".utf8).write(to: legacy.appendingPathComponent("journal.sqlite"))
+        let dir = AppController.supportDirectory(under: base)
+        try expectEq(String(data: try Data(contentsOf: dir.appendingPathComponent("journal.sqlite")),
+                            encoding: .utf8), "journal-bytes", "data travelled")
+        try expect(!FileManager.default.fileExists(atPath: legacy.path),
+                   "legacy dir GONE — dual dirs would fork the journal")
+    }
+
+    c.check("migration is one-shot: existing andeye dir wins, legacy untouched") {
+        let base = tempBase()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let newDir = base.appendingPathComponent("andeye")
+        let legacy = base.appendingPathComponent("Ambitick")
+        try FileManager.default.createDirectory(at: newDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: newDir.appendingPathComponent("marker"))
+        _ = AppController.supportDirectory(under: base)
+        try expectEq(String(data: try Data(contentsOf: newDir.appendingPathComponent("marker")),
+                            encoding: .utf8), "new", "existing data never overwritten")
+        try expect(FileManager.default.fileExists(atPath: legacy.path),
+                   "stale legacy dir left alone once andeye exists")
+    }
+}
+
 func menuTitleChecks(_ c: Checks) {
     c.check("refresh cadence: 1 Hz first minute, then per-minute") {
         try expectEq(MenuTitle.refreshInterval(sinceTaskChange: 5), 1)
