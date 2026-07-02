@@ -1,0 +1,200 @@
+import Foundation
+import SwiftUI
+import AmbitickCore
+import AmbitickStore
+
+/// The iOS app's engine. iOS senses no other apps — ever — so this is the
+/// SECOND SCREEN + MANUAL TRACKER: show what's tracked, switch with one tap,
+/// record manual slices. It reuses the Mac's Core wholesale: same journal
+/// store, same ranker, same backends (OP works fully over the network), same
+/// timesheet export. CloudKit sync joins once the entitled build exists —
+/// until then the phone journal is standalone (and fully local-first after).
+@MainActor
+public final class PhoneController: ObservableObject {
+    @Published public private(set) var taskCache: [WorkTask] = []
+    @Published public private(set) var tracking: (task: TaskRef, since: Date)?
+    @Published public private(set) var connectedAs: String?
+    @Published public private(set) var lastError: String?
+    @Published public var settings: AmbitickSettings {
+        didSet {
+            try? settingsStore.save(settings)
+            if oldValue.opBaseURL != settings.opBaseURL { rebuildBackend() }
+            if oldValue.localTasks != settings.localTasks { mergeLocalTasks() }
+        }
+    }
+
+    public let journal: any JournalStore
+    private let settingsStore: JSONFileStore<AmbitickSettings>
+    private var backend: (any TaskBackend)?
+    private let ranker = TaskRanker()
+
+    public init() {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+            .appendingPathComponent("andeye")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        settingsStore = JSONFileStore<AmbitickSettings>(
+            url: dir.appendingPathComponent("settings.json"))
+        settings = (try? settingsStore.load().flatMap { $0 })
+            ?? AmbitickSettings(opBaseURL: "")
+        journal = (try? SQLiteJournalStore(path: dir.appendingPathComponent("journal.sqlite").path))
+            ?? InMemoryJournalStore()
+        restoreLiveSlice()
+        mergeLocalTasks()
+        rebuildBackend()
+        Task { await refreshTasks() }
+    }
+
+    // MARK: - Manual tracking (the whole point on iOS)
+
+    /// A running manual slice survives app death via the same crash-checkpoint
+    /// pattern as the Mac (fixed id, promoted on next launch).
+    static let liveCheckpointID = UUID(uuidString: "00000000-0000-0000-0000-0000C0FFEE01")!
+
+    public func start(_ task: TaskRef) {
+        if tracking != nil { stop() }          // switching = stop + start
+        tracking = (task, Date())
+        touchRecency(task)
+        checkpoint()
+    }
+
+    public func stop() {
+        guard let live = tracking else { return }
+        tracking = nil
+        try? journal.deleteSession(Self.liveCheckpointID)
+        let end = Date()
+        guard end.timeIntervalSince(live.since) >= 30 else { return }   // taps, not slices
+        let s = Session(task: live.task, start: live.since, end: end,
+                        certainty: 1.0, comment: nil)
+        try? journal.save(s)
+        try? journal.escalateOrigin(s.id, to: .manual)
+        touchRecency(live.task)
+        Task { await pushIfEligible() }
+    }
+
+    private func checkpoint() {
+        guard let live = tracking else { return }
+        try? journal.update(Session(id: Self.liveCheckpointID, task: live.task,
+                                    start: live.since, end: Date(), certainty: 1.0,
+                                    pushedToOP: true))
+    }
+
+    /// App relaunch: a checkpoint row means a manual slice was running when
+    /// the app died — resume it (manual tracking is deliberate; keep going).
+    private func restoreLiveSlice() {
+        guard let stale = try? journal.session(id: Self.liveCheckpointID) else { return }
+        tracking = (stale.task, stale.start)
+    }
+
+    /// Foreground/background hooks call this so a long-running slice's
+    /// checkpoint stays fresh without any timer.
+    public func appLifecycleTick() {
+        checkpoint()
+    }
+
+    // MARK: - Task list
+
+    /// Recent-first then ranked — the same ordering the Mac popover uses.
+    public func pickList(filter: String = "") -> [WorkTask] {
+        let ranked = ranker.recentThenRanked(taskCache, at: Date())
+        guard !filter.isEmpty else { return ranked }
+        return FuzzyMatch.filter(ranked, query: filter)
+    }
+
+    public func name(of ref: TaskRef) -> String {
+        taskCache.first { $0.ref == ref }?.subject ?? ref.fallbackLabel
+    }
+
+    @discardableResult
+    public func addLocalTask(name: String) -> TaskRef {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let existing = settings.localTasks.first(where: {
+            $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) { return .local(existing.id) }
+        let def = LocalTaskDef(name: trimmed)
+        settings.localTasks.append(def)
+        return .local(def.id)
+    }
+
+    private func mergeLocalTasks() {
+        let locals = settings.localTasks.map {
+            WorkTask(ref: .local($0.id), subject: $0.name,
+                     project: $0.projectName, status: "Open")
+        }
+        taskCache = taskCache.filter { $0.ref.isRemote } + locals
+    }
+
+    private func touchRecency(_ ref: TaskRef) {
+        if let i = taskCache.firstIndex(where: { $0.ref == ref }) {
+            taskCache[i].lastConfirmedAt = Date()
+        }
+    }
+
+    // MARK: - Backend (OP works fully on iOS; Xero arrives via the Pro app)
+
+    public func saveAPIKey(_ key: String) {
+        do { try APIKeyStore.saveAPIKey(key) } catch {
+            lastError = "API key save failed – \(error)"
+            return
+        }
+        rebuildBackend()
+        Task { await refreshTasks() }
+    }
+
+    private func rebuildBackend() {
+        backend = nil
+        connectedAs = nil
+        let raw = settings.opBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: raw), url.host != nil,
+              let key = try? APIKeyStore.loadAPIKey() else { return }
+        backend = OPBackend(baseURL: url, apiKey: key, transport: URLSessionTransport())
+    }
+
+    public func refreshTasks() async {
+        guard let backend else { return }
+        do {
+            if connectedAs == nil { connectedAs = try? await backend.fetchMe() }
+            let recency = Dictionary(uniqueKeysWithValues:
+                taskCache.compactMap { t in t.lastConfirmedAt.map { (t.ref, $0) } })
+            var fetched = try await backend.fetchTasks()
+            for i in fetched.indices {
+                fetched[i].lastConfirmedAt = recency[fetched[i].ref]
+            }
+            taskCache = fetched + taskCache.filter { !$0.ref.isRemote }
+            lastError = nil
+        } catch {
+            lastError = "\(backend.displayName) fetch failed: \(error)"
+        }
+    }
+
+    private func pushIfEligible() async {
+        guard let backend else { return }
+        let engine = SyncEngine(journal: journal, backend: backend)
+        _ = try? await engine.pushEligible(
+            threshold: settings.certaintyAutoPushThreshold,
+            defaultActivityID: settings.defaultActivityID,
+            activityOverrides: settings.activityOverrides,
+            includeComments: false)
+    }
+
+    // MARK: - Totals + export
+
+    public func todaysTotal() -> TimeInterval {
+        let start = Calendar.current.startOfDay(for: Date())
+        let sessions = ((try? journal.sessions(from: start, to: Date())) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        let banked = sessions.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        let live = tracking.map { Date().timeIntervalSince($0.since) } ?? 0
+        return banked + live
+    }
+
+    public func timesheetCSV(days: Int = 7) -> String {
+        let from = Date().addingTimeInterval(-Double(days) * 86_400)
+        let sessions = ((try? journal.sessions(from: from, to: Date())) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        return TimesheetExport.csv(sessions: sessions) { [weak self] ref in
+            (self?.name(of: ref) ?? ref.fallbackLabel,
+             self?.taskCache.first { $0.ref == ref }?.project)
+        }
+    }
+}
