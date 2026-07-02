@@ -174,6 +174,31 @@ func sqliteSyncStampingChecks(_ c: Checks) {
         try expectEq(try store.revision(id: early.id)?.hlc, stamp, "idempotent")
     }
 
+    c.check("tombstone GC: purges old synced tombstones only") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let now = Date(timeIntervalSince1970: Double(nowMillis) / 1000)
+        func tombstone(_ ageDays: Double, dirty: Bool) throws -> UUID {
+            let s = session()
+            let hlc = HLC(physicalMillis: nowMillis - Int64(ageDays * 86_400 * 1000),
+                          counter: 0, deviceID: "mac")
+            let rev = SessionRevision(session: s, hlc: hlc, origin: .auto, deleted: true)
+            if dirty { try store.saveLocal(rev) } else { try store.applyRemote(rev) }
+            return s.id
+        }
+        let oldSynced = try tombstone(120, dirty: false)     // purged
+        let oldUnpushed = try tombstone(120, dirty: true)    // MUST survive
+        let recent = try tombstone(10, dirty: false)         // survives
+        let live = session()
+        try store.save(live)                                  // untouched
+        try store.purgeTombstones(olderThanDays: 90, now: now)
+        try expectNil(try store.revision(id: oldSynced), "old synced tombstone purged")
+        try expectEq(try store.revision(id: oldUnpushed)?.deleted, true,
+                     "an unpushed delete must survive or it never travels")
+        try expectEq(try store.revision(id: recent)?.deleted, true)
+        try expectEq(try store.session(id: live.id)?.id, live.id, "live rows untouched")
+    }
+
     c.check("a synced SQLite replica converges with an in-memory one end-to-end") {
         let server = MockSyncServer()
         let sqlite = try makeStore()

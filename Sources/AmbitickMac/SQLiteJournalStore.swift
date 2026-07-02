@@ -78,6 +78,7 @@ public final class SQLiteJournalStore: JournalStore {
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
         try exec("DELETE FROM spans WHERE start < \(Date().addingTimeInterval(-30 * 86_400).timeIntervalSince1970)")
+        try purgeTombstones()
     }
 
     deinit {
@@ -589,6 +590,19 @@ extension SQLiteJournalStore: RevisionStore {
     func saveClockState() {
         guard let clock, let data = try? encoder.encode(clock.last) else { return }
         setSyncStateData("clock", data)
+    }
+
+    /// Tombstone GC (sync design: retain ≥ 90 days). Only tombstones the
+    /// server has already seen (dirty = 0) are purged — an unpushed delete
+    /// must survive locally or it never travels. LOCAL-only: the CK-side
+    /// record remains (incremental pulls never re-send untouched records, so
+    /// it won't resurrect); server-side GC is a later explicit pass.
+    public func purgeTombstones(olderThanDays days: Int = 90, now: Date = Date()) throws {
+        let cutoffMillis = Int64((now.timeIntervalSince1970 - Double(days) * 86_400) * 1000)
+        try exec("""
+        DELETE FROM sessions
+        WHERE deleted = 1 AND dirty = 0 AND hlc_millis > 0 AND hlc_millis < \(cutoffMillis)
+        """)
     }
 
     /// One-shot sync-enablement migration: stamp every pre-sync row (in start
