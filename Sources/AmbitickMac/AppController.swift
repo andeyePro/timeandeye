@@ -87,17 +87,6 @@ public extension NSColor {
     }
 }
 
-/// URLSession-backed transport for the real OP instance.
-public struct URLSessionTransport: HTTPTransport {
-    public init() {}
-    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        return (data, http)
-    }
-}
 
 /// An idle/away stretch that defaulted to untracked, offered for one-tap claim.
 public struct IdleGap: Equatable, Sendable {

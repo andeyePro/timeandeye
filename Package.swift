@@ -3,17 +3,21 @@ import PackageDescription
 
 let package = Package(
     name: "Ambitick",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "AmbitickCore", targets: ["AmbitickCore"]),
         // The pro repo's executable wraps these two (plus its paid backends).
         .library(name: "AmbitickMac", targets: ["AmbitickMac"]),
         .library(name: "AmbitickUI", targets: ["AmbitickUI"]),
+        .library(name: "AmbitickStore", targets: ["AmbitickStore"]),
     ],
     targets: [
         .target(name: "AmbitickCore"),
-        // macOS-only layer: SQLite journal, Keychain, sensors, app controller.
-        .target(name: "AmbitickMac", dependencies: ["AmbitickCore"]),
+        // Platform-NEUTRAL persistence + sync transport: SQLite replica,
+        // CloudKit pipe, key file store. macOS AND iOS build on this.
+        .target(name: "AmbitickStore", dependencies: ["AmbitickCore"]),
+        // macOS-only layer: sensors, app controller, menu-bar glue.
+        .target(name: "AmbitickMac", dependencies: ["AmbitickCore", "AmbitickStore"]),
         // The whole SwiftUI layer as a LIBRARY, so app flavours are thin
         // wrappers: Community (below) and the private Pro executable both
         // return AmbitickScenes.body(controller:).
