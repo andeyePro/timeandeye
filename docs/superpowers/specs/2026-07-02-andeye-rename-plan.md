@@ -10,7 +10,7 @@ developers see (cheap to defer, decide at FOSS-publish).
 
 | Surface | Today | Action |
 |---|---|---|
-| App bundle + process name | `Ambitick.app` | `andeye.app` via make-app.sh (bundle display name lowercase per brand) |
+| App bundle + process name | `Ambitick.app` | `andeye.app` (short name, Martin 2026-07-02); long/store name "andeye time tracker" |
 | Bundle identifier | ad-hoc, none baked | mint as `com.andeye.mac` (or Apple-portal choice) when the entitled build lands — never shipped, so free |
 | CloudKit container | not yet created | `iCloud.com.andeye.mac` — created AFTER rename, no migration |
 | Menu-bar/UI strings | "Ambitick Time", "Ambitick Review", "Ambitick Settings", popover copy | sweep AmbitickUI string literals |
@@ -30,8 +30,8 @@ journal at stake). Do the migration commit first and alone.
 
 SPM package/target/module names (`Ambitick`, `AmbitickCore`, `AmbitickMac`,
 `AmbitickUI`, checks, integration), the `pro` package's product names, and
-the GitHub org/repo (github.com/Ambitick/Ambitick — transfers/renames leave
-permanent redirects, so moving to the andeye org later is cheap).
+the GitHub org/repo — DESTINATION now known: github.com/andeyePro/andeye
+(transfers leave permanent redirects, so the move is cheap whenever taken).
 
 Renaming modules is pure churn: giant diff, breaks the PRO repo's imports
 (coordinate via the seam-change protocol), invalidates local checkouts, zero
