@@ -69,6 +69,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("DuplicateReconcile", duplicateReconcileChecks),
     ("TimePeriod", timePeriodChecks),
     ("TimesheetExport", timesheetExportChecks),
+    ("JournalPrune", journalPruneChecks),
     ("HLC", hlcChecks),
     ("SessionSync", sessionSyncChecks),
     ("RevisionStore[InMemory]", { c in
