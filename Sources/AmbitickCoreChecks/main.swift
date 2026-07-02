@@ -1,5 +1,6 @@
 import Foundation
 import AmbitickCore
+import AmbitickMac
 
 // Suites register here as they are implemented (plan task order).
 
@@ -69,6 +70,19 @@ let suites: [(String, (Checks) -> Void)] = [
     ("TimesheetExport", timesheetExportChecks),
     ("HLC", hlcChecks),
     ("SessionSync", sessionSyncChecks),
+    ("RevisionStore[InMemory]", { c in
+        revisionStoreConformanceChecks(c, name: "InMemory") { InMemoryRevisionStore() }
+    }),
+    ("RevisionStore[SQLite]", { c in
+        revisionStoreConformanceChecks(c, name: "SQLite") {
+            let path = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ambitick-revs-\(UUID().uuidString).sqlite").path
+            let store = try! SQLiteJournalStore(path: path)
+            store.clock = HLCClock(deviceID: "mac")
+            return store
+        }
+    }),
+    ("SQLiteSyncStamping", sqliteSyncStampingChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("JournalSyncer", journalSyncerChecks),

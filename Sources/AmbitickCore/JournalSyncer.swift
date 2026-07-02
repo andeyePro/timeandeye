@@ -33,7 +33,9 @@ public protocol RevisionStore: AnyObject {
     /// Upsert from a REMOTE revision that won the merge: never dirty (it came
     /// from the server; pushing it back would be an echo).
     func applyRemote(_ revision: SessionRevision) throws
-    func clearDirty(_ ids: [UUID]) throws
+    /// Clear dirty ONLY where the stored revision still matches (same HLC) —
+    /// a local edit that landed mid-push must stay dirty for the next cycle.
+    func clearDirty(_ revisions: [SessionRevision]) throws
     /// Persisted pull cursor.
     var syncToken: SyncToken? { get set }
 }
@@ -69,8 +71,10 @@ public final class InMemoryRevisionStore: RevisionStore {
         dirty.remove(revision.id)   // the remote won; nothing of ours to push
     }
 
-    public func clearDirty(_ ids: [UUID]) throws {
-        dirty.subtract(ids)
+    public func clearDirty(_ cleared: [SessionRevision]) throws {
+        for rev in cleared where revisions[rev.id]?.hlc == rev.hlc {
+            dirty.remove(rev.id)
+        }
     }
 }
 
@@ -112,7 +116,7 @@ public final class JournalSyncer {
         let outgoing = try dirtyIDs.compactMap { try store.revision(id: $0) }
         if !outgoing.isEmpty {
             try await transport.push(outgoing)
-            try store.clearDirty(outgoing.map(\.id))
+            try store.clearDirty(outgoing)
         }
         if applied > 0 || !outgoing.isEmpty {
             onDebug("sync: applied \(applied) remote, pushed \(outgoing.count)")

@@ -2,6 +2,20 @@
 
 ## 2026-07-02
 
+- [x] **SQLite journal becomes a sync replica (15 checks, 237 total green).**
+  The sessions table now carries the revision meta (HLC triplet, origin,
+  deleted, dirty) beside the row; `SQLiteJournalStore` conforms to
+  `RevisionStore`. With a clock attached, every JournalStore mutation
+  re-stamps + dirties (markPushed included) and deletes become travelling
+  tombstones; without one, behaviour is byte-for-byte pre-sync (hard deletes,
+  no stamping). All reads filter tombstones. The live crash-checkpoint row is
+  sync-excluded (never stamped, never uploaded, hard-deleted).
+  `stampAllUnstamped` is the one-shot enablement migration (start-ordered,
+  idempotent). clearDirty is HLC-matched so an edit landing mid-push stays
+  queued. New conformance suite runs against BOTH stores, plus an end-to-end
+  check where a SQLite replica and an in-memory replica converge through the
+  mock server.
+
 - [x] **Sync orchestration: `JournalSyncer` + `SyncTransport`/`RevisionStore`
   seams (5 checks, 222 total green).** The replica sync cycle (pull → HLC
   receive → record-LWW apply → push dirty → clear) is pure Core, driven in

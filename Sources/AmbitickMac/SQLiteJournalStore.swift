@@ -15,6 +15,12 @@ public final class SQLiteJournalStore: JournalStore {
     private var db: OpaquePointer?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    /// Sync switch: non-nil = every session mutation is stamped (HLC + dirty)
+    /// and deletes become tombstones. nil = pre-sync behaviour, byte-for-byte.
+    public var clock: HLCClock?
+    /// Rows that must NEVER sync (the live crash-checkpoint row): mutations
+    /// aren't stamped, deletes stay hard deletes, revisions() skips them.
+    public var syncExcludedIDs: Set<UUID> = []
     // Serialises ALL access to the one sqlite3 connection. Without this, an
     // async OP push (SyncEngine isn't @MainActor, so it resumes off-main after
     // its network await) and the main-actor journal reads hit the connection
@@ -57,6 +63,17 @@ public final class SQLiteJournalStore: JournalStore {
         // Swift. ADD COLUMN has no IF NOT EXISTS, so tolerate the duplicate on
         // an already-migrated db, then backfill any rows written before it.
         try? exec("ALTER TABLE sessions ADD COLUMN end REAL NOT NULL DEFAULT 0")
+        // Sync revision metadata (see 2026-07-02-sync-design.md): the row IS
+        // the replica's raw revision. hlc_device = '' marks a row written
+        // before sync was enabled (stampAll migrates). Deleted rows stay as
+        // tombstones so the delete travels; every read filters deleted = 0.
+        try? exec("ALTER TABLE sessions ADD COLUMN hlc_millis INTEGER NOT NULL DEFAULT 0")
+        try? exec("ALTER TABLE sessions ADD COLUMN hlc_counter INTEGER NOT NULL DEFAULT 0")
+        try? exec("ALTER TABLE sessions ADD COLUMN hlc_device TEXT NOT NULL DEFAULT ''")
+        try? exec("ALTER TABLE sessions ADD COLUMN origin INTEGER NOT NULL DEFAULT 0")
+        try? exec("ALTER TABLE sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+        try? exec("ALTER TABLE sessions ADD COLUMN dirty INTEGER NOT NULL DEFAULT 0")
+        try exec("CREATE TABLE IF NOT EXISTS sync_state (key TEXT PRIMARY KEY, value BLOB)")
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
@@ -104,6 +121,41 @@ public final class SQLiteJournalStore: JournalStore {
     // MARK: - Sessions
 
     public func save(_ session: Session) throws {
+        // One critical section: meta read + row write must not interleave.
+        try locked {
+            let existing = try revisionRow(id: session.id)
+            let meta: RowMeta
+            if let clock, !syncExcludedIDs.contains(session.id) {
+                // Local mutation while sync is on: re-stamp, mark dirty. A
+                // save always yields a LIVE row (saving over a tombstone is
+                // the user re-instating). Origin is preserved — the caller
+                // escalates it via saveLocal when a mutation is deliberate.
+                meta = RowMeta(hlc: clock.tick(),
+                               origin: existing?.origin ?? .auto,
+                               deleted: false, dirty: true)
+            } else {
+                // Sync off / excluded row: preserve whatever meta the row has
+                // (INSERT OR REPLACE would otherwise wipe it to defaults).
+                meta = existing.map { RowMeta(hlc: $0.hlc, origin: $0.origin,
+                                              deleted: false, dirty: $0.dirty) }
+                    ?? RowMeta.unstamped
+            }
+            try write(session, meta: meta)
+        }
+    }
+
+    /// Row-level revision metadata as stored beside the session JSON.
+    struct RowMeta {
+        var hlc: HLC
+        var origin: SliceOrigin
+        var deleted: Bool
+        var dirty: Bool
+        /// Pre-sync rows: hlc_device '' marks "not yet stamped".
+        static let unstamped = RowMeta(hlc: HLC(physicalMillis: 0, counter: 0, deviceID: ""),
+                                       origin: .auto, deleted: false, dirty: false)
+    }
+
+    private func write(_ session: Session, meta: RowMeta) throws {
         try locked {
             guard let json = try? encoder.encode(session),
                   let jsonString = String(data: json, encoding: .utf8) else {
@@ -112,7 +164,12 @@ public final class SQLiteJournalStore: JournalStore {
             var isOP = 0
             if case .op = session.task { isOP = 1 }
             var stmt: OpaquePointer?
-            let sql = "INSERT OR REPLACE INTO sessions (id, start, end, certainty, pushed, is_op, json) VALUES (?,?,?,?,?,?,?)"
+            let sql = """
+            INSERT OR REPLACE INTO sessions
+                (id, start, end, certainty, pushed, is_op, json,
+                 hlc_millis, hlc_counter, hlc_device, origin, deleted, dirty)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
@@ -124,15 +181,43 @@ public final class SQLiteJournalStore: JournalStore {
             sqlite3_bind_int(stmt, 5, session.pushedToOP ? 1 : 0)
             sqlite3_bind_int(stmt, 6, Int32(isOP))
             sqlite3_bind_text(stmt, 7, jsonString, -1, Self.transient)
+            sqlite3_bind_int64(stmt, 8, meta.hlc.physicalMillis)
+            sqlite3_bind_int(stmt, 9, meta.hlc.counter)
+            sqlite3_bind_text(stmt, 10, meta.hlc.deviceID, -1, Self.transient)
+            sqlite3_bind_int(stmt, 11, Int32(meta.origin.rawValue))
+            sqlite3_bind_int(stmt, 12, meta.deleted ? 1 : 0)
+            sqlite3_bind_int(stmt, 13, meta.dirty ? 1 : 0)
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
         }
     }
 
+    /// The raw row (live OR tombstone) with its revision meta; nil if absent.
+    private func revisionRow(id: UUID) throws -> (session: Session, hlc: HLC,
+                                                  origin: SliceOrigin, deleted: Bool,
+                                                  dirty: Bool)? {
+        var out: [(Session, HLC, SliceOrigin, Bool, Bool)] = []
+        try query("""
+            SELECT json, hlc_millis, hlc_counter, hlc_device, origin, deleted, dirty
+            FROM sessions WHERE id = ?
+            """,
+                  bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
+            let session = try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0))
+            let device = sqlite3_column_text(stmt, 3).map { String(cString: $0) } ?? ""
+            out.append((session,
+                        HLC(physicalMillis: sqlite3_column_int64(stmt, 1),
+                            counter: sqlite3_column_int(stmt, 2), deviceID: device),
+                        SliceOrigin(rawValue: Int(sqlite3_column_int(stmt, 4))) ?? .auto,
+                        sqlite3_column_int(stmt, 5) != 0,
+                        sqlite3_column_int(stmt, 6) != 0))
+        }
+        return out.first
+    }
+
     public func allSessions() throws -> [Session] {
         var out: [Session] = []
-        try query("SELECT json FROM sessions ORDER BY start") { stmt in
+        try query("SELECT json FROM sessions WHERE deleted = 0 ORDER BY start") { stmt in
             out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
         }
         return out
@@ -140,7 +225,7 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func session(id: UUID) throws -> Session? {
         var out: [Session] = []
-        try query("SELECT json FROM sessions WHERE id = ?",
+        try query("SELECT json FROM sessions WHERE id = ? AND deleted = 0",
                   bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
             out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
         }
@@ -149,7 +234,7 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func sessionCount() throws -> Int {
         var count = 0
-        try query("SELECT COUNT(*) FROM sessions") { stmt in
+        try query("SELECT COUNT(*) FROM sessions WHERE deleted = 0") { stmt in
             count = Int(sqlite3_column_int64(stmt, 0))
         }
         return count
@@ -157,7 +242,7 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func pushedCount() throws -> Int {
         var count = 0
-        try query("SELECT COUNT(*) FROM sessions WHERE pushed = 1") { stmt in
+        try query("SELECT COUNT(*) FROM sessions WHERE pushed = 1 AND deleted = 0") { stmt in
             count = Int(sqlite3_column_int64(stmt, 0))
         }
         return count
@@ -165,7 +250,7 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         var out: [Session] = []
-        try query("SELECT json FROM sessions WHERE pushed = 0 AND is_op = 1 AND certainty >= ? ORDER BY start",
+        try query("SELECT json FROM sessions WHERE pushed = 0 AND is_op = 1 AND deleted = 0 AND certainty >= ? ORDER BY start",
                   bind: { sqlite3_bind_double($0, 1, threshold) }) { stmt in
             out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
         }
@@ -194,9 +279,9 @@ public final class SQLiteJournalStore: JournalStore {
         // GROUP BY the JSON task key in SQL so durable recency never decodes
         // the whole table (it used to, once a minute, growing with history).
         var out: [TaskRef: Date] = [:]
-        let notIn = excluding.isEmpty ? "" : " WHERE id NOT IN ("
+        let notIn = excluding.isEmpty ? "" : " AND id NOT IN ("
             + excluding.map { "'\($0.uuidString)'" }.joined(separator: ",") + ")"
-        try query("SELECT json_extract(json, '$.task'), MAX(end) FROM sessions\(notIn) GROUP BY 1") { stmt in
+        try query("SELECT json_extract(json, '$.task'), MAX(end) FROM sessions WHERE deleted = 0\(notIn) GROUP BY 1") { stmt in
             guard let text = sqlite3_column_text(stmt, 0) else { return }
             if let ref = try? self.decoder.decode(TaskRef.self,
                                                   from: Data(String(cString: text).utf8)) {
@@ -210,7 +295,7 @@ public final class SQLiteJournalStore: JournalStore {
         var out: [Session] = []
         // Bounds BOTH sides in SQL (was: start < to, then a Swift end > from
         // filter that still decoded every row before `to`).
-        try query("SELECT json FROM sessions WHERE start < ? AND end > ? ORDER BY start",
+        try query("SELECT json FROM sessions WHERE start < ? AND end > ? AND deleted = 0 ORDER BY start",
                   bind: {
                       sqlite3_bind_double($0, 1, to.timeIntervalSince1970)
                       sqlite3_bind_double($0, 2, from.timeIntervalSince1970)
@@ -237,6 +322,14 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func deleteSession(_ id: UUID) throws {
         try locked {
+            // Sync on: the delete must travel, so the row becomes a tombstone
+            // (stamped + dirty). Sync off / excluded rows: hard delete as ever.
+            if let clock, !syncExcludedIDs.contains(id) {
+                guard let row = try revisionRow(id: id), !row.deleted else { return }
+                try write(row.session, meta: RowMeta(hlc: clock.tick(), origin: row.origin,
+                                                     deleted: true, dirty: true))
+                return
+            }
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, "DELETE FROM sessions WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
@@ -327,6 +420,127 @@ public final class SQLiteJournalStore: JournalStore {
                 guard var segment = segments.first else { continue }
                 segment.assigned = target
                 try save(segment)
+            }
+        }
+    }
+}
+
+// MARK: - RevisionStore (the replica side of sync)
+
+extension SQLiteJournalStore: RevisionStore {
+    public func allRevisions() throws -> [SessionRevision] {
+        var out: [SessionRevision] = []
+        try query("""
+            SELECT json, hlc_millis, hlc_counter, hlc_device, origin, deleted
+            FROM sessions WHERE hlc_device != ''
+            """) { stmt in
+            let session = try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0))
+            let device = sqlite3_column_text(stmt, 3).map { String(cString: $0) } ?? ""
+            out.append(SessionRevision(
+                session: session,
+                hlc: HLC(physicalMillis: sqlite3_column_int64(stmt, 1),
+                         counter: sqlite3_column_int(stmt, 2), deviceID: device),
+                origin: SliceOrigin(rawValue: Int(sqlite3_column_int(stmt, 4))) ?? .auto,
+                deleted: sqlite3_column_int(stmt, 5) != 0))
+        }
+        return out.filter { !syncExcludedIDs.contains($0.id) }
+            .sorted {
+                $0.session.start != $1.session.start
+                    ? $0.session.start < $1.session.start
+                    : $0.id.uuidString < $1.id.uuidString
+            }
+    }
+
+    public func revision(id: UUID) throws -> SessionRevision? {
+        guard !syncExcludedIDs.contains(id),
+              let row = try revisionRow(id: id), !row.hlc.deviceID.isEmpty else { return nil }
+        return SessionRevision(session: row.session, hlc: row.hlc,
+                               origin: row.origin, deleted: row.deleted)
+    }
+
+    public func dirtyRevisionIDs() throws -> [UUID] {
+        var out: [UUID] = []
+        try query("SELECT id FROM sessions WHERE dirty = 1 AND hlc_device != ''") { stmt in
+            if let text = sqlite3_column_text(stmt, 0),
+               let id = UUID(uuidString: String(cString: text)) { out.append(id) }
+        }
+        return out.filter { !syncExcludedIDs.contains($0) }
+            .sorted { $0.uuidString < $1.uuidString }
+    }
+
+    public func saveLocal(_ revision: SessionRevision) throws {
+        try write(revision.session, meta: RowMeta(hlc: revision.hlc, origin: revision.origin,
+                                                  deleted: revision.deleted, dirty: true))
+    }
+
+    public func applyRemote(_ revision: SessionRevision) throws {
+        try write(revision.session, meta: RowMeta(hlc: revision.hlc, origin: revision.origin,
+                                                  deleted: revision.deleted, dirty: false))
+    }
+
+    public func clearDirty(_ cleared: [SessionRevision]) throws {
+        try locked {
+            for rev in cleared {
+                var stmt: OpaquePointer?
+                let sql = """
+                UPDATE sessions SET dirty = 0
+                WHERE id = ? AND hlc_millis = ? AND hlc_counter = ? AND hlc_device = ?
+                """
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+                }
+                defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, rev.id.uuidString, -1, Self.transient)
+                sqlite3_bind_int64(stmt, 2, rev.hlc.physicalMillis)
+                sqlite3_bind_int(stmt, 3, rev.hlc.counter)
+                sqlite3_bind_text(stmt, 4, rev.hlc.deviceID, -1, Self.transient)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+                }
+            }
+        }
+    }
+
+    public var syncToken: SyncToken? {
+        get {
+            var out: Data?
+            try? query("SELECT value FROM sync_state WHERE key = 'token'") { stmt in
+                if let bytes = sqlite3_column_blob(stmt, 0) {
+                    out = Data(bytes: bytes, count: Int(sqlite3_column_bytes(stmt, 0)))
+                }
+            }
+            return out.map(SyncToken.init(raw:))
+        }
+        set {
+            try? locked {
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(
+                    db, "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('token', ?)",
+                    -1, &stmt, nil) == SQLITE_OK else { return }
+                defer { sqlite3_finalize(stmt) }
+                let raw = newValue?.raw ?? Data()
+                _ = raw.withUnsafeBytes {
+                    sqlite3_bind_blob(stmt, 1, $0.baseAddress, Int32(raw.count), Self.transient)
+                }
+                _ = sqlite3_step(stmt)
+            }
+        }
+    }
+
+    /// One-shot sync-enablement migration: stamp every pre-sync row (in start
+    /// order, so HLCs read sensibly) and mark it dirty for the first upload.
+    /// Idempotent — already-stamped rows are untouched.
+    public func stampAllUnstamped(clock: HLCClock) throws {
+        try locked {
+            var stale: [UUID] = []
+            try query("SELECT id FROM sessions WHERE hlc_device = '' ORDER BY start") { stmt in
+                if let text = sqlite3_column_text(stmt, 0),
+                   let id = UUID(uuidString: String(cString: text)) { stale.append(id) }
+            }
+            for id in stale where !syncExcludedIDs.contains(id) {
+                guard let row = try revisionRow(id: id) else { continue }
+                try write(row.session, meta: RowMeta(hlc: clock.tick(), origin: .auto,
+                                                     deleted: row.deleted, dirty: true))
             }
         }
     }
