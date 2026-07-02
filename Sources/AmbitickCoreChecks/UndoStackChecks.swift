@@ -15,7 +15,7 @@ func undoStackChecks(_ c: Checks) async {
         try expectEq(u.count, 1)
     }
 
-    await c.check("pop on an empty stack returns nil") {
+    c.check("pop on an empty stack returns nil") {
         let u = UndoStack()
         try expect(u.pop() == nil)
     }
