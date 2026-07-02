@@ -137,7 +137,7 @@ non-work time land there instead of stopping the clock.
 
 ## Licence
 
-AGPL-3.0 (see LICENSE). Contributions are accepted under the andeye
+GPL-3.0 (see LICENSE). Contributions are accepted under the andeye
 Individual Contributor Licence Agreement (CLA.md), which is what lets the
 same code also ship in andeye Ltd's proprietary builds (e.g. the App
 Store releases). Details in CONTRIBUTING.md.

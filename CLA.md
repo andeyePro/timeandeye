@@ -1,7 +1,7 @@
 # andeye Individual Contributor Licence Agreement
 
 An agreement in the style of the Apache ICLA / Harmony agreements. It
-exists because andeye Ltd dual-licenses this codebase (AGPL-3.0 in this
+exists because andeye Ltd dual-licenses this codebase (GPL-3.0 in this
 repo, proprietary terms for the App Store builds), which requires the
 company to hold sufficient rights in every contribution.
 
