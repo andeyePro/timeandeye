@@ -512,7 +512,7 @@ extension SQLiteJournalStore: RevisionStore {
             return out.map(SyncToken.init(raw:))
         }
         set {
-            try? locked {
+            locked {
                 var stmt: OpaquePointer?
                 guard sqlite3_prepare_v2(
                     db, "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('token', ?)",

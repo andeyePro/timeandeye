@@ -116,6 +116,20 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] iCloud quota stewardship (Martin, 2026-07-02). Reality check first: the
+  synced journal is TINY — a slice is a few hundred bytes, heavy tracking is
+  ~50k slices/year ≈ 15–25 MB/year in the user's CloudKit private DB, and the
+  bulky window-span detail is local-only (already 30-day pruned) and never
+  syncs. Nobody gets pushed into a paid iCloud tier by Ambitick; photos do
+  that. Still, build the stewardship story so the complaint can never land:
+  (a) Settings shows Ambitick's actual iCloud footprint; (b) an
+  age-consolidation prune — slices older than N years collapse into per-day
+  per-task rollups (durations summed, comments concatenated, backend entry
+  ids dropped) so totals/invoicing history survive at ~1% of the size;
+  (c) an extreme hard-cap prune (delete oldest raw slices beyond a chosen MB
+  ceiling), UI-labelled as strongly discouraged with a double confirm;
+  (d) tombstone GC after 90 days (already in the sync design).
+
 - [x] Full keyboard/mouse parity sweep (DONE 2026-06-28). Audited every
   interactive control (Explore inventory): every action has a mouse path. Added
   ⌘-shortcuts across the popover (⌘T/⌘P/⌘./⌘R/⌘Z/⌘Y/⌘U/⌘,/⌘Q, ↵ picks top task)
