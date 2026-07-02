@@ -24,6 +24,7 @@ targets:
         product: AmbitickPhone
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.andeye.ios
         INFOPLIST_KEY_CFBundleDisplayName: andeye
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
