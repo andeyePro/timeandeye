@@ -133,6 +133,7 @@ public final class SQLiteJournalStore: JournalStore {
                 meta = RowMeta(hlc: clock.tick(),
                                origin: existing?.origin ?? .auto,
                                deleted: false, dirty: true)
+                saveClockState()
             } else {
                 // Sync off / excluded row: preserve whatever meta the row has
                 // (INSERT OR REPLACE would otherwise wipe it to defaults).
@@ -328,6 +329,7 @@ public final class SQLiteJournalStore: JournalStore {
                 guard let row = try revisionRow(id: id), !row.deleted else { return }
                 try write(row.session, meta: RowMeta(hlc: clock.tick(), origin: row.origin,
                                                      deleted: true, dirty: true))
+                saveClockState()
                 return
             }
             var stmt: OpaquePointer?
@@ -339,6 +341,21 @@ public final class SQLiteJournalStore: JournalStore {
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
+        }
+    }
+
+    public func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
+        try locked {
+            guard let row = try revisionRow(id: id), row.origin < origin else { return }
+            // Origin drives cross-device overlap authority, so a change must
+            // sync: re-stamp + dirty like any other mutation (clock present),
+            // else just record it for a later sync enablement.
+            let hlc = (clock != nil && !syncExcludedIDs.contains(id))
+                ? clock!.tick() : row.hlc
+            try write(row.session, meta: RowMeta(hlc: hlc, origin: origin,
+                                                 deleted: row.deleted,
+                                                 dirty: row.dirty || clock != nil))
+            saveClockState()
         }
     }
 
@@ -527,6 +544,53 @@ extension SQLiteJournalStore: RevisionStore {
         }
     }
 
+    // MARK: sync_state helpers (device id, clock persistence)
+
+    private func syncStateData(_ key: String) -> Data? {
+        var out: Data?
+        try? query("SELECT value FROM sync_state WHERE key = ?",
+                   bind: { sqlite3_bind_text($0, 1, key, -1, Self.transient) }) { stmt in
+            if let bytes = sqlite3_column_blob(stmt, 0) {
+                out = Data(bytes: bytes, count: Int(sqlite3_column_bytes(stmt, 0)))
+            }
+        }
+        return out
+    }
+
+    private func setSyncStateData(_ key: String, _ value: Data) {
+        locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                db, "INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)",
+                -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, key, -1, Self.transient)
+            _ = value.withUnsafeBytes {
+                sqlite3_bind_blob(stmt, 2, $0.baseAddress, Int32(value.count), Self.transient)
+            }
+            _ = sqlite3_step(stmt)
+        }
+    }
+
+    public func syncStateString(_ key: String) -> String? {
+        syncStateData(key).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    public func setSyncStateString(_ key: String, _ value: String) {
+        setSyncStateData(key, Data(value.utf8))
+    }
+
+    /// The HLC clock state as of the last stamped mutation — restored on
+    /// launch so stamps stay monotonic even across a wall-clock regression.
+    public func loadClockState() -> HLC? {
+        syncStateData("clock").flatMap { try? decoder.decode(HLC.self, from: $0) }
+    }
+
+    func saveClockState() {
+        guard let clock, let data = try? encoder.encode(clock.last) else { return }
+        setSyncStateData("clock", data)
+    }
+
     /// One-shot sync-enablement migration: stamp every pre-sync row (in start
     /// order, so HLCs read sensibly) and mark it dirty for the first upload.
     /// Idempotent — already-stamped rows are untouched.
@@ -542,6 +606,7 @@ extension SQLiteJournalStore: RevisionStore {
                 try write(row.session, meta: RowMeta(hlc: clock.tick(), origin: .auto,
                                                      deleted: row.deleted, dirty: true))
             }
+            saveClockState()
         }
     }
 }

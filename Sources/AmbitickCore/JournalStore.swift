@@ -26,6 +26,11 @@ public protocol JournalStore {
     /// Timeline edits: replace the stored session (matched by id).
     func update(_ session: Session) throws
     func deleteSession(_ id: UUID) throws
+    /// Escalate a slice's sync authority (auto → manual → edited) after a
+    /// deliberate user action, so cross-device overlap resolution knows a
+    /// human shaped it. Never downgrades. No-op on stores that aren't sync
+    /// replicas (the in-memory store).
+    func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws
 
     func save(_ segment: ReviewSegment) throws
     /// Unassigned review segments, oldest first.
@@ -97,6 +102,10 @@ public final class InMemoryJournalStore: JournalStore {
 
     public func deleteSession(_ id: UUID) throws {
         sessions.removeAll { $0.id == id }
+    }
+
+    public func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
+        // Not a sync replica: origin has no effect here.
     }
 
     public func save(_ span: FocusSpan) throws {

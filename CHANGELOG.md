@@ -2,6 +2,20 @@
 
 ## 2026-07-02
 
+- [x] **Controller sync wiring + CloudKit transport skeleton (245 checks
+  green).** New `escalateOrigin` on the journal protocol: deliberate user
+  actions promote a slice's cross-device authority (timeline edit/reassign →
+  `edited`, idle-gap claim → `manual`; auto tracking stays `auto`); promotion
+  re-stamps + dirties (it must sync), downgrades are refused no-ops.
+  `AmbitickSettings.journalSyncEnabled` (default OFF — store behaviour is
+  byte-for-byte pre-sync until flipped); on enablement the controller mints a
+  persisted device id, restores the HLC clock state (persisted per stamped
+  mutation, so stamps stay monotonic across a wall-clock regression), excludes
+  the crash-checkpoint row, and runs the idempotent backlog stamp.
+  `CloudKitSyncTransport` (Mac layer, `canImport(CloudKit)`) maps
+  SessionRevision ⇄ CKRecord in one custom private-DB zone — thin by design,
+  Core's merge stays the authority; inert until the entitled build exists.
+
 - [x] **Licensing rail (5 checks, 244 total green).** Core `License` /
   `LicenseTier` (plus/pro/premium/enterprise; Community = no licence, fully
   functional) with offline Ed25519 verification of `AMBI1.<payload>.<sig>`

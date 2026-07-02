@@ -133,6 +133,26 @@ func sqliteSyncStampingChecks(_ c: Checks) {
         try expectEq(try store.sessionCount(), 1, "checkpoint hard-deleted")
     }
 
+    c.check("escalateOrigin promotes, re-stamps and dirties — and never downgrades") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let s = session()
+        try store.save(s)
+        let auto = try unwrap(try store.revision(id: s.id))
+        try expectEq(auto.origin, .auto)
+        try store.escalateOrigin(s.id, to: .edited)
+        let edited = try unwrap(try store.revision(id: s.id))
+        try expectEq(edited.origin, .edited)
+        try expect(auto.hlc < edited.hlc, "origin change must sync, so it re-stamps")
+        try store.escalateOrigin(s.id, to: .manual)   // downgrade attempt
+        try expectEq(try store.revision(id: s.id)?.origin, .edited,
+                     "edited never downgrades to manual")
+        try expectEq(try store.revision(id: s.id)?.hlc, edited.hlc,
+                     "a refused downgrade is a no-op, not a new revision")
+        // Clock state persists across a store re-open (monotonic restarts).
+        try expect(store.loadClockState() != nil, "clock state persisted")
+    }
+
     c.check("stampAllUnstamped migrates pre-sync rows once, in start order") {
         let store = try makeStore()
         let early = Session(task: .op(1), start: t0, end: t0.addingTimeInterval(600), certainty: 0.9)

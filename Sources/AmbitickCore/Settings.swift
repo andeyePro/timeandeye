@@ -94,6 +94,10 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
     /// The pasted licence key (a signed token, not a secret — safe in the
     /// settings file). nil/invalid = Community tier, fully functional.
     public var licenseKey: String?
+    /// Multi-device journal sync (CloudKit). Default OFF: until enabled the
+    /// store behaves exactly pre-sync. Flipping on stamps the backlog and
+    /// starts the replica cycle (needs the CloudKit-entitled build).
+    public var journalSyncEnabled: Bool
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -121,7 +125,8 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:],
                 emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
-                licenseKey: String? = nil) {
+                licenseKey: String? = nil,
+                journalSyncEnabled: Bool = false) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
@@ -149,6 +154,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         self.taskColours = taskColours
         self.emailMatchOrder = emailMatchOrder
         self.licenseKey = licenseKey
+        self.journalSyncEnabled = journalSyncEnabled
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -191,6 +197,7 @@ public struct AmbitickSettings: Codable, Equatable, Sendable {
         let mapped = rawOrder.compactMap { EmailMatchLevel(rawValue: $0) }
         emailMatchOrder = Set(mapped) == Set(EmailMatchLevel.allCases) ? mapped : defaults.emailMatchOrder
         licenseKey = ((try? c.decodeIfPresent(String.self, forKey: .licenseKey)) ?? nil) ?? defaults.licenseKey
+        journalSyncEnabled = c.lenient(.journalSyncEnabled, or: defaults.journalSyncEnabled)
     }
 }
 

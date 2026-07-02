@@ -50,6 +50,9 @@ final class FailingMarkJournalStore: JournalStore {
     }
     func update(_ session: Session) throws { try inner.update(session) }
     func deleteSession(_ id: UUID) throws { try inner.deleteSession(id) }
+    func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
+        try inner.escalateOrigin(id, to: origin)
+    }
     func save(_ segment: ReviewSegment) throws { try inner.save(segment) }
     func pendingReview() throws -> [ReviewSegment] { try inner.pendingReview() }
     func assign(_ segmentIDs: [UUID], to target: Target?) throws { try inner.assign(segmentIDs, to: target) }

@@ -252,8 +252,36 @@ public final class AppController: ObservableObject {
         wireTracker()
         rebuildClient()
         revalidateLicense()
+        configureSyncReplica()
         taskCache = localWorkTasks()   // locals exist before OP ever connects
         applyJournalRecency()          // recency survives the relaunch
+    }
+
+    /// This device's stable sync identity + clock. The clock only attaches to
+    /// the store when journal sync is enabled — until then every mutation is
+    /// byte-for-byte pre-sync (hard deletes, no stamping), so the feature is
+    /// inert for existing installs. The CloudKit transport arrives with the
+    /// signing identity; enabling then = flip the setting, which stamps the
+    /// backlog (one-shot) and starts the sync cycle on the 60 s timer.
+    private(set) var syncClock: HLCClock?
+    private func configureSyncReplica() {
+        guard settings.journalSyncEnabled, let sqlite = journal as? SQLiteJournalStore else { return }
+        // Device id: persisted beside the journal so a settings-file restore
+        // on another Mac doesn't clone identities.
+        let idKey = "deviceID"
+        let deviceID: String
+        if let existing = sqlite.syncStateString(idKey) {
+            deviceID = existing
+        } else {
+            deviceID = "mac-" + UUID().uuidString.prefix(8).lowercased()
+            sqlite.setSyncStateString(idKey, deviceID)
+        }
+        let clock = HLCClock(deviceID: deviceID, last: sqlite.loadClockState())
+        syncClock = clock
+        sqlite.syncExcludedIDs = [Self.liveCheckpointID]
+        sqlite.clock = clock
+        try? sqlite.stampAllUnstamped(clock: clock)   // idempotent backlog stamp
+        DebugLog.write("sync replica active, device \(deviceID)")
     }
 
     /// Community when nil. Verification is offline (embedded public key);
@@ -935,7 +963,8 @@ public final class AppController: ObservableObject {
         pendingGap = nil
         Task {
             await createTimelineSession(Session(task: g.task, start: g.from, end: g.to,
-                                                certainty: 0.95, comment: "worked through idle gap"))
+                                                certainty: 0.95, comment: "worked through idle gap"),
+                                        origin: .manual)
             // Continue, don't split: merge the claimed gap into the prior
             // same-task slice it butts up against, so "continue when away"
             // yields one continuous slice / one OP entry.
@@ -1403,8 +1432,12 @@ public final class AppController: ObservableObject {
     }
 
     /// A brand-new manual slice (drawn or gap-filled on the timeline).
-    public func createTimelineSession(_ session: Session) async {
+    /// `origin`: .edited for timeline-drawn slices; claimIdleGap passes
+    /// .manual ("I claim this time", not "I shaped these bounds").
+    public func createTimelineSession(_ session: Session,
+                                      origin: SliceOrigin = .edited) async {
         try? journal.save(session)
+        try? journal.escalateOrigin(session.id, to: origin)
         registerUndo("create \(name(of: .task(session.task)))") { [weak self] in
             guard let self else { return }
             let saved = try? self.journal.session(id: session.id)
@@ -1443,6 +1476,7 @@ public final class AppController: ObservableObject {
             session.pushedToOP = false
         }
         try? journal.update(session)
+        try? journal.escalateOrigin(session.id, to: .edited)
         if case .op(let wpID) = session.task, let entryID = session.opTimeEntryID,
            let backend {
             do {
@@ -1531,6 +1565,7 @@ public final class AppController: ObservableObject {
             session.opTimeEntryID = nil
             session.pushedToOP = false
             try? journal.update(session)
+            try? journal.escalateOrigin(session.id, to: .edited)
             teachAssociation(for: session)   // stop the same window mis-filing again
         }
         await syncIfEnabled()
