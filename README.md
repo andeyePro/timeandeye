@@ -134,3 +134,10 @@ non-work time land there instead of stopping the clock.
 - Safari tab URLs not yet read (Chrome/Opera/Brave only).
 - Calls answered on the iPhone are invisible (look like idle time).
 - Onboarding is this README; in-app guided onboarding arrives with user 2.
+
+## Licence
+
+AGPL-3.0 (see LICENSE). Contributions are accepted under the andeye
+Individual Contributor Licence Agreement (CLA.md), which is what lets the
+same code also ship in andeye Ltd's proprietary builds (e.g. the App
+Store releases). Details in CONTRIBUTING.md.

@@ -33,7 +33,14 @@ green — CI runs them on every push.
 
 ## Licence and contributor agreement
 
-[PENDING — the licence and the contributor mechanism (DCO vs CLA) are being
-finalised for launch; this section will state them explicitly. Until it
-does, opening an issue costs nothing and PRs are welcome with the
-understanding that the mechanism lands before merge.]
+andeye is licensed under the GNU AGPL-3.0 (see LICENSE). andeye Ltd also
+ships the same code in proprietary builds (for example the App Store
+releases), which is possible because the company holds sufficient rights
+in every line.
+
+To keep that true, contributions are accepted under the andeye Individual
+Contributor Licence Agreement (CLA.md): you keep ownership of your work
+and grant andeye Ltd a licence broad enough to distribute it under both
+the AGPL and the proprietary build terms. State your agreement in your
+first pull request; PRs from authors who have not agreed cannot be
+merged.

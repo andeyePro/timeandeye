@@ -1,10 +1,9 @@
-# andeye Individual Contributor Licence Agreement (DRAFT)
+# andeye Individual Contributor Licence Agreement
 
-DRAFT for Martin's review before the repo goes public — a template in the
-style of the Apache ICLA / Harmony agreements, not legal advice. It exists
-because andeye Ltd dual-licenses this codebase (open-source in this repo,
-proprietary terms for the App Store builds), which requires the company to
-hold sufficient rights in every contribution.
+An agreement in the style of the Apache ICLA / Harmony agreements. It
+exists because andeye Ltd dual-licenses this codebase (AGPL-3.0 in this
+repo, proprietary terms for the App Store builds), which requires the
+company to hold sufficient rights in every contribution.
 
 Thank you for your interest in contributing to andeye ("the Project"),
 software maintained by andeye Ltd, a company registered in Scotland

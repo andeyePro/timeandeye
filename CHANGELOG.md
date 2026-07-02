@@ -2,6 +2,14 @@
 
 ## 2026-07-02
 
+- [x] **Licence landed: AGPL-3.0 + CLA (Martin's call, 15:03 BST).** LICENSE
+  is the verbatim SPDX AGPL-3.0-only text; CLA.md is an ICLA-style agreement
+  granting andeye Ltd rights broad enough to dual-license the proprietary
+  App Store builds; CONTRIBUTING's pending section now states both; README
+  gains a Licence section. The staging kit (docs/licensing-staging/) deleted
+  itself in this commit. Remaining before the repo flips public (WP 223):
+  Martin reviews the CLA text and the CLA enforcement check gets wired.
+
 - [x] **UndoStack extracted to Core (282 checks green).** The pure stack +
   grouping semantics behind the global ⌘Z (LIFO, group-bundles-to-one-entry
   with reversed replay, nested groups folding into the outermost, empty
