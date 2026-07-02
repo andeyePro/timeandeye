@@ -116,6 +116,13 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] BEFORE the FOSS publish: contributor IP mechanism (2026-07-02, from the
+  strategy note's exit-cleanliness guard — "IP assignment from any
+  contributor", product IP must sit cleanly in andeye Ltd from day one).
+  Decide DCO (lightweight, Linux-style sign-off) vs CLA (heavier, true
+  assignment — what an acquirer's diligence prefers); add CONTRIBUTING.md +
+  enforcement (PR check) in the same commit that makes the repo public. Zero
+  urgency until the publish moment, blocking at it.
 - [ ] Generalise duplicate-reconcile beyond OP (2026-07-02, from the
   TaskRef.remote migration): `DuplicateReconcile` is structurally OP-only
   (`OPTimeEntry.workPackageID: Int`, `listTimeEntries` returns OP-shaped
