@@ -2,6 +2,14 @@
 
 ## 2026-07-02
 
+- [x] **UndoStack extracted to Core (282 checks green).** The pure stack +
+  grouping semantics behind the global ⌘Z (LIFO, group-bundles-to-one-entry
+  with reversed replay, nested groups folding into the outermost, empty
+  groups pushing nothing) moved from AppController into
+  `AmbitickCore.UndoStack` with 5 checks; the controller keeps the sounds,
+  notification and published count. First of the three review-flagged
+  AppController extractions.
+
 - [x] **PieGeometry extracted to Core + label-keyed pie selection (277 checks
   green).** The Time Spent donut's pure geometry (slice-angle layout, polar
   normalisation, radial band hit model, metrics) moved from SpentView into

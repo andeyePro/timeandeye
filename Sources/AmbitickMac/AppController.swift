@@ -1044,38 +1044,27 @@ public final class AppController: ObservableObject {
     // MARK: - Undo
 
     /// Infinite, session-bounded undo of data edits (timeline, review,
-    /// local tasks, colours). ⌘Z anywhere in the app.
-    private var undoStack: [(label: String, inverse: () async -> Void)] = []
+    /// local tasks, colours). ⌘Z anywhere in the app. The stack + grouping
+    /// semantics live in Core (UndoStack, checked); this owns the sounds,
+    /// the notification and the published count.
+    private let undoStack = UndoStack()
     @Published public private(set) var undoCount = 0
-    private var pendingGroup: [() async -> Void]?
 
     private func registerUndo(_ label: String, inverse: @escaping () async -> Void) {
-        if pendingGroup != nil {
-            pendingGroup?.append(inverse)   // accumulate; the group pushes one entry
-        } else {
-            undoStack.append((label, inverse))
-            undoCount = undoStack.count
-        }
+        undoStack.register(label, inverse: inverse)
+        undoCount = undoStack.count
     }
 
     /// Bundle every mutation in `body` into ONE undo step (a handle drag that
     /// overwrites several records, or an overlap save that trims a neighbour
     /// and moves a slice, undoes in a single ⌘Z). Nestable.
     public func undoGroup(_ label: String, _ body: () async -> Void) async {
-        let outer = pendingGroup == nil
-        if outer { pendingGroup = [] }
-        await body()
-        if outer, let group = pendingGroup {
-            pendingGroup = nil
-            if !group.isEmpty {
-                undoStack.append((label, { for inverse in group.reversed() { await inverse() } }))
-                undoCount = undoStack.count
-            }
-        }
+        await undoStack.group(label, body)
+        undoCount = undoStack.count
     }
 
     public func undo() {
-        guard let last = undoStack.popLast() else {
+        guard let last = undoStack.pop() else {
             NSSound(named: "Funk")?.play()
             return
         }

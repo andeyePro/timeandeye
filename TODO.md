@@ -114,7 +114,8 @@ and recorded rather than fixed blind:
   journal editing block (~575 lines, no AppKit — could move toward Core as a
   TimelineEditor), sync orchestration (~100 lines, `SyncCoordinator`), and the
   pure `UndoStack`. Mechanical, but big diffs — do when the file next fights
-  back.
+  back. (UndoStack DONE 2026-07-02 — Core class + 5 checks; the other two
+  remain parked.)
 
 ## Open
 
