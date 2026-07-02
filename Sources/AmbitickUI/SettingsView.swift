@@ -12,7 +12,7 @@ struct SettingsView: View {
     @State private var dupActions: [ReconcileAction] = []
     @State private var scanning = false
     @State private var scanned = false
-    @State private var expandedDup: Set<Int> = []
+    @State private var expandedDup: Set<String> = []
     @State private var expandAllDup = false
     @State private var senderProbe = ""
     @State private var exportPeriod: TimePeriod = .thisWeek
@@ -353,7 +353,7 @@ struct SettingsView: View {
         }
     }
 
-    private func dupEntryRow(_ e: OPTimeEntry, survivor: Bool) -> some View {
+    private func dupEntryRow(_ e: RemoteTimeEntry, survivor: Bool) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text(survivor ? "KEEP" : "delete")
                 .font(.caption2).bold()
@@ -369,9 +369,9 @@ struct SettingsView: View {
                 }
             }
             Spacer()
-            Button { openInOP(e.workPackageID) } label: { Image(systemName: "arrow.up.right.square") }
+            Button { openInBackend(e.taskID) } label: { Image(systemName: "arrow.up.right.square") }
                 .buttonStyle(.plain)
-                .help("Open work package #\(e.workPackageID) in OpenProject to check anything not shown here")
+                .help("Open task \(e.taskID) in the backend to check anything not shown here")
         }
         .padding(.leading, 18)
     }
@@ -380,10 +380,8 @@ struct SettingsView: View {
         MenuTitle.text(elapsed: secs, certainty: nil, showPercent: false)
     }
 
-    private func openInOP(_ wp: Int) {
-        // OPTimeEntry.workPackageID is genuinely an Int (OP API side); the
-        // seam speaks String.
-        if let url = controller.taskWebURL(id: String(wp)) { openURL(url) }
+    private func openInBackend(_ taskID: String) {
+        if let url = controller.taskWebURL(id: taskID) { openURL(url) }
     }
 
     /// The single non-work catch-all, expressed as a one-of selection over the

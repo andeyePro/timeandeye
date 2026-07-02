@@ -37,27 +37,28 @@ public struct OPTimeEntry: Equatable, Sendable, Identifiable {
 /// rest, and don't lose anything — the deleted entries' comments are folded into
 /// the survivor, and any journal slice that pointed at a deleted entry is
 /// re-pointed at the survivor. Applied ONE AT A TIME after the user confirms it.
+/// Backend-neutral since the RemoteTimeEntry generalisation: ids are Strings.
 public struct ReconcileAction: Equatable, Sendable, Identifiable {
-    public var workPackageID: Int
+    public var taskID: String
     public var start: Date
-    public var survivorID: Int
-    public var deleteIDs: [Int]
+    public var survivorID: RemoteEntryID
+    public var deleteIDs: [RemoteEntryID]
     /// Every entry in the duplicate group (survivor + to-delete), so the UI can
     /// expand and show exactly what differs before you confirm.
-    public var entries: [OPTimeEntry]
+    public var entries: [RemoteTimeEntry]
     /// The survivor's comment after folding in the deleted entries' comments, or
     /// nil when nothing needs to change on the survivor.
     public var mergedComment: String?
     /// Journal session ids that referenced a deleted entry and must be re-pointed
-    /// to the survivor so future edits still PATCH the right OP entry.
+    /// to the survivor so future edits still PATCH the right backend entry.
     public var repointSessionIDs: [UUID]
     public var label: String
-    public var id: Int { survivorID }
+    public var id: String { survivorID }
 
-    public init(workPackageID: Int, start: Date, survivorID: Int, deleteIDs: [Int],
-                entries: [OPTimeEntry], mergedComment: String?,
-                repointSessionIDs: [UUID], label: String) {
-        self.workPackageID = workPackageID
+    public init(taskID: String, start: Date, survivorID: RemoteEntryID,
+                deleteIDs: [RemoteEntryID], entries: [RemoteTimeEntry],
+                mergedComment: String?, repointSessionIDs: [UUID], label: String) {
+        self.taskID = taskID
         self.start = start
         self.survivorID = survivorID
         self.deleteIDs = deleteIDs
@@ -79,21 +80,21 @@ public enum DuplicateReconcile {
     private static func minuteKey(_ d: Date) -> Int { Int((d.timeIntervalSince1970 / 60).rounded(.down)) }
     private static func durMin(_ s: TimeInterval) -> Int { Int((s / 60).rounded()) }
 
-    public static func plan(entries: [OPTimeEntry], sessions: [Session]) -> [ReconcileAction] {
+    public static func plan(entries: [RemoteTimeEntry], sessions: [Session]) -> [ReconcileAction] {
         // Key on task + start-minute + duration (never duration alone, never
         // start alone): two records at the same point in time for the same task
         // with the same length.
-        var groups: [String: [OPTimeEntry]] = [:]
+        var groups: [String: [RemoteTimeEntry]] = [:]
         for e in entries {
-            groups["\(e.workPackageID)@\(minuteKey(e.start))#\(durMin(e.durationSeconds))",
+            groups["\(e.taskID)@\(minuteKey(e.start))#\(durMin(e.durationSeconds))",
                    default: []].append(e)
         }
         var actions: [ReconcileAction] = []
         for group in groups.values where group.count > 1 {
-            let wp = group[0].workPackageID
+            let taskID = group[0].taskID
             let mk = minuteKey(group[0].start)
             let dm = durMin(group[0].durationSeconds)
-            let ids = Set(group.map { String($0.id) })
+            let ids = Set(group.map(\.id))
             // How many of these are REAL, per the journal (the source of truth):
             // slices linked to one of the entries, or matching task+minute+
             // duration. The journal decides the count, so this stays safe even
@@ -102,7 +103,7 @@ public enum DuplicateReconcile {
             // never touch (could be hand-entered in OP).
             let realCount = sessions.filter { s in
                 (s.opTimeEntryID.map { ids.contains($0) } ?? false)
-                    || (s.task == .op(wp) && minuteKey(s.start) == mk
+                    || (s.task.backendTaskID == taskID && minuteKey(s.start) == mk
                         && durMin(s.end.timeIntervalSince(s.start)) == dm)
             }.count
             guard realCount >= 1, group.count > realCount else { continue }
@@ -127,16 +128,16 @@ public enum DuplicateReconcile {
             let mergedText = merged.joined(separator: "; ")
             let mergedComment = (mergedText.isEmpty || mergedText == (survivor.comment ?? "")) ? nil : mergedText
             let deleteIDs = deletes.map(\.id)
-            let deleteIDStrings = Set(deleteIDs.map(String.init))
+            let deleteIDSet = Set(deleteIDs)
             let repoint = sessions
-                .filter { s in s.opTimeEntryID.map { deleteIDStrings.contains($0) } ?? false }
+                .filter { s in s.opTimeEntryID.map { deleteIDSet.contains($0) } ?? false }
                 .map(\.id)
             actions.append(ReconcileAction(
-                workPackageID: wp, start: survivor.start, survivorID: survivor.id,
+                taskID: taskID, start: survivor.start, survivorID: survivor.id,
                 deleteIDs: deleteIDs,
                 entries: group.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) },
                 mergedComment: mergedComment, repointSessionIDs: repoint,
-                label: "WP #\(wp): keep entry #\(survivor.id), delete \(deleteIDs.count) duplicate"
+                label: "Task \(taskID): keep entry \(survivor.id), delete \(deleteIDs.count) duplicate"
                     + (deleteIDs.count == 1 ? "" : "s")))
         }
         return actions.sorted { ($0.entries.first?.createdAt ?? $0.start) < ($1.entries.first?.createdAt ?? $1.start) }

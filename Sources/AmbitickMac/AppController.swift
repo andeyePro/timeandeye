@@ -1194,14 +1194,14 @@ public final class AppController: ObservableObject {
     public func applyReconcile(_ action: ReconcileAction) async {
         guard let backend else { return }
         if let merged = action.mergedComment {
-            try? await backend.updateEntryComment(id: String(action.survivorID), comment: merged)
+            try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
         }
         for id in action.deleteIDs {
-            try? await backend.deleteTimeEntry(id: String(id))
+            try? await backend.deleteTimeEntry(id: id)
         }
         for sid in action.repointSessionIDs {
             if var s = try? journal.session(id: sid) {
-                s.opTimeEntryID = String(action.survivorID)
+                s.opTimeEntryID = action.survivorID
                 try? journal.update(s)
             }
         }

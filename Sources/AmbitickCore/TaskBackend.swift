@@ -9,7 +9,39 @@ public typealias RemoteEntryID = String
 public typealias TimeActivity = OPTimeActivity
 
 /// A time entry as it exists in the backend, read back for reconciliation.
-public typealias RemoteTimeEntry = OPTimeEntry
+/// String ids throughout (`TaskRef.backendTaskID` form): OP converts its
+/// ints at the edge, GUID backends use theirs verbatim.
+public struct RemoteTimeEntry: Equatable, Sendable, Identifiable {
+    public var id: RemoteEntryID
+    public var taskID: String
+    public var start: Date
+    public var durationSeconds: TimeInterval
+    public var comment: String?
+    /// When the backend recorded / last changed the entry — the key signal
+    /// for telling an accidental duplicate from a deliberate second entry.
+    public var createdAt: Date?
+    public var updatedAt: Date?
+    public var activity: String?
+    /// Whether the backend reported a real per-entry start time (OP can have
+    /// the feature off; Xero may be day-granular) — grouping must not trust
+    /// the minute when false.
+    public var hasStart: Bool
+
+    public init(id: RemoteEntryID, taskID: String, start: Date,
+                durationSeconds: TimeInterval, comment: String? = nil,
+                createdAt: Date? = nil, updatedAt: Date? = nil,
+                activity: String? = nil, hasStart: Bool = true) {
+        self.id = id
+        self.taskID = taskID
+        self.start = start
+        self.durationSeconds = durationSeconds
+        self.comment = comment
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.activity = activity
+        self.hasStart = hasStart
+    }
+}
 
 /// How the backend's task pages show up in captured browser URLs / window
 /// titles — the attribution engine's "you are looking at task N right now"

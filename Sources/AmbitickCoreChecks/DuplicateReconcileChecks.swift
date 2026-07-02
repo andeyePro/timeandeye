@@ -5,8 +5,9 @@ func duplicateReconcileChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
 
     func entry(_ id: Int, wp: Int = 5, start: Date, dur: TimeInterval = 600,
-               comment: String? = nil) -> OPTimeEntry {
-        OPTimeEntry(id: id, workPackageID: wp, start: start, durationSeconds: dur, comment: comment)
+               comment: String? = nil) -> RemoteTimeEntry {
+        RemoteTimeEntry(id: String(id), taskID: String(wp), start: start,
+                        durationSeconds: dur, comment: comment)
     }
     func session(task: TaskRef = .op(5), start: Date, opID: Int? = nil) -> Session {
         var s = Session(task: task, start: start, end: start.addingTimeInterval(600), certainty: 0.95)
@@ -21,8 +22,8 @@ func duplicateReconcileChecks(_ c: Checks) {
         let actions = DuplicateReconcile.plan(entries: [a, b], sessions: [s])
         try expectEq(actions.count, 1)
         let act = actions[0]
-        try expectEq(act.survivorID, 2, "richest (longest comment) survives")
-        try expectEq(act.deleteIDs, [1])
+        try expectEq(act.survivorID, "2", "richest (longest comment) survives")
+        try expectEq(act.deleteIDs, ["1"])
         try expectEq(act.mergedComment, "a longer, richer comment; short")
         try expectEq(act.repointSessionIDs, [s.id], "the journal slice re-points to the survivor")
     }
@@ -73,6 +74,6 @@ func duplicateReconcileChecks(_ c: Checks) {
             sessions: [session(start: t0, opID: 1), session(start: t0, opID: 2)])
         try expectEq(actions.count, 1)
         try expectEq(actions[0].deleteIDs.count, 1, "3 entries − 2 real = 1 deleted")
-        try expectEq(actions[0].deleteIDs, [3], "the least-rich (shortest comment) goes")
+        try expectEq(actions[0].deleteIDs, ["3"], "the least-rich (shortest comment) goes")
     }
 }

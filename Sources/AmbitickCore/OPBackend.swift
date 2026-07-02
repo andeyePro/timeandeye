@@ -106,7 +106,13 @@ public final class OPBackend: TaskBackend {
     }
 
     public func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {
-        try await client.listTimeEntries(from: from, to: to)
+        try await client.listTimeEntries(from: from, to: to).map { e in
+            RemoteTimeEntry(id: String(e.id), taskID: String(e.workPackageID),
+                            start: e.start, durationSeconds: e.durationSeconds,
+                            comment: e.comment, createdAt: e.createdAt,
+                            updatedAt: e.updatedAt, activity: e.activity,
+                            hasStart: e.hasStart)
+        }
     }
 
     public func addTaskComment(taskID: String, text: String) async throws {
