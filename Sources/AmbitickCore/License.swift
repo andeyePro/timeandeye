@@ -38,13 +38,13 @@ public struct License: Codable, Equatable, Sendable {
 }
 
 public enum LicenseError: Error, Equatable {
-    case malformed          // not AMBI1-<payload>-<signature>
+    case malformed          // not ANDE1.<payload>.<signature>
     case badSignature       // cryptographic verification failed
     case expired(Date)      // valid key, but past its expiry
     case unsupported        // platform without CryptoKit (Linux CI) — never valid
 }
 
-/// Offline verification of `AMBI1.<base64url payload>.<base64url sig>` keys
+/// Offline verification of `ANDE1.<base64url payload>.<base64url sig>` keys
 /// (dot-separated, JWT-style — "-" and "_" belong to base64url itself).
 /// Ed25519 over the exact payload bytes; the private key lives ONLY in the
 /// pro repo's generator (and Martin's password manager) — this side can
@@ -62,7 +62,7 @@ public struct LicenseVerifier: Sendable {
     public static let production = LicenseVerifier(
         publicKey: Data(base64Encoded: "EV1yqS6xkRLkf6wirhnNdiT7bdZr9nkn57y3CVijjWM=")!)
 
-    public static let keyPrefix = "AMBI1"
+    public static let keyPrefix = "ANDE1"   // flipped from AMBI1 with the andeye naming call, 2026-07-02 — BEFORE any real key was issued
 
     /// Verify + decode + expiry-check a pasted key.
     public func validate(_ key: String, now: Date = Date()) -> Result<License, LicenseError> {
