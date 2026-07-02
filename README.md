@@ -125,8 +125,9 @@ non-work time land there instead of stopping the clock.
   (NSWorkspace, Accessibility window titles, browser tabs via Apple Events,
   idle, sleep/wake, mic-in-use), app controller.
 - `AmbitickApp` – SwiftUI `MenuBarExtra` popover, review window, settings.
-- `AmbitickCoreChecks` – the test suite as a plain executable (the build
-  environment has no XCTest); CI-friendly on Linux and macOS alike.
+- `AmbitickCoreChecks` – the test suite as a plain executable (no XCTest
+  anywhere); CI runs it on macOS (the Mac layer imports AppKit/SQLite3, so
+  Linux can't build the full suite).
 
 ## Known v0.1 limits
 
