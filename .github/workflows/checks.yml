@@ -1,0 +1,15 @@
+name: checks
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  checks:
+    # The Mac layer imports AppKit/SQLite3, so the suite needs a macOS runner
+    # (the harness itself is a plain executable — no XCTest anywhere).
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the check suite
+        run: swift run AmbitickCoreChecks

@@ -17,7 +17,7 @@ func licenseChecks(_ c: Checks) {
     }
 
     c.check("a minted key validates and round-trips its payload") {
-        let license = License(tier: .pro, licensee: "Martin Currie <martin@example.com>",
+        let license = License(tier: .pro, licensee: "Test User <licensee@example.com>",
                               issued: t0)
         let key = try mint(license)
         try expect(key.hasPrefix("ANDE1."), "recognisable prefix")
