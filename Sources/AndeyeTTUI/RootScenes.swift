@@ -15,7 +15,13 @@ public enum AndeyeScenes {
         } label: {
             HStack(spacing: 4) {
                 Image(nsImage: controller.logoImage)
+                // Tabular digits: without this the 1 Hz seconds text changes
+                // width every tick and the right-anchored status item drags
+                // the logo with it. Pairs with MenuTitle.text's figure-space
+                // pad on single-digit seconds, which is digit-width only
+                // under monospaced digits.
                 Text(controller.menuText)
+                    .monospacedDigit()
             }
             .onAppear {
                 NSApp.setActivationPolicy(.accessory)

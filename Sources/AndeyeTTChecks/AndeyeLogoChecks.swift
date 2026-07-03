@@ -88,38 +88,90 @@ func andeyeLogoChecks(_ c: Checks) {
         }
     }
 
-    c.check("a wink squashes the whole mark vertically, width preserved") {
-        let open = curveBBox(AndeyeLogo.stroke(t: 1))
-        for wink in [0.5, 1.0] {
-            let b = curveBBox(AndeyeLogo.stroke(t: 1, wink: wink))
-            let expected = 1 - AndeyeLogo.winkSquash * wink
-            try expectClose(b.maxX - b.minX, open.maxX - open.minX, accuracy: 1e-9,
-                            "wink \(wink) changed the width:")
-            try expectClose((b.maxY - b.minY) / (open.maxY - open.minY), expected,
-                            accuracy: 1e-9, "wink \(wink) squash factor:")
-            // Squash is toward the box's vertical centre, so the mark's
-            // vertical midline never drifts by more than the squash pulls it.
-            try expectClose((b.minY + b.maxY) / 2,
-                            AndeyeLogo.aspect / 2
-                                + ((open.minY + open.maxY) / 2 - AndeyeLogo.aspect / 2) * expected,
-                            accuracy: 1e-9, "wink \(wink) centre drift:")
+    /// y of the segment's curve nearest a given x — the lids are x-monotone
+    /// over the eye's span, so nearest-x sampling reads off "the lid's height
+    /// at x" without solving the cubic.
+    func yAt(_ s: AndeyeLogo.Cubic, x: Double) -> Double {
+        var best = 0.0
+        var nearest = Double.infinity
+        for i in 0...400 {
+            let p = AndeyeLogo.point(on: s, at: Double(i) / 400)
+            if abs(p.x - x) < nearest { nearest = abs(p.x - x); best = p.y }
         }
+        return best
+    }
+
+    c.check("a wink closes the eyelids: left side and every corner stay fixed") {
+        let open = AndeyeLogo.fullStroke(wink: 0)
+        for wink in [0.5, 1.0] {
+            let shut = AndeyeLogo.fullStroke(wink: wink)
+            // The left side of the ampersand is stationary through a blink.
+            try expectEq(shut[0], open[0], "wink \(wink) moved left segment 0:")
+            try expectEq(shut[1], open[1], "wink \(wink) moved left segment 1:")
+            // Every endpoint — both eye corners included — is pinned; only
+            // the lid segments' control points move.
+            for i in [2, 3] {
+                try expectEq(shut[i].p0, open[i].p0, "wink \(wink) moved segment \(i) start:")
+                try expectEq(shut[i].p1, open[i].p1, "wink \(wink) moved segment \(i) end:")
+            }
+            // Footprint: the mark's width never changes during a blink.
+            let a = curveBBox(open), b = curveBBox(shut)
+            try expectClose(b.maxX - b.minX, a.maxX - a.minX, accuracy: 1e-9,
+                            "wink \(wink) changed the width:")
+        }
+    }
+
+    c.check("the top lid comes down a lot, the bottom lid up a little, monotonically") {
+        let midX = (228.0 + 18.0915) / 365   // mid-eye (SVG x = 228), normalised
+        let open = AndeyeLogo.fullStroke(wink: 0)
+        let shut = AndeyeLogo.fullStroke(wink: 1)
+        let drop = yAt(open[2], x: midX) - yAt(shut[2], x: midX)   // y up
+        let rise = yAt(shut[3], x: midX) - yAt(open[3], x: midX)
+        try expect(drop > 0.15, "top lid barely moved: \(drop)")
+        try expect(rise > 0.01 && rise < 0.08, "bottom lid should rise a LITTLE: \(rise)")
+        try expect(rise < drop / 3, "lids moved comparably — top must dominate: \(rise) vs \(drop)")
+        // Each lid moves one way only as the wink progresses — no bounce.
+        var top = yAt(open[2], x: midX)
+        var bottom = yAt(open[3], x: midX)
+        for k in 1...10 {
+            let segs = AndeyeLogo.fullStroke(wink: Double(k) / 10)
+            let t = yAt(segs[2], x: midX), b = yAt(segs[3], x: midX)
+            try expect(t <= top + 1e-9, "top lid rose mid-wink at step \(k)")
+            try expect(b >= bottom - 1e-9, "bottom lid dropped mid-wink at step \(k)")
+            top = t
+            bottom = b
+        }
+    }
+
+    c.check("at full wink the lids meet along one slightly-smiling line") {
+        let shut = AndeyeLogo.fullStroke(wink: 1)
+        let leftCorner = shut[3].p1, rightCorner = shut[3].p0
+        // Max vertical separation between the lids over the eye's span stays
+        // well under the stroke width, so the two curves render as ONE line.
+        var maxGap = 0.0
+        var samples = 0
+        var x = leftCorner.x + 0.02
+        while x < rightCorner.x - 0.02 {
+            maxGap = max(maxGap, abs(yAt(shut[2], x: x) - yAt(shut[3], x: x)))
+            x += 0.01
+            samples += 1
+        }
+        try expect(samples > 20, "gap scan sampled too few points")
+        try expect(maxGap < AndeyeLogo.strokeWidth / 3,
+                   "lids don't meet: gap \(maxGap) vs stroke \(AndeyeLogo.strokeWidth)")
+        // The meeting line is a slightly positive curve: its middle sags
+        // gently below the corner-to-corner chord (y up), like ‿ — never
+        // above the chord, and never deeply below it.
+        let midX = (leftCorner.x + rightCorner.x) / 2
+        let chordY = leftCorner.y + (rightCorner.y - leftCorner.y)
+            * (midX - leftCorner.x) / (rightCorner.x - leftCorner.x)
+        let sag = chordY - yAt(shut[3], x: midX)
+        try expect(sag > 0.02 && sag < 0.12, "closed line should sag gently: \(sag)")
     }
 
     c.check("a full wink still leaves a visible (non-degenerate) mark") {
         let b = curveBBox(AndeyeLogo.stroke(t: 1, wink: 1))
         try expect(b.maxY - b.minY > 0.01, "full wink flattened the mark to nothing")
-        try expect(AndeyeLogo.winkSquash < 1, "winkSquash must keep some height")
-    }
-
-    c.check("the wink only scales y — x coordinates are untouched") {
-        let open = AndeyeLogo.fullStroke(wink: 0)
-        let shut = AndeyeLogo.fullStroke(wink: 1)
-        for (a, b) in zip(open, shut) {
-            for (p, q) in [(a.p0, b.p0), (a.c1, b.c1), (a.c2, b.c2), (a.p1, b.p1)] {
-                try expectEq(p.x, q.x, "wink moved a point horizontally:")
-            }
-        }
     }
 
     c.check("t and wink clamp to [0, 1]") {

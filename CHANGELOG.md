@@ -2,6 +2,25 @@
 
 ## 2026-07-03
 
+- [x] **Menu-bar jiggle killed; wink is now an eyelid close on task change.**
+  Martin: "when seconds are counting, the logo is jiggling" — the logo image
+  was a fixed 28×18 canvas all along; the 1 Hz seconds text ("41s"→"42s")
+  changed width in proportional digits and the right-anchored status item
+  dragged the logo with it (identical in the dot era, just invisible on a
+  12 px circle). Fix: `.monospacedDigit()` on the menu Text plus a leading
+  FIGURE SPACE (U+2007, exactly one tabular-digit wide) on single-digit
+  seconds, so 9s→10s doesn't reflow either — no reserved width for minutes.
+  Wink retargeted per Martin: tracked-task change winks, minute tick doesn't
+  (was the reverse); stopped→tracking is a start, not a switch, so no wink.
+  And the wink itself is redesigned from whole-mark vertical squash to a
+  true eyelid close: left side and both eye corners pinned, top lid comes
+  down a lot, bottom lid rises a little, meeting in a slightly-positive ‿
+  line — closed control points fitted numerically (least-squares of the top
+  lid onto the reversed raised bottom lid; max lid gap 1.6 SVG units against
+  the 17-unit stroke, so they render as one line). AndeyeLogoChecks rewritten
+  for the new invariants (corners/left side fixed, monotone lid travel,
+  lids-meet gap bound, gentle-sag bound); MacChecks covers the pad.
+
 - [x] **iOS timeline is now DRAWN, matching the Mac's (321 checks green,
   iOS simulator build succeeded).** Martin: "why did you ditch the beautiful
   and highly functional timeline from the mac app and replace it with a

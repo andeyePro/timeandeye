@@ -81,6 +81,16 @@ func menuTitleChecks(_ c: Checks) {
         try expectEq(MenuTitle.text(elapsed: 60, certainty: 0.87, showPercent: true), "1m 87%")
     }
 
+    c.check("single-digit seconds pad to two-digit width with a figure space") {
+        try expectEq(MenuTitle.text(elapsed: 9, certainty: nil, showPercent: false), "\u{2007}9s")
+        try expectEq(MenuTitle.text(elapsed: 0, certainty: nil, showPercent: false), "\u{2007}0s")
+        try expectEq(MenuTitle.text(elapsed: 10, certainty: nil, showPercent: false), "10s",
+                     "two digits need no pad")
+        try expectEq(MenuTitle.text(elapsed: 9, certainty: nil, showPercent: false).count,
+                     MenuTitle.text(elapsed: 10, certainty: nil, showPercent: false).count,
+                     "9s and 10s occupy the same glyph count")
+    }
+
     c.check("menu-bar task name suffix") {
         try expectEq(MenuTitle.withTaskName("Ambitick design", chars: 5, body: "21m"), "21m Ambit")
         try expectEq(MenuTitle.withTaskName("Inv", chars: 5, body: "21m"), "21m Inv",

@@ -12,12 +12,18 @@ public enum MenuTitle {
 
     /// Seconds only under a minute, whole minutes under an hour, then h+m —
     /// per-second precision is noise once the first minute has passed.
+    /// Single-digit seconds get a leading FIGURE SPACE (U+2007, exactly one
+    /// tabular-digit wide) so 9s→10s doesn't reflow the label: paired with
+    /// .monospacedDigit() on the menu Text, every first-minute string is the
+    /// same width and the logo beside it stays still. Minutes/hours don't pad —
+    /// their width changes are once-a-minute, not a 1 Hz jiggle, and reserving
+    /// for "1h 59m" would waste menu-bar space all day.
     public static func text(elapsed: TimeInterval, certainty: Double?,
                             showPercent: Bool) -> String {
         let total = Int(elapsed.rounded())
         let body: String
         if total < 60 {
-            body = "\(total)s"
+            body = total < 10 ? "\u{2007}\(total)s" : "\(total)s"
         } else if total < 3600 {
             body = "\(total / 60)m"
         } else {
@@ -262,9 +268,9 @@ public final class AppController: ObservableObject {
     private var logoT = 0.0
     private var logoWink = 0.0
     private var logoAnimation: Task<Void, Never>?
-    /// The whole minute last shown, so the wink fires exactly when the
-    /// tracked figure ticks over (nil when stopped / freshly started).
-    private var lastDisplayedMinute: Int?
+    /// The task last shown, so the wink fires exactly when the tracked task
+    /// changes (nil when stopped — a fresh start from stopped doesn't wink).
+    private var lastDisplayedTarget: TaskRef?
 
     private func renderLogo() {
         logoImage = AndeyeLogoImage.image(t: logoT, wink: logoWink, colour: menuColour)
@@ -285,9 +291,9 @@ public final class AppController: ObservableObject {
         }
     }
 
-    /// A brief wink (shut → half → open over ~360 ms) each time the displayed
-    /// tracked time changes. Fire-and-forget like playDrawOn; a re-trigger
-    /// mid-wink restarts from shut, and the last frame always reopens the eye.
+    /// A brief wink (shut → half → open over ~360 ms) each time the tracked
+    /// task changes. Fire-and-forget like playDrawOn; a re-trigger mid-wink
+    /// restarts from shut, and the last frame always reopens the eye.
     private func playWink() {
         guard logoT >= 1 else { return }   // never interrupt the draw-on
         logoAnimation?.cancel()
@@ -728,7 +734,7 @@ public final class AppController: ObservableObject {
             newText = "–"
             newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
-            lastDisplayedMinute = nil
+            lastDisplayedTarget = nil
         case .tracking(let target, let certainty):
             let now = Date()
             let running = targetSince.map { now.timeIntervalSince($0) } ?? 0
@@ -757,12 +763,12 @@ public final class AppController: ObservableObject {
                 running: running, now: now)
             let body = MenuTitle.text(elapsed: elapsed, certainty: certainty,
                                       showPercent: settings.showPercent)
-            // Wink when the displayed tracked MINUTE ticks over — not on the
-            // 1 Hz seconds updates of the first minute, which would leave the
-            // eye permanently half-shut. nil→0 (fresh start) doesn't wink.
-            let minute = Int(elapsed) / 60
-            if let last = lastDisplayedMinute, minute != last { playWink() }
-            lastDisplayedMinute = minute
+            // Wink when the TRACKED TASK changes — the eye acknowledging the
+            // switch — never on time ticks. stopped→tracking (nil last) is a
+            // start, not a switch, so it doesn't wink; the draw-on owns app
+            // launch instead.
+            if let last = lastDisplayedTarget, last != target { playWink() }
+            lastDisplayedTarget = target
             // Elapsed WITHOUT the task name — the popover already shows the task
             // as its headline, so menuText (which carries the name for the menu
             // bar) would duplicate it there. MUST be change-gated like its

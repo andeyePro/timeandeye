@@ -6,9 +6,9 @@ import Foundation
 /// cubic segments are kept exactly (translate applied, then normalised to a
 /// unit-WIDTH box preserving the 365:235 aspect, y up), so the platform
 /// layers just scale and stroke them. Revealing the path by arc length from
-/// its M point hand-draws the mark; a wink is a vertical squash of the whole
-/// mark toward its vertical centre (width preserved), which at menu-bar size
-/// reads as a blink without ever distorting the curves themselves.
+/// its M point hand-draws the mark; a wink is an eyelid close — the left
+/// side and the eye's corners stay fixed while the top lid sweeps down and
+/// the bottom lid rises a little, the two meeting along one gentle ‿ arc.
 public enum AndeyeLogo {
 
     public struct Point: Equatable, Sendable {
@@ -57,26 +57,37 @@ public enum AndeyeLogo {
               (235.0 - (p.y + translate.y)) / 365.0)
     }
 
-    /// How much of the mark's height survives a full wink. The squash never
-    /// reaches zero so the shut eye still renders as a slim mark, not a bare
-    /// horizontal dash.
-    public static let winkSquash = 0.85
+    /// Closed-eye pose (SVG space). Only the two lid segments' CONTROL points
+    /// move — every endpoint (the eye's corners at (311,137) and (145,157),
+    /// and the top lid's junction with the left side at (122,137)) is fixed,
+    /// and segments 0-1 (the left side) never change at all. The bottom lid
+    /// rises a little; the top-lid values are a least-squares fit of its
+    /// cubic (endpoints pinned) onto the reversed closed bottom lid, so at
+    /// wink 1 the lids lie along the same gentle ‿ arc — max separation
+    /// ~1.6 SVG units against a 17-unit stroke, i.e. they render as one line.
+    static let topLidClosed = (c1: Point(171.03, 187.18), c2: Point(258.9, 178.05))
+    static let bottomLidClosed = (c1: Point(311, 141), c2: Point(232, 196))
 
-    /// The complete mark at blink amount `wink` (0 open … 1 shut): the four
-    /// SVG cubics, vertically squashed toward the box's vertical centre.
-    /// Width is untouched, so the wink can never mangle the curves.
+    /// The complete mark at blink amount `wink` (0 open … 1 shut): an eyelid
+    /// close, not a squash. The lid control points lerp toward the closed
+    /// pose above; everything else is untouched, so the mark's footprint and
+    /// the left half of the ampersand hold perfectly still through a blink.
     public static func fullStroke(wink: Double) -> [Cubic] {
-        let scale = 1 - winkSquash * min(max(wink, 0), 1)
-        let cy = aspect / 2
-        func squash(_ p: Point) -> Point {
-            let n = normalised(p)
-            return Point(n.x, cy + (n.y - cy) * scale)
+        let w = min(max(wink, 0), 1)
+        func lerp(_ a: Point, _ b: Point) -> Point {
+            Point(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w)
         }
-        return svgCubics.map { Cubic(squash($0.0), squash($0.1), squash($0.2), squash($0.3)) }
+        var svg = svgCubics
+        svg[2].1 = lerp(svg[2].1, topLidClosed.c1)
+        svg[2].2 = lerp(svg[2].2, topLidClosed.c2)
+        svg[3].1 = lerp(svg[3].1, bottomLidClosed.c1)
+        svg[3].2 = lerp(svg[3].2, bottomLidClosed.c2)
+        return svg.map { Cubic(normalised($0.0), normalised($0.1),
+                               normalised($0.2), normalised($0.3)) }
     }
 
     /// The mark revealed by arc length from its M point. `t` = 0 shows
-    /// nothing, 1 the full closed mark; `wink` squashes vertically as above.
+    /// nothing, 1 the full closed mark; `wink` closes the eyelids as above.
     /// Both clamp to [0, 1].
     public static func stroke(t rawT: Double, wink rawWink: Double = 0) -> [Cubic] {
         let t = min(max(rawT, 0), 1)
