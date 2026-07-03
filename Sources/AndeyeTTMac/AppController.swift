@@ -268,9 +268,9 @@ public final class AppController: ObservableObject {
     private var logoT = 0.0
     private var logoWink = 0.0
     private var logoAnimation: Task<Void, Never>?
-    /// The task last shown, so the wink fires exactly when the tracked task
+    /// The target last shown, so the wink fires exactly when the tracked task
     /// changes (nil when stopped — a fresh start from stopped doesn't wink).
-    private var lastDisplayedTarget: TaskRef?
+    private var lastDisplayedTarget: Target?
 
     private func renderLogo() {
         logoImage = AndeyeLogoImage.image(t: logoT, wink: logoWink, colour: menuColour)
