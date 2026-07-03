@@ -481,9 +481,12 @@ struct PopoverView: View {
         resetAIState()
         switch pin.rule {
         case .components(let scope):
-            // Round-trips as-is even for the email flavour's system/site
-            // grain (a plain PinScope pin under the hood) — reopening shows
-            // the classic strip, which is exactly what it matches.
+            // A PinScope pin reopens in the CLASSIC strip: pinCount below is
+            // an index into draft.segments (the URL strip), so the email
+            // ladder must not consume it — under a reordered ladder its
+            // first grain can be a correspondent, and re-committing would
+            // silently convert this .components pin into an .expression one.
+            pinIdentity = nil
             pinMode = .components
             pinCount = min(scope.prefix.count, draft.segments.count)
             pinExpression = ""
@@ -597,6 +600,7 @@ struct PopoverView: View {
         }
         pinning = false
         pinEditingID = nil
+        pinIdentity = nil
     }
 
     private func message(for error: PredicateParser.ParseError) -> String {
@@ -617,6 +621,7 @@ struct PopoverView: View {
         if pinEditingID != nil { controller.unpinCurrentSurface() }
         pinning = false
         pinEditingID = nil
+        pinIdentity = nil
     }
 
     @ViewBuilder
