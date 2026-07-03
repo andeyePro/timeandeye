@@ -162,6 +162,62 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(block.start, t(20_000))
         try expectEq(block.end, t(23_000))
     }
+
+    c.check("clampViewport: span clamps to [minSpan, day] and stays in bounds") {
+        let day = t(0)...t(86_400)
+        // Too-small span grows to the minimum.
+        let tiny = TimelineMath.clampViewport(start: t(1000), span: 10,
+                                              bounds: day, minSpan: 900)
+        try expectEq(tiny.span, 900)
+        try expectEq(tiny.start, t(1000))
+        // Too-large span shrinks to the whole day, pinned at the day start.
+        let huge = TimelineMath.clampViewport(start: t(-5000), span: 200_000,
+                                              bounds: day, minSpan: 900)
+        try expectEq(huge.span, 86_400)
+        try expectEq(huge.start, t(0))
+    }
+
+    c.check("clampViewport: start slides back inside the bounds") {
+        let day = t(0)...t(86_400)
+        // Panned past the right edge: the window slides back flush.
+        let right = TimelineMath.clampViewport(start: t(85_000), span: 3600,
+                                               bounds: day, minSpan: 900)
+        try expectEq(right.start, t(82_800))
+        try expectEq(right.span, 3600)
+        // Panned past the left edge: pinned at the day start.
+        let left = TimelineMath.clampViewport(start: t(-3600), span: 3600,
+                                              bounds: day, minSpan: 900)
+        try expectEq(left.start, t(0))
+        // Inside the bounds: untouched.
+        let mid = TimelineMath.clampViewport(start: t(30_000), span: 3600,
+                                             bounds: day, minSpan: 900)
+        try expectEq(mid.start, t(30_000))
+    }
+
+    c.check("clampViewport: minSpan wider than the bounds cannot escape them") {
+        let hour = t(0)...t(3600)
+        let r = TimelineMath.clampViewport(start: t(500), span: 10,
+                                           bounds: hour, minSpan: 7200)
+        try expectEq(r.span, 3600)
+        try expectEq(r.start, t(0))
+    }
+
+    c.check("tickStep: picks the smallest step keeping labels >= minGap apart") {
+        // A full day on a 390 pt phone: hourly ticks would be 16 pt apart —
+        // steps up to 3 h (48.75 pt).
+        try expectEq(TimelineMath.tickStep(span: 86_400, width: 390, minGap: 44), 3 * 3600)
+        // An 8 h working view on the same width: hourly fits (48.75 pt).
+        try expectEq(TimelineMath.tickStep(span: 8 * 3600, width: 390, minGap: 44), 3600)
+        // Zoomed to an hour: quarter-hour ticks (97.5 pt).
+        try expectEq(TimelineMath.tickStep(span: 3600, width: 390, minGap: 44), 900)
+        // Tight zoom: the 5-minute floor.
+        try expectEq(TimelineMath.tickStep(span: 900, width: 390, minGap: 44), 300)
+    }
+
+    c.check("tickStep: degenerate inputs fall back to the coarsest step") {
+        try expectEq(TimelineMath.tickStep(span: 0, width: 390, minGap: 44), 12 * 3600)
+        try expectEq(TimelineMath.tickStep(span: 86_400, width: 0, minGap: 44), 12 * 3600)
+    }
 }
 
 func timeAggregatorChecks(_ c: Checks) {

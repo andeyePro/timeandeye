@@ -2,6 +2,25 @@
 
 ## 2026-07-03
 
+- [x] **iOS timeline is now DRAWN, matching the Mac's (321 checks green,
+  iOS simulator build succeeded).** Martin: "why did you ditch the beautiful
+  and highly functional timeline from the mac app and replace it with a
+  regular list?" — TimelinePhoneView's List replaced with a Canvas timeline
+  mirroring the Mac look: horizontal time axis with adaptive hour ticks +
+  labels (`TimelineMath.tickStep`, width-aware so labels never collide on a
+  phone), coloured slice bars with task labels (same PhonePalette scheme as
+  the pie/Now views), gaps as gaps, a red "now" line, and the live slice
+  growing at the right with the Mac's zig-zag torn edge (same SliceShape
+  geometry). Touch model: pinch-zoom anchored on the fingers + drag-pan,
+  both clamped to today (`TimelineMath.clampViewport`, pure + checked);
+  opens framed on the latest block like the Mac (`latestBlock`), "Day"
+  toolbar button zooms back out. Tap a slice → read-only detail card (task,
+  start–end, duration, live badge); edits stay Mac-side. Drawing factored
+  into `ios/Sources/TimelineCanvas.swift` (no UIKit, no controller) and
+  visually verified: rendered headless on the build Mac via ImageRenderer
+  at 8 h / 24 h / 1 h zooms, light + dark, and inspected — matches the Mac
+  bar. +4 TimelineMath checks (viewport clamp, tick step).
+
 - [x] **Menu-bar icon now renders Martin's real andeye mark, not invented
   geometry.** He supplied the actual logo (assets/brand/andeye.svg +
   andeye-logo.afdesign, moved from repo root, 3-line README added);

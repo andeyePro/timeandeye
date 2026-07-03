@@ -309,66 +309,201 @@ struct SpentPhoneView: View {
     }
 }
 
-// MARK: - Timeline (the day's slices, top to bottom)
+// MARK: - Timeline (the Mac's drawn timeline, reshaped for touch)
 
-/// Today's slices as a simple vertical list: colour bar, task, start–end,
-/// duration; the running slice ticks at the bottom. v1 is read-only — edits
-/// stay a Mac (and later) feature.
+/// Today's slices as a real drawn timeline, matching the Mac app's: a
+/// horizontal time axis with hour ticks, coloured slice bars with task
+/// labels, gaps visible as gaps, a red "now" line, and the live slice
+/// growing at the right with the Mac's zig-zag edge. Pinch zooms (anchored
+/// on the pinch point), drag pans, both clamped to today; opens framed on
+/// the latest block of work like the Mac. Tap a slice for a read-only
+/// detail card — edits stay a Mac (and later) feature. Drawing lives in
+/// TimelineCanvas (injected slices) so it renders headless for checks.
 struct TimelinePhoneView: View {
     @ObservedObject var controller: PhoneController
     @State private var sessions: [Session] = []
+    @State private var viewStart = Calendar.current.startOfDay(for: Date())
+    @State private var viewSpan: TimeInterval = 86_400
+    @State private var selectedID: UUID?
+    /// viewStart captured when a pan starts (translation is cumulative).
+    @State private var panBase: Date?
+    /// Span + the date under the pinch start (and its screen fraction),
+    /// held for the whole gesture so the pinch zooms around the fingers.
+    @State private var pinchBase: (span: TimeInterval, anchor: Date, frac: Double)?
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var now = Date()
 
+    private let minSpan: TimeInterval = 900
+
     var body: some View {
-        List {
-            if sessions.isEmpty && controller.tracking == nil {
+        VStack(alignment: .leading, spacing: 12) {
+            GeometryReader { geo in
+                TimelineCanvas(slices: slices, viewStart: viewStart,
+                               viewSpan: viewSpan, now: now, selectedID: selectedID)
+                    .contentShape(Rectangle())
+                    .onTapGesture { location in
+                        tap(at: location, width: geo.size.width)
+                    }
+                    .gesture(panGesture(width: geo.size.width))
+                    .simultaneousGesture(pinchGesture(width: geo.size.width))
+            }
+            .frame(height: TimelineCanvas.height)
+
+            if let slice = slices.first(where: { $0.id == selectedID }) {
+                detailCard(slice)
+            } else if slices.isEmpty {
                 Text("Nothing tracked today")
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 24)
+            } else {
+                Text("Pinch to zoom · drag to pan · tap a slice for detail")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
-            ForEach(sessions, id: \.id) { s in
-                row(task: s.task, start: s.start, end: s.end, live: false)
-            }
-            if let live = controller.tracking {
-                row(task: live.task, start: live.since, end: now, live: true)
-            }
+            Spacer(minLength: 0)
         }
+        .padding()
         .navigationTitle("Today")
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { reload() }
-        .onAppear { reload() }
-        .onReceive(clock) { now = $0 }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Day") { showWholeDay() }
+                    .accessibilityLabel("Zoom out to the whole day")
+            }
+        }
+        .onAppear { reload(); frameLatestBlock() }
+        .onReceive(clock) { tick in
+            now = tick
+            // Cheap re-query once a minute so slices banked elsewhere appear.
+            if Int(tick.timeIntervalSince1970) % 60 == 0 { reload() }
+        }
+    }
+
+    // MARK: Data
+
+    private var dayBounds: ClosedRange<Date> {
+        let start = Calendar.current.startOfDay(for: now)
+        return start...start.addingTimeInterval(86_400)
     }
 
     private func reload() {
-        let start = Calendar.current.startOfDay(for: Date())
-        sessions = controller.bankedSessions(from: start, to: Date())
+        sessions = controller.bankedSessions(from: dayBounds.lowerBound, to: Date())
     }
 
-    private func row(task: TaskRef, start: Date, end: Date, live: Bool) -> some View {
+    /// Banked slices + the live one, resolved to labels/colours for drawing.
+    private var slices: [TimelineSlice] {
+        var out = sessions.map { s in
+            TimelineSlice(id: s.id, label: controller.name(of: s.task),
+                          start: s.start, end: s.end,
+                          colour: PhonePalette.colour(for: s.task,
+                                                      overrides: controller.settings.taskColours),
+                          isLive: false)
+        }
+        if let live = controller.tracking {
+            out.append(TimelineSlice(id: PhoneController.liveCheckpointID,
+                                     label: controller.name(of: live.task),
+                                     start: live.since, end: max(now, live.since),
+                                     colour: PhonePalette.colour(for: live.task,
+                                                                 overrides: controller.settings.taskColours),
+                                     isLive: true))
+        }
+        return out
+    }
+
+    // MARK: Viewport
+
+    private func setViewport(start: Date, span: TimeInterval) {
+        (viewStart, viewSpan) = TimelineMath.clampViewport(
+            start: start, span: span, bounds: dayBounds, minSpan: minSpan)
+    }
+
+    private func showWholeDay() {
+        setViewport(start: dayBounds.lowerBound, span: 86_400)
+    }
+
+    /// Open framed on the latest run of work (like the Mac), padded a touch;
+    /// whole day when nothing is tracked yet.
+    private func frameLatestBlock() {
+        var all = sessions
+        if let live = controller.tracking {
+            all.append(Session(task: live.task, start: live.since, end: now, certainty: 1))
+        }
+        guard let block = TimelineMath.latestBlock(in: all) else {
+            showWholeDay()
+            return
+        }
+        let pad = max(block.end.timeIntervalSince(block.start) * 0.15, 900)
+        setViewport(start: block.start.addingTimeInterval(-pad),
+                    span: block.end.timeIntervalSince(block.start) + 2 * pad)
+    }
+
+    private func panGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                if panBase == nil { panBase = viewStart }
+                let dt = -TimeInterval(value.translation.width / width) * viewSpan
+                setViewport(start: (panBase ?? viewStart).addingTimeInterval(dt),
+                            span: viewSpan)
+            }
+            .onEnded { _ in panBase = nil }
+    }
+
+    private func pinchGesture(width: CGFloat) -> some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                if pinchBase == nil {
+                    let x = value.startLocation.x
+                    let anchor = viewStart.addingTimeInterval(
+                        TimeInterval(x / width) * viewSpan)
+                    pinchBase = (viewSpan, anchor, Double(x / width))
+                }
+                guard let base = pinchBase, value.magnification > 0 else { return }
+                let span = min(max(base.span / TimeInterval(value.magnification),
+                                   minSpan), 86_400)
+                setViewport(start: base.anchor.addingTimeInterval(-base.frac * span),
+                            span: span)
+            }
+            .onEnded { _ in pinchBase = nil }
+    }
+
+    // MARK: Tap → detail card
+
+    private func tap(at location: CGPoint, width: CGFloat) {
+        let date = viewStart.addingTimeInterval(TimeInterval(location.x / width) * viewSpan)
+        // Nearest slice under the finger, with a few points of slack so thin
+        // slivers stay tappable.
+        let slack = TimeInterval(6 / width) * viewSpan
+        let hit = slices.first {
+            date >= $0.start.addingTimeInterval(-slack)
+                && date < $0.end.addingTimeInterval(slack)
+        }
+        selectedID = hit?.id == selectedID ? nil : hit?.id
+    }
+
+    private func detailCard(_ slice: TimelineSlice) -> some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(PhonePalette.colour(for: task,
-                                          overrides: controller.settings.taskColours))
+                .fill(slice.colour)
                 .frame(width: 4, height: 36)
             VStack(alignment: .leading, spacing: 2) {
-                Text(controller.name(of: task)).lineLimit(1)
-                Text(live
-                     ? "\(time(start)) – now"
-                     : "\(time(start)) – \(time(end))")
+                Text(slice.label).lineLimit(2)
+                Text("\(time(slice.start)) – \(slice.isLive ? "now" : time(slice.end))")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             HStack(spacing: 4) {
-                if live {
+                if slice.isLive {
                     Image(systemName: "record.circle.fill")
                         .font(.caption).foregroundStyle(.red)
                 }
-                Text(duration(start, end))
+                Text(duration(slice.start, slice.isLive ? now : slice.end))
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(live ? .primary : .secondary)
+                    .foregroundStyle(slice.isLive ? .primary : .secondary)
             }
         }
+        .padding(10)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func time(_ d: Date) -> String {

@@ -193,6 +193,34 @@ public enum TimelineMath {
         return TimelineKeyNav(anchor: newFocus, focus: newFocus, selection: [newFocus])
     }
 
+    /// Clamp a viewport to `bounds` (the phone timeline pans within one day
+    /// the way the Mac one pans within the history floor…live edge). The span
+    /// is clamped to [minSpan, bounds length] first, then the start is slid so
+    /// the window never leaves the bounds. Pure, so it is unit-checkable.
+    public static func clampViewport(start: Date, span: TimeInterval,
+                                     bounds: ClosedRange<Date>,
+                                     minSpan: TimeInterval = 300) -> (start: Date, span: TimeInterval) {
+        let maxSpan = bounds.upperBound.timeIntervalSince(bounds.lowerBound)
+        let s = min(max(span, min(minSpan, maxSpan)), maxSpan)
+        var st = max(start, bounds.lowerBound)
+        if st.addingTimeInterval(s) > bounds.upperBound {
+            st = bounds.upperBound.addingTimeInterval(-s)
+        }
+        return (st, s)
+    }
+
+    /// The tick interval for a time axis: the smallest "round" step whose
+    /// on-screen gap is at least `minGap` points, so labels never collide at
+    /// any zoom (the Mac picks by span alone; the phone is much narrower).
+    public static func tickStep(span: TimeInterval, width: Double,
+                                minGap: Double = 44) -> TimeInterval {
+        let steps: [TimeInterval] = [300, 900, 1800, 3600, 2 * 3600, 3 * 3600,
+                                     6 * 3600, 12 * 3600]
+        guard span > 0, width > 0 else { return steps.last! }
+        for step in steps where width * step / span >= minGap { return step }
+        return steps.last!
+    }
+
     /// The most recent block of sessions separated by gaps < maxGap.
     public static func latestBlock(in sessions: [Session],
                                    maxGap: TimeInterval = 3600) -> (start: Date, end: Date)? {
