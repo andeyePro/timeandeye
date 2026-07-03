@@ -3,7 +3,7 @@
 ## Time-window polish (Martin, 2026-06-27)
 
 - [x] Window titles (DONE 2026-06-28): the Time window is titled "Timeline" when showing the
-  timeline and "Time Pie" when showing the pie (currently "Ambitick Time").
+  timeline and "Time Pie" when showing the pie (previously "Ambitick Time").
 - [x] Pie view — closeable highlight-calendar (DONE 2026-06-28). Anchorable
   `TimePeriod` in Core (unit-checked); a `MonthCalendar` grid bottom-right (below
   the key) highlights the shown range and re-anchors on a tapped day; the period
@@ -72,7 +72,7 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 
 - [ ] #1 follow-on — weight controls SHIPPED 2026-06-28 (boost/always on the why
   panel); STILL OPEN: use the explain
-  data to chase the live mis-attribution bugs (tracking as Ambitick while on
+  data to chase the live mis-attribution bugs (tracking as the andeyeTT task while on
   Chrome; the revert button offering a stale task — `revertTargetTask` returns
   `previousTask`, which can be wrong; now diagnosable via the explain panel).
 - [x] #5 — combined Timeline/Pie view: DONE (CHANGELOG 2026-06-27). Now ONE Time
@@ -164,9 +164,9 @@ and recorded rather than fixed blind:
   synced journal is TINY — a slice is a few hundred bytes, heavy tracking is
   ~50k slices/year ≈ 15–25 MB/year in the user's CloudKit private DB, and the
   bulky window-span detail is local-only (already 30-day pruned) and never
-  syncs. Nobody gets pushed into a paid iCloud tier by Ambitick; photos do
+  syncs. Nobody gets pushed into a paid iCloud tier by andeye; photos do
   that. Still, build the stewardship story so the complaint can never land:
-  (a) Settings shows Ambitick's actual iCloud footprint; (b) an
+  (a) Settings shows andeye's actual iCloud footprint; (b) an
   age-consolidation prune — slices older than N years collapse into per-day
   per-task rollups (durations summed, comments concatenated, backend entry
   ids dropped) so totals/invoicing history survive at ~1% of the size;
@@ -203,7 +203,7 @@ and recorded rather than fixed blind:
 - [ ] Pin rules — visual boolean builder: a drag/click gate builder (AND/OR/NOT
   + parens) as an alternative to the typed expression. If too heavy for the
   app, host it as a static webpage: app opens it with the captured fields in the
-  URL, the page builds the expression, and returns it via an `ambitick://`
+  URL, the page builds the expression, and returns it via an `andeye://`
   deep-link (or copy-paste). Keeps the app slim. Phase-1 ships the typed
   expression; this is the friendlier front-end. - 2026-06-24
 - [x] Pin rules — priority override (DONE 2026-06-28): default precedence is
@@ -342,7 +342,7 @@ and recorded rather than fixed blind:
   off-LAN); OP-as-rendezvous (breaks standalone, and the backend shouldn't see
   second-by-second state). DECIDED 2026-07-01: it lives IN THIS REPO, not a
   new one. Rationale: the iOS app is a
-  thin SwiftUI shell over AmbitickCore, and pre-1.0 Core API churns weekly — a
+  thin SwiftUI shell over AndeyeTTCore, and pre-1.0 Core API churns weekly — a
   separate repo forces either a tag-per-change SPM dance or fragile local-path
   references, and every cross-cutting change becomes two PRs. In-repo, one
   commit updates Core and both shells, and the one check suite guards both.
@@ -355,7 +355,7 @@ and recorded rather than fixed blind:
   reinforced — an iOS-only user connecting to OP/Xero runs OPBackend/Core
   directly, so Core is the shared product on both platforms. The eventual
   free/paid split is by SPM MODULE, not by repo: if Pro backends go
-  closed-source, they move to a private `ambitick-pro` package the release
+  closed-source, they move to a private `andeyePro` package the release
   builds depend on — the TaskBackend seam makes that a clean lift.
 
 
@@ -389,7 +389,7 @@ and recorded rather than fixed blind:
   after the first fix). Consider auto-priming a local task to the frontmost
   window at creation time.
 - [x] True global hotkey for "I'm leaving my desk" (DONE 2026-06-28) (currently ⌘⇧L works when
-  Ambitick/its popover is key; a global RegisterEventHotKey would fire from
+  andeye/its popover is key; a global RegisterEventHotKey would fire from
   any app).
 - [ ] Ambiguous web pages (no clear purpose in URL/title) — POLICY (proposed
   2026-07-01, awaiting Martin's steer sticky-vs-review). Treat the URL HOST as a

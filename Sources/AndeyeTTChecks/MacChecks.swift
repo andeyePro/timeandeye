@@ -6,7 +6,7 @@ import AppKit
 func sqliteJournalChecks(_ c: Checks) {
     journalStoreConformanceChecks(c) {
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ambitick-checks-\(UUID().uuidString).sqlite").path
+            .appendingPathComponent("andeyett-checks-\(UUID().uuidString).sqlite").path
         return try! SQLiteJournalStore(path: path)
     }
 }
@@ -92,10 +92,10 @@ func menuTitleChecks(_ c: Checks) {
     }
 
     c.check("menu-bar task name suffix") {
-        try expectEq(MenuTitle.withTaskName("Ambitick design", chars: 5, body: "21m"), "21m Ambit")
+        try expectEq(MenuTitle.withTaskName("andeyeTT design", chars: 5, body: "21m"), "21m andey")
         try expectEq(MenuTitle.withTaskName("Inv", chars: 5, body: "21m"), "21m Inv",
                      "name shorter than the limit is shown whole")
-        try expectEq(MenuTitle.withTaskName("Ambitick", chars: 0, body: "21m"), "21m",
+        try expectEq(MenuTitle.withTaskName("andeyeTT", chars: 0, body: "21m"), "21m",
                      "chars 0 leaves the time alone")
         try expectEq(MenuTitle.withTaskName(nil, chars: 5, body: "21m"), "21m")
         try expectEq(MenuTitle.withTaskName("   ", chars: 5, body: "21m"), "21m",

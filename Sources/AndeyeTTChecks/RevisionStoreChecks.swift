@@ -72,7 +72,7 @@ func sqliteSyncStampingChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
     func makeStore() throws -> SQLiteJournalStore {
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ambitick-sync-\(UUID().uuidString).sqlite").path
+            .appendingPathComponent("andeyett-sync-\(UUID().uuidString).sqlite").path
         return try SQLiteJournalStore(path: path)
     }
     var nowMillis: Int64 = 1_750_000_000_000

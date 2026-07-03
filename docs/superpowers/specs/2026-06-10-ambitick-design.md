@@ -1,5 +1,7 @@
 # Ambitick v0.1 – design
 
+> Historical record: "Ambitick" was the working name — the app is now **andeyeTT** (user-facing brand "andeye"; see `docs/superpowers/specs/2026-07-02-andeye-rename-plan.md`). Module/file names below are the pre-rename ones (Ambitick* → AndeyeTT*).
+
 Status: approved by Martin 2026-06-10 (this document is the written form of that approval, with his amendments folded in).
 
 ## What it is

@@ -18,9 +18,9 @@ func modelsChecks(_ c: Checks) {
                                      tabURL: "https://mail.google.com/mail/u/0/#inbox",
                                      timestamp: Date(timeIntervalSince1970: 0))
         try expectEq(Surface(signal: withURL).detail, "mail.google.com/mail/u/0#inbox")
-        let titled = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick",
+        let titled = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT",
                                     timestamp: Date(timeIntervalSince1970: 0))
-        try expectEq(Surface(signal: titled), Surface(app: "Ghostty", detail: "Ambitick"))
+        try expectEq(Surface(signal: titled), Surface(app: "Ghostty", detail: "andeyeTT"))
     }
 
     c.check("session round-trips through JSON") {

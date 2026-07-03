@@ -185,7 +185,7 @@ Identity chains:
 email:   Gmail ▸ harborlane.example ▸ r.naismith@ ▸ "Insurance Renewals"
 CRM:     crm.foocorp.com ▸ clients ▸ Acme Ltd ▸ "Q3 rebrand"
                                     └ recipe-extracted, marked ◆
-plain:   github.com ▸ aqueum ▸ ambitick ▸ issues        (unchanged today)
+plain:   github.com ▸ andeyePro ▸ andeyeTT ▸ issues        (unchanged today)
 ```
 
 Popover: picking a different task while an email/recipe surface is focused

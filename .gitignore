@@ -14,6 +14,6 @@
 *.app/
 
 # Pro-tier staging area — NEVER committed here. Xero/paid-backend code lives
-# in the private ambitick-pro repo; this folder only stages it until that
+# in the private andeyePro/Pro repo; this folder only stages it until that
 # repo exists on this machine.
 /pro/

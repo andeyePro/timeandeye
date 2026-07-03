@@ -143,13 +143,13 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
 
     c.check("spans round-trip with range query") {
         let s = make()
-        let signal = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: t0)
+        let signal = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: t0)
         let span = FocusSpan(target: .task(.op(1)), certainty: 0.95, signal: signal,
                              start: t0, end: t0.addingTimeInterval(120))
         try s.save(span)
         let hits = try s.spans(from: t0.addingTimeInterval(-10), to: t0.addingTimeInterval(10))
         try expectEq(hits.count, 1)
-        try expectEq(hits.first?.signal.windowTitle, "Ambitick")
+        try expectEq(hits.first?.signal.windowTitle, "andeyeTT")
         try expectEq(try s.spans(from: t0.addingTimeInterval(500),
                                  to: t0.addingTimeInterval(600)).count, 0)
     }
@@ -199,8 +199,8 @@ func opClientChecks(_ c: Checks) async {
         transport.responses = [
             (200, """
             {"total": 3, "count": 2, "_embedded": {"elements": [
-              {"id": 1, "subject": "Ambitick build",
-               "_links": {"status": {"title": "Now"}, "project": {"title": "Ambitick"}}},
+              {"id": 1, "subject": "andeyeTT build",
+               "_links": {"status": {"title": "Now"}, "project": {"title": "andeyeTT"}}},
               {"id": 2, "subject": "Timesheets",
                "_links": {"status": {"title": "Closed"}, "project": {"title": "Admin"}}}
             ]}}
@@ -214,8 +214,8 @@ func opClientChecks(_ c: Checks) async {
         ]
         let tasks = try await makeClient(transport).fetchTasks(pageSize: 2)
         try expectEq(tasks.count, 3)
-        try expectEq(tasks[0], WorkTask(ref: .op(1), subject: "Ambitick build",
-                                        project: "Ambitick", status: "Now"))
+        try expectEq(tasks[0], WorkTask(ref: .op(1), subject: "andeyeTT build",
+                                        project: "andeyeTT", status: "Now"))
         try expectEq(transport.requests.count, 2)
         try expectEq(transport.requests[0].value(forHTTPHeaderField: "Authorization"),
                      "Basic " + Data("apikey:SECRET".utf8).base64EncodedString())
@@ -269,7 +269,7 @@ func opClientChecks(_ c: Checks) async {
         let start = Date(timeIntervalSince1970: 1_750_000_000)   // 2025-06-15 UTC
         try await makeClient(transport).createTimeEntry(
             workPackageID: 42, start: start, duration: 5_400,
-            activityID: 4, comment: "Ghostty – Ambitick")
+            activityID: 4, comment: "Ghostty – andeyeTT")
         let body = try unwrap(transport.requests[0].httpBody)
         let json = try unwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         try expectEq(json["hours"] as? String, "PT1H30M")
@@ -277,7 +277,7 @@ func opClientChecks(_ c: Checks) async {
         let links = try unwrap(json["_links"] as? [String: [String: String]])
         try expectEq(links["workPackage"]?["href"], "/api/v3/work_packages/42")
         try expectEq(links["activity"]?["href"], "/api/v3/time_entries/activities/4")
-        try expectEq((json["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
+        try expectEq((json["comment"] as? [String: String])?["raw"], "Ghostty – andeyeTT")
         try expectNil(json["startTime"], "omitted unless requested")
     }
 
@@ -346,7 +346,7 @@ func syncEngineChecks(_ c: Checks) async {
         let (engine, journal, transport) = makeWorld()
         transport.responses = [(201, "{}")]
         try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(1800),
-                                 certainty: 0.9, comment: "Ghostty – Ambitick"))
+                                 certainty: 0.9, comment: "Ghostty – andeyeTT"))
         try journal.save(Session(task: .op(43), start: t0, end: t0.addingTimeInterval(60),
                                  certainty: 0.4))   // below threshold: stays local
         let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
@@ -356,7 +356,7 @@ func syncEngineChecks(_ c: Checks) async {
         let body = try unwrap(try JSONSerialization.jsonObject(
             with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
         try expectEq(body["hours"] as? String, "PT0H30M")
-        try expectEq((body["comment"] as? [String: String])?["raw"], "Ghostty – Ambitick")
+        try expectEq((body["comment"] as? [String: String])?["raw"], "Ghostty – andeyeTT")
         try expectEq(body["startTime"] as? String, "2025-06-15T15:06:40Z",
                      "ISO 8601 UTC date-time, not HH:mm")
         try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [])
@@ -501,14 +501,14 @@ func syncEngineOwnershipChecks(_ c: Checks) async {
 func aiAssistChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
     let segID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
-    let tasks = [WorkTask(ref: .op(1), subject: "Ambitick build",
-                          project: "Ambitick", status: "Now")]
+    let tasks = [WorkTask(ref: .op(1), subject: "andeyeTT build",
+                          project: "andeyeTT", status: "Now")]
     let segments = [ReviewSegment(id: segID, app: "Chrome", windowTitle: "Spreadsheet xyz",
                                   start: t0, end: t0.addingTimeInterval(300))]
 
     c.check("prompt contains tasks, segments and format contract") {
         let prompt = AIAssist.classificationPrompt(tasks: tasks, segments: segments)
-        try expect(prompt.contains("Ambitick build"))
+        try expect(prompt.contains("andeyeTT build"))
         try expect(prompt.contains("#1"))
         try expect(prompt.contains(segID.uuidString))
         try expect(prompt.contains("Spreadsheet xyz"))
@@ -754,7 +754,7 @@ func settingsChecks(_ c: Checks) {
 
     c.check("file store round-trip and missing file") {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ambitick-checks-\(UUID().uuidString)")
+            .appendingPathComponent("andeyett-checks-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = JSONFileStore<AndeyeSettings>(
             url: dir.appendingPathComponent("settings.json"))
@@ -776,7 +776,7 @@ func endToEndChecks(_ c: Checks) async {
         let base = Date(timeIntervalSince1970: 1_750_000_080)   // minute-aligned
         func t(_ s: TimeInterval) -> Date { base.addingTimeInterval(s) }
 
-        let tasks = [WorkTask(ref: .op(1), subject: "Ambitick build", status: "Now")]
+        let tasks = [WorkTask(ref: .op(1), subject: "andeyeTT build", status: "Now")]
         let journal = InMemoryJournalStore()
         let transport = MockTransport()
         transport.responses = [(201, "{}")]
@@ -793,11 +793,11 @@ func endToEndChecks(_ c: Checks) async {
             app: "Chrome", windowTitle: "WP1",
             tabURL: "https://op.example.com/work_packages/1", timestamp: t(0))))
         // 2. switch to Ghostty; user confirms the task via the popover
-        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "Ambitick",
+        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT",
                                              timestamp: t(20))))
         tracker.confirm(task: .op(1), at: t(25))
         // 3. keep working in the same window
-        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "Ambitick",
+        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT",
                                              timestamp: t(600))))
         tracker.handle(.input(t(1190)))
         // 4. stop after 20 min

@@ -1,5 +1,7 @@
 # Ambitick Core Implementation Plan
 
+> Historical record: "Ambitick" was the working name — the app is now **andeyeTT** (user-facing brand "andeye"; see `docs/superpowers/specs/2026-07-02-andeye-rename-plan.md`). Module/file names below are the pre-rename ones (Ambitick* → AndeyeTT*).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `AmbitickCore` – the pure-Swift, platform-independent heart of Ambitick (models, attribution, learning, session tracking, journal, OpenProject client, sync, AI-assist, settings) – fully covered by `swift test`.

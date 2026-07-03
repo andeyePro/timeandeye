@@ -36,7 +36,7 @@ public enum MenuTitle {
     }
 
     /// Optional task tag after the time in the menu bar: the first `chars` of
-    /// the task name, so a glance reads "21m Ambit" rather than just "21m".
+    /// the task name, so a glance reads "21m andey" rather than just "21m".
     /// No ellipsis — the truncation is implicit and it saves a character.
     /// Empty name or chars <= 0 leaves the body alone.
     public static func withTaskName(_ name: String?, chars: Int, body: String) -> String {

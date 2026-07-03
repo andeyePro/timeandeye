@@ -105,7 +105,7 @@ struct SettingsView: View {
                         ? "Task name in menu bar: off"
                         : "Task name in menu bar: \(controller.settings.menuTaskChars) chars",
                         value: $controller.settings.menuTaskChars, in: 0...20)
-                Text("The first few letters of what's being tracked appear after the time — \"21m Ambit\". Set to 0 to hide it.")
+                Text("The first few letters of what's being tracked appear after the time — \"21m andey\". Set to 0 to hide it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

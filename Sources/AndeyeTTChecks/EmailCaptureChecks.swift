@@ -20,7 +20,7 @@ func emailCaptureChecks(_ c: Checks) {
 
     c.check("a browser on a non-email host never captures") {
         try expectNil(EmailCaptureEngine.captureTarget(
-            bundleID: "com.google.Chrome", tabURL: "https://github.com/aqueum/andeye"))
+            bundleID: "com.google.Chrome", tabURL: "https://github.com/andeyePro/andeyeTT"))
     }
 
     c.check("a detected email system with no recipe yet (Outlook) never captures") {

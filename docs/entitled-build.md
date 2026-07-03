@@ -8,8 +8,8 @@ short answer up front: the whole Mac pipeline stays `swift build` + `codesign`
 one-time portal/console clicks, and the only place a real `.xcodeproj` is
 unavoidable is the planned iOS companion (already scoped that way in TODO.md).
 
-Bundle ID everywhere below: `org.example.ambitick` (already in make-app.sh).
-Container ID: `iCloud.org.example.ambitick`. `TEAMID` means the 10-character
+Bundle ID everywhere below: `com.andeye.mac` (already in make-app.sh).
+Container ID: `iCloud.com.andeye.mac`. `TEAMID` means the 10-character
 Team ID from https://developer.apple.com/account → Membership details.
 
 ---
@@ -69,16 +69,16 @@ All at https://developer.apple.com/account unless noted. Order matters.
    Also download Apple's **Developer ID G2 intermediate** if the identity
    shows as “not trusted” – https://www.apple.com/certificateauthority/.
 3. **Register the App ID** (Identifiers → “+” → App IDs → App):
-   explicit bundle ID `org.example.ambitick`; tick capabilities **iCloud**
+   explicit bundle ID `com.andeye.mac`; tick capabilities **iCloud**
    (with CloudKit support) and **Push Notifications** (push is how CloudKit
    zone subscriptions wake the app – wanted for sync, harmless if unused).
 4. **Create the iCloud container** (Identifiers → dropdown “iCloud
-   Containers” → “+”): `iCloud.org.example.ambitick`. Then edit the App ID's
+   Containers” → “+”): `iCloud.com.andeye.mac`. Then edit the App ID's
    iCloud capability and **assign** this container to it.
 5. **Create the Developer ID provisioning profile**
    (Profiles → “+” → Distribution → **Developer ID**): select the App ID from
    step 3 and the certificate from step 2. Download it; it lands as
-   `Ambitick_Developer_ID.provisionprofile` (any name is fine). Check the
+   `andeye_Developer_ID.provisionprofile` (any name is fine). Check the
    repo out: this file is not secret (it contains no private key) but it is
    per-team – keep it out of the public repo, park it next to the pro repo's
    secrets. Profile lifetime is tied to the certificate (Developer ID certs
@@ -93,7 +93,7 @@ All at https://developer.apple.com/account unless noted. Order matters.
      `deleted` (Int64) – matching `CloudKitSyncTransport.record(from:)`.
      No queryable indexes needed (`recordZoneChanges` reads by zone, not by
      query). Then **Deploy Schema Changes… → Production**. The custom zone
-     `AmbitickJournal` needs no pre-creation; zones are data, not schema.
+     `AndeyeJournal` needs no pre-creation; zones are data, not schema.
    - Or run a Development-signed build once so CloudKit JIT-creates the
      types, then deploy. Skip this: it needs an Apple Development cert, a
      registered Mac (Provisioning UDID) and a Mac Development profile – three
@@ -105,13 +105,13 @@ All at https://developer.apple.com/account unless noted. Order matters.
    Developer). Store it once on the build Mac:
 
    ```bash
-   xcrun notarytool store-credentials ambitick-notary \
+   xcrun notarytool store-credentials andeye-notary \
      --apple-id martin@example.com --team-id TEAMID \
      --password <app-specific-password>
    ```
 
    After this, no secret ever appears in scripts – they say
-   `--keychain-profile ambitick-notary`.
+   `--keychain-profile andeye-notary`.
 
 Everything after this heading is scriptable.
 
@@ -129,11 +129,11 @@ Everything after this heading is scriptable.
     <!-- Restricted entitlements: must all be authorised by
          embedded.provisionprofile or the app is killed at launch. -->
     <key>com.apple.application-identifier</key>
-    <string>TEAMID.org.example.ambitick</string>
+    <string>TEAMID.com.andeye.mac</string>
     <key>com.apple.developer.team-identifier</key>
     <string>TEAMID</string>
     <key>com.apple.developer.icloud-container-identifiers</key>
-    <array><string>iCloud.org.example.ambitick</string></array>
+    <array><string>iCloud.com.andeye.mac</string></array>
     <key>com.apple.developer.icloud-services</key>
     <array><string>CloudKit</string></array>
     <!-- Developer ID profiles only ever authorise Production. -->
@@ -186,7 +186,7 @@ build/Info.plist/stamp parts unchanged):
 
 ```bash
 IDENTITY="Developer ID Application: Martin Currie (TEAMID)"
-PROFILE="$HOME/secrets/Ambitick_Developer_ID.provisionprofile"
+PROFILE="$HOME/secrets/andeye_Developer_ID.provisionprofile"
 
 # 1. Embed the profile - BEFORE signing, exact filename matters.
 cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
@@ -221,7 +221,7 @@ Gotchas specific to this repo:
   `security cms -D -i "$APP/Contents/embedded.provisionprofile"`.
 - CloudKit at runtime needs the *user* signed into iCloud (System Settings →
   Apple ID). `CKContainer.default()` resolves via the entitlement to
-  `iCloud.org.example.ambitick` – no code change needed to adopt the container.
+  `iCloud.com.andeye.mac` – no code change needed to adopt the container.
 - Push registration for zone subscriptions is
   `NSApplication.registerForRemoteNotifications()` – works fine for an
   `LSUIElement` menu-bar app; silent CloudKit pushes need no user-visible
@@ -233,29 +233,29 @@ Gotchas specific to this repo:
 
 ```bash
 # Zip preserving the bundle (ditto, not zip - resource forks/symlinks).
-ditto -c -k --keepParent "$APP" /tmp/Ambitick.zip
+ditto -c -k --keepParent "$APP" /tmp/andeye.zip
 
 # Submit and block until the verdict (usually 1-5 min).
-xcrun notarytool submit /tmp/Ambitick.zip \
-    --keychain-profile ambitick-notary --wait
+xcrun notarytool submit /tmp/andeye.zip \
+    --keychain-profile andeye-notary --wait
 
 # Staple the ticket to the .app (offline Gatekeeper pass), then re-zip
 # for distribution - the stapled bundle, not the submitted zip.
 xcrun stapler staple "$APP"
-ditto -c -k --keepParent "$APP" Ambitick-0.1.0.zip
+ditto -c -k --keepParent "$APP" andeye-0.1.0.zip
 
 # Final check - exactly what a downloader's Gatekeeper will conclude.
 spctl -a -vv "$APP"     # want: "accepted ... source=Notarized Developer ID"
 ```
 
 On failure: `xcrun notarytool log <submission-id> --keychain-profile
-ambitick-notary` names every offending binary. The classic causes are a
+andeye-notary` names every offending binary. The classic causes are a
 missing `--options runtime`, missing `--timestamp`, or an unsigned nested
 binary. `notarytool` and `stapler` ship with the Command Line Tools – no
 Xcode install needed for any of this section.
 
 If distribution moves to a DMG later: sign the DMG
-(`codesign -s "$IDENTITY" Ambitick.dmg`), notarise the DMG (Gatekeeper then
+(`codesign -s "$IDENTITY" andeye.dmg`), notarise the DMG (Gatekeeper then
 covers both the container and the app inside), staple the DMG *and* the app.
 
 ---
@@ -331,8 +331,8 @@ Nothing above conflicts with Sparkle; notes so the pieces are cut to fit:
 ## 7. Who does what – the split
 
 **Martin, once, in the portal/console (≈30 min):** enrol; Developer ID
-Application cert; App ID `org.example.ambitick` with iCloud + Push; container
-`iCloud.org.example.ambitick` assigned to the App ID; Developer ID provisioning
+Application cert; App ID `com.andeye.mac` with iCloud + Push; container
+`iCloud.com.andeye.mac` assigned to the App ID; Developer ID provisioning
 profile downloaded to the build Mac; `SessionRevision` schema created and
 deployed to Production in CloudKit Console; notary credentials stored via
 `notarytool store-credentials`.

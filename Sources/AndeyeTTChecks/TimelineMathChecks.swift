@@ -227,7 +227,7 @@ func timeAggregatorChecks(_ c: Checks) {
 
     c.check("project > task > app hierarchy with local grouping") {
         let tasks = [
-            WorkTask(ref: .op(1), subject: "Ambitick", project: "IT", status: "Now"),
+            WorkTask(ref: .op(1), subject: "andeyeTT", project: "IT", status: "Now"),
             WorkTask(ref: .op(2), subject: "Email", project: "Admin", status: "Now"),
             WorkTask(ref: .local(localID), subject: "Chess", status: "Open"),
         ]
@@ -248,7 +248,7 @@ func timeAggregatorChecks(_ c: Checks) {
         let nodes = TimeAggregator.byProject(sessions: sessions, tasks: tasks, spans: spans)
         try expectEq(nodes.map(\.label), ["IT", "Admin", "Personal"])
         try expectClose(nodes[0].seconds, 5400)
-        try expectEq(nodes[0].children.first?.label, "Ambitick")
+        try expectEq(nodes[0].children.first?.label, "andeyeTT")
         let apps = nodes[0].children.first?.children ?? []
         try expectEq(apps.map(\.label), ["Ghostty", "Chrome"])
         try expectClose(apps[0].seconds, 3000)

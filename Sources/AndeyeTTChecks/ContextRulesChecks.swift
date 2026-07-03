@@ -73,21 +73,21 @@ func contextIdentityChecks(_ c: Checks) {
 
     c.check("a plain URL surface is the PinScope chain: host then path segments") {
         let sig = ActivitySignal(app: "Google Chrome", windowTitle: "GitHub",
-                                 tabURL: "https://github.com/aqueum/ambitick/issues",
+                                 tabURL: "https://github.com/andeyePro/andeyeTT/issues",
                                  timestamp: t0)
         let id = ContextIdentity.from(sig)
         try expectEq(id.segments.map(\.kind), [.urlHost, .urlPath, .urlPath, .urlPath])
-        try expectEq(id.segments.map(\.value), ["github.com", "aqueum", "ambitick", "issues"])
+        try expectEq(id.segments.map(\.value), ["github.com", "andeyePro", "andeyeTT", "issues"])
         try expectEq(id.segments.map(\.value),
                      PinScope.identity(of: sig)?.segments ?? [],
                      "chain values must equal the pin editor's identity segments")
     }
 
     c.check("an app window chains app then title segments") {
-        let sig = ActivitySignal(app: "Ghostty", windowTitle: "ambitick — vim",
+        let sig = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT — vim",
                                  timestamp: t0)
         let id = ContextIdentity.from(sig)
-        try expectEq(id.segments.map(\.value), ["Ghostty", "ambitick", "vim"])
+        try expectEq(id.segments.map(\.value), ["Ghostty", "andeyeTT", "vim"])
         try expect(id.segments.allSatisfy { $0.kind == .app })
     }
 
@@ -313,10 +313,10 @@ func surfaceFragmentChecks(_ c: Checks) {
 
     c.check("a non-mail URL's surface is byte-identical to before (persisted keys keep matching)") {
         let sig = ActivitySignal(app: "Google Chrome", windowTitle: "readme",
-                                 tabURL: "https://github.com/aqueum/ambitick#readme",
+                                 tabURL: "https://github.com/andeyePro/andeyeTT#readme",
                                  timestamp: t0)
         // The exact Surface the pre-fix code produced for this signal:
-        let legacy = Surface(app: "Google Chrome", detail: "github.com/aqueum/ambitick")
+        let legacy = Surface(app: "Google Chrome", detail: "github.com/andeyePro/andeyeTT")
         try expectEq(Surface(signal: sig), legacy)
         try expectEq(try JSONEncoder().encode(Surface(signal: sig)),
                      try JSONEncoder().encode(legacy),
@@ -516,7 +516,7 @@ func forgetChecks(_ c: Checks) {
     c.check("forget is targeted: other tasks' learning and other signals' features survive") {
         let a = Attributor(instanceHost: host)
         let mail = gmailSignal()
-        let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "ambitick", timestamp: t0)
+        let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: t0)
         a.confirm(mail, task: .op(1), now: t0)
         a.confirm(ghostty, task: .op(1), now: t0)
         a.confirm(mail, task: .op(2), now: t0)
