@@ -119,6 +119,24 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] NAIL Chrome/Gmail correspondent categorisation (Martin, 2026-07-03
+  02:04 BST, priority — "spin out agents and absolutely nail it, take your
+  time, run focus groups"). Symptoms: Gmail slices keep going to "University Teaching" and the why-panel can't explain why; the components/
+  features list shows window-title junk ("High memory usage") and no
+  correspondent addresses except his own; a painful learned outcome can't
+  be removed. Deliverables: (a) diagnose + fix correspondent extraction on
+  Chrome Gmail (EmailSignalProbe / Sensors page recipe — when did signals
+  last carry correspondents?); (b) why-panel must show the email evidence
+  (correspondent/domain/subject) whenever an email context exists; (c) an
+  UN-LEARN affordance — remove a bad learned rule/association from the why
+  panel; (d) pin by correspondent ADDRESS and DOMAIN without per-email
+  pinning — design an intuitive UI (agent judge-panels over 2-3 mockup
+  options before building); (e) generalise the mechanism beyond Gmail:
+  pluggable page recipes for web apps where app/URL/title are insufficient
+  (host-as-signal groundwork exists — see the ambiguous-web-page policy
+  note, 6907245). Multi-agent programme; start AFTER the andeyeTT folder
+  rename/vibe reopen.
+
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —
   Martin chose AGPL-3.0 + CLA; LICENSE, CLA.md and the CONTRIBUTING licence
   section landed in one commit. Still on the publish click-list (WP 223):
