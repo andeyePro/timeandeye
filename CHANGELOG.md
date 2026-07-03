@@ -2,6 +2,20 @@
 
 ## 2026-07-03
 
+- [x] **Menu-bar icon now renders Martin's real andeye mark, not invented
+  geometry.** He supplied the actual logo (assets/brand/andeye.svg +
+  andeye-logo.afdesign, moved from repo root, 3-line README added);
+  AndeyeLogo.swift now hardcodes its path verbatim — four cubics, translate
+  applied, normalised to a unit-width box preserving the 365:235 aspect.
+  Pupil/eyelid machinery dropped (his mark has none); the arc-length draw-on
+  reveal stays, and the wink is now a vertical squash of the whole mark
+  toward its centre (width preserved) so it can never mangle the curves.
+  AndeyeLogoImage strokes at 17/365 width, round caps/joins, ~18pt tall ×
+  ~28pt wide; certainty tint and AppController trigger plumbing untouched.
+  Checks rewritten (contiguity, closed loop, reveal monotone/linear, squash
+  bounds, aspect); geometry rendered to PNGs at 360×232 and 36×24 and
+  visually verified against the SVG. 321 checks green.
+
 - [x] **Full rename: the package is `andeyeTT` (317 checks green, iOS
   simulator build succeeded).** Martin's call — the core carries the brand
   for future adjacent apps. Targets/products: AmbitickCore→AndeyeTTCore,
