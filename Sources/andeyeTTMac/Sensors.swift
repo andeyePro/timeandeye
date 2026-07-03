@@ -161,12 +161,23 @@ public final class SensorHub {
         "com.google.Chrome", "com.operasoftware.Opera", "com.brave.Browser",
     ]
 
+    /// Logged once per run, not per poll — a missing Automation grant fails
+    /// EVERY read, and per-poll logging would flood the debug log.
+    private var loggedTabURLError = false
+
     private func activeChromeTabURL(bundleID: String) -> String? {
         let appName = bundleID == "com.google.Chrome" ? "Google Chrome"
             : bundleID == "com.operasoftware.Opera" ? "Opera" : "Brave Browser"
         let source = "tell application \"\(appName)\" to get URL of active tab of front window"
         var error: NSDictionary?
         let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error, !loggedTabURLError {
+            loggedTabURLError = true
+            // -1743 = Automation permission missing/denied for this browser:
+            // every URL read fails SILENTLY, browser surfaces degrade to
+            // app|title, and email detection starves. Make it findable.
+            DebugLog.write("tab URL AppleScript failed for \(appName): \(error)")
+        }
         return error == nil ? result?.stringValue : nil
     }
 }

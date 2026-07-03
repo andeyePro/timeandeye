@@ -79,21 +79,28 @@ public final class EmailCaptureEngine {
     }
 
     private static func fullCapture(appName: String, deadline: TimeInterval) -> FullCapture? {
-        guard let urlStr = runOsascript(activeTabURLScript(appName: appName), deadline: deadline),
-              let host = URL(string: urlStr)?.host else {
+        let urlRead = runOsascript(activeTabURLScript(appName: appName), deadline: deadline)
+        guard let urlStr = urlRead.out, let host = URL(string: urlStr)?.host else {
+            // Surface osascript's own words: "-1743 Not authorized to send
+            // Apple events" names a missing Automation grant instantly,
+            // where a bare "couldn't read" hid it (2026-07-03 diagnosis).
             return FullCapture(system: .unknown, senders: [], recipients: [],
-                               error: "Couldn't read the active tab URL.")
+                               error: "Couldn't read the active tab URL."
+                                   + (urlRead.failure.map { " [\($0)]" } ?? ""))
         }
         let system = EmailSystem.detect(urlHost: host)
         guard let sSel = system.senderSelector, let rSel = system.recipientSelector else {
             return FullCapture(system: system, senders: [], recipients: [],
                                error: "No recipe for this system yet (host: \(host)).")
         }
-        guard let raw = runOsascript(jsScript(appName: appName, sender: sSel, recipient: rSel),
-                                     deadline: deadline) else {
+        let jsRead = runOsascript(jsScript(appName: appName, sender: sSel, recipient: rSel),
+                                  deadline: deadline)
+        guard let raw = jsRead.out else {
             return FullCapture(system: system, senders: [], recipients: [],
-                               error: "JavaScript execution failed or timed out. (If JS is off: " +
-                                      "Chrome ▸ View ▸ Developer ▸ Allow JavaScript from Apple Events.)")
+                               error: "JavaScript execution failed or timed out."
+                                   + (jsRead.failure.map { " [\($0)]" } ?? "")
+                                   + " (If JS is off: Chrome ▸ View ▸ Developer ▸ "
+                                   + "Allow JavaScript from Apple Events.)")
         }
         let parts = raw.components(separatedBy: "\u{1e}")
         return FullCapture(system: system,
@@ -134,25 +141,40 @@ public final class EmailCaptureEngine {
     /// caller's thread) open indefinitely. Arguments are passed as `Process`
     /// argv, not through a shell, so nothing here needs AppleScript-string
     /// escaping beyond what the source already does.
-    private static func runOsascript(_ source: String, deadline: TimeInterval) -> String? {
+    private static func runOsascript(_ source: String,
+                                     deadline: TimeInterval) -> (out: String?, failure: String?) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", source]
         let outPipe = Pipe()
+        let errPipe = Pipe()
         process.standardOutput = outPipe
-        process.standardError = FileHandle.nullDevice   // never buffers, can't fill
-        guard (try? process.run()) != nil else { return nil }
+        process.standardError = errPipe
+        guard (try? process.run()) != nil else { return (nil, "couldn't launch osascript") }
         let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline, execute: watchdog)
-        // Drain stdout BEFORE waiting: a child that fills the ~64 KB pipe
+        // Drain BOTH pipes BEFORE waiting: a child that fills a ~64 KB pipe
         // buffer blocks on write, so wait-then-read deadlocks until the
-        // watchdog kills it. Reading first consumes as the child writes and
-        // returns at EOF (exit or watchdog kill), so the wait is then instant.
+        // watchdog kills it. stderr drains on a background reader (semaphore-
+        // synchronised, so no race on errData); stdout on this thread. Both
+        // reads return at EOF (exit or watchdog kill), so the wait is instant.
+        var errData = Data()
+        let errDone = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            errDone.signal()
+        }
         let data = outPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         watchdog.cancel()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        errDone.wait()
+        guard process.terminationStatus == 0 else {
+            let err = String(data: errData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return (nil, err.isEmpty ? "osascript exited \(process.terminationStatus)" : err)
+        }
+        return (String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines), nil)
     }
 
     // MARK: - Capture gate (pure)
