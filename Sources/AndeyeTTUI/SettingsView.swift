@@ -279,7 +279,7 @@ struct SettingsView: View {
 
             Section("Diagnostics (dev)") {
                 Button("Probe email sender (front browser)") {
-                    senderProbe = controller.probeEmailSender()
+                    Task { senderProbe = await controller.probeEmailSender() }
                 }
                 .help("Walks the focused browser window's Accessibility tree and lists the email addresses it can see, with each node's role. Result is also copied to the clipboard.")
                 Text("Open the email you'd want to pin in your browser, then click. Paste the result back so we can design a robust sender extractor. (Whole-tree crawl — diagnostic only, not how the shipped feature will work.)")

@@ -2,6 +2,38 @@
 
 ## 2026-07-03
 
+- [x] **Gmail correspondent capture is live again — async, deadline-bounded,
+  one probe in flight (capture layer of the correspondent-attribution
+  programme).** The 2026-07-03 diagnosis (a90fe90) found capture had been off
+  since the 6-30 freeze-revert (5439a83): every live signal carried nil
+  correspondents/subject, so the whole email-rule system (EmailRule ladder,
+  sender/domain pins, email-keyed stickies) was dead code at runtime. Fix per
+  the diagnosis's fix design: new `EmailCaptureEngine` (AndeyeTTMac) replaces
+  every `NSAppleScript` round-trip — main-thread-bound, the actual cause of
+  the freeze — with an `/usr/bin/osascript` SUBPROCESS run off a background
+  queue, hard per-call deadline, watchdog kill. `SensorHub.poll()` emits the
+  plain `.focus` signal immediately (never blocks) and only on a
+  surface-change onto a chrome-like browser sitting on a KNOWN, recipe'd mail
+  host (`EmailSystem.hasRecipe`) kicks a capture off fire-and-forget, one in
+  flight at a time (a request while busy is dropped, not queued). The result
+  comes back as a new `SensorEvent.focusEnrichment`, applied RETROACTIVELY by
+  `SessionTracker.applyEnrichment` to the still-open span — but only if the
+  surface is still the one the probe was captured for (`Surface(signal:)`
+  equality); a probe that outlives the user's next focus change is dropped
+  silently, never mis-tagging whatever is open now. The diagnostics "Probe
+  email sender" button now shares the same engine
+  (`EmailSignalProbe.buildReport()`, run via `Task.detached` so it no longer
+  risks even its own AX-crawl blocking main). +9 checks (3 SessionTracker
+  retroactive-enrichment scenarios incl. the stale-surface drop; 6
+  EmailCaptureEngine pure gate cases — the `osascript`/`Process` execution
+  itself is impure and browser-dependent, so it needs the on-device soak the
+  diagnosis explicitly calls for: "191 green checks did not catch a
+  main-thread stall" was the 6-30 lesson). Out of scope here: the Evidence
+  Card / un-learn UI (context-rules-ux spec, Core layer landed WIP in
+  2e6f784, unverified, UI phase not started) and the base poll's own
+  tab-URL/title AppleScript hazard (TODO.md — a separate, lower-probability
+  instance of the same freeze class, left for its own fix).
+
 - [x] **iOS timeline is now DRAWN, matching the Mac's (321 checks green,
   iOS simulator build succeeded).** Martin: "why did you ditch the beautiful
   and highly functional timeline from the mac app and replace it with a

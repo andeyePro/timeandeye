@@ -1776,43 +1776,14 @@ public final class AppController: ObservableObject {
 
     /// Dev diagnostic: probe the front browser's AX tree for sender candidates,
     /// format a report, and copy it to the clipboard. Drives the email-sender
-    /// signal design (TODO 2026-06-29).
-    public func probeEmailSender() -> String {
-        guard AXIsProcessTrusted() else {
-            return "Accessibility permission not granted — System Settings ▸ Privacy ▸ Accessibility."
-        }
-        guard let r = EmailSignalProbe.probeFrontBrowser() else {
-            return "No running browser found (Chrome / Opera / Brave / Safari)."
-        }
-        var out = "Browser: \(r.app)\nNodes scanned: \(r.nodesScanned)\(r.truncated ? " (capped)" : "")\n"
-        if r.nodesScanned < 200 {
-            out += "(Looks like only the window chrome — Chrome's page accessibility " +
-                   "tree may still be building. Click Probe again in a second.)\n"
-        }
-        out += "\nEmail addresses found (\(r.candidates.count)):\n"
-        out += r.candidates.isEmpty ? "  (none)\n"
-            : r.candidates.map { "  • \($0)" }.joined(separator: "\n") + "\n"
-        out += "\nNodes containing '@' (role | text):\n"
-        out += r.contexts.isEmpty ? "  (none)"
-            : r.contexts.map { "  \($0)" }.joined(separator: "\n")
-        // The real channel: detect the system + run its DOM recipe.
-        out += "\n\n— Recipe channel (page JavaScript) —\n"
-        if let p = EmailSignalProbe.frontBrowserParties() {
-            out += "System: \(p.system.rawValue)\n"
-            if let e = p.error { out += "Error: \(e)\n" }
-            func fmt(_ ps: [EmailSignal.Party]) -> String {
-                ps.isEmpty ? "(none)" : ps.map { "\($0.name) <\($0.email)>" }.joined(separator: ", ")
-            }
-            out += "Sender: \(fmt(p.senders))\n"
-            out += "Recipients: \(fmt(p.recipients))\n"
-            let others = EmailSignal.counterparties(senders: p.senders, recipients: p.recipients)
-            out += "Counterparties (you removed): \(fmt(others))\n"
-            let domains = Set(others.compactMap { EmailSignal.domain(of: $0.email) })
-                .sorted().joined(separator: ", ")
-            out += "Counterparty domains: \(domains.isEmpty ? "(none)" : domains)"
-        } else {
-            out += "Front app is not a supported browser."
-        }
+    /// signal design (TODO 2026-06-29). Shares `EmailCaptureEngine`'s
+    /// deadline-bounded `osascript` channel with live capture (2026-07-03),
+    /// so it blocks up to a couple of seconds — run off the main actor via
+    /// `Task.detached`; only the clipboard write needs to be back on main.
+    public func probeEmailSender() async -> String {
+        let out = await Task.detached(priority: .utility) {
+            EmailSignalProbe.buildReport()
+        }.value
         copyToClipboard(out)
         return out
     }
