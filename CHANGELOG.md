@@ -2,6 +2,32 @@
 
 ## 2026-07-03
 
+- [x] **Module-level case rename: `AndeyeTT*`/`AndeyeApp` → `andeyeTT*`/`andeyeApp`.**
+  Brings every SwiftPM target/product/directory in line with Martin's
+  lowercase-module convention (module `andeyeTTCore`, matching the sibling
+  `andeyeProBackends`/`andeyeProChecks` targets in the Pro repo) — only the
+  identifiers change, Swift TYPE names stay UpperCamelCase
+  (`AndeyeLogo`/`AndeyeLogoImage`/`AndeyeScenes`/`AndeyeApp` the `App` struct
+  all untouched). Renamed: `Sources/AndeyeTTCore` → `andeyeTTCore`,
+  `AndeyeTTMac` → `andeyeTTMac`, `AndeyeTTUI` → `andeyeTTUI`, `AndeyeTTStore`
+  → `andeyeTTStore`, `AndeyeTTPhone` → `andeyeTTPhone`, `AndeyeTTChecks` →
+  `andeyeTTChecks`, `AndeyeTTIntegration` → `andeyeTTIntegration`,
+  `AndeyeApp` → `andeyeApp`; Package.swift targets/products/dependency
+  strings and `swift run` comments follow; `ios/project.yml`'s three
+  `product:` lines and every `import AndeyeTT*` across Sources/ and
+  ios/Sources (~50 files) now read lowercase; `scripts/make-app.sh`'s
+  `--product`/bin-path lines follow. **Pro-side fallout: the Pro repo's
+  imports must change too** — `import AndeyeTTCore` etc. now fail to
+  resolve; every Pro file importing this package needs `import
+  andeyeTTCore`/`andeyeTTMac`/`andeyeTTUI`/`andeyeTTStore`/`andeyeTTPhone`.
+  **First Mac build after pulling this needs `rm -rf .build`** — a
+  case-insensitive filesystem caches build products keyed by directory name,
+  and `AndeyeTTCore`/`andeyeTTCore` collide there; stale cache from the old
+  case causes confusing build errors otherwise. Also run `cd ios &&
+  xcodegen` to regenerate `andeye.xcodeproj` from the updated `project.yml`
+  (the pbxproj itself was left untouched here — it's generated and has
+  Martin's uncommitted local edits).
+
 - [x] **Ambitick mention purge — the residual-name sweep the 4e7a393 module
   rename deferred.** Every remaining "Ambitick"/"ambitick" mention now says
   the right new name: check fixture strings and their assertions updated

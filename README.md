@@ -31,7 +31,7 @@ cd andeyeTT
 Run the checks (no XCTest needed – plain executable):
 
 ```bash
-swift run AndeyeTTChecks   # expect: TOTAL: N passed, 0 failed
+swift run andeyeTTChecks   # expect: TOTAL: N passed, 0 failed
 ```
 
 ## First-run setup
@@ -115,17 +115,17 @@ non-work time land there instead of stopping the clock.
 
 ## Architecture
 
-- `AndeyeTTCore` – platform-independent engine: attribution (task URL ≈ 100%,
+- `andeyeTTCore` – platform-independent engine: attribution (task URL ≈ 100%,
   task-priming, learned associations, ranking priors), dominant-minute session
   resolution, journal protocol, the `TaskBackend` seam (OpenProject behind
   `OPBackend`; Xero next; standalone = no backend), sync, timesheet export,
   AI-assist, settings. No AppKit; the iOS companion (planned in this repo, as
   an `ios/` Xcode project) reuses it unchanged.
-- `AndeyeTTMac` – SQLite journal (raw sqlite3, no deps), Keychain, sensors
+- `andeyeTTMac` – SQLite journal (raw sqlite3, no deps), Keychain, sensors
   (NSWorkspace, Accessibility window titles, browser tabs via Apple Events,
   idle, sleep/wake, mic-in-use), app controller.
-- `AndeyeApp` – SwiftUI `MenuBarExtra` popover, review window, settings.
-- `AndeyeTTChecks` – the test suite as a plain executable (no XCTest
+- `andeyeApp` – SwiftUI `MenuBarExtra` popover, review window, settings.
+- `andeyeTTChecks` – the test suite as a plain executable (no XCTest
   anywhere); CI runs it on macOS (the Mac layer imports AppKit/SQLite3, so
   Linux can't build the full suite).
 

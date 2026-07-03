@@ -2,8 +2,8 @@
 
 The second screen + manual tracker (iOS cannot observe other apps — the
 automatic attribution stays a Mac superpower). Two-tap tracking: open the
-app, tap a task. Reuses the shared engine wholesale: `AndeyeTTCore` (models,
-ranking, backends, export) and `AndeyeTTStore` (the SQLite journal replica,
+app, tap a task. Reuses the shared engine wholesale: `andeyeTTCore` (models,
+ranking, backends, export) and `andeyeTTStore` (the SQLite journal replica,
 CloudKit transport) — the OpenProject backend works fully over the network
 from the phone, and CloudKit journal sync switches on with the entitled
 App Store build.

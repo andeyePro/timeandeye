@@ -33,11 +33,11 @@ Status: DIAGNOSIS ONLY — no code changed. Evidence cites file:line on branch
 ### RC1 — capture is off: signals never carry email context
 
 `ActivitySignal` has optional `correspondents` / `emailSubject` fields
-(Sources/AndeyeTTCore/Models.swift:79-95). The only production writer was the
+(Sources/andeyeTTCore/Models.swift:79-95). The only production writer was the
 sensor poll, added in 26522a2 (2026-06-30, "capture correspondents on
 email-surface focus") and reverted the same day in 5439a83 because it froze
 tracking. Today the poll emits signals with both fields nil, with an explicit
-note (Sources/AndeyeTTMac/Sensors.swift:107-113):
+note (Sources/andeyeTTMac/Sensors.swift:107-113):
 
 ```
 // NOTE: email correspondents are NOT fetched here — a synchronous
@@ -47,23 +47,23 @@ note (Sources/AndeyeTTMac/Sensors.swift:107-113):
 
 The only remaining code that produces correspondents is the dev diagnostic
 button (Settings ▸ Diagnostics ▸ "Probe email sender" →
-`AppController.probeEmailSender()`, Sources/AndeyeTTMac/AppController.swift:1780,
+`AppController.probeEmailSender()`, Sources/andeyeTTMac/AppController.swift:1780,
 calling `EmailSignalProbe.probeFrontBrowser` / `frontBrowserParties`,
-Sources/AndeyeTTMac/EmailSignalProbe.swift:35, 99). Its output goes to the
+Sources/andeyeTTMac/EmailSignalProbe.swift:35, 99). Its output goes to the
 clipboard — it never touches a tracked signal.
 
 Knock-on: `EmailContext.from(signal)` returns nil for every live signal
-(Sources/AndeyeTTCore/EmailMatch.swift:57-63, guard on non-empty
+(Sources/andeyeTTCore/EmailMatch.swift:57-63, guard on non-empty
 correspondents/subject). Therefore, for every real signal since 2026-06-30:
 
-- `emailRuleMatch` never fires (Sources/AndeyeTTCore/Attributor.swift:272-275)
+- `emailRuleMatch` never fires (Sources/andeyeTTCore/Attributor.swift:272-275)
   — the `.emailRule` ladder source is unreachable.
 - `learnEmailRule` never learns (Attributor.swift:288-299) — corrections on
   Gmail teach nothing email-shaped.
 - The session-sticky key falls through to the coarse focus surface instead of
   the email subject/correspondents (Attributor.swift:241-251).
 - Pin fields `sender`/`subject` evaluate to `[]` / `""`
-  (Sources/AndeyeTTCore/PinRule.swift:21-25) — a `from contains "university.example"`
+  (Sources/andeyeTTCore/PinRule.swift:21-25) — a `from contains "university.example"`
   pin can never match, silently.
 
 So attribution for Gmail falls through to exactly the sources Martin is
@@ -72,7 +72,7 @@ seeing: primed surface and learned title/app/URL features.
 ### RC2 — Surface identity: all of Gmail is one surface
 
 `Surface(signal:)` keys on URL host+path, fragment discarded
-(Sources/AndeyeTTCore/Models.swift:155-164). Gmail URLs are
+(Sources/andeyeTTCore/Models.swift:155-164). Gmail URLs are
 `https://mail.google.com/mail/u/0/#inbox/<threadid>` — `URL.path` is
 `/mail/u/0`, so EVERY Gmail page (inbox, any message, compose) is
 `Surface(app: "Google Chrome", detail: "mail.google.com/mail/u/0")`.
@@ -96,7 +96,7 @@ Consequences:
 ### RC3 — learning only accumulates; corrections never subtract
 
 `LearningStore.correct()` (subtract from wrong, add to right —
-Sources/AndeyeTTCore/LearningStore.swift:64-67) exists but is NEVER called in
+Sources/andeyeTTCore/LearningStore.swift:64-67) exists but is NEVER called in
 production (only in checks). Every teach path uses `learn(weight: 2)` (assign/
 confirm) or 4-6 (Boost/pin fallback). So the counts "University
 Teaching" accumulated on Gmail-generic features — `app=google chrome`,

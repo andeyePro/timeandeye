@@ -165,7 +165,7 @@ Edge cases:
   lies.
 
 Implementation surface: `TimelineView.detailText` → new `EvidenceCardView`
-(AndeyeTTUI, shared by timeline + popover + review); `PopoverView.header` gains
+(andeyeTTUI, shared by timeline + popover + review); `PopoverView.header` gains
 the why-caption; `Attributor` gains `unlearn(_ explanation:)` +
 `explain()` extended to carry the matched EmailRule and its metadata;
 `EmailRule` gains `createdAt`/`fireCount`; `AppController` persistence bump.
@@ -240,7 +240,7 @@ Edge cases:
   (general→specific per the settings ladder); reordering the ladder in
   Settings reorders strips app-wide.
 
-Implementation surface: new `ContextIdentity` in AndeyeTTCore merging
+Implementation surface: new `ContextIdentity` in andeyeTTCore merging
 `PinScope.identity(of:)` + `EmailContext` + recipes into one segment list with
 kinds; `PopoverView` pin editor's `componentsEditor` generalised and reused;
 `TimelineView` detail pane gains the strip; commit path writes `EmailRule`
@@ -318,7 +318,7 @@ Edge cases:
 - **Toast fatigue**: only on NEW rules and first-fires, never on every match;
   a Settings toggle silences toasts entirely (ledger remains).
 
-Implementation surface: new `RulesLedgerView` window (AndeyeTTUI) + scene in
+Implementation surface: new `RulesLedgerView` window (andeyeTTUI) + scene in
 `RootScenes`; toast host in `PopoverView` (and optional `systemNotifications`
 reuse); `AppController` exposes `emailRules`/`pins` as published lists with
 delete/edit; timeline pane gets the "view rule" link only. Biggest new-surface
@@ -472,7 +472,7 @@ toasts suppress automatically while screen-sharing (Priya).
 
 ## 5. Final design — Context Rules (complete, implementable)
 
-### 5.1 Data model (AndeyeTTCore)
+### 5.1 Data model (andeyeTTCore)
 
 **`ContextIdentity`** (new) — one broad→narrow segment chain for any surface,
 unifying `PinScope.identity(of:)`, `EmailContext` and (later) recipe fields:
@@ -557,7 +557,7 @@ fallback reuses the `AIAssist` clipboard pattern with a DOM snippet. Per-site
 `enabled` is the privacy opt-in surface; Gmail ships enabled (existing
 behaviour) but visibly listed.
 
-### 5.2 The Evidence Card (AndeyeTTUI — one view, three hosts)
+### 5.2 The Evidence Card (andeyeTTUI — one view, three hosts)
 
 `EvidenceCardView(controller:, signal:, host: .timeline | .popover | .ledger)`.
 
@@ -732,23 +732,23 @@ surface (Sam's "most important row on the screen").
 
 ### 5.6 Implementation surface (by file)
 
-- `AndeyeTTCore/ContextIdentity.swift` — new.
-- `AndeyeTTCore/EmailMatch.swift` — EmailRule metadata + decode migration.
-- `AndeyeTTCore/Attributor.swift` — `forgettable`/`forget`/`explainWithout`;
+- `andeyeTTCore/ContextIdentity.swift` — new.
+- `andeyeTTCore/EmailMatch.swift` — EmailRule metadata + decode migration.
+- `andeyeTTCore/Attributor.swift` — `forgettable`/`forget`/`explainWithout`;
   fireCount bump in `emailRuleMatch`; silent `learnEmailRule` call sites
   removed from `confirm`/`assign` (function kept; the card/footer call it
   with an explicit level).
-- `AndeyeTTUI/EvidenceCardView.swift` — new (three hosts).
-- `AndeyeTTUI/TimelineView.swift` — `detailText`/`selectedSpanPanes` → card;
+- `andeyeTTUI/EvidenceCardView.swift` — new (three hosts).
+- `andeyeTTUI/TimelineView.swift` — `detailText`/`selectedSpanPanes` → card;
   move-strip grain footer.
-- `AndeyeTTUI/PopoverView.swift` — why-caption + ⌘E inline card; post-pick
+- `andeyeTTUI/PopoverView.swift` — why-caption + ⌘E inline card; post-pick
   grain footer; toast host.
-- `AndeyeTTUI/ReviewView.swift` — assign-bar grain footer (later phase).
-- `AndeyeTTUI/RulesLedgerView.swift` — new window; scene in
+- `andeyeTTUI/ReviewView.swift` — assign-bar grain footer (later phase).
+- `andeyeTTUI/RulesLedgerView.swift` — new window; scene in
   `RootScenes.swift` (later phase).
-- `AndeyeTTUI/SettingsView.swift` — ledger button; "Announce newly learned
+- `andeyeTTUI/SettingsView.swift` — ledger button; "Announce newly learned
   rules" toggle; capture-recipe list (later phase).
-- `AndeyeTTMac/AppController.swift` — rules exposed as published lists,
+- `andeyeTTMac/AppController.swift` — rules exposed as published lists,
   forget plumbing + undo, persistence bump, screen-share detection for toast
   suppression (later phase).
 - `MANUAL.md` — a "Context rules" section replacing the "Why was this tracked

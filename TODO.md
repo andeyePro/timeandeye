@@ -342,7 +342,7 @@ and recorded rather than fixed blind:
   off-LAN); OP-as-rendezvous (breaks standalone, and the backend shouldn't see
   second-by-second state). DECIDED 2026-07-01: it lives IN THIS REPO, not a
   new one. Rationale: the iOS app is a
-  thin SwiftUI shell over AndeyeTTCore, and pre-1.0 Core API churns weekly — a
+  thin SwiftUI shell over andeyeTTCore, and pre-1.0 Core API churns weekly — a
   separate repo forces either a tag-per-change SPM dance or fragile local-path
   references, and every cross-cutting change becomes two PRs. In-repo, one
   commit updates Core and both shells, and the one check suite guards both.

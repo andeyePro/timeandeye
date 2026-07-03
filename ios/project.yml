@@ -17,11 +17,11 @@ targets:
     sources: [Sources]
     dependencies:
       - package: andeyeTT
-        product: AndeyeTTCore
+        product: andeyeTTCore
       - package: andeyeTT
-        product: AndeyeTTStore
+        product: andeyeTTStore
       - package: andeyeTT
-        product: AndeyeTTPhone
+        product: andeyeTTPhone
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

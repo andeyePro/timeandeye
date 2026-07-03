@@ -268,7 +268,7 @@ environment for release-signed builds**. Practical implications:
 - Day-to-day dev builds keep using the existing self-signed path –
   `CloudKitSyncTransport` stays inert there, exactly as its header comment
   says. Sync logic is already tested where it should be: Core's merge is
-  pure and covered by `AndeyeTTChecks`; CloudKit is a thin pipe.
+  pure and covered by `andeyeTTChecks`; CloudKit is a thin pipe.
 - To exercise the *pipe* itself, build the entitled flavour (§3) and test
   against Production under a **test iCloud account** (sign the Mac into a
   scratch Apple ID, or use a separate macOS user account signed into one).
