@@ -5,8 +5,8 @@ import Foundation
 /// and (later) site-recipe fields (2026-07-03 context-rules spec §5.1).
 ///
 ///   email:   Gmail ▸ harborlane.example ▸ r.naismith@… ▸ "Insurance Renewals"
-///   plain:   github.com ▸ aqueum ▸ ambitick ▸ issues
-///   app:     Ghostty ▸ ambitick ▸ Attributor.swift
+///   plain:   github.com ▸ andeyePro ▸ andeyeTT ▸ issues
+///   app:     Ghostty ▸ andeyeTT ▸ Attributor.swift
 ///
 /// Email segments follow the user's `emailMatchOrder` ladder, so reordering
 /// the ladder in Settings reorders every card and strip app-wide. Segments are

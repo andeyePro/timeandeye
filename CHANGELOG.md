@@ -2,6 +2,32 @@
 
 ## 2026-07-03
 
+- [x] **Ambitick mention purge — the residual-name sweep the 4e7a393 module
+  rename deferred.** Every remaining "Ambitick"/"ambitick" mention now says
+  the right new name: check fixture strings and their assertions updated
+  together (menu-suffix check is now `"andeyeTT design"` → `"21m andey"`;
+  the learned-titleToken expectation follows the lowercased `"andeyett"`;
+  the regex-operator fixture is `("andeyett", "and.?y")`; case-insensitivity
+  checks keep case-differing needles), example URLs/segments moved from
+  `aqueum/ambitick` to `andeyePro/andeyeTT`, temp-file scratch names to
+  `andeyett-*`, code doc-comments and the Settings caption ("21m andey")
+  swept, TODO/.gitignore/entitled-build/overnight-memo updated
+  (entitled-build now carries the rename plan's `com.andeye.mac` /
+  `iCloud.com.andeye.mac` IDs and the real `AndeyeJournal` zone), the
+  2026-07-02 taskref-remote plan's file paths follow the renamed tree, and
+  the three dated 2026-06 Ambitick plans/specs keep their filenames+content
+  as historical record with a one-line "now andeyeTT" gloss. LEFT IN PLACE
+  deliberately: the legacy data-dir migration strings (`Ambitick/` support
+  dir in AppSupport + MacChecks — they must match old installs), the
+  pre-rename quit/retire lines in make-app.sh and install-andeye.command,
+  make-app.sh's existing `~/ambitick-dev.keychain-db` (renaming would mint a
+  new identity and void TCC grants), the OP integration scratch-WP subject
+  (reuses the live WP; rename plan says leave), the `ambitick` Mac build
+  user in the overnight memo (real account name), CHANGELOG history, and
+  ios/andeye.xcodeproj/project.pbxproj (stale generated `AmbitickCore/
+  Store/Phone` productRefs — regenerate on the Mac with `cd ios && xcodegen`
+  from the already-correct project.yml rather than hand-editing).
+
 - [x] **Gmail correspondent capture is live again — async, deadline-bounded,
   one probe in flight (capture layer of the correspondent-attribution
   programme).** The 2026-07-03 diagnosis (a90fe90) found capture had been off

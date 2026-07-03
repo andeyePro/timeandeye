@@ -9,7 +9,7 @@ func sessionTrackerChecks(_ c: Checks) {
     func t(_ s: TimeInterval) -> Date { base.addingTimeInterval(s) }
 
     let host = "op.example.com"
-    let tasks = [WorkTask(ref: .op(1), subject: "Ambitick", status: "Now"),
+    let tasks = [WorkTask(ref: .op(1), subject: "andeyeTT", status: "Now"),
                  WorkTask(ref: .op(2), subject: "Investment", status: "Next")]
 
     func sig(_ app: String, _ title: String, at: TimeInterval, url: String? = nil) -> ActivitySignal {
@@ -26,11 +26,11 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 50)))   // op(1) dominates min 0
         tracker.handle(.input(t(115)))   // > 60 s floor since the t50 switch: it commits
         tracker.stop(at: t(130))
@@ -82,12 +82,12 @@ func sessionTrackerChecks(_ c: Checks) {
         var learning = LearningStore()
         learning.learn(sig("Steam", "Library", at: 0), target: .doNotTrack, weight: 5)
         attributor.replaceLearning(learning)
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Steam", "Library", at: 5)))      // brief non-work flit
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 10)))  // back to work within grace
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 10)))  // back to work within grace
         tracker.handle(.input(t(60)))   // well past grace from the non-work pend at t5
         if case .stopped = tracker.state {
             try expect(false, "returning to work must cancel the pending non-work stop")
@@ -157,7 +157,7 @@ func sessionTrackerChecks(_ c: Checks) {
         attributor.replaceLearning(learning)
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Steam", "Library", at: 30)))
         try expect(states.last != .stopped, "non-work within grace must not stop yet")
         tracker.handle(.focus(sig("Steam", "Library", at: 70)))   // grace elapsed
@@ -190,10 +190,10 @@ func sessionTrackerChecks(_ c: Checks) {
         var prompts: [TrackerPrompt] = []
         tracker.onSession = { sessions.append($0) }
         tracker.onPrompt = { prompts.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.input(t(40)))
         tracker.handle(.input(t(700)))   // 660 s gap > 600
 
@@ -208,10 +208,10 @@ func sessionTrackerChecks(_ c: Checks) {
         var prompts: [TrackerPrompt] = []
         tracker.onSession = { sessions.append($0) }
         tracker.onPrompt = { prompts.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.input(t(50)))
         tracker.handle(.willSleep(t(120)))
         tracker.handle(.didWake(t(3000)))
@@ -226,10 +226,10 @@ func sessionTrackerChecks(_ c: Checks) {
         var prompts: [TrackerPrompt] = []
         tracker.onSession = { sessions.append($0) }
         tracker.onPrompt = { prompts.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.input(t(50)))
         tracker.handle(.willSleep(t(60)))
         tracker.handle(.didWake(t(100)))    // 40 s < grace: keep tracking
@@ -252,12 +252,12 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var spans: [FocusSpan] = []
         tracker.onSpanClosed = { spans.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))   // opens a span
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))   // opens a span
         tracker.handle(.screenLocked(t(30)))                        // closes it at 30
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 60)))  // ignored while locked
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 60)))  // ignored while locked
         tracker.handle(.screenUnlocked(t(90)))
         tracker.stop(at: t(120))
 
@@ -272,10 +272,10 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker(config: config)
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))      // 19 min at 0.95
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))      // 19 min at 0.95
         tracker.handle(.focus(sig("Mystery", "???", at: 1140)))        // 1 min uncertain
         tracker.stop(at: t(1200))
 
@@ -311,13 +311,13 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // 10s excursion (< grace)
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))    // back within grace → revert
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 110)))    // back within grace → revert
         tracker.stop(at: t(180))
 
         // One op(1) slice spanning the whole stretch — the Investment dip is a
@@ -334,14 +334,14 @@ func sessionTrackerChecks(_ c: Checks) {
         // that re-tags spans back to the base task must NOT move that start, or
         // the menu under-counts versus what flushes to OP.
         let (tracker, attributor) = makeTracker()
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         let before = tracker.liveSliceStart
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // 10s excursion (< grace)
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))    // back within grace → revert
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 110)))    // back within grace → revert
         try expectEq(before, t(0), "live slice begins at the start of tracking")
         try expectEq(tracker.liveSliceStart, before,
                      "a reverted sub-grace excursion must not move liveSliceStart")
@@ -354,14 +354,14 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))  // excursion begins
         tracker.handle(.input(t(135)))                                 // 35 s in — past old grace
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 145)))    // back at 45 s → folds
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 145)))    // back at 45 s → folds
         tracker.stop(at: t(240))
 
         try expect(!sessions.contains { $0.task == .op(2) },
@@ -381,11 +381,11 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker(config: config)
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 65)))   // switch away at 65 s
         tracker.handle(.input(t(160)))   // B held 95 s > sliceFloor(90) → commits, flushes A[0,65]
         tracker.stop(at: t(220))
@@ -400,17 +400,17 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var states: [TrackerState] = []
         tracker.onState = { states.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional
         // The menu bar shows op(2) immediately (what would be recorded if held)…
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
             throw CheckFailure(description: "display should follow to op(2), got \(tracker.state)")
         }
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))     // …back before grace
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 110)))     // …back before grace
         guard case .tracking(.task(.op(1)), _) = tracker.state else {
             throw CheckFailure(description: "display should revert to op(1), got \(tracker.state)")
         }
@@ -423,11 +423,11 @@ func sessionTrackerChecks(_ c: Checks) {
         // must stay the outgoing task until commit, revert to it on return,
         // and move to the new task once the switch commits.
         let (tracker, attributor) = makeTracker()
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         try expectEq(tracker.liveSliceOwner, .task(.op(1)))
 
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional
@@ -437,7 +437,7 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.liveSliceOwner, .task(.op(1)),
                      "pending switch: the open slice still belongs to op(1)")
 
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 110)))     // revert
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 110)))     // revert
         try expectEq(tracker.liveSliceOwner, .task(.op(1)))
 
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 200)))   // pending again
@@ -450,11 +450,11 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 120)))  // pending
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 160)))  // commits (40 s)
         tracker.stop(at: t(300))
@@ -470,11 +470,11 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var prompts: [TrackerPrompt] = []
         tracker.onPrompt = { prompts.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
             throw CheckFailure(description: "switch must be instant, got \(tracker.state)")
@@ -492,19 +492,19 @@ func sessionTrackerChecks(_ c: Checks) {
         var config = TrackerConfig()
         config.idleThresholdSeconds = 600
         let (tracker, attributor) = makeTracker(config: config)
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.input(t(40)))
         tracker.handle(.input(t(700)))   // idle stop, trimmed to t(40)
         try expectEq(tracker.state, .stopped)
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 710)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 710)))
         guard case .tracking(.task(.op(1)), _) = tracker.state else {
             throw CheckFailure(description: "primed surface must resume after idle stop, got \(tracker.state)")
         }
         tracker.stop(at: t(720))         // manual
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 730)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 730)))
         try expectEq(tracker.state, .stopped, "manual stop must be respected")
     }
 
@@ -513,11 +513,11 @@ func sessionTrackerChecks(_ c: Checks) {
         // tracking starts by auto-resume, then move to the other window and
         // type: sensor-style input events with slightly lagging dates.
         let (tracker, attributor) = makeTracker()
-        attributor.assign(sig("Ghostty", "Ambitick", at: 0), target: .task(.op(1)))
+        attributor.assign(sig("Ghostty", "andeyeTT", at: 0), target: .task(.op(1)))
         attributor.assign(sig("Ghostty", "scratch", at: 0), target: .task(.op(2)))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         guard case .tracking(.task(.op(1)), let c1) = tracker.state, c1 >= 0.9 else {
             throw CheckFailure(description: "assign must prime like confirm, got \(tracker.state)")
         }
@@ -525,7 +525,7 @@ func sessionTrackerChecks(_ c: Checks) {
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
             throw CheckFailure(description: "moving to scratch must switch instantly, got \(tracker.state)")
         }
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 70)))  // and straight back
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 70)))  // and straight back
         guard case .tracking(.task(.op(1)), _) = tracker.state else {
             throw CheckFailure(description: "returning must switch back instantly, got \(tracker.state)")
         }
@@ -537,10 +537,10 @@ func sessionTrackerChecks(_ c: Checks) {
         tracker.onPrompt = { prompts.append($0) }
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.handle(.microphone(active: true, at: t(30)))
         tracker.handle(.focus(sig("FaceTime", "Call", at: 30)))   // unknown -> uncertain
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 90)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 90)))
         tracker.handle(.microphone(active: false, at: t(95)))
 
         guard case .callEnded(let segments)? = prompts.last else {
@@ -557,10 +557,10 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         try expectEq(tracker.liveSliceStart, t(0), "live slice starts at the open visit")
         tracker.commitLive(at: t(120))
 
@@ -589,11 +589,11 @@ func sessionTrackerChecks(_ c: Checks) {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
         tracker.onSession = { sessions.append($0) }
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 60)))  // closes the first span as op(1)
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 60)))  // closes the first span as op(1)
         tracker.relabelCurrentSession(to: .op(2))                    // re-tag elapsed + future
         guard case .tracking(.task(.op(2)), let cert) = tracker.state, cert >= 0.9 else {
             throw CheckFailure(description: "relabel must hold op(2) at confirmed certainty, got \(tracker.state)")
@@ -609,10 +609,10 @@ func sessionTrackerChecks(_ c: Checks) {
 
     c.check("backdateSessionStart extends the live slice earlier with a synthetic span") {
         let (tracker, attributor) = makeTracker()
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(100))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 100)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 100)))
         try expectEq(tracker.liveSliceStart, t(100))
         tracker.backdateSessionStart(to: t(40))                      // drag the slice back
         try expectEq(tracker.liveSliceStart, t(40),
@@ -624,11 +624,11 @@ func sessionTrackerChecks(_ c: Checks) {
 
     c.check("adjustCurrentStart clamps to the previous closed span's end") {
         let (tracker, attributor) = makeTracker()
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 50)))  // closes a span ending at t(50)
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 50)))  // closes a span ending at t(50)
         // The open visit started at t(50); dragging it back past the closed span
         // is clamped so the visits cannot overlap.
         tracker.adjustCurrentStart(to: t(30))
@@ -644,10 +644,10 @@ func sessionTrackerChecks(_ c: Checks) {
         // next focus change — reevaluate re-attributes the open spans and lifts
         // the live certainty/target to the pinned task.
         let (tracker, attributor) = makeTracker()
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         // User pins this surface to op(2), then asks the tracker to re-evaluate.
         attributor.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty"])),
                               task: .op(2)))
@@ -659,11 +659,11 @@ func sessionTrackerChecks(_ c: Checks) {
 
     c.check("away mode holds the session open across focus changes, then resumes and switches normally") {
         let (tracker, attributor) = makeTracker()
-        attributor.confirm(sig("Ghostty", "Ambitick", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
         attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
 
         tracker.start(task: .op(1), at: t(0))
-        tracker.handle(.focus(sig("Ghostty", "Ambitick", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
         tracker.away = true
         // While away, focus changes are ignored: the pinned task is held.
         tracker.handle(.focus(sig("Ghostty", "Investment", at: 30)))

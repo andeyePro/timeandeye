@@ -37,14 +37,14 @@ in §11 before editing.
   string the backend hands it and compares byte-for-byte. The (future, pro
   repo) XeroBackend must lowercase GUIDs at its edge so equality is stable.
 
-## 1. Core model — Sources/AmbitickCore/Models.swift
+## 1. Core model — Sources/AndeyeTTCore/Models.swift
 
 ### 1a. The case (Models.swift:9-12)
 
 ```swift
 /// Identity of a task. `.op` = OpenProject work package; `.remote` = a task in
 /// a GUID-keyed backend (Xero), id stored verbatim (conformer normalises);
-/// `.local` = Ambitick-only (leisure tracking etc.), never pushed.
+/// `.local` = andeye-only (leisure tracking etc.), never pushed.
 public enum TaskRef: Hashable, Codable, Sendable {
     case op(Int)
     case remote(String)
@@ -86,7 +86,7 @@ public extension TaskRef {
 `WorkTask.isLocalOnly` (Models.swift:28-31) is already correct for the new case
 (`.remote` returns false) — no edit, but add the check in §9.
 
-## 2. storageKey — Sources/AmbitickCore/Settings.swift:31-36
+## 2. storageKey — Sources/AndeyeTTCore/Settings.swift:31-36
 
 Add the arm:
 
@@ -102,7 +102,7 @@ key/value array — additive case decodes fine; §9 check 13 proves it.
 
 ## 3. Journal semantics
 
-### 3a. Protocol doc + in-memory store — Sources/AmbitickCore/JournalStore.swift
+### 3a. Protocol doc + in-memory store — Sources/AndeyeTTCore/JournalStore.swift
 
 - Line 22-24: reword the doc comment to
   `/// Sessions eligible for backend push: certainty >= threshold, not yet pushed, and on a remote (.op / .remote) task (local-only tasks never push).`
@@ -110,7 +110,7 @@ key/value array — additive case decodes fine; §9 check 13 proves it.
   `guard case .op = session.task else { return false }` with
   `guard session.task.isRemote else { return false }`.
 
-### 3b. SQLite store — Sources/AmbitickMac/SQLiteJournalStore.swift
+### 3b. SQLite store — Sources/AndeyeTTMac/SQLiteJournalStore.swift
 
 - Line 44: leave the DDL exactly as-is (`is_op INTEGER NOT NULL`). Add a
   comment above the CREATE TABLE:
@@ -125,7 +125,7 @@ key/value array — additive case decodes fine; §9 check 13 proves it.
   it round-trips through the same JSONDecoder). No backfill anywhere: no
   existing row can hold `.remote`.
 
-## 4. Backend seam — Sources/AmbitickCore/TaskBackend.swift
+## 4. Backend seam — Sources/AndeyeTTCore/TaskBackend.swift
 
 Widen task ids to String and add ownership. Full list of signature edits:
 
@@ -144,7 +144,7 @@ Widen task ids to String and add ownership. Full list of signature edits:
 - Lines 76-81 (`NoPageRecognizer`): update the two method names/returns to
   `TaskRef?`, still `nil`.
 
-## 5. OP conformer — Sources/AmbitickCore/OPBackend.swift
+## 5. OP conformer — Sources/AndeyeTTCore/OPBackend.swift
 
 - Add next to `opID` (lines 51-56), same throw-don't-no-op policy:
   ```swift
@@ -168,7 +168,7 @@ Widen task ids to String and add ownership. Full list of signature edits:
 - Lines 105-123 `OPPageRecognizer`: rename to the new protocol shape, wrap:
   `OPURLParser.taskID(...)` results in `.op($0)` via `.map(TaskRef.op)`.
 
-## 6. SyncEngine — Sources/AmbitickCore/SyncEngine.swift
+## 6. SyncEngine — Sources/AndeyeTTCore/SyncEngine.swift
 
 - Line 26: `guard case .op(let taskID) = session.task else { continue }` →
   ```swift
@@ -181,7 +181,7 @@ Widen task ids to String and add ownership. Full list of signature edits:
   no other change; the sub-60s short-circuit (lines 27-33) and the orphan
   rollback (lines 44-53) are ref-agnostic already.
 
-## 7. Attribution + recognizer plumbing — Sources/AmbitickCore/Attributor.swift
+## 7. Attribution + recognizer plumbing — Sources/AndeyeTTCore/Attributor.swift
 
 - Line 77: rename `lastOpenedOPTask` → `lastOpenedBackendTask` (private; also
   used at 121, 129, 167-168).
@@ -208,7 +208,7 @@ EmailMatch.swift:71-78, LearningStore targets, MinuteResolver, SessionTracker,
 TaskRanker) stores `TaskRef`/`Target` opaquely — no edits; they work for
 `.remote` the moment it exists.
 
-## 8. App layer — Sources/AmbitickMac/AppController.swift (+ UI)
+## 8. App layer — Sources/AndeyeTTMac/AppController.swift (+ UI)
 
 - **433-434** (task-note routing in `wireTracker`):
   `if let taskNote, case .op(let wpID) = s.task { ... postTaskComment(wpID:...) }`
@@ -234,7 +234,7 @@ TaskRanker) stores `TaskRef`/`Target` opaquely — no edits; they work for
 - **1849-1861** `refreshTasks` recency carry-over: keyed by `ref` — no edit
   needed; works when `fetchTasks()` starts returning `.remote` refs.
 
-UI (Sources/AmbitickUI):
+UI (Sources/AndeyeTTUI):
 
 - **SettingsView.swift:383-385** `openInOP(_ wp: Int)` calls
   `controller.taskWebURL(id: wp)` → `taskWebURL(id: String(wp))`. (This is the
@@ -245,12 +245,12 @@ UI (Sources/AmbitickUI):
   sentinels resolved before save; a `.remote("")` variant would be worse. Add
   a `// placeholder sentinel; never journalled` comment if absent.
 
-Integration harness Sources/AmbitickIntegration/main.swift:113-131 exercises a
+Integration harness Sources/AndeyeTTIntegration/main.swift:113-131 exercises a
 real OP instance — `.op` stays correct there; it must still compile after the
 seam change (its stub task list construction doesn't touch the changed
 signatures, but `swift build` will confirm).
 
-## 9. Check list — Sources/AmbitickCoreChecks
+## 9. Check list — Sources/AndeyeTTCoreChecks
 
 Add to existing suites (registration table at main.swift:47-77); new checks,
 mechanical to write:
@@ -293,10 +293,10 @@ AttributorChecks:
     (`noteDwell` then a non-backend surface) primes to that ref.
 
 SettingsChecks:
-13. `AmbitickSettings.activityOverrides` and `taskColours` keyed by a `.remote`
+13. `AndeyeSettings.activityOverrides` and `taskColours` keyed by a `.remote`
     ref round-trip through JSONFileStore encode/decode.
 
-## 10. AI assist — Sources/AmbitickCore/AIAssist.swift
+## 10. AI assist — Sources/AndeyeTTCore/AIAssist.swift
 
 Today the prompt lists only `.op` tasks (lines 29-33) and the reply grammar is
 int-or-"do-not-track" (lines 41-45, 113-128, 159).
@@ -378,7 +378,7 @@ data are fine and expected to remain).
 8. §11 TODO.md entry (DuplicateReconcile), §12 doc lines, CHANGELOG entry —
    same commit as the final code phase per the TODO/CHANGELOG convention.
 
-Verification each phase: `swift build && swift run AmbitickCoreChecks`
+Verification each phase: `swift build && swift run AndeyeTTChecks`
 (Command Line Tools only — no XCTest; the checks harness IS the test suite).
 Pro repo (`pro/`, XeroClient.swift already present, no TaskBackend conformer
 yet) builds against the widened seam afterwards; the XeroBackend conformer

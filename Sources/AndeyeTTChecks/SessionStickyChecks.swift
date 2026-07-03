@@ -4,7 +4,7 @@ import AndeyeTTCore
 func sessionStickyChecks(_ c: Checks) {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
     let host = "op.example.com"
-    let tasks = [WorkTask(ref: .op(1), subject: "Ambitick build", status: "Now"),
+    let tasks = [WorkTask(ref: .op(1), subject: "andeyeTT build", status: "Now"),
                  WorkTask(ref: .op(2), subject: "Investment review", status: "Next")]
 
     /// The email Martin is composing, at different moments: the draft's window

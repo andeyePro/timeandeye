@@ -87,7 +87,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("RevisionStore[SQLite]", { c in
         revisionStoreConformanceChecks(c, name: "SQLite") {
             let path = FileManager.default.temporaryDirectory
-                .appendingPathComponent("ambitick-revs-\(UUID().uuidString).sqlite").path
+                .appendingPathComponent("andeyett-revs-\(UUID().uuidString).sqlite").path
             let store = try! SQLiteJournalStore(path: path)
             store.clock = HLCClock(deviceID: "mac")
             return store

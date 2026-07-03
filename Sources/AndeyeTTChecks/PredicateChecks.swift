@@ -3,24 +3,24 @@ import AndeyeTTCore
 
 func predicateChecks(_ c: Checks) {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
-    let sig = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick — vim",
-                             tabURL: "https://github.com/aqueum/ambitick", timestamp: now)
+    let sig = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT — vim",
+                             tabURL: "https://github.com/andeyePro/andeyeTT", timestamp: now)
 
     c.check("operators: equals/contains/startsWith/regex") {
         try expect(PinOp.equals.test("Ghostty", "ghostty"), "equals is case-insensitive")
-        try expect(PinOp.contains.test("Ambitick — vim", "ambitick"))
-        try expect(PinOp.startsWith.test("Ambitick — vim", "Ambitick"))
-        try expect(PinOp.startsWith.test("Ambitick — vim", "ambitick"), "startsWith is case-insensitive, like equals/contains")
+        try expect(PinOp.contains.test("andeyeTT — vim", "Andeyett"))
+        try expect(PinOp.startsWith.test("andeyeTT — vim", "andeyeTT"))
+        try expect(PinOp.startsWith.test("andeyeTT — vim", "ANDEYETT"), "startsWith is case-insensitive, like equals/contains")
         try expect(PinOp.startsWith.test("anything", ""), "empty prefix matches all (was hasPrefix)")
-        try expect(!PinOp.startsWith.test("Ambitick — vim", "vim"))
-        try expect(PinOp.regex.test("ambitick", "amb.?t"))
+        try expect(!PinOp.startsWith.test("andeyeTT — vim", "vim"))
+        try expect(PinOp.regex.test("andeyett", "and.?y"))
         try expect(!PinOp.regex.test("foo", "(unterminated"), "bad regex never matches, never throws")
     }
 
     c.check("field extraction") {
         try expectEq(PinField.app.value(of: sig), "Ghostty")
-        try expectEq(PinField.title.value(of: sig), "Ambitick — vim")
-        try expectEq(PinField.url.value(of: sig), "https://github.com/aqueum/ambitick")
+        try expectEq(PinField.title.value(of: sig), "andeyeTT — vim")
+        try expectEq(PinField.url.value(of: sig), "https://github.com/andeyePro/andeyeTT")
         let bare = ActivitySignal(app: "x", timestamp: now)
         try expectEq(PinField.url.value(of: bare), "", "missing url is empty, not nil-crash")
     }
@@ -50,7 +50,7 @@ func predicateChecks(_ c: Checks) {
 
     c.check("Predicate + PinRule round-trip Codable") {
         let rule = PinRule.expression(.and([
-            .leaf(field: .title, op: .contains, value: "Ambitick"),
+            .leaf(field: .title, op: .contains, value: "andeyeTT"),
             .not(.leaf(field: .url, op: .regex, value: "gitlab|bitbucket")),
         ]))
         let data = try JSONEncoder().encode(rule)
@@ -79,6 +79,6 @@ func predicateChecks(_ c: Checks) {
         try expect(!Predicate.leaf(field: .sender, op: .contains, value: "anyone").evaluate(sig), "nil correspondents → no match")
         try expect(!Predicate.leaf(field: .subject, op: .contains, value: "anything").evaluate(sig), "nil subject → no match")
         try expectEq(PinField.sender.values(of: sig), [String](), "nil correspondents → empty value list")
-        try expect(Predicate.leaf(field: .any, op: .contains, value: "Ambitick").evaluate(sig), "any spans title even with no email fields")
+        try expect(Predicate.leaf(field: .any, op: .contains, value: "andeyeTT").evaluate(sig), "any spans title even with no email fields")
     }
 }

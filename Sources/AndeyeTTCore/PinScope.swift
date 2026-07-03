@@ -8,8 +8,8 @@ import Foundation
 /// site, a single page, a whole app, or one window of an app.
 ///
 /// Identity segments, broad→narrow, always start with the "root":
-///   url:  ["github.com", "aqueum", "ambitick", "issues", "42"]   (host + path)
-///   app:  ["Visual Studio Code", "ambitick", "Attributor.swift"] (app + title parts)
+///   url:  ["github.com", "andeyePro", "andeyeTT", "issues", "42"]   (host + path)
+///   app:  ["Visual Studio Code", "andeyeTT", "Attributor.swift"] (app + title parts)
 /// A pin stores the selected prefix; it matches any surface whose identity
 /// begins with that prefix.
 public struct PinScope: Hashable, Codable, Sendable {
@@ -36,7 +36,7 @@ public struct PinScope: Hashable, Codable, Sendable {
 
     /// The prefix length this pin editor should select by default — the
     /// "intelligent" blue selection the user then widens/narrows.
-    ///  • url: host + first path segment (e.g. github.com/aqueum) — the usual
+    ///  • url: host + first path segment (e.g. github.com/andeyePro) — the usual
     ///    "this section is this task" grain; host-only when there's no path.
     ///  • app: app + the first window-title segment when there is one (e.g. a
     ///    named Ghostty/terminal window or a doc title) — most users run several

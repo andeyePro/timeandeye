@@ -19,8 +19,8 @@ func opURLParserChecks(_ c: Checks) {
     }
 
     c.check("extracts id from PWA-style titles") {
-        try expectEq(OPURLParser.taskID(inTitle: "#223 Ambitick | OpenProject"), 223)
-        try expectEq(OPURLParser.taskID(inTitle: "Ambitick (#223) - IT | OpenProject"), 223)
+        try expectEq(OPURLParser.taskID(inTitle: "#223 andeyeTT | OpenProject"), 223)
+        try expectEq(OPURLParser.taskID(inTitle: "andeyeTT (#223) - IT | OpenProject"), 223)
         try expectNil(OPURLParser.taskID(inTitle: "My page | OpenProject"))
         try expectNil(OPURLParser.taskID(inTitle: "Fix bug #42 · GitHub"), "needs OpenProject in title")
     }
@@ -30,7 +30,7 @@ func opURLParserChecks(_ c: Checks) {
 
 func learningStoreChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
-    let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: t0)
+    let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: t0)
     let steam = ActivitySignal(app: "Steam", windowTitle: "Library", timestamp: t0)
     let taskA = Target.task(.op(1))
     let taskB = Target.task(.op(2))
@@ -115,9 +115,9 @@ func learningStoreChecks(_ c: Checks) {
 
     c.check("learnedValues returns positively-associated values, excludes hour") {
         var store = LearningStore()
-        store.learn(ghostty, target: taskA)   // app=ghostty, titleToken=ambitick, hourOfDay=N
+        store.learn(ghostty, target: taskA)   // app=ghostty, titleToken=andeyett, hourOfDay=N
         let vals = store.learnedValues(for: taskA)
-        try expect(vals.contains("ambitick"), "learned titleToken surfaced")
+        try expect(vals.contains("andeyett"), "learned titleToken surfaced")
         try expect(vals.contains("ghostty"), "learned app surfaced")
         try expect(!vals.contains(where: { Int($0) != nil }), "hourOfDay value not returned")
         try expect(store.learnedValues(for: taskB).isEmpty, "unrelated target has none")

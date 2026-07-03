@@ -9,13 +9,13 @@ func pinScopeChecks(_ c: Checks) {
     }
 
     c.check("url identity is host + path segments, query dropped") {
-        let id = PinScope.identity(of: urlSig("https://github.com/aqueum/ambitick/issues/42?tab=1"))
+        let id = PinScope.identity(of: urlSig("https://github.com/andeyePro/andeyeTT/issues/42?tab=1"))
         try expectEq(id?.kind, .url)
-        try expectEq(id?.segments ?? [], ["github.com", "aqueum", "ambitick", "issues", "42"])
+        try expectEq(id?.segments ?? [], ["github.com", "andeyePro", "andeyeTT", "issues", "42"])
     }
 
     c.check("url default selection is host + first path segment") {
-        let segs = ["github.com", "aqueum", "ambitick", "issues", "42"]
+        let segs = ["github.com", "andeyePro", "andeyeTT", "issues", "42"]
         try expectEq(PinScope.defaultPrefixCount(kind: .url, segments: segs), 2)
     }
 
@@ -27,10 +27,10 @@ func pinScopeChecks(_ c: Checks) {
 
     c.check("app identity is app name + title segments; default is app + window") {
         let sig = ActivitySignal(app: "Visual Studio Code",
-                                 windowTitle: "Attributor.swift — ambitick", timestamp: now)
+                                 windowTitle: "Attributor.swift — andeyeTT", timestamp: now)
         let id = PinScope.identity(of: sig)
         try expectEq(id?.kind, .app)
-        try expectEq(id?.segments ?? [], ["Visual Studio Code", "Attributor.swift", "ambitick"])
+        try expectEq(id?.segments ?? [], ["Visual Studio Code", "Attributor.swift", "andeyeTT"])
         // Default now grabs the window (most users run several windows of one
         // app on different tasks — e.g. named Ghostty windows). Widen with ←.
         try expectEq(PinScope.defaultPrefixCount(kind: .app, segments: id?.segments ?? []), 2)
@@ -43,9 +43,9 @@ func pinScopeChecks(_ c: Checks) {
     }
 
     c.check("a prefix pin matches any deeper identity, not a sibling") {
-        let pin = PinScope(kind: .url, prefix: ["github.com", "aqueum"])
-        try expect(pin.matches(urlSig("https://github.com/aqueum/ambitick/issues/42")))
-        try expect(pin.matches(urlSig("https://github.com/aqueum")))
+        let pin = PinScope(kind: .url, prefix: ["github.com", "andeyePro"])
+        try expect(pin.matches(urlSig("https://github.com/andeyePro/andeyeTT/issues/42")))
+        try expect(pin.matches(urlSig("https://github.com/andeyePro")))
         try expect(!pin.matches(urlSig("https://github.com/other/repo")))
         try expect(!pin.matches(urlSig("https://github.com")), "shorter than the prefix")
     }
@@ -75,13 +75,13 @@ func pinScopeChecks(_ c: Checks) {
     }
 
     c.check("a more-specific app pin still requires all its segments present") {
-        let pin = PinScope(kind: .app, prefix: ["Code", "Attributor.swift", "ambitick"])
+        let pin = PinScope(kind: .app, prefix: ["Code", "Attributor.swift", "andeyeTT"])
         func c2(_ t: String) -> ActivitySignal {
             ActivitySignal(app: "Code", windowTitle: t, timestamp: now)
         }
-        try expect(pin.matches(c2("Attributor.swift — ambitick")))
-        try expect(pin.matches(c2("ambitick — Attributor.swift — zsh")), "order-independent")
-        try expect(!pin.matches(c2("Attributor.swift — other")), "missing 'ambitick'")
+        try expect(pin.matches(c2("Attributor.swift — andeyeTT")))
+        try expect(pin.matches(c2("andeyeTT — Attributor.swift — zsh")), "order-independent")
+        try expect(!pin.matches(c2("Attributor.swift — other")), "missing 'andeyeTT'")
     }
 
     c.check("a url pin never matches a native app and vice-versa") {

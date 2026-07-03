@@ -1,4 +1,4 @@
-# Ambitick sync design — multi-master journal (CloudKit)
+# andeyeTT sync design — multi-master journal (CloudKit)
 
 Decided 2026-07-02 (Martin): go multi-master immediately, not Mac-owned +
 iOS-commands. An iOS-only user has no Mac to own the journal, so the journal's

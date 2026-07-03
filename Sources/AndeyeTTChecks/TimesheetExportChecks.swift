@@ -9,7 +9,7 @@ func timesheetExportChecks(_ c: Checks) {
 
     func names(_ ref: TaskRef) -> (task: String, project: String?) {
         switch ref {
-        case .op(1): return ("Ambitick build", "Ambitick")
+        case .op(1): return ("andeyeTT build", "andeyeTT")
         case .op(2): return ("Insurance, renewal \"B\"", "Admin")
         default: return ("Chess", nil)
         }
@@ -25,7 +25,7 @@ func timesheetExportChecks(_ c: Checks) {
         let csv = TimesheetExport.csv(sessions: sessions, names: names, calendar: cal)
         let lines = csv.split(separator: "\n").map(String.init)
         try expectEq(lines[0], "date,start,end,duration,project,task,comment")
-        try expectEq(lines[1], "2025-06-15,15:06,16:36,1:30,Ambitick,Ambitick build,",
+        try expectEq(lines[1], "2025-06-15,15:06,16:36,1:30,andeyeTT,andeyeTT build,",
                      "oldest first despite input order")
         try expectEq(lines[2],
                      "2025-06-15,16:13,16:43,0:30,Admin,\"Insurance, renewal \"\"B\"\"\",\"call, then email\"",
@@ -42,7 +42,7 @@ func timesheetExportChecks(_ c: Checks) {
         let md = TimesheetExport.markdown(sessions: sessions, names: names, calendar: cal)
         try expect(md.contains("## 2025-06-15"), "first day heading")
         try expect(md.contains("## 2025-06-16"), "second day heading")
-        try expect(md.contains("- 15:06–16:06 (1:00) — Ambitick / Ambitick build"))
+        try expect(md.contains("- 15:06–16:06 (1:00) — andeyeTT / andeyeTT build"))
         try expect(md.contains("- 16:06–17:06 (1:00) — Chess — evening game"),
                    "nil project renders without the project prefix")
         try expectEq(md.components(separatedBy: "Day total: 1:00").count, 3,

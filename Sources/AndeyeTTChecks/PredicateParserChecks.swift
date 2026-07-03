@@ -3,8 +3,8 @@ import AndeyeTTCore
 
 func predicateParserChecks(_ c: Checks) {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
-    let sig = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick — vim",
-                             tabURL: "https://github.com/aqueum/ambitick", timestamp: now)
+    let sig = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT — vim",
+                             tabURL: "https://github.com/andeyePro/andeyeTT", timestamp: now)
 
     func parsed(_ s: String) throws -> AndeyeTTCore.Predicate {
         switch PredicateParser.parse(s) {
@@ -18,8 +18,8 @@ func predicateParserChecks(_ c: Checks) {
                      .leaf(field: .app, op: .equals, value: "Ghostty"))
         try expectEq(try parsed("title contains \"vim\""),
                      .leaf(field: .title, op: .contains, value: "vim"))
-        try expectEq(try parsed("title starts with \"Ambitick\""),
-                     .leaf(field: .title, op: .startsWith, value: "Ambitick"))
+        try expectEq(try parsed("title starts with \"andeyeTT\""),
+                     .leaf(field: .title, op: .startsWith, value: "andeyeTT"))
         try expectEq(try parsed("url matches \"amb.*\""),
                      .leaf(field: .url, op: .regex, value: "amb.*"))
     }
@@ -42,8 +42,8 @@ func predicateParserChecks(_ c: Checks) {
     }
 
     c.check("bare text means contains-any-field") {
-        let p = try parsed("Ambitick")
-        try expectEq(p, PredicateParser.anyFieldContains("Ambitick"))
+        let p = try parsed("andeyeTT")
+        try expectEq(p, PredicateParser.anyFieldContains("andeyeTT"))
         try expect(p.evaluate(sig), "matches the window title")
         // A bare multi-word string is one substring, not an AND.
         try expectEq(try parsed("voting site"), PredicateParser.anyFieldContains("voting site"))
@@ -57,9 +57,9 @@ func predicateParserChecks(_ c: Checks) {
         try expectEq(try parsed("title doesn't match \"^Inv\""),
                      .not(.leaf(field: .title, op: .regex, value: "^Inv")))
         // The user's example must now parse.
-        let p = try parsed("title contains \"Ambitick\" and app is not \"Ghostty\"")
+        let p = try parsed("title contains \"andeyeTT\" and app is not \"Ghostty\"")
         try expectEq(p, .and([
-            .leaf(field: .title, op: .contains, value: "Ambitick"),
+            .leaf(field: .title, op: .contains, value: "andeyeTT"),
             .not(.leaf(field: .app, op: .equals, value: "Ghostty")),
         ]))
     }
@@ -82,7 +82,7 @@ func predicateParserChecks(_ c: Checks) {
     c.check("render round-trips back to an equal predicate") {
         let cases: [AndeyeTTCore.Predicate] = [
             .leaf(field: .app, op: .equals, value: "Ghostty"),
-            .and([.leaf(field: .title, op: .contains, value: "Ambitick"),
+            .and([.leaf(field: .title, op: .contains, value: "andeyeTT"),
                   .not(.leaf(field: .url, op: .regex, value: "gitlab|bitbucket"))]),
             .or([.leaf(field: .title, op: .startsWith, value: "Inv"),
                  .and([.leaf(field: .app, op: .equals, value: "Chrome"),

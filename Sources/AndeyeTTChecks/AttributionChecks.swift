@@ -6,14 +6,14 @@ import AndeyeTTCore
 func attributorChecks(_ c: Checks) {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
     let host = "op.example.com"
-    let tasks = [WorkTask(ref: .op(1), subject: "Ambitick build", status: "Now"),
+    let tasks = [WorkTask(ref: .op(1), subject: "andeyeTT build", status: "Now"),
                  WorkTask(ref: .op(2), subject: "Investment review", status: "Next")]
 
     func opPage(_ id: Int) -> ActivitySignal {
         ActivitySignal(app: "Chrome", windowTitle: "WP \(id)",
                        tabURL: "https://op.example.com/work_packages/\(id)", timestamp: now)
     }
-    let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: now)
+    let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: now)
 
     c.check("OP task page is certain (at the inferred ceiling)") {
         let a = Attributor(instanceHost: host)
@@ -141,8 +141,8 @@ func attributorChecks(_ c: Checks) {
 
     c.check("a site-section pin covers every page beneath it at 100%") {
         let a = Attributor(instanceHost: host)
-        a.upsert(componentPin(.url, ["github.com", "aqueum"], to: .op(2)))
-        let r = a.attribute(ghTab("aqueum/ambitick/issues/42"), tasks: tasks, now: now)
+        a.upsert(componentPin(.url, ["github.com", "andeyePro"], to: .op(2)))
+        let r = a.attribute(ghTab("andeyePro/andeyeTT/issues/42"), tasks: tasks, now: now)
         try expectEq(r.best?.target, .task(.op(2)), "section pin must cover the page")
         try expectClose(r.certainty, 1.0)
         let other = a.attribute(ghTab("someoneelse/repo"), tasks: tasks, now: now)
@@ -161,23 +161,23 @@ func attributorChecks(_ c: Checks) {
     c.check("the most specific (longest-prefix) pin wins") {
         let a = Attributor(instanceHost: host)
         a.upsert(componentPin(.url, ["github.com"], to: .op(1)))            // whole site
-        a.upsert(componentPin(.url, ["github.com", "aqueum"], to: .op(2)))  // a section
-        let r = a.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        a.upsert(componentPin(.url, ["github.com", "andeyePro"], to: .op(2)))  // a section
+        let r = a.attribute(ghTab("andeyePro/andeyeTT"), tasks: tasks, now: now)
         try expectEq(r.best?.target, .task(.op(2)), "section pin beats the site pin")
     }
 
     c.check("a boolean-expression pin matches across fields") {
         let a = Attributor(instanceHost: host)
-        // title contains "Ambitick" AND NOT url contains "github"
+        // title contains "andeyeTT" AND NOT url contains "github"
         let expr = Predicate.and([
-            .leaf(field: .title, op: .contains, value: "Ambitick"),
+            .leaf(field: .title, op: .contains, value: "andeyeTT"),
             .not(.leaf(field: .url, op: .contains, value: "github")),
         ])
         a.upsert(Pin(rule: .expression(expr), task: .op(2)))
-        let hit = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick — zsh", timestamp: now)
+        let hit = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT — zsh", timestamp: now)
         try expectEq(a.attribute(hit, tasks: tasks, now: now).best?.target, .task(.op(2)))
         // same title but a github url → excluded by the NOT
-        let miss = a.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        let miss = a.attribute(ghTab("andeyePro/andeyeTT"), tasks: tasks, now: now)
         try expect(miss.best?.target != .task(.op(2)) || miss.certainty < 1.0)
     }
 
@@ -210,8 +210,8 @@ func attributorChecks(_ c: Checks) {
         // A 3-segment component pin and a 1-leaf expression both match. prefix.count
         // (3) and leafCount (1) aren't commensurable, so the winner is the most
         // recently added, not the numerically-"bigger" one.
-        let sig = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick", timestamp: now)
-        let comp = Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty", "Ambitick"])),
+        let sig = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: now)
+        let comp = Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty", "andeyeTT"])),
                        task: .op(1))
         let expr = Pin(rule: .expression(.leaf(field: .app, op: .equals, value: "Ghostty")),
                        task: .op(2))
@@ -225,11 +225,11 @@ func attributorChecks(_ c: Checks) {
 
     c.check("a manual priority overrides specificity") {
         let a = Attributor(instanceHost: host)
-        a.upsert(Pin(rule: .components(PinScope(kind: .url, prefix: ["github.com", "aqueum"])),
+        a.upsert(Pin(rule: .components(PinScope(kind: .url, prefix: ["github.com", "andeyePro"])),
                      task: .op(2)))                                   // specificity 2
         a.upsert(Pin(rule: .components(PinScope(kind: .url, prefix: ["github.com"])),
                      task: .op(1), priority: 5))                      // looser, but prioritised
-        let r = a.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        let r = a.attribute(ghTab("andeyePro/andeyeTT"), tasks: tasks, now: now)
         try expectEq(r.best?.target, .task(.op(1)), "priority beats specificity")
     }
 
@@ -283,11 +283,11 @@ func attributorChecks(_ c: Checks) {
 
     c.check("pins survive a snapshot round-trip (relaunch persistence)") {
         let a = Attributor(instanceHost: host)
-        a.upsert(componentPin(.url, ["github.com", "aqueum"], to: .op(2)))
+        a.upsert(componentPin(.url, ["github.com", "andeyePro"], to: .op(2)))
         let snap = try JSONEncoder().encode(a.pins)
         let b = Attributor(instanceHost: host)
         b.pins = try JSONDecoder().decode([Pin].self, from: snap)
-        let r = b.attribute(ghTab("aqueum/ambitick"), tasks: tasks, now: now)
+        let r = b.attribute(ghTab("andeyePro/andeyeTT"), tasks: tasks, now: now)
         try expectEq(r.best?.target, .task(.op(2)))
         try expectClose(r.certainty, 1.0)
     }

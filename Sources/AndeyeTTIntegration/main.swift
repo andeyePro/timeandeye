@@ -108,7 +108,7 @@ func run() async throws {
     // 3. Replay a tracked stretch through the real pipeline.
     let host = baseURL.host ?? ""
     let attributor = Attributor(instanceHost: host)
-    let journalPath = NSTemporaryDirectory() + "ambitick-integration-\(UUID().uuidString).sqlite"
+    let journalPath = NSTemporaryDirectory() + "andeyett-integration-\(UUID().uuidString).sqlite"
     let journal = try SQLiteJournalStore(path: journalPath)
     let tasks = [WorkTask(ref: .op(wpID), subject: scratchSubject, status: "Now")]
     let tracker = SessionTracker(attributor: attributor, config: TrackerConfig()) { tasks }
