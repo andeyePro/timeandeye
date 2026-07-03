@@ -8,8 +8,8 @@ private package and never gate anything you find here.
 ## Build and test
 
 ```bash
-git clone https://github.com/andeyePro/andeye.git
-cd andeye
+git clone https://github.com/andeyePro/andeyeTT.git
+cd andeyeTT
 swift run AndeyeTTChecks   # the whole test suite — expect: TOTAL: N passed, 0 failed
 ./scripts/make-app.sh          # build + install andeye.app (macOS 14+, CLT only)
 ```

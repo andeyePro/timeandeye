@@ -23,8 +23,8 @@ Day-to-day usage: **[MANUAL.md](MANUAL.md)**. Spec:
 Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/andeyePro/andeye.git
-cd andeye
+git clone https://github.com/andeyePro/andeyeTT.git
+cd andeyeTT
 ./scripts/make-app.sh          # builds release binary, wraps it as andeye.app
 ```
 
