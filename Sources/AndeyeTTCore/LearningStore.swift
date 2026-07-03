@@ -3,6 +3,12 @@ import Foundation
 public struct Feature: Hashable, Codable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case app, titleToken, urlHost, urlPath, hourOfDay
+        /// Email counterparty address / its domain (2026-07-03). Sensor-observed
+        /// (the capture reads them off the user's own screen), so compliant with
+        /// the invariant below. Additive: existing learning.json rows decode
+        /// unchanged. Inert while capture is off (signals carry nil
+        /// correspondents); live the moment it returns.
+        case correspondent, correspondentDomain
     }
     public var kind: Kind
     public var value: String
@@ -48,6 +54,14 @@ public struct LearningStore: Codable, Equatable, Sendable {
                 out.append(Feature(.urlPath, host + "/" + first))
             }
         }
+        // WHO the mail is with — the strongest task signal an email surface
+        // carries, and the reason the why-panel used to show only title junk
+        // (2026-07-03 diagnosis: the learner had no correspondent feature at
+        // all). EmailContext already lowercases and strips self.
+        if let ctx = EmailContext.from(signal) {
+            out += ctx.correspondents.map { Feature(.correspondent, $0) }
+            out += ctx.correspondentDomains.map { Feature(.correspondentDomain, $0) }
+        }
         out.append(Feature(.hourOfDay, String(calendar.component(.hour, from: signal.timestamp))))
         return out
     }
@@ -64,6 +78,21 @@ public struct LearningStore: Codable, Equatable, Sendable {
     public mutating func correct(_ signal: ActivitySignal, from old: Target, to new: Target) {
         learn(signal, target: old, weight: -1)
         learn(signal, target: new, weight: 2)
+    }
+
+    /// Targeted un-learn (the Evidence Card's [✕ forget] for a ranked source):
+    /// ERASE this target's accumulated counts on exactly these features, however
+    /// large the mountain (a fixed negative weight can't dislodge months of
+    /// confirmations — the 2026-07-03 "University Teaching" diagnosis).
+    /// `totals` is deliberately untouched: we can't know how much of it arrived
+    /// through these features, and leaving it makes the smoothing term
+    /// (0.1/(total+1)) HARSHER for the erased features — exactly the suppression
+    /// wanted. Learning on other features/targets is unaffected.
+    public mutating func forget(target: Target, features: [Feature]) {
+        for f in features {
+            counts[f]?[target] = nil
+            if counts[f]?.isEmpty == true { counts[f] = nil }
+        }
     }
 
     /// Softmax-normalised scores (sum to 1) over `candidates` for this signal.
@@ -89,6 +118,20 @@ public struct LearningStore: Codable, Equatable, Sendable {
             sum += e
         }
         return expd.mapValues { $0 / sum }
+    }
+
+    /// The target the learned counts pull this signal toward hardest — the
+    /// largest positive count total on the signal's features, nil when nothing
+    /// positive is learned on them. Drives `Attributor.forgettable`'s
+    /// rankedAssociation case (what a [✕ suppress] would counter-teach).
+    public func dominantAssociation(for signal: ActivitySignal) -> Target? {
+        var sums: [Target: Double] = [:]
+        for f in Self.features(from: signal) {
+            for (target, count) in counts[f] ?? [:] where count > 0 {
+                sums[target, default: 0] += count
+            }
+        }
+        return sums.max { a, b in a.value < b.value }?.key
     }
 
     /// Fraction of a target's confirmed weight that fell in this hour

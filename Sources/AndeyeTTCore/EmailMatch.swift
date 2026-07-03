@@ -66,17 +66,63 @@ public struct EmailContext: Equatable, Sendable {
 /// One email→task rule, learned (from a correction) or pinned (explicit). `value`
 /// is empty for `emailSystem` ("any mail in the system").
 public struct EmailRule: Equatable, Codable, Sendable {
+    /// Where a rule came from — the Evidence Card's provenance line
+    /// ("learned 12 Jun from your correction").
+    public enum Origin: String, Codable, Sendable {
+        case correction   // learned silently by a teach path (confirm/assign)
+        case card         // Evidence Card "Remember"/"Always"
+        case ledger       // Rules Ledger "+ rule"
+        case migrated     // decoded from a pre-metadata emailrules.json
+    }
+
     public let level: EmailMatchLevel
     public let value: String
     public let target: TaskRef
     /// True for explicit user pins (which outrank a learned rule at the same level).
     public let pinned: Bool
+    /// Provenance metadata (2026-07-03). All four decode with defaults so an
+    /// emailrules.json written before they existed (stale 2026-06-30 rules are
+    /// known to be on disk) still loads: createdAt → .distantPast,
+    /// origin → .migrated, fireCount → 0, lastFired → nil.
+    public var createdAt: Date
+    public var origin: Origin
+    /// Bumped by the Attributor each time this rule WINS an attribution.
+    public var fireCount: Int
+    public var lastFired: Date?
 
-    public init(level: EmailMatchLevel, value: String, target: TaskRef, pinned: Bool = false) {
+    public init(level: EmailMatchLevel, value: String, target: TaskRef, pinned: Bool = false,
+                createdAt: Date = Date(), origin: Origin = .correction,
+                fireCount: Int = 0, lastFired: Date? = nil) {
         self.level = level
         self.value = value
         self.target = target
         self.pinned = pinned
+        self.createdAt = createdAt
+        self.origin = origin
+        self.fireCount = fireCount
+        self.lastFired = lastFired
+    }
+
+    /// Custom decode ONLY for the metadata defaults; encoding stays synthesized
+    /// (always writes the full metadata form).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        level = try c.decode(EmailMatchLevel.self, forKey: .level)
+        value = try c.decode(String.self, forKey: .value)
+        target = try c.decode(TaskRef.self, forKey: .target)
+        pinned = try c.decode(Bool.self, forKey: .pinned)
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? .distantPast
+        origin = try c.decodeIfPresent(Origin.self, forKey: .origin) ?? .migrated
+        fireCount = try c.decodeIfPresent(Int.self, forKey: .fireCount) ?? 0
+        lastFired = try c.decodeIfPresent(Date.self, forKey: .lastFired)
+    }
+
+    /// The identity of a rule for replace/forget purposes: what it matches and
+    /// where it points, NOT its metadata (a fireCount bump must not make a rule
+    /// "different" from the snapshot a card captured).
+    public func sameRule(as other: EmailRule) -> Bool {
+        level == other.level && target == other.target && pinned == other.pinned
+            && value.caseInsensitiveCompare(other.value) == .orderedSame
     }
 
     public func matches(_ context: EmailContext) -> Bool {

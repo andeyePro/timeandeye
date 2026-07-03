@@ -157,7 +157,19 @@ public struct Surface: Hashable, Codable, Sendable {
         if let raw = signal.tabURL, let url = URL(string: raw), let host = url.host {
             var path = url.path
             while path.hasSuffix("/") { path = String(path.dropLast()) }   // platform-stable
-            self.detail = host + path
+            var detail = host + path
+            // Webmail routes the MESSAGE identity through the URL fragment
+            // (mail.google.com/mail/u/0/#inbox/<threadid>), which host+path
+            // drops — collapsing ALL of Gmail to one surface, so one
+            // correction re-pointed every Gmail tab (2026-07-03 diagnosis,
+            // RC2). Lift the fragment into the identity ONLY on known-mail
+            // hosts: ordinary sites keep their exact pre-existing surface
+            // (and their persisted primed.json keys keep matching).
+            if EmailSystem.detect(urlHost: host) != .unknown,
+               let fragment = url.fragment, !fragment.isEmpty {
+                detail += "#" + fragment
+            }
+            self.detail = detail
         } else {
             self.detail = signal.windowTitle ?? ""
         }

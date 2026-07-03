@@ -26,6 +26,19 @@ public enum EmailSystem: String, CaseIterable, Sendable {
         return .unknown
     }
 
+    /// Human-readable name ("Gmail" not "gmail") — the Evidence Card / identity
+    /// chain's display form.
+    public var label: String {
+        switch self {
+        case .gmail: return "Gmail"
+        case .outlookWeb: return "Outlook"
+        case .proton: return "Proton Mail"
+        case .yahoo: return "Yahoo Mail"
+        case .fastmail: return "Fastmail"
+        case .unknown: return "Email"
+        }
+    }
+
     /// DOM selector for the open message's sender chip(s). nil = recipe not known
     /// yet (falls back to a probe / AI-derive).
     public var senderSelector: String? {

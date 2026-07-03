@@ -13,11 +13,11 @@ func modelsChecks(_ c: Checks) {
         try expect(!op.isLocalOnly)
     }
 
-    c.check("surface prefers URL over title") {
+    c.check("surface prefers URL over title (mail hosts keep their fragment)") {
         let withURL = ActivitySignal(app: "Chrome", windowTitle: "Inbox – Gmail",
                                      tabURL: "https://mail.google.com/mail/u/0/#inbox",
                                      timestamp: Date(timeIntervalSince1970: 0))
-        try expectEq(Surface(signal: withURL).detail, "mail.google.com/mail/u/0")
+        try expectEq(Surface(signal: withURL).detail, "mail.google.com/mail/u/0#inbox")
         let titled = ActivitySignal(app: "Ghostty", windowTitle: "Ambitick",
                                     timestamp: Date(timeIntervalSince1970: 0))
         try expectEq(Surface(signal: titled), Surface(app: "Ghostty", detail: "Ambitick"))

@@ -84,10 +84,17 @@ public struct AttributionExplanation: Equatable, Sendable {
     /// The signal features the learner keys on (e.g. "app=chrome",
     /// "title=insurance") — what you'd correct to change the outcome.
     public var features: [String]
+    /// The exact rule/pin that fired, when the source is .emailRule / .pin —
+    /// carried here (with its metadata) so the Evidence Card never re-derives
+    /// them and can never disagree with the decision.
+    public var matchedEmailRule: EmailRule?
+    public var matchedPin: Pin?
     public init(source: Source, chosen: Target?, chosenScore: Double,
-                lines: [Line], features: [String]) {
+                lines: [Line], features: [String],
+                matchedEmailRule: EmailRule? = nil, matchedPin: Pin? = nil) {
         self.source = source; self.chosen = chosen; self.chosenScore = chosenScore
         self.lines = lines; self.features = features
+        self.matchedEmailRule = matchedEmailRule; self.matchedPin = matchedPin
     }
 }
 
@@ -181,6 +188,7 @@ public final class Attributor {
         // is task Y". Still an inferred source, so it caps at 0.95, below a pin /
         // OP-URL.
         if let rule = emailRuleMatch(signal) {
+            recordFire(rule, now: now)
             var ranked = scored(signal, tasks: tasks, now: now)
             ranked.removeAll { $0.target == .task(rule.target) }
             let c = Candidate(target: .task(rule.target), score: Self.inferredCeiling)
@@ -268,10 +276,19 @@ public final class Attributor {
     }
 
     /// The learned email rule covering this signal, if any (nil for non-email
-    /// surfaces or when no rule matches).
+    /// surfaces or when no rule matches). Pure — explain()/forgettable() call it
+    /// too, so the provenance bump lives in `recordFire`, driven only by
+    /// `attribute()` (the real decision).
     public func emailRuleMatch(_ signal: ActivitySignal) -> EmailRule? {
         guard !emailRules.isEmpty, let ctx = EmailContext.from(signal) else { return nil }
         return EmailMatcher.match(ctx, rules: emailRules, order: emailMatchOrder)
+    }
+
+    /// Provenance: this rule just WON an attribution ("fired 8×" on the card).
+    private func recordFire(_ rule: EmailRule, now: Date) {
+        guard let i = emailRules.firstIndex(where: { $0.sameRule(as: rule) }) else { return }
+        emailRules[i].fireCount += 1
+        emailRules[i].lastFired = now
     }
 
     /// Shared webmail domains carry no task meaning (everyone is @gmail.com), so a
@@ -285,7 +302,7 @@ public final class Attributor {
     /// Conservatively learn an email rule from a correction: an org domain
     /// generalises to the whole company; a shared-webmail correspondent stays
     /// per-person. Replaces any existing rule with the same level+value.
-    public func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef) {
+    public func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef, now: Date = Date()) {
         guard let ctx = EmailContext.from(signal), let cp = ctx.correspondents.first else { return }
         let level: EmailMatchLevel
         let value: String
@@ -295,14 +312,15 @@ public final class Attributor {
             level = .correspondent; value = cp
         }
         emailRules.removeAll { $0.level == level && $0.value.caseInsensitiveCompare(value) == .orderedSame && !$0.pinned }
-        emailRules.append(EmailRule(level: level, value: value, target: task))
+        emailRules.append(EmailRule(level: level, value: value, target: task,
+                                    createdAt: now, origin: .correction))
     }
 
     /// Explicit user confirmation (popover click + return, or any direct pick).
     public func confirm(_ signal: ActivitySignal, task: TaskRef, now: Date = Date()) {
         recordSticky(signal, target: .task(task), now: now)
         learnSurface(signal, to: task, weight: 2)
-        learnEmailRule(signal, to: task)
+        learnEmailRule(signal, to: task, now: now)
     }
 
     /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
@@ -320,7 +338,7 @@ public final class Attributor {
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
             primedSurfaces[surface] = t
-            learnEmailRule(signal, to: t)
+            learnEmailRule(signal, to: t, now: now)
         } else {
             primedSurfaces[surface] = nil
         }
@@ -399,7 +417,7 @@ public final class Attributor {
         let feats = LearningStore.features(from: signal).map { "\($0.kind.rawValue)=\($0.value)" }
         if let pin = matchingPin(for: signal) {
             return .init(source: .pin, chosen: .task(pin.task), chosenScore: 1.0,
-                         lines: [], features: feats)
+                         lines: [], features: feats, matchedPin: pin)
         }
         if let sticky = stickyMatch(for: signal, now: now) {
             return .init(source: .sessionSticky, chosen: sticky.target,
@@ -419,7 +437,8 @@ public final class Attributor {
         }
         if let rule = emailRuleMatch(signal) {
             return .init(source: .emailRule, chosen: .task(rule.target), chosenScore: Self.inferredCeiling,
-                         lines: scoredComponents(signal, tasks: tasks, now: now), features: feats)
+                         lines: scoredComponents(signal, tasks: tasks, now: now), features: feats,
+                         matchedEmailRule: rule)
         }
         let lines = scoredComponents(signal, tasks: tasks, now: now)
         let surface = Surface(signal: signal)
@@ -439,6 +458,84 @@ public final class Attributor {
         guard let url = signal.tabURL,
               let ref = recognizer.taskRef(inURL: url) else { return nil }
         return .task(ref)
+    }
+
+    // MARK: - Un-learn (the Evidence Card's [✕ forget])
+
+    /// The one LEARNED thing that drove an attribution — the four stores the
+    /// 2026-07-03 diagnosis names. Pins and OP-URL recognition are absent by
+    /// design: they aren't learned (pins are lifted via the pin editor), and a
+    /// pinned EmailRule counts as a pin for this purpose.
+    public enum Unlearn: Equatable, Sendable {
+        case emailRule(EmailRule)
+        case primedSurface(Surface)
+        case sessionSticky(SessionSticky.Key)
+        /// Learned association weight. Weights can't be deleted, only
+        /// suppressed (the counts on the signal's features are erased) — the
+        /// UI says "suppress" there, honestly.
+        case rankedAssociation(Target)
+    }
+
+    /// What [✕ forget] would remove for this signal, or nil when nothing
+    /// learned fired (pin / OP-URL / pending prime / pure-prior ranking).
+    /// Mirrors `attribute()`'s ladder exactly, so the item returned is the one
+    /// that actually decided.
+    public func forgettable(for signal: ActivitySignal, now: Date) -> Unlearn? {
+        if matchingPin(for: signal) != nil { return nil }
+        if let sticky = stickyMatch(for: signal, now: now) { return .sessionSticky(sticky.key) }
+        if let url = signal.tabURL, recognizer.taskRef(inURL: url) != nil { return nil }
+        for text in [signal.windowTitle, signal.app].compactMap({ $0 })
+        where recognizer.taskRef(inTitle: text) != nil { return nil }
+        if let rule = emailRuleMatch(signal) { return rule.pinned ? nil : .emailRule(rule) }
+        let surface = Surface(signal: signal)
+        if let pending = pendingPrime, pending.surface == surface { return nil }  // transient
+        if primedSurfaces[surface] != nil { return .primedSurface(surface) }
+        // Ranked: forgettable only when learned weight is actually pulling on
+        // this signal — a pure-prior winner has nothing to un-learn. The
+        // dominant association (largest positive counts on the signal's
+        // features) is the thing the ranker is being dragged toward.
+        if let dominant = learning.dominantAssociation(for: signal) {
+            return .rankedAssociation(dominant)
+        }
+        return nil
+    }
+
+    /// Remove exactly what an Unlearn names. `signal` supplies the features a
+    /// rankedAssociation suppression erases. Persist + reevaluate afterwards
+    /// (the caller's job, as with every other mutation here).
+    public func forget(_ u: Unlearn, signal: ActivitySignal) {
+        switch u {
+        case .emailRule(let rule):
+            emailRules.removeAll { $0.sameRule(as: rule) }
+        case .primedSurface(let surface):
+            primedSurfaces[surface] = nil
+            if pendingPrime?.surface == surface { pendingPrime = nil }
+        case .sessionSticky(let key):
+            sessionStickies.removeAll { $0.key == key }
+        case .rankedAssociation(let target):
+            learning.forget(target: target, features: LearningStore.features(from: signal))
+        }
+    }
+
+    /// Preview WITHOUT mutating: `explain()` as if `u` were removed — the
+    /// card's live "would then fall back to …" line. State is snapshotted,
+    /// the removal applied, the explanation taken, and everything restored.
+    public func explainWithout(_ u: Unlearn, _ signal: ActivitySignal,
+                               tasks: [WorkTask], now: Date) -> AttributionExplanation {
+        let savedRules = emailRules
+        let savedPrimes = primedSurfaces
+        let savedStickies = sessionStickies
+        let savedLearning = learning
+        let savedPending = pendingPrime
+        defer {
+            emailRules = savedRules
+            primedSurfaces = savedPrimes
+            sessionStickies = savedStickies
+            learning = savedLearning
+            pendingPrime = savedPending
+        }
+        forget(u, signal: signal)
+        return explain(signal, tasks: tasks, now: now)
     }
 }
 
