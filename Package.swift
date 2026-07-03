@@ -2,41 +2,41 @@
 import PackageDescription
 
 let package = Package(
-    name: "Ambitick",
+    name: "andeyeTT",
     platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
-        .library(name: "AmbitickCore", targets: ["AmbitickCore"]),
+        .library(name: "AndeyeTTCore", targets: ["AndeyeTTCore"]),
         // The pro repo's executable wraps these two (plus its paid backends).
-        .library(name: "AmbitickMac", targets: ["AmbitickMac"]),
-        .library(name: "AmbitickUI", targets: ["AmbitickUI"]),
-        .library(name: "AmbitickStore", targets: ["AmbitickStore"]),
-        .library(name: "AmbitickPhone", targets: ["AmbitickPhone"]),
+        .library(name: "AndeyeTTMac", targets: ["AndeyeTTMac"]),
+        .library(name: "AndeyeTTUI", targets: ["AndeyeTTUI"]),
+        .library(name: "AndeyeTTStore", targets: ["AndeyeTTStore"]),
+        .library(name: "AndeyeTTPhone", targets: ["AndeyeTTPhone"]),
     ],
     targets: [
-        .target(name: "AmbitickCore"),
+        .target(name: "AndeyeTTCore"),
         // Platform-NEUTRAL persistence + sync transport: SQLite replica,
         // CloudKit pipe, key file store. macOS AND iOS build on this.
-        .target(name: "AmbitickStore", dependencies: ["AmbitickCore"]),
+        .target(name: "AndeyeTTStore", dependencies: ["AndeyeTTCore"]),
         // The iOS app's engine (manual tracking, pick list, export) —
         // UI-framework-free, so the CLT-only Mac loop compile-guards and
         // checks it; only the SwiftUI shell in ios/ needs Xcode.
-        .target(name: "AmbitickPhone", dependencies: ["AmbitickCore", "AmbitickStore"]),
+        .target(name: "AndeyeTTPhone", dependencies: ["AndeyeTTCore", "AndeyeTTStore"]),
         // macOS-only layer: sensors, app controller, menu-bar glue.
-        .target(name: "AmbitickMac", dependencies: ["AmbitickCore", "AmbitickStore"]),
+        .target(name: "AndeyeTTMac", dependencies: ["AndeyeTTCore", "AndeyeTTStore"]),
         // The whole SwiftUI layer as a LIBRARY, so app flavours are thin
         // wrappers: Community (below) and the private Pro executable both
-        // return AmbitickScenes.body(controller:).
-        .target(name: "AmbitickUI", dependencies: ["AmbitickCore", "AmbitickMac"]),
-        // The Community menu-bar app (wrapped into Ambitick.app by scripts/make-app.sh).
-        .executableTarget(name: "AmbitickApp",
-                          dependencies: ["AmbitickCore", "AmbitickMac", "AmbitickUI"]),
+        // return AndeyeScenes.body(controller:).
+        .target(name: "AndeyeTTUI", dependencies: ["AndeyeTTCore", "AndeyeTTMac"]),
+        // The Community menu-bar app (wrapped into andeye.app by scripts/make-app.sh).
+        .executableTarget(name: "AndeyeApp",
+                          dependencies: ["AndeyeTTCore", "AndeyeTTMac", "AndeyeTTUI"]),
         // Check harness instead of a test target: the build Mac has Command
-        // Line Tools only (no XCTest / Swift Testing). Run: swift run AmbitickCoreChecks
-        .executableTarget(name: "AmbitickCoreChecks",
-                          dependencies: ["AmbitickCore", "AmbitickMac", "AmbitickPhone"]),
+        // Line Tools only (no XCTest / Swift Testing). Run: swift run AndeyeTTChecks
+        .executableTarget(name: "AndeyeTTChecks",
+                          dependencies: ["AndeyeTTCore", "AndeyeTTMac", "AndeyeTTPhone"]),
         // Headless end-to-end against a REAL OpenProject as a test user:
-        // swift run AmbitickIntegration <base-url> <key-file>
-        .executableTarget(name: "AmbitickIntegration",
-                          dependencies: ["AmbitickCore", "AmbitickMac"]),
+        // swift run AndeyeTTIntegration <base-url> <key-file>
+        .executableTarget(name: "AndeyeTTIntegration",
+                          dependencies: ["AndeyeTTCore", "AndeyeTTMac"]),
     ]
 )

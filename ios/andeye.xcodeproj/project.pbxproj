@@ -1,0 +1,348 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0857891A2B8D3C7060257B53 /* AmbitickPhone in Frameworks */ = {isa = PBXBuildFile; productRef = 4C60635BDB66E5C354E2CC39 /* AmbitickPhone */; };
+		14F0CBF48DDE5FB9556B6ADF /* NowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEAF23557B6CB84A4225182 /* NowView.swift */; };
+		3215C06CFD87F7D6ED115E53 /* AndeyeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F4C0076152D11D05E6820A /* AndeyeApp.swift */; };
+		B3039E21525B2119C6E2BDAF /* AmbitickCore in Frameworks */ = {isa = PBXBuildFile; productRef = 758946EF47DB941B99C6A56B /* AmbitickCore */; };
+		FB0BB38B4F7130DFD48CD38A /* AmbitickStore in Frameworks */ = {isa = PBXBuildFile; productRef = 0AB43456CE66CBCCE57DAB89 /* AmbitickStore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		494C01E52FE8E11D665E3476 /* andeye.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = andeye.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C711B1CA40042310C8BD6E6 /* Ambitick */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Ambitick; path = ..; sourceTree = SOURCE_ROOT; };
+		B4F4C0076152D11D05E6820A /* AndeyeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AndeyeApp.swift; sourceTree = "<group>"; };
+		DDEAF23557B6CB84A4225182 /* NowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5E973AB136259EE9EFE23DEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B3039E21525B2119C6E2BDAF /* AmbitickCore in Frameworks */,
+				FB0BB38B4F7130DFD48CD38A /* AmbitickStore in Frameworks */,
+				0857891A2B8D3C7060257B53 /* AmbitickPhone in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2BBC832486529367E9C1AB7F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				494C01E52FE8E11D665E3476 /* andeye.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D3290669F25EF4AAFC736D11 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				7C711B1CA40042310C8BD6E6 /* Ambitick */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		DDE4EE693F833A21A71812EB /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				B4F4C0076152D11D05E6820A /* AndeyeApp.swift */,
+				DDEAF23557B6CB84A4225182 /* NowView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		F151E8158D21A8E087F2C9EA = {
+			isa = PBXGroup;
+			children = (
+				D3290669F25EF4AAFC736D11 /* Packages */,
+				DDE4EE693F833A21A71812EB /* Sources */,
+				2BBC832486529367E9C1AB7F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		95D753EC0D681B4E2A53C1FF /* andeye */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 375AFA977C58329C278CA8F1 /* Build configuration list for PBXNativeTarget "andeye" */;
+			buildPhases = (
+				E8FC83C0BA03830242B7E7FB /* Sources */,
+				5E973AB136259EE9EFE23DEE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = andeye;
+			packageProductDependencies = (
+				758946EF47DB941B99C6A56B /* AmbitickCore */,
+				0AB43456CE66CBCCE57DAB89 /* AmbitickStore */,
+				4C60635BDB66E5C354E2CC39 /* AmbitickPhone */,
+			);
+			productName = andeye;
+			productReference = 494C01E52FE8E11D665E3476 /* andeye.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		24E495AA787E866E1A97E6BE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					95D753EC0D681B4E2A53C1FF = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = AF8F54D8D003E8B4940A3438 /* Build configuration list for PBXProject "andeye" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F151E8158D21A8E087F2C9EA;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				83762A6B39E8D382003CEAAF /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2BBC832486529367E9C1AB7F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				95D753EC0D681B4E2A53C1FF /* andeye */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E8FC83C0BA03830242B7E7FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3215C06CFD87F7D6ED115E53 /* AndeyeApp.swift in Sources */,
+				14F0CBF48DDE5FB9556B6ADF /* NowView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		542BE0A6D9FAE7017A35FF81 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = andeye;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.andeye.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8A7B6B8F23D09A139EFE9F01 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C3BB49A592149188D30B1081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D30906AE3C6E1B160B962B3C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = andeye;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.andeye.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		375AFA977C58329C278CA8F1 /* Build configuration list for PBXNativeTarget "andeye" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D30906AE3C6E1B160B962B3C /* Debug */,
+				542BE0A6D9FAE7017A35FF81 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AF8F54D8D003E8B4940A3438 /* Build configuration list for PBXProject "andeye" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C3BB49A592149188D30B1081 /* Debug */,
+				8A7B6B8F23D09A139EFE9F01 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		83762A6B39E8D382003CEAAF /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0AB43456CE66CBCCE57DAB89 /* AmbitickStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AmbitickStore;
+		};
+		4C60635BDB66E5C354E2CC39 /* AmbitickPhone */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AmbitickPhone;
+		};
+		758946EF47DB941B99C6A56B /* AmbitickCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AmbitickCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 24E495AA787E866E1A97E6BE /* Project object */;
+}

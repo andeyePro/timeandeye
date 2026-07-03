@@ -1,6 +1,6 @@
 import SwiftUI
-import AmbitickCore
-import AmbitickPhone
+import AndeyeTTCore
+import AndeyeTTPhone
 
 /// The whole app on one screen (spec: two-tap tracking — open app, tap task).
 /// Current task pinned on top with its live clock and a small stop control

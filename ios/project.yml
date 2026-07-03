@@ -8,7 +8,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
 packages:
-  Ambitick:
+  andeyeTT:
     path: ..
 targets:
   andeye:
@@ -16,12 +16,12 @@ targets:
     platform: iOS
     sources: [Sources]
     dependencies:
-      - package: Ambitick
-        product: AmbitickCore
-      - package: Ambitick
-        product: AmbitickStore
-      - package: Ambitick
-        product: AmbitickPhone
+      - package: andeyeTT
+        product: AndeyeTTCore
+      - package: andeyeTT
+        product: AndeyeTTStore
+      - package: andeyeTT
+        product: AndeyeTTPhone
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

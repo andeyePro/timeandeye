@@ -24,8 +24,8 @@ if pgrep -xq andeye || pgrep -xq Ambitick; then
     fi
 fi
 
-swift build -c release --product AmbitickApp
-BIN="$(swift build -c release --show-bin-path)/AmbitickApp"
+swift build -c release --product AndeyeApp
+BIN="$(swift build -c release --show-bin-path)/AndeyeApp"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"

@@ -2,7 +2,7 @@
 
 How to take the current CLT-only SwiftPM build (`scripts/make-app.sh`, ad-hoc /
 self-signed) to a Developer ID signed, CloudKit-entitled, notarised
-`Ambitick.app` – **without converting the Mac app to an Xcode project**. The
+`andeye.app` – **without converting the Mac app to an Xcode project**. The
 short answer up front: the whole Mac pipeline stays `swift build` + `codesign`
 + `notarytool`; the only things that genuinely need Apple's GUI surfaces are
 one-time portal/console clicks, and the only place a real `.xcodeproj` is
@@ -119,7 +119,7 @@ Everything after this heading is scriptable.
 
 ## 2. The entitlements plist
 
-`scripts/Ambitick.entitlements` (checked in – nothing secret):
+`scripts/andeye.entitlements` (checked in – nothing secret):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -154,7 +154,7 @@ Everything after this heading is scriptable.
 ```
 
 Substitute the real TEAMID (a script can pull it out of the profile itself:
-`security cms -D -i Ambitick.provisionprofile | plutil -extract TeamIdentifier.0 raw -`).
+`security cms -D -i andeye.provisionprofile | plutil -extract TeamIdentifier.0 raw -`).
 
 Deliberately **not** included:
 
@@ -195,7 +195,7 @@ cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
 #    Single Mach-O, no nested frameworks yet, so one codesign call suffices;
 #    when Sparkle arrives, nested code signs first (see §6).
 codesign --force --options runtime --timestamp \
-    --entitlements scripts/Ambitick.entitlements \
+    --entitlements scripts/andeye.entitlements \
     --sign "$IDENTITY" "$APP"
 
 # 3. Verify locally before wasting a notarisation round-trip.
@@ -206,7 +206,7 @@ syspolicy_check distribution "$APP"          # macOS 14+ notarisation pre-flight
 
 Gotchas specific to this repo:
 
-- **TCC reset, once.** The whole point of the self-signed “Ambitick Dev”
+- **TCC reset, once.** The whole point of the self-signed “andeye Dev”
   identity was stable TCC grants. Developer ID changes the designated
   requirement again, so Accessibility + Automation grants reset **one final
   time** on the first Developer ID build – and then never again, on any
@@ -268,7 +268,7 @@ environment for release-signed builds**. Practical implications:
 - Day-to-day dev builds keep using the existing self-signed path –
   `CloudKitSyncTransport` stays inert there, exactly as its header comment
   says. Sync logic is already tested where it should be: Core's merge is
-  pure and covered by `AmbitickCoreChecks`; CloudKit is a thin pipe.
+  pure and covered by `AndeyeTTChecks`; CloudKit is a thin pipe.
 - To exercise the *pipe* itself, build the entitled flavour (§3) and test
   against Production under a **test iCloud account** (sign the Mac into a
   scratch Apple ID, or use a separate macOS user account signed into one).

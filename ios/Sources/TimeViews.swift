@@ -1,6 +1,6 @@
 import SwiftUI
-import AmbitickCore
-import AmbitickPhone
+import AndeyeTTCore
+import AndeyeTTPhone
 
 // The phone's Time pages: the Spent donut (project wedges, tap to expand a
 // task ring — the Mac SpentView's interaction reshaped for touch), the

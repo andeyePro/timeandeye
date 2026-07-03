@@ -2,6 +2,22 @@
 
 ## 2026-07-03
 
+- [x] **Full rename: the package is `andeyeTT` (317 checks green, iOS
+  simulator build succeeded).** Martin's call — the core carries the brand
+  for future adjacent apps. Targets/products: AmbitickCore→AndeyeTTCore,
+  Store→AndeyeTTStore, Mac→AndeyeTTMac, UI→AndeyeTTUI, Phone→AndeyeTTPhone,
+  App→AndeyeApp, CoreChecks→AndeyeTTChecks, Integration→AndeyeTTIntegration;
+  public types AmbitickScenes→AndeyeScenes, AmbitickSettings→AndeyeSettings,
+  version enum Ambitick→Andeye; CloudKit zone AmbitickJournal→AndeyeJournal
+  (never minted, so free). Brand refs in comments/UI strings swept to
+  andeye; the LEGACY data-folder migration strings keep "Ambitick" verbatim
+  (they name the old on-disk dir). install-ambitick.command →
+  install-andeye.command (still quits pre-rename installs). ios/project.yml
+  package andeyeTT. Announced to the PRO vibe first (its product references
+  need the new names on next sync); the Mac folder ../Ambitick and build
+  user stay until Martin renames the folder. Clone URL in docs now
+  andeyePro/andeye (Martin transfers/renames the GitHub repo).
+
 - [x] **andeye logo in the menu bar — draw-on, certainty tint, minute wink
   (317 checks green).** The coloured dot is now the brand mark: an ampersand
   drawn as one continuous stroke whose tail closes into an eye (andeye =
