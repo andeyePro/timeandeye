@@ -10,7 +10,10 @@ import AndeyeTTCore
 ///
 /// This is a PROBE, not the feature: it crawls the whole (bounded) tree, which is
 /// exactly what the shipped version must NOT do on the hot path. It runs only on
-/// an explicit button press.
+/// an explicit button press. The shipped feature is `EmailCaptureEngine`
+/// (async, deadline-bounded, one-in-flight) — `buildReport()` below reuses its
+/// safe `osascript` channel so the diagnostics button no longer risks the
+/// 2026-06-30 main-thread freeze either.
 public enum EmailSignalProbe {
     public struct Result {
         public let app: String
@@ -75,89 +78,54 @@ public enum EmailSignalProbe {
                       contexts: Array(s.contexts.prefix(60)))
     }
 
-    /// AppleScript app name for a Chromium-family bundle id (the JS probe channel).
-    private static func chromeAppName(_ bundleID: String) -> String? {
-        switch bundleID {
-        case "com.google.Chrome": return "Google Chrome"
-        case "com.operasoftware.Opera": return "Opera"
-        case "com.brave.Browser": return "Brave Browser"
-        default: return nil
+    /// Full diagnostics report: the AX-tree crawl plus the real recipe channel
+    /// (system detect + sender/recipient DOM read), the latter now run through
+    /// `EmailCaptureEngine`'s deadline-bounded `osascript` subprocess instead
+    /// of the main-thread-bound `NSAppleScript` this probe used until
+    /// 2026-07-03 — the diagnostics button shares the same safe engine as
+    /// live capture. Callers on the main thread must still hop to a
+    /// background queue first (this blocks up to the engine's deadline).
+    public static func buildReport() -> String {
+        guard AXIsProcessTrusted() else {
+            return "Accessibility permission not granted — System Settings ▸ Privacy ▸ Accessibility."
         }
-    }
-
-    public struct Parties {
-        public let system: EmailSystem
-        public let senders: [EmailSignal.Party]
-        public let recipients: [EmailSignal.Party]
-        public let error: String?
-    }
-
-    /// The robust browser channel: detect the email system from the active tab,
-    /// run its sender/recipient DOM recipe via Apple Events, and return the typed
-    /// parties. Needs Chrome ▸ View ▸ Developer ▸ "Allow JavaScript from Apple
-    /// Events" (off by default).
-    public static func frontBrowserParties() -> Parties? {
-        guard let app = targetBrowser(),
-              let bid = app.bundleIdentifier, let appName = chromeAppName(bid) else {
-            return nil
+        guard let r = probeFrontBrowser() else {
+            return "No running browser found (Chrome / Opera / Brave / Safari)."
         }
-        guard let urlStr = activeTabURL(appName: appName),
-              let host = URL(string: urlStr)?.host else {
-            return Parties(system: .unknown, senders: [], recipients: [],
-                           error: "Couldn't read the active tab URL.")
+        var out = "Browser: \(r.app)\nNodes scanned: \(r.nodesScanned)\(r.truncated ? " (capped)" : "")\n"
+        if r.nodesScanned < 200 {
+            out += "(Looks like only the window chrome — Chrome's page accessibility " +
+                   "tree may still be building. Click Probe again in a second.)\n"
         }
-        let system = EmailSystem.detect(urlHost: host)
-        guard let sSel = system.senderSelector, let rSel = system.recipientSelector else {
-            return Parties(system: system, senders: [], recipients: [],
-                           error: "No recipe for this system yet (host: \(host)).")
+        out += "\nEmail addresses found (\(r.candidates.count)):\n"
+        out += r.candidates.isEmpty ? "  (none)\n"
+            : r.candidates.map { "  • \($0)" }.joined(separator: "\n") + "\n"
+        out += "\nNodes containing '@' (role | text):\n"
+        out += r.contexts.isEmpty ? "  (none)"
+            : r.contexts.map { "  \($0)" }.joined(separator: "\n")
+        out += "\n\n— Recipe channel (page JavaScript) —\n"
+        if let bid = targetBrowser()?.bundleIdentifier,
+           let appName = EmailCaptureEngine.chromeAppName(bundleID: bid) {
+            if let p = EmailCaptureEngine.captureNow(appName: appName) {
+                out += "System: \(p.system.rawValue)\n"
+                if let e = p.error { out += "Error: \(e)\n" }
+                func fmt(_ ps: [EmailSignal.Party]) -> String {
+                    ps.isEmpty ? "(none)" : ps.map { "\($0.name) <\($0.email)>" }.joined(separator: ", ")
+                }
+                out += "Sender: \(fmt(p.senders))\n"
+                out += "Recipients: \(fmt(p.recipients))\n"
+                let others = EmailSignal.counterparties(senders: p.senders, recipients: p.recipients)
+                out += "Counterparties (you removed): \(fmt(others))\n"
+                let domains = Set(others.compactMap { EmailSignal.domain(of: $0.email) })
+                    .sorted().joined(separator: ", ")
+                out += "Counterparty domains: \(domains.isEmpty ? "(none)" : domains)"
+            } else {
+                out += "Capture failed unexpectedly."
+            }
+        } else {
+            out += "Front app is not a supported browser."
         }
-        let (raw, jsError) = runJS(appName: appName, js: partiesJS(sender: sSel, recipient: rSel))
-        if let jsError {
-            return Parties(system: system, senders: [], recipients: [],
-                           error: jsError + "  (If JS is off: Chrome ▸ View ▸ Developer ▸ Allow JavaScript from Apple Events.)")
-        }
-        let parts = (raw ?? "").components(separatedBy: "\u{1e}")
-        return Parties(system: system,
-                       senders: parseParties(parts.first ?? ""),
-                       recipients: parseParties(parts.count > 1 ? parts[1] : ""),
-                       error: nil)
-    }
-
-    /// Read-only JS that dumps `name<TAB>email` lines for the sender selector and
-    /// the recipient selector, separated by a record-separator char. Single quotes
-    /// + fromCharCode → nothing to escape through AppleScript.
-    private static func partiesJS(sender: String, recipient: String) -> String {
-        "(function(){var T=String.fromCharCode(9),L=String.fromCharCode(10);"
-        + "function g(sel){var a=[];document.querySelectorAll(sel).forEach(function(e){"
-        + "var em=e.getAttribute('email')||e.getAttribute('data-hovercard-id')||'';"
-        + "var nm=(e.getAttribute('name')||e.textContent||'').trim();"
-        + "if(em)a.push(nm+T+em);});return a.join(L);}"
-        + "return g('\(sender)')+String.fromCharCode(30)+g('\(recipient)');})()"
-    }
-
-    private static func parseParties(_ block: String) -> [EmailSignal.Party] {
-        block.split(separator: "\n").compactMap { line in
-            let f = String(line).components(separatedBy: "\t")
-            guard f.count == 2, !f[1].isEmpty else { return nil }
-            return EmailSignal.Party(name: f[0], email: f[1])
-        }
-    }
-
-    private static func activeTabURL(appName: String) -> String? {
-        let source = "tell application \"\(appName)\" to get URL of active tab of front window"
-        var error: NSDictionary?
-        let r = NSAppleScript(source: source)?.executeAndReturnError(&error)
-        return error == nil ? r?.stringValue : nil
-    }
-
-    private static func runJS(appName: String, js: String) -> (value: String?, error: String?) {
-        let source = "tell application \"\(appName)\" to execute active tab of front window javascript \"\(js)\""
-        var error: NSDictionary?
-        let r = NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error = error {
-            return (nil, (error["NSAppleScriptErrorMessage"] as? String) ?? "\(error)")
-        }
-        return (r?.stringValue ?? "", nil)
+        return out
     }
 
     private static func targetBrowser() -> NSRunningApplication? {

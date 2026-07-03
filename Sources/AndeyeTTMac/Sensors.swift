@@ -16,6 +16,7 @@ public final class SensorHub {
     private var lastSurfaceKey: String?
     private var micMonitor: MicMonitor?
     private var screenLocked = false
+    private let emailCapture = EmailCaptureEngine()
 
     public init() {}
 
@@ -104,13 +105,39 @@ public final class SensorHub {
         let key = "\(appName)|\(title ?? "")|\(url ?? "")"
         if key != lastSurfaceKey {
             lastSurfaceKey = key
-            // NOTE: email correspondents are NOT fetched here — a synchronous
-            // Chrome AppleScript/JS call on this poll thread stalled the sampler
-            // and froze tracking (2026-06-30). The capture must be async/off-main
-            // before it returns; the auto-learner engine stays but is inert until
-            // then. See TODO "Email auto-learner".
-            onEvent(.focus(ActivitySignal(app: appName, windowTitle: title,
-                                          tabURL: url, timestamp: now)))
+            let signal = ActivitySignal(app: appName, windowTitle: title, tabURL: url, timestamp: now)
+            // The plain signal goes out FIRST and unconditionally — tracking
+            // never waits on email capture. Correspondents/subject arrive
+            // later, if at all, as a separate .focusEnrichment event.
+            onEvent(.focus(signal))
+            captureEmailIfEligible(signal, bundleID: app.bundleIdentifier)
+        }
+    }
+
+    /// Kicks off async, deadline-bounded correspondent capture when the new
+    /// surface is a chrome-like browser on a known, recipe'd mail host —
+    /// NEVER inline: a synchronous AppleScript round-trip run right here on
+    /// the poll timer's thread is what froze tracking on 2026-06-30. The
+    /// engine itself rate-limits (one capture in flight); a probe that
+    /// outlives the user's next focus change is dropped by SessionTracker's
+    /// same-surface check on arrival, not here.
+    private func captureEmailIfEligible(_ signal: ActivitySignal, bundleID: String?) {
+        guard let appName = EmailCaptureEngine.captureTarget(bundleID: bundleID, tabURL: signal.tabURL)
+        else { return }
+        // The subject is a cheap, synchronous read of the title — no need to
+        // wait on the probe for it; only correspondents require the JS recipe.
+        let subject = EmailSignal.subject(fromTitle: signal.windowTitle)
+        emailCapture.capture(appName: appName) { [weak self] capture in
+            let correspondents = capture?.correspondents ?? []
+            guard !correspondents.isEmpty || (subject?.isEmpty == false) else { return }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let enriched = ActivitySignal(app: signal.app, windowTitle: signal.windowTitle,
+                                              tabURL: signal.tabURL, timestamp: signal.timestamp,
+                                              correspondents: correspondents.isEmpty ? nil : correspondents,
+                                              emailSubject: subject)
+                self.onEvent(.focusEnrichment(enriched))
+            }
         }
     }
 

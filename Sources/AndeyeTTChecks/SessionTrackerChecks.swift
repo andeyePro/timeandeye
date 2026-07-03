@@ -681,4 +681,72 @@ func sessionTrackerChecks(_ c: Checks) {
             throw CheckFailure(description: "a switch after away clears must follow normally, got \(tracker.state)")
         }
     }
+
+    // MARK: - Async email capture: retroactive enrichment (2026-07-03 fix)
+
+    c.check("focusEnrichment re-attributes the OPEN span when the surface is still current") {
+        let (tracker, attributor) = makeTracker()
+        // A learned domain rule that the bare (correspondent-less) signal
+        // can't match yet — exactly the state RC1 left every live signal in.
+        attributor.emailRules = [EmailRule(level: .correspondentDomain, value: "example.com",
+                                           target: .op(2))]
+        let bare = sig("Google Chrome", "Inbox - Gmail", at: 0,
+                       url: "https://mail.google.com/mail/u/0/#inbox/abc")
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(bare))
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "before enrichment: no rule can match, got \(tracker.state)")
+        }
+
+        var enriched = bare
+        enriched.correspondents = ["r.naismith@example.com"]
+        tracker.handle(.focusEnrichment(enriched))
+
+        guard case .tracking(.task(.op(2)), let certainty) = tracker.state else {
+            throw CheckFailure(description: "enrichment should let the domain rule fire, got \(tracker.state)")
+        }
+        try expectClose(certainty, Attributor.inferredCeiling)
+    }
+
+    c.check("focusEnrichment for a surface that's no longer open is dropped") {
+        let (tracker, attributor) = makeTracker()
+        attributor.emailRules = [EmailRule(level: .correspondentDomain, value: "example.com",
+                                           target: .op(2))]
+        let emailSurface = sig("Google Chrome", "Inbox - Gmail", at: 0,
+                               url: "https://mail.google.com/mail/u/0/#inbox/abc")
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(emailSurface))
+        tracker.handle(.focus(sig("Ghostty", "Notes", at: 5)))   // moved on before the probe returned
+
+        var stale = emailSurface
+        stale.correspondents = ["r.naismith@example.com"]
+        tracker.handle(.focusEnrichment(stale))
+
+        guard case .tracking(let target, _) = tracker.state else {
+            throw CheckFailure(description: "expected .tracking, got \(tracker.state)")
+        }
+        try expect(target != .task(.op(2)),
+                   "a stale enrichment for an abandoned surface must never re-tag whatever is open now")
+    }
+
+    c.check("focusEnrichment on a subject-only capture (no correspondents) still merges") {
+        let (tracker, attributor) = makeTracker()
+        attributor.emailRules = [EmailRule(level: .subject, value: "insurance renewals",
+                                           target: .op(2))]
+        let bare = sig("Google Chrome", "Re: Insurance Renewals 2026 - Gmail", at: 0,
+                       url: "https://mail.google.com/mail/u/0/#inbox/xyz")
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(bare))
+
+        var enriched = bare
+        enriched.emailSubject = "Re: Insurance Renewals 2026"
+        tracker.handle(.focusEnrichment(enriched))
+
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "a subject-only enrichment should let the subject rule fire, got \(tracker.state)")
+        }
+    }
 }

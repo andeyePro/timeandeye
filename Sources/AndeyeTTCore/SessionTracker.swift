@@ -219,6 +219,28 @@ public final class SessionTracker {
         state = .tracking(best.target, certainty: best.score)
     }
 
+    /// Apply a late-arriving correspondents/subject capture to the OPEN span
+    /// (the async capture's retroactive half — 2026-07-03 diagnosis fix
+    /// design). The probe that produced `signal` can return well after the
+    /// user has moved on, so this is dropped (no-op) unless the enrichment's
+    /// surface is STILL the one currently open; a stale enrichment must never
+    /// re-tag whatever the user is looking at now. On a live match, merges
+    /// the fields into `currentSignal` and re-derives attribution exactly as
+    /// `reevaluate()` does, so a matching EmailRule/pin can re-attribute the
+    /// span the moment the evidence arrives.
+    private func applyEnrichment(_ signal: ActivitySignal) {
+        guard let current = currentSignal,
+              Surface(signal: current) == Surface(signal: signal) else {
+            onDebug("dropped stale email enrichment for \(signal.app)")
+            return
+        }
+        var merged = current
+        merged.correspondents = signal.correspondents
+        merged.emailSubject = signal.emailSubject
+        currentSignal = merged
+        reevaluate()
+    }
+
     /// User picked a task (popover/prompt) for the surface currently in focus.
     /// This is the UI's confirm entry point: it teaches the attributor AND
     /// lifts the in-flight span to confirmed certainty.
@@ -260,6 +282,7 @@ public final class SessionTracker {
         }
         switch event {
         case .focus(let signal): handleFocus(signal)
+        case .focusEnrichment(let signal): applyEnrichment(signal)
         case .input(let date): handleInput(date)
         case .willSleep(let date): sleepingSince = date
         case .didWake(let date): handleWake(at: date)

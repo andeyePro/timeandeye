@@ -99,6 +99,12 @@ public struct ActivitySignal: Equatable, Codable, Sendable {
 /// Core tests emit them from scripts.
 public enum SensorEvent: Equatable, Sendable {
     case focus(ActivitySignal)
+    /// A late-arriving correspondents/subject capture for the CURRENT open
+    /// span (2026-07-03 diagnosis fix: capture must never block `poll()`, so
+    /// it always races the user's next focus change). The tracker applies it
+    /// retroactively to the open span if the surface is still the one it was
+    /// captured for, and drops it silently otherwise.
+    case focusEnrichment(ActivitySignal)
     case input(Date)                     // keyboard/mouse seen at this time
     case willSleep(Date)
     case didWake(Date)

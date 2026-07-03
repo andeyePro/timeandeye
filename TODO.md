@@ -136,6 +136,15 @@ and recorded rather than fixed blind:
   (host-as-signal groundwork exists — see the ambiguous-web-page policy
   note, 6907245). Multi-agent programme; start AFTER the andeyeTT folder
   rename/vibe reopen.
+  Progress: diagnosis written 2026-07-03 (a90fe90, RC1/RC2/RC3 root-caused).
+  (a) DONE 2026-07-03 — capture layer: `EmailCaptureEngine` (async,
+  deadline-bounded `osascript` subprocess, one in flight) + `SessionTracker.
+  applyEnrichment` (retroactive, same-surface-gated). Needs on-device soak
+  before trust (the 6-30 lesson: checks alone didn't catch the freeze).
+  (b)/(c)/(d) Core layer (ContextIdentity, EmailRule provenance, Attributor.
+  forget/explainWithout) landed WIP 2e6f784 — UNVERIFIED, suite not run;
+  Evidence Card UI (the context-rules-ux spec, 2026-07-03) not started.
+  (e) not started.
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —
   Martin chose AGPL-3.0 + CLA; LICENSE, CLA.md and the CONTRIBUTING licence
@@ -252,18 +261,24 @@ and recorded rather than fixed blind:
     for everyone without an app release (recipes are data, not code → low risk,
     validation guards). Monitoring for a "new/unknown client" is then free: it's
     the same detect step → gentle "want me to learn your mail here?" nudge.
-- [ ] Email auto-learner — Core engine + Mac capture SHIPPED 2026-06-30 (needs
-  on-device validation). Correcting an email's task learns an EmailRule (org
-  domain → company, shared webmail → person); matching mail auto-attributes via
-  the `.emailRule` source through the user's ladder. Settings UI to reorder the
-  ladder SHIPPED 2026-07-01 (chevrons in "Email → task matching"). Explicit pin
-  via `from`/`sender`/`subject` + `any` fields in the expression grammar SHIPPED
+- [ ] Email auto-learner — Core engine SHIPPED 2026-06-30; Mac capture SHIPPED
+  2026-06-30, REVERTED SAME DAY (5439a83 — synchronous `NSAppleScript` on the
+  poll thread froze tracking), RE-ENABLED 2026-07-03 (async/deadline-bounded/
+  one-in-flight via `EmailCaptureEngine`, retired `NSAppleScript` for an
+  `osascript` subprocess entirely — see the capture-layer entry below). Needs
+  on-device soak before trust (checks alone didn't catch the 6-30 freeze).
+  Correcting an email's task learns an EmailRule (org domain → company, shared
+  webmail → person); matching mail auto-attributes via the `.emailRule` source
+  through the user's ladder. Settings UI to reorder the ladder SHIPPED
+  2026-07-01 (chevrons in "Email → task matching"). Explicit pin via
+  `from`/`sender`/`subject` + `any` fields in the expression grammar SHIPPED
   2026-07-01 (PinField multi-valued; bare text now spans correspondents+subject).
   REMAINING for the full feature: more provider selectors
   (OWA/Proton/Yahoo/Fastmail) + native clients; validate-on-use / self-heal +
   recipe pack with background updates; multi-message-thread sender choice;
   derive own-domains from settings (beyond the "me" heuristic).
-- [ ] (b, 2026-06-29) Gmail sender extraction — CHANNEL + RECIPE FOUND.
+- [ ] (b, 2026-06-29) Gmail sender extraction — CHANNEL + RECIPE FOUND, and
+  threaded into a live signal 2026-07-03 (see the capture-layer entry below).
   Chrome's renderer AX tree stays off (AXManualAccessibility didn't wake it), so
   the channel is page JavaScript over Apple Events (needs Chrome ▸ View ▸
   Developer ▸ Allow JavaScript from Apple Events). Validated Gmail recipe:
@@ -272,9 +287,8 @@ and recorded rather than fixed blind:
   keeps in the DOM). Gmail names your own address "me", so counterparties fall out
   cleanly. Foundation shipped: `EmailSystem` (detect + per-system selectors),
   `EmailSignal.Party`/`counterparties`/`domain` (pure, tested),
-  `EmailSignalProbe.frontBrowserParties` (recipe-driven), surfaced in the
-  Diagnostics probe. REMAINING to make it a real signal: thread sender/
-  counterparty into the ActivitySignal + learner feature + pin `from` field; pick
+  `EmailCaptureEngine` (async, `osascript`-subprocess, recipe-driven; the
+  diagnostics probe shares it too). REMAINING to make it a real signal: pick
   which message's sender in a multi-message thread; derive own-domains from
   settings/accounts; validate-on-use + recipe store/pack; other providers'
   selectors (OWA/Proton/Yahoo/Fastmail) + native clients.
