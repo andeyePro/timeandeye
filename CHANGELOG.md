@@ -2,6 +2,22 @@
 
 ## 2026-07-03
 
+- [x] **andeye logo in the menu bar — draw-on, certainty tint, minute wink
+  (317 checks green).** The coloured dot is now the brand mark: an ampersand
+  drawn as one continuous stroke whose tail closes into an eye (andeye =
+  "&eye"), pure bezier geometry in `AmbitickCore.AndeyeLogo` (unit box,
+  platform-free, 12 checks: contiguity, arc-length reveal linear in t, lids
+  as the final draw phase, pupil under the lids, wink squash/clamps).
+  `AndeyeLogoImage` (AmbitickMac) strokes it into the ~18 pt status-item
+  image, tinted by the existing `MenuTitle.colour` certainty pipeline — the
+  colour still means what it meant. On launch the mark hand-draws itself
+  (t 0→1 over ~1.2 s, the end closing into the eye, pupil popping in last);
+  each time the displayed tracked minute ticks over the eye winks
+  (shut→half→open, ~360 ms). Both are fire-and-forget Task frame loops —
+  no continuous animation timer; the 1 Hz title refresh is untouched.
+  Visual result unverified until Martin rebuilds (geometry is check-proven,
+  plus contrast-rendered off-Mac).
+
 - [x] **iOS v1 feedback pass — Mac-popover feel + the Time pie/timeline
   (305 checks green).** Martin's on-device notes, all six: the "andeye"
   title is gone; share moved into a single hamburger menu with Settings;

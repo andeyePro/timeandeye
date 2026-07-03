@@ -14,7 +14,7 @@ public enum AmbitickScenes {
             PopoverView(controller: controller)
         } label: {
             HStack(spacing: 4) {
-                Image(nsImage: swatch(controller.menuColour))
+                Image(nsImage: controller.logoImage)
                 Text(controller.menuText)
             }
             .onAppear {
@@ -52,19 +52,6 @@ public enum AmbitickScenes {
             SettingsView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 460, height: 480)
-    }
-
-    /// Small filled circle carrying the certainty colour (non-template so the
-    /// menu bar shows it in colour).
-    static func swatch(_ colour: NSColor) -> NSImage {
-        let size = NSSize(width: 12, height: 12)
-        let image = NSImage(size: size, flipped: false) { rect in
-            colour.setFill()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
-            return true
-        }
-        image.isTemplate = false
-        return image
     }
 }
 

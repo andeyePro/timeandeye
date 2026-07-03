@@ -105,6 +105,9 @@ public final class AppController: ObservableObject {
     /// its headline — see refreshTitle.
     @Published public private(set) var elapsedText = "–"
     @Published public private(set) var menuColour = NSColor.systemGray
+    /// The menu-bar mark: the andeye ampersand-eye tinted with menuColour.
+    /// Starts blank; startUp plays the draw-on which ends at the full mark.
+    @Published public private(set) var logoImage = NSImage()
     @Published public private(set) var taskCache: [WorkTask] = []
     @Published public private(set) var pendingReview: [ReviewSegment] = []
     @Published public private(set) var activities: [TimeActivity] = []
@@ -250,6 +253,52 @@ public final class AppController: ObservableObject {
         configureSyncReplica()
         taskCache = localWorkTasks()   // locals exist before OP ever connects
         applyJournalRecency()          // recency survives the relaunch
+        renderLogo()
+    }
+
+    // MARK: - Menu-bar logo animation
+
+    /// Current pose of the mark; renderLogo composes these with menuColour.
+    private var logoT = 0.0
+    private var logoWink = 0.0
+    private var logoAnimation: Task<Void, Never>?
+    /// The whole minute last shown, so the wink fires exactly when the
+    /// tracked figure ticks over (nil when stopped / freshly started).
+    private var lastDisplayedMinute: Int?
+
+    private func renderLogo() {
+        logoImage = AndeyeLogoImage.image(t: logoT, wink: logoWink, colour: menuColour)
+    }
+
+    /// Hand-draws the ampersand over ~1.2 s, the tail closing into the eye at
+    /// the end. Fire-and-forget frame loop — no repeating timer survives it.
+    private func playDrawOn() {
+        logoAnimation?.cancel()
+        logoAnimation = Task { @MainActor [weak self] in
+            let steps = 16
+            for i in 0...steps {
+                guard let self, !Task.isCancelled else { return }
+                self.logoT = Double(i) / Double(steps)
+                self.renderLogo()
+                try? await Task.sleep(nanoseconds: 75_000_000)
+            }
+        }
+    }
+
+    /// A brief wink (shut → half → open over ~360 ms) each time the displayed
+    /// tracked time changes. Fire-and-forget like playDrawOn; a re-trigger
+    /// mid-wink restarts from shut, and the last frame always reopens the eye.
+    private func playWink() {
+        guard logoT >= 1 else { return }   // never interrupt the draw-on
+        logoAnimation?.cancel()
+        logoAnimation = Task { @MainActor [weak self] in
+            for w in [1.0, 0.45, 0.0] {
+                guard let self, !Task.isCancelled else { return }
+                self.logoWink = w
+                self.renderLogo()
+                try? await Task.sleep(nanoseconds: 120_000_000)
+            }
+        }
     }
 
     /// This device's stable sync identity + clock. The clock only attaches to
@@ -662,6 +711,7 @@ public final class AppController: ObservableObject {
         checkpointTimer = cp
         Task { await refreshTasks() }
         reloadReview()
+        playDrawOn()
     }
 
     /// Change-detection instead of interval gating: a 1 Hz timer gated by
@@ -678,6 +728,7 @@ public final class AppController: ObservableObject {
             newText = "–"
             newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
+            lastDisplayedMinute = nil
         case .tracking(let target, let certainty):
             let now = Date()
             let running = targetSince.map { now.timeIntervalSince($0) } ?? 0
@@ -706,6 +757,12 @@ public final class AppController: ObservableObject {
                 running: running, now: now)
             let body = MenuTitle.text(elapsed: elapsed, certainty: certainty,
                                       showPercent: settings.showPercent)
+            // Wink when the displayed tracked MINUTE ticks over — not on the
+            // 1 Hz seconds updates of the first minute, which would leave the
+            // eye permanently half-shut. nil→0 (fresh start) doesn't wink.
+            let minute = Int(elapsed) / 60
+            if let last = lastDisplayedMinute, minute != last { playWink() }
+            lastDisplayedMinute = minute
             // Elapsed WITHOUT the task name — the popover already shows the task
             // as its headline, so menuText (which carries the name for the menu
             // bar) would duplicate it there. MUST be change-gated like its
@@ -720,7 +777,10 @@ public final class AppController: ObservableObject {
                                          highHex: settings.colourHigh)
         }
         if force || newText != menuText { menuText = newText }
-        if force || !newColour.isEqual(menuColour) { menuColour = newColour }
+        if force || !newColour.isEqual(menuColour) {
+            menuColour = newColour
+            renderLogo()   // the mark carries the certainty tint
+        }
     }
 
     // MARK: - Crash-safe recording

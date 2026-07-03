@@ -57,6 +57,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("CheckpointRecovery", checkpointRecoveryChecks),
     ("SessionTracker", sessionTrackerChecks),
     ("TimelineMath", timelineMathChecks),
+    ("AndeyeLogo", andeyeLogoChecks),
     ("CommentRouting", commentRoutingChecks),
     ("FuzzyMatch", fuzzyMatchChecks),
     ("TimeAggregator", timeAggregatorChecks),
