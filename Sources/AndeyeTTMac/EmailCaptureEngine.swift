@@ -28,6 +28,12 @@ public final class EmailCaptureEngine {
     }
 
     private let queue = DispatchQueue(label: "com.andeye.emailCapture", qos: .utility)
+    /// Guards `inFlight` only — never runs capture work. The busy test can't
+    /// live inside a `queue.async` block: `queue` is serial, so blocks only
+    /// start when the previous one has finished, and an in-block guard would
+    /// never see `inFlight == true` — it would QUEUE a backlog of stale
+    /// probes instead of dropping them.
+    private let gate = DispatchQueue(label: "com.andeye.emailCapture.gate")
     private var inFlight = false
     private let deadline: TimeInterval
 
@@ -43,11 +49,16 @@ public final class EmailCaptureEngine {
     /// fires on this engine's background queue; callers must hop back to
     /// their own thread themselves (`SensorHub` hops to main).
     public func capture(appName: String, completion: @escaping (Capture?) -> Void) {
+        let claimed: Bool = gate.sync {
+            if inFlight { return false }
+            inFlight = true
+            return true
+        }
+        guard claimed else { completion(nil); return }
         queue.async { [weak self] in
-            guard let self, !self.inFlight else { completion(nil); return }
-            self.inFlight = true
+            guard let self else { completion(nil); return }
             let result = Self.mergedCapture(appName: appName, deadline: self.deadline)
-            self.inFlight = false
+            self.gate.sync { self.inFlight = false }
             completion(result)
         }
     }
@@ -129,14 +140,18 @@ public final class EmailCaptureEngine {
         process.arguments = ["-e", source]
         let outPipe = Pipe()
         process.standardOutput = outPipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice   // never buffers, can't fill
         guard (try? process.run()) != nil else { return nil }
         let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline, execute: watchdog)
+        // Drain stdout BEFORE waiting: a child that fills the ~64 KB pipe
+        // buffer blocks on write, so wait-then-read deadlocks until the
+        // watchdog kills it. Reading first consumes as the child writes and
+        // returns at EOF (exit or watchdog kill), so the wait is then instant.
+        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         watchdog.cancel()
         guard process.terminationStatus == 0 else { return nil }
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

@@ -749,4 +749,23 @@ func sessionTrackerChecks(_ c: Checks) {
             throw CheckFailure(description: "a subject-only enrichment should let the subject rule fire, got \(tracker.state)")
         }
     }
+
+    c.check("a partial second enrichment never erases what the first one learned") {
+        let (tracker, _) = makeTracker()
+        let bare = sig("Google Chrome", "Re: X - Gmail", at: 0,
+                       url: "https://mail.google.com/mail/u/0/#inbox/xyz")
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(bare))
+
+        var first = bare
+        first.correspondents = ["r.naismith@example.com"]
+        tracker.handle(.focusEnrichment(first))
+        var second = bare
+        second.emailSubject = "Re: X"   // subject-only: correspondents nil
+        tracker.handle(.focusEnrichment(second))
+
+        try expectEq(tracker.currentFocusSignal?.correspondents, ["r.naismith@example.com"],
+                     "subject-only follow-up clobbered the learned correspondents")
+        try expectEq(tracker.currentFocusSignal?.emailSubject, "Re: X")
+    }
 }

@@ -234,9 +234,12 @@ public final class SessionTracker {
             onDebug("dropped stale email enrichment for \(signal.app)")
             return
         }
+        // Non-nil fields only: a later, partial enrichment for the same
+        // surface (e.g. subject-only after a failed JS read) must not erase
+        // what an earlier capture already learned.
         var merged = current
-        merged.correspondents = signal.correspondents
-        merged.emailSubject = signal.emailSubject
+        if let correspondents = signal.correspondents { merged.correspondents = correspondents }
+        if let subject = signal.emailSubject { merged.emailSubject = subject }
         currentSignal = merged
         reevaluate()
     }
