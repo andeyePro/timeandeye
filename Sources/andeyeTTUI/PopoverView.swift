@@ -481,15 +481,28 @@ struct PopoverView: View {
         resetAIState()
         switch pin.rule {
         case .components(let scope):
-            // A PinScope pin reopens in the CLASSIC strip: pinCount below is
-            // an index into draft.segments (the URL strip), so the email
-            // ladder must not consume it — under a reordered ladder its
-            // first grain can be a correspondent, and re-committing would
-            // silently convert this .components pin into an .expression one.
-            pinIdentity = nil
             pinMode = .components
-            pinCount = min(scope.prefix.count, draft.segments.count)
             pinExpression = ""
+            // A ROOT host pin on an email surface maps cleanly onto the
+            // ladder's system/site grain, so reopen INTO the ladder with
+            // that grain selected — this is the "the whole site is pinned,
+            // narrow it to this correspondent" flow, and re-committing the
+            // selected system grain rebuilds the identical root PinScope
+            // (id reused), so the round-trip is exact even under a
+            // reordered ladder (we select the system segment's own index).
+            if let identity = pinIdentity, scope.kind == .url, scope.prefix.count == 1,
+               let sys = identity.segments.firstIndex(where: { $0.kind == .emailSystem }) {
+                pinCount = sys + 1
+            } else {
+                // Deeper path pins and app pins have no ladder equivalent —
+                // classic strip. pinCount is an index into draft.segments
+                // (the URL strip), so the ladder must not consume it: under
+                // a reordered ladder its first grain can be a correspondent,
+                // and re-committing would silently convert this .components
+                // pin into an .expression one.
+                pinIdentity = nil
+                pinCount = min(scope.prefix.count, draft.segments.count)
+            }
         case .expression(let predicate):
             // An email grain (correspondent/domain/subject) is an Expression
             // pin under the hood — reopening in Expression mode with the rule

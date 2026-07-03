@@ -2,6 +2,19 @@
 
 ## 2026-07-03
 
+- [x] **A pinned Gmail surface can now reach the grain ladder — reopen a
+  root site pin and it opens INTO the ladder, system grain selected.**
+  Martin: "Going into various emails does not show [the ladder]" — one broad
+  mail.google.com (or legacy) pin covers every email, so each one showed the
+  📌 chip; reopening a `.components` pin deliberately suppressed the ladder
+  (3d2d122's round-trip guard), so the ladder was unreachable exactly where
+  it's most wanted: "the whole site is pinned, narrow it to this
+  correspondent". Root URL pins on an email surface now reopen into the
+  ladder with the system/site grain selected by its OWN index (so a
+  reordered ladder can't misindex; re-committing untouched rebuilds the
+  identical root PinScope, id reused). Deep path pins and app pins still get
+  the classic strip — they have no ladder equivalent.
+
 - [x] **Module-level case rename: `AndeyeTT*`/`AndeyeApp` → `andeyeTT*`/`andeyeApp`.**
   Brings every SwiftPM target/product/directory in line with Martin's
   lowercase-module convention (module `andeyeTTCore`, matching the sibling
