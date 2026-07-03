@@ -7,6 +7,16 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @State private var apiKey = ""
     @State private var keySaved = false
+    @State private var buildCopied = false
+
+    /// One verbatim-copyable line for bug reports: marketing version + the
+    /// build-time stamp make-app.sh writes into CFBundleVersion.
+    static var buildDetails: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "andeye \(version) · build \(build)"
+    }
     @State private var newLocalName = ""
     @State private var newLocalProject = ""
     @State private var dupActions: [ReconcileAction] = []
@@ -297,9 +307,24 @@ struct SettingsView: View {
             }
 
             Section("About") {
-                Text("Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                // .textSelection alone is unreliable inside a grouped macOS
+                // Form (rows swallow the drag), so the copy button is the
+                // guaranteed verbatim path for bug reports.
+                HStack(spacing: 6) {
+                    Text(Self.buildDetails)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(Self.buildDetails, forType: .string)
+                        buildCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { buildCopied = false }
+                    } label: {
+                        Image(systemName: buildCopied ? "checkmark" : "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy the build details")
+                }
             }
         }
         .formStyle(.grouped)
