@@ -898,6 +898,19 @@ public final class AppController: ObservableObject {
                 PinScope.defaultPrefixCount(kind: id.kind, segments: id.segments))
     }
 
+    /// The email-flavoured identity chain for the current focus surface, when
+    /// it carries email evidence (a detected mail host, or captured
+    /// correspondents/subject) — the pin editor's grain ladder source
+    /// (pin-editor slice of the 2026-07-03 context-rules spec, §5.1/Option B).
+    /// nil for a plain surface, where the classic Components strip (fed by
+    /// `pinDraft()`) is unaffected.
+    public func pinEmailIdentity() -> ContextIdentity? {
+        guard let signal = tracker.currentFocusSignal else { return nil }
+        let identity = attributor.identity(of: signal)
+        guard identity.segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
+        return identity
+    }
+
     /// Commit a component-prefix pin: the chosen prefix is ALWAYS `ref` at
     /// 100 %. When `replacingID` is given (editing an existing pin) the same id
     /// is reused, so a changed scope updates in place instead of duplicating.

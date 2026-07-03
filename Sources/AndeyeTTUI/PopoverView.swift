@@ -19,6 +19,11 @@ struct PopoverView: View {
     @State private var pinKind: PinScope.Kind = .url
     @State private var pinSegments: [String] = []
     @State private var pinCount = 1
+    // Set when the pinned surface carries email evidence (2026-07-03
+    // context-rules spec, pin-editor slice): drives the email grain ladder
+    // in Components mode instead of the bare url/app strip. nil = plain
+    // surface, `componentsEditor` is unchanged.
+    @State private var pinIdentity: ContextIdentity?
     // The id of the pin being edited (re-opened from the badge), so committing
     // updates it in place instead of duplicating. nil = creating a new pin.
     @State private var pinEditingID: UUID?
@@ -199,7 +204,12 @@ struct PopoverView: View {
     private var pinEditor: some View {
         VStack(alignment: .leading, spacing: 4) {
             switch pinMode {
-            case .components: componentsEditor
+            case .components:
+                if let identity = pinIdentity {
+                    emailComponentsEditor(identity)
+                } else {
+                    componentsEditor
+                }
             case .expression: expressionEditor
             case .ai: aiEditor
             }
@@ -275,6 +285,52 @@ struct PopoverView: View {
         .focused($pinFocused)
         .onKeyPress(.leftArrow) { pinCount = max(1, pinCount - 1); return .handled }
         .onKeyPress(.rightArrow) { pinCount = min(pinSegments.count, pinCount + 1); return .handled }
+        .onKeyPress(.return) { commitPinning(); return .handled }
+        .onKeyPress(.escape) { cancelPinning(); return .handled }
+        .onAppear { pinFocused = true }
+    }
+
+    /// The email flavour of the Components strip (pin-editor slice of the
+    /// 2026-07-03 context-rules spec, Option B): same interaction as
+    /// `componentsEditor` — click a segment, ← wider, → narrower, ↵ commits —
+    /// fed by the email/correspondent/subject ladder instead of the bare
+    /// url/app segments. Clicking a segment SETS that grain (not a cumulative
+    /// prefix like the plain strip); earlier segments stay lit purely to show
+    /// the broader context the grain sits within. Ghost ("not captured")
+    /// segments render greyed and are never selectable — the spec's "rows are
+    /// never hidden, their absence IS the coverage signal" (§5.5).
+    private func emailComponentsEditor(_ identity: ContextIdentity) -> some View {
+        let segments = identity.segments
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
+                    let piece = (i == 0 ? "" : "  ▸  ") + seg.display
+                    Button {
+                        guard seg.available else { return }
+                        pinCount = i + 1
+                    } label: {
+                        Text(piece)
+                            .foregroundColor(!seg.available ? Color.secondary.opacity(0.4)
+                                             : i < pinCount ? .accentColor : .secondary)
+                            .italic(!seg.available)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!seg.available)
+                    .help(seg.available ? "Pin at this grain" : "not captured on this site")
+                }
+            }
+        }
+        .font(.callout)
+        .focusable()
+        .focused($pinFocused)
+        .onKeyPress(.leftArrow) {
+            pinCount = identity.steppedGrainCount(from: pinCount, narrower: false)
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            pinCount = identity.steppedGrainCount(from: pinCount, narrower: true)
+            return .handled
+        }
         .onKeyPress(.return) { commitPinning(); return .handled }
         .onKeyPress(.escape) { cancelPinning(); return .handled }
         .onAppear { pinFocused = true }
@@ -394,7 +450,8 @@ struct PopoverView: View {
         guard let draft = controller.pinDraft() else { return }
         pinKind = draft.kind
         pinSegments = draft.segments
-        pinCount = draft.defaultCount
+        pinIdentity = controller.pinEmailIdentity()
+        pinCount = pinIdentity.map { max(1, $0.defaultGrainCount) } ?? draft.defaultCount
         pinEditingID = nil
         pinMode = .components
         pinExpression = ""
@@ -419,16 +476,24 @@ struct PopoverView: View {
         guard let draft = controller.pinDraft() else { return }
         pinKind = draft.kind
         pinSegments = draft.segments
+        pinIdentity = controller.pinEmailIdentity()
         pinExprError = nil
         resetAIState()
         switch pin.rule {
         case .components(let scope):
+            // Round-trips as-is even for the email flavour's system/site
+            // grain (a plain PinScope pin under the hood) — reopening shows
+            // the classic strip, which is exactly what it matches.
             pinMode = .components
             pinCount = min(scope.prefix.count, draft.segments.count)
             pinExpression = ""
         case .expression(let predicate):
+            // An email grain (correspondent/domain/subject) is an Expression
+            // pin under the hood — reopening in Expression mode with the rule
+            // rendered back to text round-trips it; no need to reverse-map it
+            // onto the ladder (pin-editor slice, kept deliberately simple).
             pinMode = .expression
-            pinCount = draft.defaultCount
+            pinCount = pinIdentity.map { max(1, $0.defaultGrainCount) } ?? draft.defaultCount
             pinExpression = PredicateParser.string(from: predicate)
         }
         if let p = pin.priority {
@@ -455,7 +520,12 @@ struct PopoverView: View {
     }
 
     /// The current Components selection as an equivalent typed expression.
+    /// On the email ladder this renders the SELECTED grain's rule (not a
+    /// prefix union — same "one grammar" mapping `commitPinning` uses).
     private func componentsAsExpression() -> String {
+        if let identity = pinIdentity {
+            return emailGrainAsExpression(identity) ?? rootScopeExpression()
+        }
         let prefix = Array(pinSegments.prefix(pinCount))
         guard !prefix.isEmpty else { return "" }
         switch pinKind {
@@ -465,6 +535,26 @@ struct PopoverView: View {
             if prefix.count == 1 { return "app is \"\(prefix[0])\"" }
             let rest = prefix.dropFirst().joined(separator: " ")
             return "app is \"\(prefix[0])\" and title contains \"\(rest)\""
+        }
+    }
+
+    /// The typed rendering of the currently selected email grain, or nil for
+    /// the system/site grain (which stays on the PinScope path — see
+    /// `rootScopeExpression`).
+    private func emailGrainAsExpression(_ identity: ContextIdentity) -> String? {
+        guard pinCount >= 1, pinCount <= identity.segments.count,
+              let predicate = identity.segments[pinCount - 1].pinPredicate else { return nil }
+        return PredicateParser.string(from: predicate)
+    }
+
+    /// The root (broadest) PinScope segment as a typed expression — what the
+    /// email ladder's system/site grain and any nil `pinPredicate` fall back
+    /// to, since "this whole site" is exactly a root component pin.
+    private func rootScopeExpression() -> String {
+        guard let root = pinSegments.first else { return "" }
+        switch pinKind {
+        case .url:  return "url contains \"\(root)\""
+        case .app:  return "app is \"\(root)\""
         }
     }
 
@@ -483,7 +573,25 @@ struct PopoverView: View {
                 pinExprError = message(for: error)
                 return   // keep the editor open so the user can fix it
             }
+        } else if let identity = pinIdentity, pinCount >= 1, pinCount <= identity.segments.count {
+            let segment = identity.segments[pinCount - 1]
+            guard segment.available else { return }   // a ghost can't be committed
+            if let predicate = segment.pinPredicate {
+                // A correspondent/domain/subject grain — a single Expression
+                // leaf (pin-editor slice of the 2026-07-03 context-rules spec
+                // §5.1/§5.4).
+                controller.commitPin(rule: .expression(predicate), to: ref,
+                                     replacingID: pinEditingID, priority: priority)
+            } else {
+                // The system/site grain: always the ROOT segment alone (the
+                // ladder's user-configured order may put it anywhere, but its
+                // meaning is always "this whole site" — not `pinCount`
+                // segments of the unrelated URL/app chain).
+                controller.commitPin(kind: pinKind, prefix: Array(pinSegments.prefix(1)),
+                                     to: ref, replacingID: pinEditingID, priority: priority)
+            }
         } else {
+            // A plain, non-email surface: the existing component-prefix path.
             controller.commitPin(kind: pinKind, prefix: Array(pinSegments.prefix(pinCount)),
                                  to: ref, replacingID: pinEditingID, priority: priority)
         }

@@ -102,6 +102,102 @@ func contextIdentityChecks(_ c: Checks) {
     }
 }
 
+// MARK: - Pin editor grain ladder (2026-07-03 context-rules spec, pin-editor slice)
+
+func pinGrainChecks(_ c: Checks) {
+    c.check("isEmailGrain: true for the four email levels, false for PinScope/recipe kinds") {
+        for kind: ContextIdentity.SegmentKind in [.emailSystem, .correspondentDomain, .correspondent, .subject] {
+            try expect(kind.isEmailGrain, "\(kind) must be an email grain")
+        }
+        for kind: ContextIdentity.SegmentKind in [.app, .urlHost, .urlPath, .recipeField("client")] {
+            try expect(!kind.isEmailGrain, "\(kind) must not be an email grain")
+        }
+    }
+
+    c.check("domain/correspondent/subject grains map to a single Expression leaf") {
+        let id = ContextIdentity.from(gmailSignal())
+        let domain = try unwrap(id.segments.first { $0.kind == .correspondentDomain })
+        try expectEq(domain.pinPredicate, .leaf(field: .sender, op: .contains, value: "harborlane.example"))
+        let correspondent = try unwrap(id.segments.first { $0.kind == .correspondent })
+        try expectEq(correspondent.pinPredicate,
+                     .leaf(field: .sender, op: .equals, value: "r.naismith@harborlane.example"))
+        let subject = try unwrap(id.segments.first { $0.kind == .subject })
+        try expectEq(subject.pinPredicate,
+                     .leaf(field: .subject, op: .contains, value: "insurance renewals 2026"))
+    }
+
+    c.check("the system grain and every PinScope/recipe kind stay off the Expression path") {
+        let id = ContextIdentity.from(gmailSignal())
+        let system = try unwrap(id.segments.first { $0.kind == .emailSystem })
+        try expectNil(system.pinPredicate, "system/site grains keep the .components(PinScope) path")
+        let plain = ContextIdentity.from(ActivitySignal(
+            app: "Google Chrome", windowTitle: "GitHub",
+            tabURL: "https://github.com/aqueum/ambitick/issues", timestamp: t0))
+        for seg in plain.segments {
+            try expectNil(seg.pinPredicate, "\(seg.kind) is a PinScope kind, never an Expression leaf")
+        }
+    }
+
+    c.check("a ghost segment never yields a predicate, even at a normally-mappable level") {
+        let bare = ActivitySignal(app: "Google Chrome", windowTitle: "Inbox - Gmail",
+                                  tabURL: "https://mail.google.com/mail/u/0/#inbox", timestamp: t0)
+        let id = ContextIdentity.from(bare)
+        for seg in id.segments.dropFirst() {   // domain/correspondent/subject, all ghosts here
+            try expectNil(seg.pinPredicate, "a not-captured \(seg.kind) row can't be pinned")
+        }
+    }
+
+    c.check("defaultGrainCount picks the most specific AVAILABLE row") {
+        let full = ContextIdentity.from(gmailSignal())
+        try expectEq(full.defaultGrainCount, 4, "every row captured — subject (narrowest) wins")
+        let bare = ActivitySignal(app: "Google Chrome", windowTitle: "Inbox - Gmail",
+                                  tabURL: "https://mail.google.com/mail/u/0/#inbox", timestamp: t0)
+        try expectEq(ContextIdentity.from(bare).defaultGrainCount, 1, "only the system row is captured")
+        try expectEq(ContextIdentity(segments: []).defaultGrainCount, 0, "nothing to default to")
+    }
+
+    c.check("steppedGrainCount narrows/widens and skips ghosts, never landing on one") {
+        let bareSubject = ActivitySignal(app: "Google Chrome", windowTitle: "Draft - Gmail",
+                                         tabURL: "https://mail.google.com/mail/u/0/#drafts",
+                                         timestamp: t0, correspondents: nil,
+                                         emailSubject: "Q3 budget")
+        let id = ContextIdentity.from(bareSubject)   // system(avail) domain/correspondent(ghost) subject(avail)
+        try expectEq(id.segments.map(\.available), [true, false, false, true])
+        // Narrowing from the system row must jump straight past both ghosts to subject.
+        try expectEq(id.steppedGrainCount(from: 1, narrower: true), 4)
+        // Already at the narrowest available — narrower again is a no-op.
+        try expectEq(id.steppedGrainCount(from: 4, narrower: true), 4)
+        // Widening from subject jumps straight back to the system row.
+        try expectEq(id.steppedGrainCount(from: 4, narrower: false), 1)
+        // Already at the widest available — wider again is a no-op.
+        try expectEq(id.steppedGrainCount(from: 1, narrower: false), 1)
+    }
+
+    c.check("steppedGrainCount on an all-available chain behaves like the plain prefix strip") {
+        let id = ContextIdentity.from(gmailSignal())
+        try expectEq(id.steppedGrainCount(from: 1, narrower: true), 2)
+        try expectEq(id.steppedGrainCount(from: 2, narrower: true), 3)
+        try expectEq(id.steppedGrainCount(from: 3, narrower: true), 4)
+        try expectEq(id.steppedGrainCount(from: 4, narrower: true), 4, "can't narrow past the last segment")
+        try expectEq(id.steppedGrainCount(from: 4, narrower: false), 3)
+        try expectEq(id.steppedGrainCount(from: 1, narrower: false), 1, "can't widen past the first segment")
+    }
+
+    c.check("pinEmailIdentity gates on an email-kind segment, not merely a URL host") {
+        // A plain, non-mail URL: no email-kind segment anywhere in the chain.
+        let plain = ContextIdentity.from(ActivitySignal(
+            app: "Google Chrome", windowTitle: "GitHub",
+            tabURL: "https://github.com/aqueum/ambitick/issues", timestamp: t0))
+        try expect(!plain.segments.contains { $0.kind.isEmailGrain },
+                   "a plain URL chain carries no email grain to gate on")
+        // A detected mail host, even capture-off, DOES carry one (the system row).
+        let bareGmail = ContextIdentity.from(ActivitySignal(
+            app: "Google Chrome", windowTitle: "Inbox - Gmail",
+            tabURL: "https://mail.google.com/mail/u/0/#inbox", timestamp: t0))
+        try expect(bareGmail.segments.contains { $0.kind.isEmailGrain })
+    }
+}
+
 // MARK: - EmailRule metadata + migration
 
 func emailRuleMetadataChecks(_ c: Checks) {

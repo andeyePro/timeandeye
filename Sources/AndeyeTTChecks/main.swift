@@ -73,6 +73,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("PieGeometry", pieGeometryChecks),
     ("SessionSticky", sessionStickyChecks),
     ("ContextIdentity", contextIdentityChecks),
+    ("PinGrainMapping", pinGrainChecks),
     ("EmailRuleMetadata", emailRuleMetadataChecks),
     ("SurfaceFragment", surfaceFragmentChecks),
     ("CorrespondentFeatures", correspondentFeatureChecks),

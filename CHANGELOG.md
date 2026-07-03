@@ -2,6 +2,44 @@
 
 ## 2026-07-03
 
+- [x] **Pin editor grain ladder — pin an email by correspondent, domain or
+  subject, visually, no typed expressions (pin-editor slice of the
+  context-rules-ux spec).** Martin: "I don't want to have to pin every single
+  email, but … I do need the ability to pin them by correspondent email
+  address and domain … a really intuitive interface for this." Deliberately
+  the pin-editor slice ONLY — no Evidence Card, no un-learn, no rules ledger,
+  no toasts (those stay open, see TODO). When the popover's pin editor
+  (Components mode) opens on a surface with email evidence, it now shows the
+  broad→narrow email ladder (Gmail ▸ harborlane.example ▸
+  r.naismith@harborlane.example ▸ "subject") instead of the bare URL/app
+  strip, fed by `ContextIdentity` (landed WIP 2e6f784) via a new
+  `AppController.pinEmailIdentity()`. Same interaction as the proven strip:
+  click a segment, ← wider, → narrower, ↵ commits — but clicking a segment
+  SETS that single grain (Option B's model) rather than accumulating a
+  prefix. Mapping: correspondent/domain/subject grains commit as a single
+  `PinRule.expression` leaf (`sender is <addr>`, `sender contains <domain>`,
+  `subject contains <normalised text>`); the system/site grain (and any
+  plain, non-email surface) keeps the existing `.components(PinScope)` root
+  pin — "this whole site" is exactly what that already means, regardless of
+  where the user's `emailMatchOrder` setting puts it in the ladder. Ghost
+  ("not captured") segments render greyed, italic and unclickable; ← / → skip
+  over them via a new pure `ContextIdentity.steppedGrainCount`, so a ghost is
+  never reachable at all, matching the spec's "rows are never hidden, their
+  absence IS the coverage signal" without ever letting one become the
+  selection. Reopening an email-grain pin round-trips: a system/site pin
+  reopens in the classic Components strip (it IS a plain PinScope pin); a
+  correspondent/domain/subject pin reopens in Expression mode with the rule
+  rendered back to text (deliberately not reverse-mapped onto the ladder —
+  the spec explicitly allows this as the simplest correct behaviour). +8
+  checks (`isEmailGrain`/`pinPredicate` mapping incl. ghosts, `defaultGrainCount`,
+  `steppedGrainCount` incl. ghost-skipping and both-edges clamping). Not
+  verified on-device (no Swift toolchain in this environment — Mac-side
+  smoke test needed: open the pin editor on a captured Gmail message, confirm
+  the ladder renders and each grain commits/reopens correctly). Out of scope
+  (see TODO): the Evidence Card (see-why, un-learn, live fallback preview),
+  first-learn toasts, the Rules Ledger, and the shared-webmail caution tint
+  on the strip.
+
 - [x] **Gmail correspondent capture is live again — async, deadline-bounded,
   one probe in flight (capture layer of the correspondent-attribution
   programme).** The 2026-07-03 diagnosis (a90fe90) found capture had been off

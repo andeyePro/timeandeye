@@ -142,8 +142,12 @@ and recorded rather than fixed blind:
   applyEnrichment` (retroactive, same-surface-gated). Needs on-device soak
   before trust (the 6-30 lesson: checks alone didn't catch the freeze).
   (b)/(c)/(d) Core layer (ContextIdentity, EmailRule provenance, Attributor.
-  forget/explainWithout) landed WIP 2e6f784 — UNVERIFIED, suite not run;
-  Evidence Card UI (the context-rules-ux spec, 2026-07-03) not started.
+  forget/explainWithout) landed WIP 2e6f784 — UNVERIFIED, suite not run.
+  (d) pin-editor slice landed 2026-07-03 (this commit): the popover's
+  Components strip pins by correspondent/domain/subject visually, no typed
+  expressions — see CHANGELOG. Still open: the Evidence Card itself (see-why,
+  un-learn, rules ledger, toasts — the context-rules-ux spec §5.2-§5.3/§5.6),
+  and Settings ▸ "shared" caution tint on the strip.
   (e) not started.
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —

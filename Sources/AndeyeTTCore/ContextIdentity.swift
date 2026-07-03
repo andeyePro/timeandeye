@@ -121,6 +121,64 @@ public struct ContextIdentity: Sendable, Equatable {
     private static func ghost(_ kind: SegmentKind) -> Segment {
         Segment(kind: kind, value: "", display: "not captured", available: false)
     }
+
+    /// The pin editor's default grain when it opens: the most specific
+    /// AVAILABLE segment (spec §5.5 — a ghost is never the default, since it
+    /// can't be committed). 1-based, matching the Components strip's blue
+    /// prefix length; 0 only if every segment is a ghost.
+    public var defaultGrainCount: Int {
+        segments.lastIndex(where: \.available).map { $0 + 1 } ?? 0
+    }
+
+    /// The pin editor's ← / → step over this chain, skipping ghost segments —
+    /// they render (spec §5.5: never hidden) but are never selectable.
+    /// `count` is the current 1-based grain (as `defaultGrainCount`/the strip's
+    /// blue prefix length); `narrower` is true for → / false for ←. Staying put
+    /// (returning `count`) when there is no available segment in that
+    /// direction is the correct "can't go further" behaviour, not a bug.
+    public func steppedGrainCount(from count: Int, narrower: Bool) -> Int {
+        guard !segments.isEmpty else { return count }
+        let current = max(0, min(count, segments.count) - 1)
+        let candidates = narrower
+            ? Array((current + 1)..<segments.count)
+            : Array((0..<current).reversed())
+        let next = candidates.first { segments[$0].available } ?? current
+        return next + 1
+    }
+}
+
+extension ContextIdentity.SegmentKind {
+    /// True for the four email-ladder levels (system/domain/correspondent/
+    /// subject) — distinguishes an email-flavoured chain from the plain
+    /// PinScope one (app/urlHost/urlPath) and the later recipe extension
+    /// point. Drives the pin editor's choice between the classic Components
+    /// strip and the email grain ladder (pin-editor slice, 2026-07-03 spec).
+    public var isEmailGrain: Bool {
+        switch self {
+        case .emailSystem, .correspondentDomain, .correspondent, .subject: return true
+        case .app, .urlHost, .urlPath, .recipeField: return false
+        }
+    }
+}
+
+extension ContextIdentity.Segment {
+    /// The Expression predicate this grain commits as, for the pin editor's
+    /// email ladder (pin-editor slice of the 2026-07-03 context-rules spec,
+    /// §5.1/§5.4): "correspondent/domain/subject grains become `.expression`
+    /// predicate leaves … narrow-app/site grains keep the existing
+    /// `.components(PinScope)` path". Returns nil for a ghost (never
+    /// committable) and for every kind that stays on the PinScope path —
+    /// `emailSystem` included, since "this whole site" is exactly what a
+    /// PinScope root pin already means.
+    public var pinPredicate: Predicate? {
+        guard available else { return nil }
+        switch kind {
+        case .correspondentDomain: return .leaf(field: .sender, op: .contains, value: value)
+        case .correspondent:       return .leaf(field: .sender, op: .equals, value: value)
+        case .subject:             return .leaf(field: .subject, op: .contains, value: value)
+        case .emailSystem, .app, .urlHost, .urlPath, .recipeField: return nil
+        }
+    }
 }
 
 extension Attributor {
