@@ -70,8 +70,22 @@ BUILD_STAMP="$(date '+%Y-%m-%d %H:%M')"
 # build, which silently invalidates TCC grants (Accessibility, Automation)
 # each time. A persistent self-signed cert keeps grants across rebuilds.
 IDENTITY="andeye Dev"
-KC="$HOME/ambitick-dev.keychain-db"
-KCPASS="ambitick-build"
+KC="$HOME/andeyett-dev.keychain-db"
+KCPASS="andeyett-build"
+# One-shot migration from the pre-rename keychain: MOVE the file — the
+# "andeye Dev" identity inside travels bit-for-bit, so the app's signature
+# (and every TCC grant keyed to it) is untouched. Letting ensure_identity
+# mint a fresh cert in a new keychain instead would void all grants. The
+# keychain password is renamed with it; if the old password ever mismatches,
+# the fallback is the existing ad-hoc warning path, never a hang.
+LEGACY_KC="$HOME/ambitick-dev.keychain-db"
+if [ ! -f "$KC" ] && [ -f "$LEGACY_KC" ]; then
+    mv "$LEGACY_KC" "$KC"
+    security set-keychain-password -o "ambitick-build" -p "$KCPASS" "$KC" 2>/dev/null || true
+    # Re-point the user search list at the moved file, dropping the stale path.
+    security list-keychains -d user -s "$KC" \
+        $(security list-keychains -d user | tr -d '"' | grep -v "dev.keychain-db")
+fi
 ensure_identity() {
     security list-keychains -d user | grep -q "$KC" || {
         security create-keychain -p "$KCPASS" "$KC" 2>/dev/null || true
