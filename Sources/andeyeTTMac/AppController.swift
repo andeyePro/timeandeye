@@ -1800,9 +1800,29 @@ public final class AppController: ObservableObject {
     /// so it blocks up to a couple of seconds — run off the main actor via
     /// `Task.detached`; only the clipboard write needs to be back on main.
     public func probeEmailSender() async -> String {
-        let out = await Task.detached(priority: .utility) {
+        let probe = await Task.detached(priority: .utility) {
             EmailSignalProbe.buildReport()
         }.value
+        // Tracker-side ground truth: what the pin editor would see right
+        // now. When the browser probe above succeeds but the grain ladder
+        // still doesn't show, the divergence is in this half.
+        var out = probe + "\n\n— tracker state —\n"
+        out += "state: \(trackerState)\n"
+        if let s = tracker.currentFocusSignal {
+            out += "signal: app=\(s.app)  title=\(s.windowTitle ?? "nil")\n"
+            let host = s.tabURL.flatMap { URL(string: $0)?.host }
+            out += "tabURL: \(s.tabURL ?? "nil")  (host: \(host ?? "nil") → \(EmailSystem.detect(urlHost: host).rawValue))\n"
+            out += "correspondents: \(s.correspondents?.joined(separator: ", ") ?? "nil")\n"
+            out += "subject: \(s.emailSubject ?? "nil")\n"
+            let id = attributor.identity(of: s)
+            out += "identity: " + id.segments.map {
+                "\($0.kind)\($0.available ? "" : "(ghost)")=\($0.display)"
+            }.joined(separator: " ▸ ") + "\n"
+            out += "pinEmailIdentity: \(pinEmailIdentity() != nil ? "LADDER" : "nil → classic strip")\n"
+        } else {
+            out += "signal: nil (nothing observed while tracking yet)\n"
+        }
+        out += "currentPin: \(currentPin.map { String(describing: $0.pin.rule) } ?? "none")\n"
         copyToClipboard(out)
         return out
     }
