@@ -16,19 +16,24 @@ cd ios && xcodegen             # generates andeye.xcodeproj from project.yml
 open andeye.xcodeproj          # select your team, build to a device/simulator
 ```
 
-STATUS: source-complete and desk-checked; not yet compiled (no iOS SDK in
-the build loop). Expect a first-build fixup pass in Xcode. CloudKit
-entitlements are deliberately absent until the Apple organisation conversion
-completes — do not add the iCloud capability before then (assets would mint
-under the personal team).
+STATUS: builds for the iOS Simulator (xcodebuild on the build Mac, Xcode
+26.6) and has had a first on-device test pass. CloudKit entitlements are
+deliberately absent until the Apple organisation conversion completes — do
+not add the iCloud capability before then (assets would mint under the
+personal team).
 
 ## What's in / out (v1)
 
-- IN: two-tap manual tracking with live clock; crash-safe running slice
-  (same checkpoint pattern as the Mac); ranked recent-first task list with
-  fuzzy filter; local task creation; OpenProject connect (URL + API key,
-  same file-based key store); auto-push of finished slices; today's total;
-  7-day CSV timesheet via the share sheet.
+- IN: two-tap manual tracking with live clock and a compact stop control
+  (tapping a task switches; tapping the tracked task is a no-op; long-press
+  a row to re-label the running timer without restarting it); crash-safe
+  running slice (same checkpoint pattern as the Mac); ranked recent-first
+  task list with fuzzy filter; local task creation; a LIVE mini-pie in the
+  toolbar opening the Time page — donut of the period's time by project
+  (tap a wedge for its task ring; Today/Week) plus a read-only timeline of
+  the day's slices; OpenProject connect (URL + API key, same file-based
+  key store); auto-push of finished slices; today's total; 7-day CSV
+  timesheet via the hamburger menu's share.
 - OUT (named next steps): CloudKit journal sync (engine done + checked in
   the main package — needs entitlements), Live Activity lock-screen timer,
   widgets, Watch, calendar/location context signals, Pro backends (Xero —

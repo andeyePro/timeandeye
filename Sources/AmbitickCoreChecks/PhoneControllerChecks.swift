@@ -78,6 +78,93 @@ func phoneControllerChecks(_ c: Checks) async {
         try expectEq(try unwrap(tracking).task, b)
     }
 
+    await c.check("tapping the tracked task is a no-op (same slice keeps running)") {
+        let (pc, clock, _) = await MainActor.run { makeController() }
+        let ref = await MainActor.run { pc.addLocalTask(name: "Deep work") }
+        let started = await MainActor.run { pc.start(ref); return pc.tracking?.since }
+        await MainActor.run { clock.now += 120; pc.start(ref) }
+        let (tracking, banked) = try await MainActor.run {
+            (pc.tracking,
+             try pc.journal.sessions(from: clock.now - 3600, to: clock.now + 3600)
+                .filter { $0.id != PhoneController.liveCheckpointID })
+        }
+        try expectEq(try unwrap(tracking).since, try unwrap(started),
+                     "the running slice keeps its original start")
+        try expectEq(banked.count, 0, "no slice banked, no restart")
+    }
+
+    await c.check("relabelCurrent moves the running slice, keeping its start") {
+        let (pc, clock, _) = await MainActor.run { makeController() }
+        let a = await MainActor.run { pc.addLocalTask(name: "Task A") }
+        let b = await MainActor.run { pc.addLocalTask(name: "Task B") }
+        let started = clock.now
+        await MainActor.run { pc.start(a) }
+        await MainActor.run { clock.now += 300; pc.relabelCurrent(to: b) }
+        let (tracking, checkpoint, banked) = try await MainActor.run {
+            (pc.tracking,
+             try pc.journal.session(id: PhoneController.liveCheckpointID),
+             try pc.journal.sessions(from: clock.now - 3600, to: clock.now + 3600)
+                .filter { $0.id != PhoneController.liveCheckpointID })
+        }
+        let live = try unwrap(tracking, "still tracking after relabel")
+        try expectEq(live.task, b)
+        try expectEq(live.since, started, "start time preserved")
+        let cp = try unwrap(checkpoint, "checkpoint row exists")
+        try expectEq(cp.task, b, "checkpoint follows the new label")
+        try expectEq(cp.start, started)
+        try expectEq(banked.count, 0, "relabel banks nothing")
+        // The whole span lands on B when the slice eventually stops.
+        await MainActor.run { clock.now += 300; pc.stop() }
+        let saved = try await MainActor.run {
+            try pc.journal.sessions(from: started - 1, to: clock.now + 1)
+        }
+        try expectEq(saved.count, 1)
+        try expectEq(saved[0].task, b)
+        try expectEq(saved[0].end.timeIntervalSince(saved[0].start), 600)
+    }
+
+    await c.check("relabelCurrent with nothing running is a no-op") {
+        let (pc, _, _) = await MainActor.run { makeController() }
+        let a = await MainActor.run { pc.addLocalTask(name: "Task A") }
+        await MainActor.run { pc.relabelCurrent(to: a) }
+        let (tracking, checkpoint) = try await MainActor.run {
+            (pc.tracking, try pc.journal.session(id: PhoneController.liveCheckpointID))
+        }
+        try expectNil(tracking)
+        try expectNil(checkpoint, "no checkpoint row minted")
+    }
+
+    await c.check("spentNodes: banked + live under the local project, checkpoint excluded") {
+        let (pc, clock, _) = await MainActor.run { makeController() }
+        let a = await MainActor.run { pc.addLocalTask(name: "Task A") }
+        let b = await MainActor.run { pc.addLocalTask(name: "Task B") }
+        await MainActor.run { pc.start(a) }
+        await MainActor.run { clock.now += 600; pc.stop() }     // banked 600
+        await MainActor.run { pc.start(b); clock.now += 60 }    // live 60
+        let nodes = await MainActor.run {
+            pc.spentNodes(from: clock.now - 3600, to: clock.now + 1)
+        }
+        try expectEq(nodes.count, 1, "local tasks group under one project")
+        try expectEq(nodes[0].label, "Personal")
+        try expectEq(nodes[0].seconds, 660, "banked + live, no checkpoint double-count")
+        try expectEq(nodes[0].children.count, 2)
+        try expectEq(nodes[0].children[0].label, "Task A")   // sorted by seconds
+        try expectEq(nodes[0].children[1].seconds, 60)
+    }
+
+    await c.check("bankedSessions: start-ordered, live checkpoint excluded") {
+        let (pc, clock, _) = await MainActor.run { makeController() }
+        let a = await MainActor.run { pc.addLocalTask(name: "Task A") }
+        await MainActor.run { pc.start(a) }
+        await MainActor.run { clock.now += 600; pc.stop() }
+        await MainActor.run { pc.start(a); pc.appLifecycleTick() }   // live checkpoint exists
+        let sessions = await MainActor.run {
+            pc.bankedSessions(from: clock.now - 3600, to: clock.now + 3600)
+        }
+        try expectEq(sessions.count, 1, "only the banked slice")
+        try expectEq(sessions[0].task, a)
+    }
+
     await c.check("addLocalTask dedupes case-insensitively") {
         let (pc, _, _) = await MainActor.run { makeController() }
         let first = await MainActor.run { pc.addLocalTask(name: "Admin") }

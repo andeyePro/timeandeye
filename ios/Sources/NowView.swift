@@ -3,8 +3,12 @@ import AmbitickCore
 import AmbitickPhone
 
 /// The whole app on one screen (spec: two-tap tracking — open app, tap task).
-/// Current task pinned on top with its live clock; the ranked list below;
-/// filter, quick local-task creation, settings and export in the toolbar.
+/// Current task pinned on top with its live clock and a small stop control
+/// (matching the Mac popover's compact feel); the ranked list below; filter
+/// and quick local-task creation inline. The toolbar holds a LIVE mini-pie
+/// (opens the Time page) and a hamburger menu (Settings, timesheet share).
+/// Tapping a task SWITCHES (stop + start); tapping the tracked task is a
+/// no-op; long-press a row to re-label the running timer instead.
 struct NowView: View {
     @ObservedObject var controller: PhoneController
     @State private var filter = ""
@@ -12,26 +16,33 @@ struct NowView: View {
     @State private var showSettings = false
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var now = Date()
+    @State private var miniNodes: [TimeAggregator.Node] = []
+    @State private var miniReloadedAt = Date.distantPast
 
     var body: some View {
         NavigationStack {
             List {
                 if let live = controller.tracking {
                     Section {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(controller.name(of: live.task))
-                                .font(.title2).bold()
-                            Text(elapsed(since: live.since))
-                                .font(.system(.largeTitle, design: .rounded).monospacedDigit())
-                            Button(role: .destructive) {
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(controller.name(of: live.task))
+                                    .font(.headline).lineLimit(2)
+                                Text(elapsed(since: live.since))
+                                    .font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
                                 controller.stop()
                             } label: {
-                                Label("Stop", systemImage: "stop.fill")
-                                    .frame(maxWidth: .infinity)
+                                Image(systemName: "stop.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.red)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Stop tracking")
                         }
-                        .padding(.vertical, 4)
                     } header: {
                         Text("Tracking now · today \(short(controller.todaysTotal()))")
                     }
@@ -69,6 +80,16 @@ struct NowView: View {
                             }
                         }
                         .tint(.primary)
+                        .contextMenu {
+                            if let live = controller.tracking, live.task != task.ref {
+                                Button {
+                                    controller.relabelCurrent(to: task.ref)
+                                } label: {
+                                    Label("Re-label current timer as this",
+                                          systemImage: "pencil.line")
+                                }
+                            }
+                        }
                     }
                     HStack {
                         TextField("New local task…", text: $newTaskName)
@@ -86,17 +107,28 @@ struct NowView: View {
                 }
             }
             .searchable(text: $filter, prompt: "Filter tasks")
-            .navigationTitle("andeye")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    ShareLink(item: controller.timesheetCSV(),
-                              preview: SharePreview("andeye timesheet (7 days).csv")) {
-                        Image(systemName: "square.and.arrow.up")
+                    NavigationLink {
+                        SpentPhoneView(controller: controller)
+                    } label: {
+                        MiniPieIcon(nodes: miniNodes,
+                                    overrides: controller.settings.taskColours)
                     }
+                    .accessibilityLabel("Time pie")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                    Menu {
+                        Button { showSettings = true } label: {
+                            Label("Settings", systemImage: "gearshape")
+                        }
+                        ShareLink(item: controller.timesheetCSV(),
+                                  preview: SharePreview("andeye timesheet (7 days).csv")) {
+                            Label("Share timesheet (7 days)", systemImage: "square.and.arrow.up")
+                        }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
                     }
                 }
             }
@@ -104,8 +136,22 @@ struct NowView: View {
                 PhoneSettingsView(controller: controller)
             }
             .refreshable { await controller.refreshTasks() }
-            .onReceive(clock) { now = $0 }
+            .onReceive(clock) {
+                now = $0
+                // The mini-pie is LIVE but its proportions move slowly — a
+                // journal query per second would be waste (the Mac learnt
+                // that lesson); every 30 s is imperceptible at 24 pt.
+                if now.timeIntervalSince(miniReloadedAt) >= 30 { reloadMini() }
+            }
+            .onChange(of: controller.tracking?.task) { _, _ in reloadMini() }
+            .onAppear { reloadMini() }
         }
+    }
+
+    private func reloadMini() {
+        let start = Calendar.current.startOfDay(for: Date())
+        miniNodes = controller.spentNodes(from: start, to: Date())
+        miniReloadedAt = Date()
     }
 
     private func elapsed(since: Date) -> String {

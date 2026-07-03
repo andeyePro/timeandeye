@@ -59,8 +59,19 @@ public final class PhoneController: ObservableObject {
     public static let liveCheckpointID = UUID(uuidString: "00000000-0000-0000-0000-0000C0FFEE01")!
 
     public func start(_ task: TaskRef) {
+        if tracking?.task == task { return }   // tapping the tracked task: no-op
         if tracking != nil { stop() }          // switching = stop + start
         tracking = (task, now())
+        touchRecency(task)
+        checkpoint()
+    }
+
+    /// "That timer was really this task": move the RUNNING slice onto `task`
+    /// keeping its start time — no slice is banked, no new one starts. The
+    /// crash checkpoint follows so a relaunch resumes under the new label.
+    public func relabelCurrent(to task: TaskRef) {
+        guard let live = tracking, live.task != task else { return }
+        tracking = (task, live.since)
         touchRecency(task)
         checkpoint()
     }
@@ -185,6 +196,34 @@ public final class PhoneController: ObservableObject {
     }
 
     // MARK: - Totals + export
+
+    /// Time Spent hierarchy for the phone pie: project -> task, the live
+    /// slice included and sessions clipped to the range so totals never
+    /// double-count across days. Mirrors the Mac's spentNodes minus the app
+    /// level (iOS senses no apps, so there are no focus spans).
+    public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
+        var sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+            .map { s -> Session in
+                var c = s
+                c.start = max(s.start, from)
+                c.end = min(s.end, to)
+                return c
+            }
+        if let live = tracking, live.since < to, now() > from {
+            sessions.append(Session(task: live.task, start: max(live.since, from),
+                                    end: min(now(), to), certainty: 1.0))
+        }
+        return TimeAggregator.byProject(sessions: sessions, tasks: taskCache)
+    }
+
+    /// Banked slices in start order (checkpoint row excluded) — the timeline
+    /// page's data; the live slice comes from `tracking`.
+    public func bankedSessions(from: Date, to: Date) -> [Session] {
+        ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+            .sorted { $0.start < $1.start }
+    }
 
     public func todaysTotal() -> TimeInterval {
         let start = Calendar.current.startOfDay(for: now())

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-03
+
+- [x] **iOS v1 feedback pass — Mac-popover feel + the Time pie/timeline
+  (305 checks green).** Martin's on-device notes, all six: the "andeye"
+  title is gone; share moved into a single hamburger menu with Settings;
+  the huge stop button shrank to a small red stop control beside a compact
+  name + elapsed row (the menu-bar popover feel); tapping the tracked task
+  is now a no-op (`start` returns on `tracking?.task == task` — before, it
+  restarted the timer on every tap); a tap still SWITCHES, but long-press
+  offers "Re-label current timer as this" — new
+  `PhoneController.relabelCurrent(to:)` moves the RUNNING slice onto the
+  task keeping its start (checkpoint follows, nothing banked). And the
+  Mac's coolest views came over: a LIVE mini-pie toolbar icon (Canvas +
+  Core's PieGeometry) opens a Time page — donut by project, tap a wedge
+  for its task ring, Today/Week picker, label-keyed selection — plus a
+  read-only timeline list of the day's slices. New PhoneController data
+  accessors `spentNodes(from:to:)` (live slice included, boundary-clipped,
+  no app level) and `bankedSessions(from:to:)`. Five new checks: tracked-tap
+  no-op, relabel keeps start + updates checkpoint + banks nothing, relabel
+  idle no-op, spentNodes grouping, bankedSessions ordering.
+
 ## 2026-07-02
 
 - [x] **Session-sticky categorisation — your word holds for the day (300
