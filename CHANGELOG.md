@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+- [x] **Root CLAUDE.md: orientation map for agents and humans.** Module
+  layout (lowercase `andeyeTT*`/`andeyeApp` targets, UpperCamelCase types),
+  build/check/run commands, the load-bearing legacy-string and
+  keychain-identity rules, and the TODO/CHANGELOG conventions.
+
 - [x] **Website scaffold: Astro + Starlight in `site/`, built for Cloudflare
   Pages.** One Astro project serves both the marketing landing page (`/`, a
   swappable placeholder until the chosen treatment is productionised) and the
