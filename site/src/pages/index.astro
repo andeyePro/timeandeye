@@ -1,16 +1,23 @@
 ---
-// andeye landing page — the "Watchful" treatment, picked by Martin from
-// the three-way bake-off (Instrument / Ink / Watchful), all authored by
-// Fable 5 subagents. The hero demo geometry is a verbatim port of
-// Sources/andeyeTTCore/AndeyeLogo.swift; keep them in sync.
+// andeye landing page - the "Watchful" treatment, productionised from
+// the design bake-off. The hero demo geometry is a verbatim port of
+// Sources/andeyeTTCore/AndeyeLogo.swift (svgCubics, translate,
+// strokeWidth, the eyelid-close wink control points); keep them in sync.
+// The HERO mark is always the orange accent (it's andeye saying hello).
+// Only the small MENU-BAR mark carries the certainty tint, verbatim from
+// MenuTitle.colour: #FF3B30 (systemRed) when unsure -> #34C759 (systemGreen)
+// when sure, blended linearly by certainty. RED = unsure, GREEN = sure.
+// There is no autoplay: the demo sits idle until the visitor clicks.
+// Timeline slices and pie wedges are coloured by project via the app's
+// HSB hash palette (AppController.colour) and are clickable/hoverable.
 ---
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>andeye — automatic time tracking for your Mac</title>
-<meta name="description" content="andeye tracks your time automatically, on your Mac. It watches what you are working on and attributes each minute to the right task with an honest certainty score." />
+<title>andeye - automatic time tracking for your Mac</title>
+<meta name="description" content="andeye tracks your time automatically, on your Mac. It watches what you are working on and attributes each minute to the right task with an honest certainty score. The watching stays on your machine; only the finished hours you approve are sent, to your own tools." />
 <link rel="canonical" href="https://andeye.com/" />
 <style>
   :root {
@@ -126,7 +133,7 @@
   #heroEye { display: block; max-width: 100%; height: auto; }
 
   .hero .sub {
-    max-width: 640px;
+    max-width: 660px;
     margin: 0 auto 1.9rem;
   }
 
@@ -135,7 +142,7 @@
     gap: 14px;
     justify-content: center;
     flex-wrap: wrap;
-    margin-bottom: 0.9rem;
+    margin-bottom: 0.7rem;
   }
 
   .btn {
@@ -162,6 +169,18 @@
   }
   .btn-ghost:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
 
+  /* hover-reactive CTA subtext: one line that answers whichever button you're on */
+  .cta-sub {
+    min-height: 1.4em;
+    margin: 0 auto 0.7rem;
+    max-width: 560px;
+    font-size: 0.92rem;
+    color: var(--muted);
+    transition: color 0.25s ease, opacity 0.25s ease;
+  }
+  .cta-sub.tech { color: #b7c0d4; }
+  .cta-sub.app { color: #f4c98a; }
+
   .fineprint {
     font-size: 0.85rem;
     color: var(--faint);
@@ -181,14 +200,14 @@
   /* ---------- demo ---------- */
 
   .demo {
-    max-width: 880px;
+    max-width: 900px;
     margin: clamp(40px, 7vh, 72px) auto 0;
     text-align: left;
   }
 
   .demo-head { text-align: center; margin-bottom: 1.4rem; }
   .demo-head h2 { margin-bottom: 0.5rem; }
-  .demo-head p { color: var(--muted); max-width: 560px; margin: 0 auto; }
+  .demo-head p { color: var(--muted); max-width: 620px; margin: 0 auto; }
 
   .demo-note {
     display: flex;
@@ -231,23 +250,21 @@
     display: flex;
     align-items: center;
     gap: 9px;
-    transition: opacity 0.3s;
   }
-  .mb-tracker.attributing #mbTask,
-  .mb-tracker.attributing #mbCert { opacity: 0.35; }
+  #mbEye { display: block; }
+  #mbClock { font-weight: 700; color: var(--muted); min-width: 2.4em; text-align: right; }
   #mbTask {
     color: var(--muted);
-    max-width: 220px;
+    font-weight: 600;
+    max-width: 130px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: opacity 0.3s;
   }
-  #mbClock { font-weight: 700; }
-  #mbCert { font-weight: 700; transition: color 0.4s, opacity 0.3s; color: var(--faint); }
-  #mbEye { display: block; }
+  .mb-tracker.idle #mbClock, .mb-tracker.idle #mbTask { color: var(--faint); }
   .mb-sys { color: var(--faint); }
 
+  /* the four windows on the desktop */
   .desktop {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -256,32 +273,32 @@
     background: radial-gradient(120% 130% at 50% 0%, #1a2233 0%, #121722 58%, #0e1220 100%);
   }
 
-  .app-card {
-    font: inherit;
-    color: inherit;
-    text-align: left;
-    padding: 0;
+  .win {
     display: flex;
     flex-direction: column;
     background: #141927;
     border: 1px solid var(--line);
     border-radius: 12px;
     overflow: hidden;
+    min-height: 196px;
+    opacity: 0.5;
     cursor: pointer;
-    opacity: 0.72;
-    transition: opacity 0.35s, border-color 0.35s, box-shadow 0.35s, transform 0.35s;
+    transition: opacity 0.35s, box-shadow 0.35s;
   }
-  .app-card:hover { opacity: 0.92; border-color: #33405c; }
-  .app-card.active {
+  .win:not(.focused):hover { opacity: 0.78; }
+  .win.focused {
     opacity: 1;
-    border-color: rgba(240, 161, 58, 0.55);
-    box-shadow: 0 0 0 1px rgba(240, 161, 58, 0.22), 0 16px 44px rgba(0, 0, 0, 0.45);
-    transform: translateY(-2px);
+    cursor: default;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
   }
-  .app-card.autopulse { animation: pulse 0.55s ease; }
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(240, 161, 58, 0.45); }
-    100% { box-shadow: 0 0 0 14px rgba(240, 161, 58, 0); }
+  /* the try-me hint: windows breathe gently until the first click */
+  .desktop.idle .win { animation: hintpulse 2.4s ease-in-out infinite; }
+  .desktop.idle .win:nth-child(2) { animation-delay: 0.3s; }
+  .desktop.idle .win:nth-child(3) { animation-delay: 0.6s; }
+  .desktop.idle .win:nth-child(4) { animation-delay: 0.9s; }
+  @keyframes hintpulse {
+    0%, 100% { opacity: 0.5; box-shadow: 0 0 0 0 rgba(240, 161, 58, 0); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 3px rgba(240, 161, 58, 0.13); }
   }
 
   .chrome {
@@ -292,118 +309,209 @@
     background: #1a2131;
     border-bottom: 1px solid var(--line-soft);
   }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: #38425b; }
+  /* real-macOS traffic lights: coloured when focused, hollow when not */
+  .traffic { display: flex; align-items: center; gap: 7px; flex: none; }
+  .traffic i {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+    display: block;
+  }
+  .win.focused .traffic .tl-c { background: #ff5f57; box-shadow: none; }
+  .win.focused .traffic .tl-m { background: #febc2e; box-shadow: none; }
+  .win.focused .traffic .tl-z { background: #28c840; box-shadow: none; }
   .wtitle { margin-left: 7px; font-size: 0.72rem; color: #8b93a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .app-body {
-    flex: 1;
-    min-height: 128px;
-    padding: 12px;
+  /* email client */
+  .mail-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .mail-list { display: flex; flex-direction: column; }
+  .mailrow {
+    font: inherit;
+    color: inherit;
+    text-align: left;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--line-soft);
+    cursor: pointer;
+    transition: background 0.25s;
+  }
+  .mailrow:last-child { border-bottom: none; }
+  .mailrow:hover { background: rgba(255, 255, 255, 0.03); }
+  .mailrow.active { background: rgba(240, 161, 58, 0.09); }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem; font-weight: 800; color: #10131c;
+  }
+  .mtext { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .mfrom { font-size: 0.82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msubj { font-size: 0.76rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mtime { font-size: 0.7rem; color: var(--faint); flex: none; }
+  .unread .mfrom::before {
+    content: ""; display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: middle;
   }
 
-  /* browser-on-webmail silhouette */
+  /* email reading view */
+  .mail-read { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 9px; flex: 1; }
+  .mail-back {
+    font: inherit; font-size: 0.72rem; color: var(--muted);
+    background: none; border: none; padding: 0; cursor: pointer;
+    align-self: flex-start;
+  }
+  .mail-back:hover { color: var(--accent); }
+  .read-head { display: flex; align-items: center; gap: 10px; }
+  .rh-text { display: flex; flex-direction: column; min-width: 0; }
+  .rh-from { font-size: 0.82rem; font-weight: 700; }
+  .rh-addr { font-size: 0.72rem; color: var(--faint); }
+  .read-subj { font-size: 0.82rem; font-weight: 700; }
+  .read-body p { font-size: 0.76rem; color: var(--muted); margin: 0 0 6px; line-height: 1.5; }
+
+  /* browser with tabs */
+  .tabbar { display: flex; align-items: center; gap: 4px; padding: 7px 9px 0; background: #1a2131; }
+  .tab {
+    font: inherit;
+    color: #8b93a8;
+    display: flex; align-items: center; gap: 6px;
+    max-width: 46%;
+    padding: 6px 10px;
+    font-size: 0.7rem;
+    background: #141a27;
+    border: 1px solid var(--line-soft);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: background 0.25s, color 0.25s;
+  }
+  .tab .fav { width: 14px; height: 14px; flex: none; }
+  .tab.active { background: #0e1220; color: var(--text); }
   .urlbar {
-    display: block;
+    margin: 8px 11px 0;
     font-size: 0.68rem;
     color: var(--faint);
     background: #10141f;
     border: 1px solid var(--line-soft);
     border-radius: 999px;
-    padding: 3px 12px;
-    width: 70%;
+    padding: 4px 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .mail-cols { display: flex; gap: 10px; flex: 1; }
-  .rail { display: flex; flex-direction: column; gap: 7px; width: 26%; }
-  .pill { display: block; height: 14px; border-radius: 999px; background: var(--accent-soft); border: 1px solid rgba(240, 161, 58, 0.4); }
-  .rl { display: block; height: 6px; border-radius: 4px; background: #2a3346; }
-  .rl:nth-child(3) { width: 80%; }
-  .rl:nth-child(4) { width: 65%; }
-  .mlist { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-  .mrow { display: flex; gap: 8px; align-items: center; }
-  .mrow i { display: block; height: 6px; border-radius: 4px; background: #33405c; }
-  .mrow .frm { width: 26%; background: #40506f; }
-  .mrow .subj { flex: 1; }
-  .mrow.unread .frm, .mrow.unread .subj { background: #55617e; }
-
-  /* code editor silhouette */
-  .code-lines { display: flex; flex-direction: column; gap: 7px; }
-  .cl { display: flex; gap: 10px; align-items: center; }
-  .cl b { display: block; width: 14px; height: 5px; border-radius: 3px; background: #232b40; }
-  .cl i { display: block; height: 6px; border-radius: 4px; background: #33405c; }
-  .cl:nth-child(1) i { width: 48%; }
-  .cl:nth-child(2) i { width: 72%; background: #40506f; }
-  .cl:nth-child(3) i { width: 34%; margin-left: 18px; }
-  .cl:nth-child(4) i { width: 58%; margin-left: 18px; background: rgba(240, 161, 58, 0.5); }
-  .cl:nth-child(5) i { width: 44%; margin-left: 18px; }
-  .cl:nth-child(6) i { width: 20%; }
-  .cl:nth-child(7) i { width: 63%; background: #40506f; }
-
-  /* design canvas silhouette */
-  .canvas-area {
+  .webbody {
     flex: 1;
+    min-height: 130px;
+    padding: 10px 12px;
     display: flex;
-    gap: 12px;
+    background: #0e1220;
   }
-  .tools { display: flex; flex-direction: column; gap: 7px; width: 18px; }
-  .tools i { display: block; width: 14px; height: 14px; border-radius: 4px; background: #2a3346; }
-  .tools i:first-child { background: var(--accent-soft); border: 1px solid rgba(240, 161, 58, 0.4); }
-  .board {
-    flex: 1;
-    background: #1b2334;
+
+  /* inline line-art canvases (browser content + design app) */
+  .art { width: 100%; height: auto; max-height: 148px; color: #4d566e; display: block; margin: auto; }
+
+  /* design app */
+  .design-body { flex: 1; padding: 10px 12px; display: flex; background: #0e1220; }
+
+  /* messages / chat */
+  .chat-body { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; justify-content: flex-end; background: #0e1220; }
+  .bubble { font-size: 0.74rem; line-height: 1.4; max-width: 82%; padding: 7px 11px; border-radius: 13px; }
+  .bubble.in { align-self: flex-start; background: #1c2436; color: var(--text); border-bottom-left-radius: 4px; }
+  .bubble.out { align-self: flex-end; background: rgba(240, 161, 58, 0.16); color: #f4d3a3; border-bottom-right-radius: 4px; }
+
+  /* ---------- analytics: real timeline + real pie, fed by the demo ---------- */
+
+  .analytics {
+    display: grid;
+    grid-template-columns: 1.55fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+  }
+  .panel-card {
+    background: var(--panel);
     border: 1px solid var(--line-soft);
-    border-radius: 8px;
-    position: relative;
-    overflow: hidden;
+    border-radius: 12px;
+    padding: 16px 16px 14px;
   }
-  .shape { position: absolute; border: 2px solid #55617e; }
-  .shape.circle { width: 44px; height: 44px; border-radius: 50%; left: 14%; top: 22%; }
-  .shape.rect { width: 68px; height: 34px; border-radius: 8px; right: 12%; top: 18%; border-color: rgba(240, 161, 58, 0.65); }
-  .shape.line { width: 40%; height: 0; border-width: 0 0 2px; left: 20%; bottom: 24%; }
+  .panel-card h4 {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 700;
+  }
 
-  /* terminal silhouette */
-  .term { background: #0b0f18; border-radius: 8px; flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-  .trow { display: flex; gap: 8px; align-items: center; font-size: 0.72rem; color: #5d6activator; }
-  .trow s { text-decoration: none; color: rgba(240, 161, 58, 0.8); font-weight: 700; }
-  .trow i { display: block; height: 5px; border-radius: 3px; background: #273046; }
-  .trow:nth-child(1) i { width: 55%; }
-  .trow:nth-child(2) i { width: 34%; background: #1d2434; }
-  .trow:nth-child(3) i { width: 68%; background: #1d2434; }
-  .cursor { width: 7px; height: 13px; background: #9aa3b8; animation: blink 1.1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
-
-  /* timeline */
-  .timeline { margin-top: 14px; }
+  /* timeline: coloured slices by project, a horizontal time axis */
   .tl-head {
     display: flex;
     justify-content: space-between;
     font-size: 0.78rem;
     color: var(--faint);
-    margin-bottom: 7px;
+    margin-bottom: 8px;
     letter-spacing: 0.03em;
   }
   #tlTotal { color: var(--muted); font-weight: 700; }
   .tl-strip {
     display: flex;
     gap: 2px;
-    height: 12px;
+    height: 30px;
     border-radius: 6px;
     overflow: hidden;
-    background: var(--panel);
+    background: #0e1220;
     border: 1px solid var(--line-soft);
   }
-  .tl-strip:empty { opacity: 0.4; }
+  .tl-empty { margin: auto; font-size: 0.72rem; color: var(--faint); }
   .tl-block {
     flex-grow: 1;
-    min-width: 3px;
-    transition: flex-grow 0.4s linear;
+    min-width: 5px;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    transition: flex-grow 0.4s linear, filter 0.2s, transform 0.2s;
   }
-  .tl-key {
-    margin-top: 8px;
+  .tl-block.hi { filter: brightness(1.28); transform: scaleY(1.12); }
+  .tl-axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.68rem;
+    color: var(--faint);
+    margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* pie: donut of time by project with a legend */
+  .pie-wrap { display: flex; align-items: center; gap: 16px; }
+  #pieCanvas { display: block; flex: none; cursor: pointer; }
+  .legend { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; flex: 1; min-width: 0; }
+  .legend-row {
+    font: inherit; text-align: left;
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: none; padding: 3px 4px; border-radius: 6px;
+    cursor: pointer; width: 100%;
+    transition: background 0.2s;
+  }
+  .legend-row.hi { background: rgba(255, 255, 255, 0.05); }
+  .legend-sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .legend-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .legend-val { color: var(--faint); font-variant-numeric: tabular-nums; }
+  .legend-note { font-size: 0.68rem; color: var(--faint); font-style: italic; }
+
+  .readout {
+    margin-top: 10px;
     font-size: 0.74rem;
     color: var(--faint);
+    min-height: 1.15em;
+  }
+  .readout b { color: var(--muted); font-weight: 700; }
+
+  .demo-caption {
+    margin: 14px 0 0;
+    font-size: 0.8rem;
+    color: var(--faint);
+    text-align: center;
   }
 
   /* ---------- sections ---------- */
@@ -451,7 +559,7 @@
     font-weight: 800;
     letter-spacing: -0.015em;
   }
-  .pv-claims p { color: var(--muted); max-width: 560px; margin: 0; }
+  .pv-claims p { color: var(--muted); max-width: 620px; margin: 0; }
 
   .tiers {
     display: grid;
@@ -507,11 +615,12 @@
     .tiers { grid-template-columns: 1fr; }
     .mb-menus { display: none; }
   }
-  @media (max-width: 560px) {
-    .desktop { grid-template-columns: 1fr; padding: 14px; gap: 12px; }
-    .app-body { min-height: 104px; }
-    #mbTask { max-width: 110px; }
+  @media (max-width: 640px) {
+    .desktop { grid-template-columns: 1fr; padding: 14px; gap: 14px; }
+    .analytics { grid-template-columns: 1fr; }
+    #mbTask { max-width: 90px; }
     .mb-sys { display: none; }
+    .tab { max-width: 40%; }
   }
 
   /* ---------- reduced motion: final states, no choreography ---------- */
@@ -534,93 +643,136 @@
     </div>
     <p class="eyebrow reveal" style="--d:0s">andeye &middot; automatic time tracking for macOS</p>
     <h1 class="reveal" style="--d:0.08s">andeye watches.<br>You just work.</h1>
-    <p class="sub lede reveal" style="--d:0.16s">A menu-bar tracker that attributes your time to tasks by itself &ndash; on your Mac, never off it &ndash; with an honest certainty score on every minute.</p>
+    <p class="sub lede reveal" style="--d:0.16s">A menu-bar tracker that attributes your time to tasks by itself &ndash; on your Mac, never phoning home &ndash; with an honest certainty score on every minute.</p>
     <div class="ctas reveal" style="--d:0.26s">
-      <a class="btn btn-primary" href="https://github.com/andeyePro/andeyeTT">Star on GitHub</a>
+      <a class="btn btn-primary" id="ctaStar" href="https://github.com/andeyePro/andeyeTT">Star on GitHub</a>
       <a class="btn btn-ghost" id="ctaWaitlist" href="mailto:hello@andeye.com?subject=andeye%20waitlist">Join the waitlist</a>
     </div>
+    <p class="cta-sub reveal" id="ctaSub" style="--d:0.3s" aria-live="polite">Free and open source today. A ready-to-download app is on the way.</p>
     <p class="fineprint reveal" style="--d:0.34s">macOS 14+ &middot; free and open source &middot; build from source today</p>
 
     <div class="demo reveal" style="--d:0.46s" id="demo">
       <div class="demo-head">
-        <h2>A day at your Mac, in miniature</h2>
-        <p>Click around like you're working. The eye follows, winks when you switch, and its tint is its confidence: grey when unsure, amber when sure.</p>
+        <h2>A designer's Tuesday morning</h2>
+        <p>It's 9:41 and you're mid-rebrand. Click around like you're working &ndash; the eye follows, winks when you switch, and its tint is its confidence: <span style="color:#FF3B30">red when unsure</span>, <span style="color:#34C759">green when sure</span>.</p>
       </div>
-      <div class="demo-note"><span id="driveState">auto-demo &middot; click any window to take over</span></div>
+      <div class="demo-note"><span id="driveState">Click an email or a tab &ndash; watch andeye follow you</span></div>
       <div class="mac">
         <div class="menubar" aria-live="polite">
           <span class="mb-app" id="mbApp">Finder</span>
-          <span class="mb-menus">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View&nbsp;&nbsp;Go&nbsp;&nbsp;Window&nbsp;&nbsp;Help</span>
+          <span class="mb-menus">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View&nbsp;&nbsp;Window&nbsp;&nbsp;Help</span>
           <span class="mb-spacer"></span>
-          <span class="mb-tracker" id="mbTracker">
+          <span class="mb-tracker idle" id="mbTracker">
             <canvas id="mbEye" aria-hidden="true"></canvas>
-            <span id="mbTask">watching&hellip;</span>
-            <span id="mbClock" class="tnum">00:00</span>
-            <span id="mbCert" class="tnum">&ndash;</span>
+            <span id="mbClock" class="tnum">0s</span>
+            <span id="mbTask">waiting</span>
           </span>
           <span class="mb-sys tnum">Tue&nbsp;9:41</span>
         </div>
         <div class="desktop" id="desktop">
-          <button class="app-card" data-app="mail" aria-label="Switch to the browser, reading client email">
-            <span class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wtitle">webmail &ndash; inbox</span></span>
-            <span class="app-body">
-              <span class="urlbar">mail.client.example</span>
-              <span class="mail-cols">
-                <span class="rail"><i class="pill"></i><i class="rl"></i><i class="rl"></i><i class="rl"></i></span>
-                <span class="mlist">
-                  <span class="mrow unread"><i class="frm"></i><i class="subj"></i></span>
-                  <span class="mrow"><i class="frm"></i><i class="subj"></i></span>
-                  <span class="mrow unread"><i class="frm"></i><i class="subj"></i></span>
-                  <span class="mrow"><i class="frm"></i><i class="subj"></i></span>
-                </span>
-              </span>
-            </span>
-          </button>
-          <button class="app-card" data-app="code" aria-label="Switch to the code editor">
-            <span class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wtitle">TrackerCore.swift &ndash; andeyeTT</span></span>
-            <span class="app-body">
-              <span class="code-lines">
-                <span class="cl"><b></b><i></i></span>
-                <span class="cl"><b></b><i></i></span>
-                <span class="cl"><b></b><i></i></span>
-                <span class="cl"><b></b><i></i></span>
-                <span class="cl"><b></b><i></i></span>
-                <span class="cl"><b></b><i></i></span>
-                <span class="cl"><b></b><i></i></span>
-              </span>
-            </span>
-          </button>
-          <button class="app-card" data-app="design" aria-label="Switch to the design canvas">
-            <span class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wtitle">brand-refresh-v3</span></span>
-            <span class="app-body">
-              <span class="canvas-area">
-                <span class="tools"><i></i><i></i><i></i><i></i></span>
-                <span class="board">
-                  <span class="shape circle"></span>
-                  <span class="shape rect"></span>
-                  <span class="shape line"></span>
-                </span>
-              </span>
-            </span>
-          </button>
-          <button class="app-card" data-app="term" aria-label="Switch to the terminal">
-            <span class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wtitle">deploy &ndash; zsh</span></span>
-            <span class="app-body">
-              <span class="term">
-                <span class="trow"><s>$</s><i></i></span>
-                <span class="trow"><i></i></span>
-                <span class="trow"><i></i></span>
-                <span class="trow"><s>$</s><span class="cursor"></span></span>
-              </span>
-            </span>
-          </button>
+
+          <!-- Mail: three correspondents, three jobs -->
+          <div class="win win-mail" id="winMail">
+            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Mail &ndash; Inbox</span></div>
+            <div class="mail-body">
+              <div class="mail-list" id="mailList">
+                <button class="mailrow unread" data-focus="mail-maren" aria-label="Open Maren Vale's email about the rebrand">
+                  <span class="avatar" style="background:#c9a7ea">MV</span>
+                  <span class="mtext">
+                    <span class="mfrom">Maren Vale</span>
+                    <span class="msubj">Re: the new logo &ndash; it looks wonderful</span>
+                  </span>
+                  <span class="mtime tnum">9:12</span>
+                </button>
+                <button class="mailrow unread" data-focus="mail-priya" aria-label="Open the email from Priya at x-accounts.com">
+                  <span class="avatar" style="background:#8fb6e8">P</span>
+                  <span class="mtext">
+                    <span class="mfrom">Priya@x-accounts.com</span>
+                    <span class="msubj">Q2 invoices &ndash; one receipt to confirm</span>
+                  </span>
+                  <span class="mtime tnum">8:47</span>
+                </button>
+                <button class="mailrow unread" data-focus="mail-anthropic" aria-label="Open the newsletter from Anthropic">
+                  <span class="avatar" style="background:#e6a97a">A</span>
+                  <span class="mtext">
+                    <span class="mfrom">Anthropic</span>
+                    <span class="msubj">Designing with Claude &ndash; a few ideas this week</span>
+                  </span>
+                  <span class="mtime tnum">8:15</span>
+                </button>
+              </div>
+              <div class="mail-read" id="mailRead" hidden></div>
+            </div>
+          </div>
+
+          <!-- Chrome: two work tabs and one honest break, all line-drawn -->
+          <div class="win win-web" id="winWeb">
+            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Chrome</span></div>
+            <div class="tabbar" id="tabBar">
+              <button class="tab" data-focus="tab-staging" aria-label="The client's staging site tab">
+                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="2" y1="6" x2="14" y2="6"/></svg>staging
+              </button>
+              <button class="tab" data-focus="tab-ref" aria-label="A design reference tab">
+                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>reference
+              </button>
+              <button class="tab" data-focus="tab-kitten" aria-label="A kitten video tab">
+                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4.5"/><path d="M4.5 5 L3.5 2.3 L6.2 4.3"/><path d="M11.5 5 L12.5 2.3 L9.8 4.3"/></svg>kittens
+              </button>
+            </div>
+            <div class="urlbar" id="webUrl">staging.marenvale.co/home</div>
+            <div class="webbody" id="webBody"><!-- filled by the script --></div>
+          </div>
+
+          <!-- Design app: the rebrand on the canvas -->
+          <div class="win win-design" id="winDesign">
+            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Studio &ndash; marenvale-rebrand</span></div>
+            <div class="design-body">
+              <svg class="art" viewBox="0 0 240 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="8" y="12" width="16" height="126" rx="6" stroke-opacity="0.4"/>
+                <circle cx="16" cy="26" r="3"/><circle cx="16" cy="40" r="3"/><rect x="12" y="52" width="8" height="8" rx="2"/><circle cx="16" cy="74" r="3"/>
+                <rect x="40" y="16" width="150" height="118" rx="6" stroke-opacity="0.6"/>
+                <path d="M70 96 C60 60 120 58 108 88 C102 104 130 108 140 84" stroke="#f0a13a" stroke-width="3"/>
+                <circle cx="150" cy="86" r="12" stroke="#f0a13a" stroke-width="3"/>
+                <line x1="72" y1="118" x2="150" y2="118" stroke-opacity="0.5"/>
+                <rect x="204" y="16" width="28" height="118" rx="6" stroke-opacity="0.4"/>
+                <line x1="210" y1="30" x2="226" y2="30" stroke-opacity="0.6"/><line x1="210" y1="42" x2="222" y2="42" stroke-opacity="0.6"/>
+                <rect x="210" y="54" width="16" height="10" rx="2" fill="#f0a13a" fill-opacity="0.2" stroke="#f0a13a"/>
+                <line x1="210" y1="76" x2="226" y2="76" stroke-opacity="0.6"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Messages: the client back-and-forth -->
+          <div class="win win-chat" id="winChat">
+            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Messages &ndash; Maren Vale</span></div>
+            <div class="chat-body">
+              <div class="bubble in">morning! did the curl on the mark survive the night?</div>
+              <div class="bubble out">it did &ndash; pushing the wordmark a touch warmer now, 2 mins</div>
+              <div class="bubble in">you're a star. no rush at all</div>
+            </div>
+          </div>
+
         </div>
       </div>
-      <div class="timeline">
-        <div class="tl-head"><span>attributed in this demo</span><span id="tlTotal" class="tnum">0:00</span></div>
-        <div class="tl-strip" id="tlStrip" aria-hidden="true"></div>
-        <p class="tl-key">Each block is one stretch on one task. Block colour = the eye's certainty at the time.</p>
+
+      <!-- Real timeline + real pie, populated by the demo's attribution -->
+      <div class="analytics">
+        <div class="panel-card">
+          <div class="tl-head"><span>Timeline &middot; this morning</span><span id="tlTotal" class="tnum">0:00</span></div>
+          <div class="tl-strip" id="tlStrip"><span class="tl-empty">click a window to start tracking</span></div>
+          <div class="tl-axis"><span>9:41</span><span id="tlNow">now</span></div>
+          <div class="readout" id="tlReadout">Hover a slice to see the task and time.</div>
+        </div>
+        <div class="panel-card">
+          <h4>Time by project</h4>
+          <div class="pie-wrap">
+            <canvas id="pieCanvas" width="112" height="112" aria-hidden="true"></canvas>
+            <div class="legend" id="legend"></div>
+          </div>
+          <div class="readout" id="pieReadout">Hover a wedge to see the project and time.</div>
+        </div>
       </div>
+      <p class="demo-caption">Colours are your projects. The big eye up top is just andeye saying hello.</p>
     </div>
   </div>
 </header>
@@ -628,22 +780,22 @@
 <section id="how">
   <div class="wrap">
     <p class="eyebrow">How it works</p>
-    <h2>Three moves, all on your Mac</h2>
+    <h2>Three moves, and your timesheet writes itself</h2>
     <div class="steps">
       <div class="step">
         <span class="num">01 &ndash; OBSERVE</span>
         <h3>It reads the room</h3>
-        <p>andeye watches your active window and tab title as you work. That is the whole feed &ndash; no screenshots, no keystrokes, and nothing ever sent anywhere.</p>
+        <p>andeye watches your active window, tab and app as you work &ndash; and who a piece of mail is from. No screenshots, no keystrokes. It all stays on your Mac.</p>
       </div>
       <div class="step">
         <span class="num">02 &ndash; ATTRIBUTE</span>
         <h3>Every minute finds its task</h3>
-        <p>Each minute lands on a task with an honest certainty score. 97% sure you were on issue #142; 74% sure that terminal session was the deploy. It tells you, and it never rounds up.</p>
+        <p>Each minute lands on a task with an honest certainty score. 94% sure that thread was Maren's rebrand; not at all sure the newsletter was work &ndash; and it says so. A kitten break is a break. It never rounds up.</p>
       </div>
       <div class="step">
         <span class="num">03 &ndash; POST</span>
         <h3>Your backlog fills itself in</h3>
-        <p>Confirmed time posts to your own backlog &ndash; OpenProject today, more connectors to come. You keep the final say on every entry.</p>
+        <p>The hours you confirm post to your own backlog &ndash; OpenProject today, Xero via Pro later. You keep the final say on every entry, and it only goes where you already keep your work.</p>
       </div>
     </div>
   </div>
@@ -657,8 +809,8 @@
     <p class="lede">Most tracking software points the camera at the worker and hands the film to someone else. andeye inverts that: the eye answers to the person it watches, and to no one else.</p>
     <div class="pv-claims">
       <div>
-        <h3>Nothing leaves your Mac.</h3>
-        <p>Observation, attribution and learning all run on-device. There is no server, no account, no telemetry &ndash; nowhere for your day to go.</p>
+        <h3>Your day stays on your Mac.</h3>
+        <p>Observation, attribution and learning all run on-device. There is no server, no account, no telemetry. The only thing that ever leaves is a finished time entry you approve, sent to your own OpenProject &ndash; or your Xero, later. Never to us.</p>
       </div>
       <div>
         <h3>Learning stays local.</h3>
@@ -666,7 +818,7 @@
       </div>
       <div>
         <h3>Your rules, on your disk.</h3>
-        <p>Pin rules like &ldquo;mail from this client goes to this project&rdquo; are files in your home folder. Read them, edit them, delete them.</p>
+        <p>Pin rules like &ldquo;mail from this client goes to this project&rdquo; are files on your Mac. Read them, edit them, delete them.</p>
       </div>
     </div>
   </div>
@@ -708,7 +860,7 @@
 (function () {
 'use strict';
 
-// --- geometry begin (literal port of Sources/AndeyeTTCore/AndeyeLogo.swift,
+// --- geometry begin (literal port of Sources/andeyeTTCore/AndeyeLogo.swift,
 //     verbatim from the verified logo-preview) ---
 
 // SVG viewBox is 365 x 235; everything normalises by the WIDTH, so the
@@ -879,10 +1031,15 @@ function drawMark(ctx, cssW, cssH, segs, colour) {
 }
 
 // --- colour: the certainty gradient (the app's honest-confidence signal) ---
+// VERBATIM from MenuTitle.colour: a linear blend of the user's two gradient
+// colours — default #FF3B30 (systemRed) at certainty 0 -> #34C759
+// (systemGreen) at certainty 1. RED means unsure, GREEN means sure.
+// ONLY the menu-bar mark carries this; the hero mark stays orange.
 
-const NEUTRAL = [174, 182, 196];              // before the eye knows anything
-const LOW = [106, 115, 130];                  // unsure: cool slate
-const ACC = [240, 161, 58];                   // sure: dusk amber
+const NEUTRAL = [142, 142, 147];              // systemGray: before the eye knows anything
+const CERT_LOW = [255, 59, 48];               // #FF3B30 systemRed — unsure
+const CERT_HIGH = [52, 199, 89];              // #34C759 systemGreen — sure
+const ACCENT = '#f0a13a';                     // the hero mark's fixed orange
 function mixRGB(a, b, k) {
   return [Math.round(a[0] + (b[0] - a[0]) * k),
           Math.round(a[1] + (b[1] - a[1]) * k),
@@ -890,19 +1047,37 @@ function mixRGB(a, b, k) {
 }
 function cssRGB(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
 function certRGB(cert) {
-  const k = clamp01((cert - 0.65) / 0.35);
-  return mixRGB(LOW, ACC, k);
+  return mixRGB(CERT_LOW, CERT_HIGH, clamp01(cert));
 }
 
-// --- the living eye: one state, rendered to hero + menu bar together ---
+// --- project palette: the app's per-task colour (AppController.colour) is
+// HSB(hue, 0.55, 0.85); we pick fixed hues in that exact saturation/brightness
+// so the timeline slices and pie wedges read like the real app. ---
+function hsb(h, s, v) {
+  h = (h % 360) / 60;
+  const c = v * s, x = c * (1 - Math.abs(h % 2 - 1)), m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 1) { r = c; g = x; }
+  else if (h < 2) { r = x; g = c; }
+  else if (h < 3) { g = c; b = x; }
+  else if (h < 4) { g = x; b = c; }
+  else if (h < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+const PROJECTS = {
+  maren:    { label: 'Maren',     rgb: hsb(265, 0.55, 0.85), billable: true },
+  accounts: { label: 'Accounts',  rgb: hsb(205, 0.55, 0.85), billable: true },
+  reading:  { label: 'Anthropic', rgb: hsb(338, 0.55, 0.85), billable: false },
+  brk:      { label: 'Kittens',   rgb: hsb(150, 0.10, 0.62), billable: false },
+};
+const PROJ_ORDER = ['maren', 'accounts', 'reading', 'brk'];
+
+// --- the two eyes: HERO (always orange) and MENU-BAR (certainty-tinted) ---
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const dpr = Math.max(window.devicePixelRatio || 1, 1);
-
-const state = { t: reduced ? 1.0 : 0.0, wink: 0.0, rgb: NEUTRAL.slice() };
-let animTimer = null;
-let colourRaf = null;
-let blinkTimer = null;
 
 const heroEye = document.getElementById('heroEye');
 const mbEye = document.getElementById('mbEye');
@@ -919,210 +1094,82 @@ function sizeCanvas(cv, ctx, w, h) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+// hero state: geometry only, colour is always ACCENT
+let heroT = reduced ? 1 : 0, heroWink = 0, heroTimer = null, heroBlinkTimer = null;
+function renderHero() { drawMark(heroCtx, HERO_W, HERO_H, stroke(heroT, heroWink), ACCENT); }
+
+// menu-bar state: always fully drawn (t=1), winks on task change, tint = certainty
+let mbWink = 0, mbTimer = null, mbRaf = null, mbRGB = NEUTRAL.slice();
+function renderMB() { drawMark(mbCtx, MB_W, MB_H, stroke(1, mbWink), cssRGB(mbRGB)); }
+
 function sizeAll() {
   const avail = heroEye.parentElement.clientWidth || 340;
   HERO_W = Math.min(340, avail);
   HERO_H = Math.round(HERO_W * aspect);
   sizeCanvas(heroEye, heroCtx, HERO_W, HERO_H);
   sizeCanvas(mbEye, mbCtx, MB_W, MB_H);
-  render();
+  renderHero();
+  renderMB();
 }
 
-function render() {
-  const segs = stroke(state.t, state.wink);
-  const col = cssRGB(state.rgb);
-  drawMark(heroCtx, HERO_W, HERO_H, segs, col);
-  drawMark(mbCtx, MB_W, MB_H, segs, col);
+// Hero draw-on: t 0 -> 1 in 16 steps at 75 ms/frame (~1.2 s), mirroring
+// AppController.playDrawOn. Then a hello wink, then idle blinks.
+function heroDrawOn(done) {
+  if (heroTimer !== null) { clearTimeout(heroTimer); heroTimer = null; }
+  const steps = 16; let i = 0;
+  (function frame() {
+    heroT = i / steps; renderHero();
+    if (i < steps) { i++; heroTimer = setTimeout(frame, 75); }
+    else { heroTimer = null; if (done) done(); }
+  })();
 }
-
-function cancelAnim() {
-  if (animTimer !== null) { clearTimeout(animTimer); animTimer = null; }
-}
-
-// Draw-on: t stepping 0 -> 1 in 16 steps at 75 ms/frame (~1.2 s),
-// mirroring AppController.playDrawOn.
-function playDrawOn(done) {
-  cancelAnim();
-  const steps = 16;
-  let i = 0;
-  function frame() {
-    state.t = i / steps;
-    render();
-    if (i < steps) { i++; animTimer = setTimeout(frame, 75); }
-    else { animTimer = null; if (done) done(); }
-  }
-  frame();
-}
-
-// Wink: [1.0, 0.45, 0.0] at 120 ms/frame (shut -> half -> open, ~360 ms),
-// mirroring AppController.playWink. Only winks once fully drawn.
-function playWink(done) {
+function heroWinkPlay(done) {
   if (reduced) { if (done) done(); return; }
-  cancelAnim();
-  state.t = 1;
-  const frames = [1.0, 0.45, 0.0];
-  let i = 0;
-  function frame() {
-    state.wink = frames[i];
-    render();
-    i++;
-    if (i < frames.length) animTimer = setTimeout(frame, 120);
-    else { animTimer = null; if (done) done(); }
-  }
-  frame();
+  if (heroTimer !== null) { clearTimeout(heroTimer); heroTimer = null; }
+  heroT = 1;
+  const fr = [1.0, 0.45, 0.0]; let i = 0;
+  (function frame() {
+    heroWink = fr[i]; renderHero(); i++;
+    if (i < fr.length) heroTimer = setTimeout(frame, 120);
+    else { heroTimer = null; if (done) done(); }
+  })();
 }
-
-// Certainty tint: blend the eye's colour over ~550 ms.
-function tintTo(target, instant) {
-  if (colourRaf !== null) { cancelAnimationFrame(colourRaf); colourRaf = null; }
-  if (instant || reduced) { state.rgb = target.slice(); render(); return; }
-  const from = state.rgb.slice();
-  const start = performance.now();
-  const dur = 550;
-  function step(now) {
-    const k = clamp01((now - start) / dur);
-    const e = k * (2 - k); // ease-out
-    state.rgb = mixRGB(from, target, e);
-    render();
-    if (k < 1) colourRaf = requestAnimationFrame(step);
-    else colourRaf = null;
-  }
-  colourRaf = requestAnimationFrame(step);
-}
-
-// Idle blinks: the eye is alive even when nothing happens.
-function scheduleBlink() {
+function scheduleHeroBlink() {
   if (reduced) return;
-  clearTimeout(blinkTimer);
-  blinkTimer = setTimeout(function () {
-    if (animTimer === null && document.visibilityState === 'visible') playWink();
-    scheduleBlink();
+  clearTimeout(heroBlinkTimer);
+  heroBlinkTimer = setTimeout(function () {
+    if (heroTimer === null && document.visibilityState === 'visible') heroWinkPlay();
+    scheduleHeroBlink();
   }, 4800 + Math.random() * 4600);
 }
 
-// --- the demo: a day at your Mac ---
-
-const APPS = {
-  mail:   { app: 'Browser',  task: 'Acme Ltd · redesign thread', cert: 0.92 },
-  code:   { app: 'Code',     task: 'andeyeTT · issue #142',      cert: 0.97 },
-  design: { app: 'Canvas',   task: 'Brand refresh · v3',         cert: 0.88 },
-  term:   { app: 'Terminal', task: 'Deploy · pipeline fix',      cert: 0.74 },
-};
-
-const mbApp = document.getElementById('mbApp');
-const mbTask = document.getElementById('mbTask');
-const mbClock = document.getElementById('mbClock');
-const mbCert = document.getElementById('mbCert');
-const mbTracker = document.getElementById('mbTracker');
-const tlStrip = document.getElementById('tlStrip');
-const tlTotal = document.getElementById('tlTotal');
-const driveState = document.getElementById('driveState');
-const cards = Array.prototype.slice.call(document.querySelectorAll('.app-card'));
-
-let currentTask = null;      // committed task id
-let currentFocus = null;     // focused window id
-let taskStart = 0;           // performance.now() at last commit
-let pendingTimer = null;
-let doneSeconds = 0;         // finished blocks total
-let curBlock = null;
-
-function fmtClock(s) {
-  s = Math.max(0, Math.floor(s));
-  const m = Math.floor(s / 60);
-  const ss = ('0' + (s % 60)).slice(-2);
-  return ('0' + m).slice(-2) + ':' + ss;
-}
-function fmtTotal(s) {
-  s = Math.max(0, Math.floor(s));
-  return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+// Menu-bar wink: [1.0, 0.45, 0.0] at 120 ms/frame – fires on every task change.
+function mbWinkPlay() {
+  if (reduced) return;
+  if (mbTimer !== null) { clearTimeout(mbTimer); mbTimer = null; }
+  const fr = [1.0, 0.45, 0.0]; let i = 0;
+  (function frame() {
+    mbWink = fr[i]; renderMB(); i++;
+    if (i < fr.length) mbTimer = setTimeout(frame, 120);
+    else { mbTimer = null; }
+  })();
 }
 
-function setFocus(id) {
-  currentFocus = id;
-  mbApp.textContent = APPS[id].app;
-  cards.forEach(function (c) {
-    c.classList.toggle('active', c.getAttribute('data-app') === id);
-  });
+// Menu-bar certainty tint: blend the mark's colour over ~550 ms.
+function tintMB(target, instant) {
+  if (mbRaf !== null) { cancelAnimationFrame(mbRaf); mbRaf = null; }
+  if (instant || reduced) { mbRGB = target.slice(); renderMB(); return; }
+  const from = mbRGB.slice();
+  const start = performance.now(), dur = 550;
+  (function step(now) {
+    const k = clamp01((now - start) / dur);
+    const e = k * (2 - k); // ease-out
+    mbRGB = mixRGB(from, target, e);
+    renderMB();
+    if (k < 1) mbRaf = requestAnimationFrame(step);
+    else mbRaf = null;
+  })(performance.now());
 }
-
-function commit(id, instant) {
-  const now = performance.now();
-  if (currentTask !== null) doneSeconds += (now - taskStart) / 1000;
-  currentTask = id;
-  taskStart = now;
-  const a = APPS[id];
-  mbTask.textContent = a.task;
-  mbClock.textContent = '00:00';
-  mbCert.textContent = Math.round(a.cert * 100) + '%';
-  const rgb = certRGB(a.cert);
-  mbCert.style.color = cssRGB(rgb);
-  tintTo(rgb, instant);
-  if (!instant) { playWink(); scheduleBlink(); }
-  // new timeline block for the new stretch
-  curBlock = document.createElement('div');
-  curBlock.className = 'tl-block';
-  curBlock.style.background = cssRGB(rgb);
-  curBlock.style.flexGrow = 1;
-  tlStrip.appendChild(curBlock);
-}
-
-function switchTo(id, instant) {
-  if (id === currentFocus && id === currentTask) return;
-  setFocus(id);
-  clearTimeout(pendingTimer);
-  if (instant) { commit(id, true); return; }
-  // the attribution beat: focus is instant, attribution takes a moment
-  mbTracker.classList.add('attributing');
-  pendingTimer = setTimeout(function () {
-    mbTracker.classList.remove('attributing');
-    commit(id, false);
-  }, 700);
-}
-
-setInterval(function () {
-  if (currentTask === null) return;
-  const s = (performance.now() - taskStart) / 1000;
-  mbClock.textContent = fmtClock(s);
-  if (curBlock) curBlock.style.flexGrow = Math.max(s, 1);
-  tlTotal.textContent = fmtTotal(doneSeconds + s);
-}, 250);
-
-// --- autoplay: a scripted loop until the visitor takes over ---
-
-const AUTO_ORDER = ['mail', 'code', 'design', 'term'];
-let autoIdx = 0;
-let autoTimer = null;
-let driving = false;
-
-function autoStep() {
-  const id = AUTO_ORDER[autoIdx % AUTO_ORDER.length];
-  autoIdx++;
-  const card = cards.find(function (c) { return c.getAttribute('data-app') === id; });
-  if (card && !reduced) {
-    card.classList.remove('autopulse');
-    void card.offsetWidth;
-    card.classList.add('autopulse');
-  }
-  switchTo(id, false);
-  autoTimer = setTimeout(autoStep, 3800);
-}
-
-function stopAuto() {
-  if (driving) return;
-  driving = true;
-  clearTimeout(autoTimer);
-  driveState.textContent = "you're driving · the eye follows you now";
-  driveState.classList.add('driving');
-}
-
-cards.forEach(function (card) {
-  card.addEventListener('click', function (e) {
-    if (e.isTrusted) stopAuto();
-    switchTo(card.getAttribute('data-app'), false);
-  });
-});
-
-// --- decorative privacy mark (static, fully drawn) ---
 
 function drawStaticMark(cv, w, colour) {
   const h = Math.round(w * aspect);
@@ -1131,19 +1178,409 @@ function drawStaticMark(cv, w, colour) {
   drawMark(ctx, w, h, stroke(1, 0), colour);
 }
 
-// --- CTA hover: the eye winks back ---
+// --- the demo: a freelance designer's Tuesday morning ---
+// The VIEWER is the designer. The cast are the correspondents, tabs and apps:
+//   Maren Vale  – the rebrand client (her mail, her staging tab, the canvas, the chat)
+//   Priya@x-accounts.com – the accounts firm (Accounts)
+//   Anthropic   – an ambiguous designer newsletter (low certainty, red-ish)
+//   a kitten video – an honest break, tracked but not billable.
+// Certainty varies so the red->green range is visible as you click around.
 
-let lastCtaWink = 0;
-document.getElementById('ctaWaitlist').addEventListener('mouseenter', function () {
+const FOCUS = {
+  'mail-maren':     { app: 'Mail',     task: 'Maren',    proj: 'maren',    cert: 0.94, win: 'winMail' },
+  'mail-priya':     { app: 'Mail',     task: 'Accounts', proj: 'accounts', cert: 0.90, win: 'winMail' },
+  'mail-anthropic': { app: 'Mail',     task: 'Anthropic',proj: 'reading',  cert: 0.38, win: 'winMail' },
+  'tab-staging':    { app: 'Chrome',   task: 'Maren',    proj: 'maren',    cert: 0.92, win: 'winWeb', url: 'staging.marenvale.co/home' },
+  'tab-ref':        { app: 'Chrome',   task: 'Maren',    proj: 'maren',    cert: 0.88, win: 'winWeb', url: 'type.reference.example/grotesque' },
+  'tab-kitten':     { app: 'Chrome',   task: 'Kittens',  proj: 'brk',      cert: 0.30, win: 'winWeb', url: 'videos.example/kittens-vs-box' },
+  'design':         { app: 'Studio',   task: 'Maren',    proj: 'maren',    cert: 0.95, win: 'winDesign' },
+  'chat':           { app: 'Messages', task: 'Maren',    proj: 'maren',    cert: 0.93, win: 'winChat' },
+};
+
+// Line-art browser bodies, swapped per active tab (inline SVG, no text placeholders).
+const WEB_ART = {
+  'tab-staging':
+    '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+    + '<rect x="10" y="10" width="200" height="130" rx="6" stroke-opacity="0.5"/>'
+    + '<line x1="10" y1="34" x2="210" y2="34" stroke-opacity="0.5"/>'
+    + '<circle cx="22" cy="22" r="4"/><line x1="150" y1="22" x2="165" y2="22"/><line x1="175" y1="22" x2="198" y2="22"/>'
+    + '<rect x="24" y="48" width="80" height="44" rx="4" stroke="#f0a13a"/>'
+    + '<line x1="120" y1="52" x2="196" y2="52"/><line x1="120" y1="64" x2="180" y2="64"/><line x1="120" y1="76" x2="192" y2="76"/>'
+    + '<rect x="24" y="104" width="52" height="26" rx="4"/><rect x="84" y="104" width="52" height="26" rx="4"/><rect x="144" y="104" width="52" height="26" rx="4"/>'
+    + '</svg>',
+  'tab-ref':
+    '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+    + '<rect x="14" y="14" width="58" height="42" rx="5"/>'
+    + '<rect x="82" y="14" width="58" height="42" rx="5" fill="#f0a13a" fill-opacity="0.16" stroke="#f0a13a"/>'
+    + '<rect x="150" y="14" width="56" height="42" rx="5"/>'
+    + '<rect x="14" y="66" width="58" height="42" rx="5" fill="#c9a7ea" fill-opacity="0.16" stroke="#c9a7ea"/>'
+    + '<rect x="82" y="66" width="58" height="42" rx="5"/>'
+    + '<rect x="150" y="66" width="56" height="42" rx="5"/>'
+    + '<line x1="14" y1="126" x2="120" y2="126"/><line x1="14" y1="136" x2="88" y2="136"/>'
+    + '</svg>',
+  'tab-kitten':
+    '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M120 96 L120 132 L188 132 L188 96"/>'
+    + '<path d="M112 96 L120 96 L134 84 L126 84 Z"/><path d="M196 96 L188 96 L174 84 L182 84 Z"/>'
+    + '<line x1="112" y1="96" x2="196" y2="96"/>'
+    + '<circle cx="64" cy="86" r="26"/>'
+    + '<path d="M46 66 L40 44 L60 60"/><path d="M82 66 L88 44 L68 60"/>'
+    + '<circle cx="55" cy="84" r="2.4" fill="currentColor"/><circle cx="73" cy="84" r="2.4" fill="currentColor"/>'
+    + '<path d="M64 90 l-4 5 M64 90 l4 5"/>'
+    + '<line x1="30" y1="86" x2="48" y2="90"/><line x1="30" y1="96" x2="48" y2="96"/>'
+    + '<line x1="98" y1="86" x2="80" y2="90"/><line x1="98" y1="96" x2="80" y2="96"/>'
+    + '<path d="M40 108 q24 18 48 0"/>'
+    + '<circle cx="150" cy="58" r="16" stroke-opacity="0.7"/>'
+    + '<path d="M145 50 L145 66 L159 58 Z" fill="currentColor" stroke="none"/>'
+    + '</svg>',
+};
+
+// Email reading views. Priya's `from` IS the address, since the accounts
+// firm's domain is what andeye keys the attribution on.
+const EMAILS = {
+  'mail-maren': {
+    from: 'Maren Vale', addr: 'maren@marenvale.co', avatar: '#c9a7ea', initials: 'MV',
+    subj: 'Re: the new logo – it looks wonderful',
+    body: ['Morning! I finally sat with the latest round and I love where the mark is going. That little curl at the end feels like us.',
+           'Could we nudge the wordmark a touch warmer to match? Otherwise I am so happy with it. Thank you.'],
+  },
+  'mail-priya': {
+    from: 'Priya@x-accounts.com', addr: 'Priya@x-accounts.com', avatar: '#8fb6e8', initials: 'P',
+    subj: 'Q2 invoices – one receipt to confirm',
+    body: ['Hi, your Q2 invoices are all reconciled bar one. There is a receipt from June we cannot match to a payment.',
+           'Could you confirm the attached is yours? Then the quarter is clear.'],
+  },
+  'mail-anthropic': {
+    from: 'Anthropic', addr: 'news@anthropic.com', avatar: '#e6a97a', initials: 'A',
+    subj: 'Designing with Claude – a few ideas this week',
+    body: ['This week: three ways designers are speeding up moodboards, plus a prompt pack you can lift straight into your own work.',
+           'A friendly nudge, nothing urgent. Read it when the kettle is on.'],
+  },
+};
+
+const mbApp = document.getElementById('mbApp');
+const mbTask = document.getElementById('mbTask');
+const mbClock = document.getElementById('mbClock');
+const mbTracker = document.getElementById('mbTracker');
+const desktop = document.getElementById('desktop');
+const tlStrip = document.getElementById('tlStrip');
+const tlTotal = document.getElementById('tlTotal');
+const tlReadout = document.getElementById('tlReadout');
+const pieReadout = document.getElementById('pieReadout');
+const driveState = document.getElementById('driveState');
+const webBody = document.getElementById('webBody');
+const webUrl = document.getElementById('webUrl');
+const mailList = document.getElementById('mailList');
+const mailRead = document.getElementById('mailRead');
+const pieCanvas = document.getElementById('pieCanvas');
+const pieCtx = pieCanvas.getContext('2d');
+const legendEl = document.getElementById('legend');
+const surfaces = Array.prototype.slice.call(document.querySelectorAll('[data-focus]'));
+const WINS = {
+  winMail: document.getElementById('winMail'),
+  winWeb: document.getElementById('winWeb'),
+  winDesign: document.getElementById('winDesign'),
+  winChat: document.getElementById('winChat'),
+};
+
+let currentProj = null;      // the running task's project (null before first click)
+let currentMailId = 'mail-maren';
+let currentTabId = 'tab-staging';
+let taskStart = 0;
+let doneSeconds = 0;
+let curBlock = null;
+const projSeconds = {};
+PROJ_ORDER.forEach(function (p) { projSeconds[p] = 0; });
+
+const blocks = [];           // timeline block buttons, each carries _task/_proj/_secs
+let hoveredBlock = null;
+let hoveredProj = null;
+let pieWedges = [];
+let started = false;
+
+function fmtDur(s) {
+  s = Math.max(0, Math.floor(s));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60), ss = s % 60;
+  return ss ? (m + 'm ' + ss + 's') : (m + 'm');
+}
+function fmtTotal(s) {
+  s = Math.max(0, Math.floor(s));
+  return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+}
+
+function firstInteraction() {
+  if (started) return;
+  started = true;
+  desktop.classList.remove('idle');
+  mbTracker.classList.remove('idle');
+  driveState.textContent = "andeye is following you – keep clicking around";
+  driveState.classList.add('driving');
+  const e = tlStrip.querySelector('.tl-empty');
+  if (e) e.remove();
+}
+
+// Show one email's reading view inside the Mail window.
+function showMailReading(id) {
+  const e = EMAILS[id];
+  if (!e) return;
+  let html = '<button class="mail-back" type="button">‹ Inbox</button>'
+    + '<div class="read-head"><span class="avatar" style="background:' + e.avatar + '">' + e.initials + '</span>'
+    + '<span class="rh-text"><span class="rh-from">' + e.from + '</span>'
+    + (e.from !== e.addr ? ('<span class="rh-addr">' + e.addr + '</span>') : '')
+    + '</span></div>'
+    + '<div class="read-subj">' + e.subj + '</div>'
+    + '<div class="read-body">' + e.body.map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>';
+  mailRead.innerHTML = html;
+  mailList.hidden = true;
+  mailRead.hidden = false;
+  mailRead.querySelector('.mail-back').addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    mailRead.hidden = true;
+    mailList.hidden = false;
+  });
+}
+
+// Reflect the focus: raise its window (macOS traffic lights + full opacity),
+// mark the active row/tab, swap the browser body / open the email.
+function setFocus(id) {
+  const f = FOCUS[id];
+  mbApp.textContent = f.app;
+  Object.keys(WINS).forEach(function (k) { WINS[k].classList.toggle('focused', k === f.win); });
+  surfaces.forEach(function (el) { el.classList.toggle('active', el.getAttribute('data-focus') === id); });
+  if (f.win === 'winWeb') { webUrl.textContent = f.url || ''; webBody.innerHTML = WEB_ART[id] || ''; currentTabId = id; }
+  if (f.win === 'winMail') { showMailReading(id); currentMailId = id; }
+}
+
+// Commit a task change: bank the last stretch, reset the clock, wink the
+// menu-bar mark, and start a new timeline block coloured by project.
+function commit(f) {
   const now = performance.now();
-  if (reduced || animTimer !== null || now - lastCtaWink < 2500) return;
-  lastCtaWink = now;
-  playWink();
+  if (currentProj !== null) {
+    const dt = (now - taskStart) / 1000;
+    doneSeconds += dt;
+    projSeconds[currentProj] += dt;
+    if (curBlock) curBlock._secs = dt;
+  }
+  currentProj = f.proj;
+  taskStart = now;
+  mbTask.textContent = f.task;
+  mbClock.textContent = '0s';
+  mbWinkPlay();
+  curBlock = document.createElement('button');
+  curBlock.type = 'button';
+  curBlock.className = 'tl-block';
+  curBlock.style.background = cssRGB(PROJECTS[f.proj].rgb);
+  curBlock.style.flexGrow = 1;
+  curBlock._task = f.task;
+  curBlock._proj = f.proj;
+  curBlock._secs = 0;
+  curBlock.setAttribute('aria-label', f.task + ' block on the timeline');
+  tlStrip.appendChild(curBlock);
+  blocks.push(curBlock);
+  drawPie();
+}
+
+// A click anywhere: focus the surface, tint to its certainty, and – only if
+// the task actually changed – commit a new stretch.
+function switchTo(id) {
+  const f = FOCUS[id];
+  if (!f) return;
+  firstInteraction();
+  setFocus(id);
+  tintMB(certRGB(f.cert), reduced);
+  if (f.proj !== currentProj) commit(f);
+}
+
+// Wire the surfaces (rows + tabs) and the whole-window clicks.
+surfaces.forEach(function (el) {
+  el.addEventListener('click', function (e) {
+    e.stopPropagation();
+    switchTo(el.getAttribute('data-focus'));
+  });
+});
+WINS.winMail.addEventListener('click', function () { switchTo(currentMailId); });
+WINS.winWeb.addEventListener('click', function () { switchTo(currentTabId); });
+WINS.winDesign.addEventListener('click', function () { switchTo('design'); });
+WINS.winChat.addEventListener('click', function () { switchTo('chat'); });
+
+// The clock ticks; the current block grows; the pie breathes.
+setInterval(function () {
+  if (currentProj === null) return;
+  const s = (performance.now() - taskStart) / 1000;
+  mbClock.textContent = fmtDur(s);
+  if (curBlock) { curBlock.style.flexGrow = Math.max(s, 1); curBlock._secs = s; }
+  tlTotal.textContent = fmtTotal(doneSeconds + s);
+  drawPie();
+  if (hoveredBlock === curBlock) tlReadout.innerHTML = '<b>' + curBlock._task + '</b> · ' + fmtDur(s);
+  if (hoveredProj) updatePieReadout();
+}, 250);
+
+// --- interactive timeline: hover / click a slice to read it ---
+
+function highlightBlock(b) {
+  blocks.forEach(function (x) { x.classList.toggle('hi', x === b); });
+  hoveredBlock = b || null;
+  if (b) {
+    const s = (b === curBlock) ? (performance.now() - taskStart) / 1000 : b._secs;
+    tlReadout.innerHTML = '<b>' + b._task + '</b> · ' + fmtDur(s);
+  } else {
+    tlReadout.textContent = 'Hover a slice to see the task and time.';
+  }
+}
+tlStrip.addEventListener('mouseover', function (e) {
+  const b = e.target.closest('.tl-block'); if (b) highlightBlock(b);
+});
+tlStrip.addEventListener('mouseleave', function () { highlightBlock(null); });
+tlStrip.addEventListener('click', function (e) {
+  const b = e.target.closest('.tl-block'); if (b) highlightBlock(b);
 });
 
-// --- load choreography: one orchestrated sequence ---
-// dark -> the eye draws itself on -> one wink -> the words arrive -> the
-// demo starts working on its own. Reduced motion: everything is simply there.
+// --- the pie: a clickable donut of time by project (matches the app's donut) ---
+
+function liveProjSeconds() {
+  const out = {};
+  PROJ_ORDER.forEach(function (p) { out[p] = projSeconds[p]; });
+  if (currentProj !== null) {
+    out[currentProj] += (performance.now() - taskStart) / 1000;
+  }
+  return out;
+}
+
+function drawPie() {
+  const secs = liveProjSeconds();
+  const total = PROJ_ORDER.reduce(function (a, p) { return a + secs[p]; }, 0);
+  const side = 112;
+  sizeCanvas(pieCanvas, pieCtx, side, side);
+  pieCtx.clearRect(0, 0, side, side);
+  const cx = side / 2, cy = side / 2;
+  const rOuter = side * 0.46;
+  const rInner = side * 0.24;
+  pieWedges = [];
+  let a0 = -Math.PI / 2;
+  if (total > 0) {
+    PROJ_ORDER.forEach(function (p) {
+      const w = secs[p];
+      if (w <= 0) return;
+      const a1 = a0 + (w / total) * Math.PI * 2;
+      const hi = p === hoveredProj;
+      const rO = hi ? rOuter + 4 : rOuter;
+      pieCtx.beginPath();
+      pieCtx.arc(cx, cy, rO, a0, a1, false);
+      pieCtx.arc(cx, cy, rInner, a1, a0, true);
+      pieCtx.closePath();
+      const rgb = PROJECTS[p].rgb;
+      pieCtx.fillStyle = hi ? cssRGB(mixRGB(rgb, [255, 255, 255], 0.18)) : cssRGB(rgb);
+      pieCtx.fill();
+      pieWedges.push({ proj: p, a0: a0, a1: a1 });
+      a0 = a1;
+    });
+  } else {
+    pieCtx.beginPath();
+    pieCtx.arc(cx, cy, rOuter, 0, Math.PI * 2);
+    pieCtx.arc(cx, cy, rInner, 0, Math.PI * 2, true);
+    pieCtx.fillStyle = 'rgba(255,255,255,0.05)';
+    pieCtx.fill();
+  }
+  pieCtx.fillStyle = '#98a0b3';
+  pieCtx.font = '700 13px -apple-system, sans-serif';
+  pieCtx.textAlign = 'center';
+  pieCtx.textBaseline = 'middle';
+  pieCtx.fillText(fmtTotal(total), cx, cy);
+  drawLegend(secs, total);
+}
+
+function drawLegend(secs) {
+  let html = '';
+  PROJ_ORDER.forEach(function (p) {
+    const proj = PROJECTS[p];
+    html += '<button type="button" class="legend-row' + (p === hoveredProj ? ' hi' : '') + '" data-proj="' + p + '">'
+      + '<span class="legend-sw" style="background:' + cssRGB(proj.rgb) + '"></span>'
+      + '<span class="legend-name">' + proj.label
+      + (proj.billable ? '' : ' <span class="legend-note">not billable</span>')
+      + '</span><span class="legend-val">' + fmtDur(secs[p]) + '</span></button>';
+  });
+  legendEl.innerHTML = html;
+}
+
+function updatePieReadout() {
+  if (hoveredProj) {
+    const s = liveProjSeconds()[hoveredProj];
+    pieReadout.innerHTML = '<b>' + PROJECTS[hoveredProj].label + '</b> · ' + fmtDur(s);
+  } else {
+    pieReadout.textContent = 'Hover a wedge to see the project and time.';
+  }
+}
+function setPieHover(proj) {
+  if (proj === hoveredProj) return;
+  hoveredProj = proj;
+  drawPie();
+  updatePieReadout();
+}
+function angleInWedge(a, a0, a1) {
+  let x = a;
+  while (x < a0) x += 2 * Math.PI;
+  while (x >= a0 + 2 * Math.PI) x -= 2 * Math.PI;
+  return x >= a0 && x < a1;
+}
+function pieHitTest(e) {
+  const r = pieCanvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * 112;
+  const y = (e.clientY - r.top) / r.height * 112;
+  const dx = x - 56, dy = y - 56, dist = Math.hypot(dx, dy);
+  if (dist < 112 * 0.24 || dist > 112 * 0.46 + 4) return null;
+  const a = Math.atan2(dy, dx);
+  for (let i = 0; i < pieWedges.length; i++) {
+    if (angleInWedge(a, pieWedges[i].a0, pieWedges[i].a1)) return pieWedges[i].proj;
+  }
+  return null;
+}
+pieCanvas.addEventListener('mousemove', function (e) { setPieHover(pieHitTest(e)); });
+pieCanvas.addEventListener('mouseleave', function () { setPieHover(null); });
+pieCanvas.addEventListener('click', function (e) { setPieHover(pieHitTest(e)); });
+legendEl.addEventListener('mouseover', function (e) {
+  const row = e.target.closest('[data-proj]'); if (row) setPieHover(row.getAttribute('data-proj'));
+});
+legendEl.addEventListener('mouseleave', function () { setPieHover(null); });
+legendEl.addEventListener('click', function (e) {
+  const row = e.target.closest('[data-proj]'); if (row) setPieHover(row.getAttribute('data-proj'));
+});
+
+// --- CTA hover: subtext reacts, and the hero winks back on the waitlist ---
+
+const ctaSub = document.getElementById('ctaSub');
+const ctaStar = document.getElementById('ctaStar');
+const ctaWaitlist = document.getElementById('ctaWaitlist');
+const SUB_DEFAULT = 'Free and open source today. A ready-to-download app is on the way.';
+const SUB_TECH = "It's free and open source. Clone the repo and build it on your Mac today – every last line of it.";
+const SUB_APP = "Not a coder? No problem. Join the list and we'll email you the moment andeye is a normal app you just download and open – nothing to build, nothing to set up.";
+
+function setSub(text, cls) {
+  ctaSub.textContent = text;
+  ctaSub.classList.remove('tech', 'app');
+  if (cls) ctaSub.classList.add(cls);
+}
+function bindSub(el, text, cls) {
+  el.addEventListener('mouseenter', function () { setSub(text, cls); });
+  el.addEventListener('focus', function () { setSub(text, cls); });
+  el.addEventListener('mouseleave', function () { setSub(SUB_DEFAULT, null); });
+  el.addEventListener('blur', function () { setSub(SUB_DEFAULT, null); });
+}
+bindSub(ctaStar, SUB_TECH, 'tech');
+bindSub(ctaWaitlist, SUB_APP, 'app');
+
+let lastCtaWink = 0;
+ctaWaitlist.addEventListener('mouseenter', function () {
+  const now = performance.now();
+  if (reduced || heroTimer !== null || now - lastCtaWink < 2500) return;
+  lastCtaWink = now;
+  heroWinkPlay();
+});
+
+// --- load: the hero eye draws itself on and says hello; the demo waits ---
+// There is NO autoplay. The desktop breathes a "try me" hint until the first
+// click, then the visitor drives. Reduced motion: everything simply there,
+// hero fully drawn, demo idle and waiting.
 
 function revealAll() {
   document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
@@ -1151,23 +1588,23 @@ function revealAll() {
 
 sizeAll();
 drawStaticMark(pvEye, 72, 'rgba(240,161,58,0.9)');
+webBody.innerHTML = WEB_ART[currentTabId];
+drawPie();
+desktop.classList.add('idle');
 window.addEventListener('resize', function () {
   sizeAll();
   drawStaticMark(pvEye, 72, 'rgba(240,161,58,0.9)');
+  drawPie();
 });
 
 if (reduced) {
-  state.t = 1;
-  render();
+  heroT = 1; renderHero();
   revealAll();
-  setFocus('mail');
-  commit('mail', true);
-  driveState.textContent = 'click any window to switch task';
 } else {
-  playDrawOn(function () {
-    setTimeout(function () { playWink(); }, 180);
+  heroDrawOn(function () {
+    setTimeout(function () { heroWinkPlay(); }, 180);
     setTimeout(revealAll, 620);
-    setTimeout(function () { autoStep(); scheduleBlink(); }, 1500);
+    setTimeout(scheduleHeroBlink, 1500);
   });
 }
 

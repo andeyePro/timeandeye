@@ -1,0 +1,833 @@
+<title>andeye — Ink treatment</title>
+
+<style>
+  /* ============================================================
+     andeye — "Ink" treatment
+     True paper white, cool ink near-black. One accent, and only
+     where certainty is being expressed: the app's real gradient,
+     #FF3B30 (certainty 0) -> #34C759 (certainty 1).
+     Display: ui-serif / New York / Georgia. Body: humanist.
+     ============================================================ */
+  :root {
+    --paper: #fdfdfb;
+    --ink: #17171a;
+    --ink-soft: #3a3a40;
+    --muted: #5f5f68;
+    --faint: #8b8b93;
+    --hairline: #e6e6e1;
+    --hairline-2: #d8d8d2;
+    --panel: #ffffff;
+    /* Accent = the certainty-1 end of the app's gradient, darkened
+       for AA text contrast on paper. Meaningful only. */
+    --accent: #1e7b3c;
+    --serif: ui-serif, "New York", "Iowan Old Style", Georgia, "Times New Roman", serif;
+    --sans: "Seravek", "Avenir Next", "Avenir", "Gill Sans", "Segoe UI", system-ui, sans-serif;
+    --measure: 65ch;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 1.0625rem;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  img, canvas, svg { max-width: 100%; height: auto; }
+
+  ::selection { background: #dcefe2; }
+
+  a { color: var(--ink); text-decoration-color: var(--hairline-2); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 2px; }
+
+  .page { max-width: 1180px; margin-inline: auto; padding-inline: clamp(20px, 5vw, 64px); }
+
+  h1, h2, h3 { font-family: var(--serif); font-weight: 500; text-wrap: balance; margin: 0; }
+  p { text-wrap: pretty; margin: 0 0 1.1em; max-width: var(--measure); }
+
+  /* ---- header ------------------------------------------------ */
+  header.site {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding-block: 1.6rem 0.4rem;
+  }
+  .wordmark {
+    font-family: var(--serif); font-style: italic; font-size: 1.35rem;
+    text-decoration: none; letter-spacing: 0.01em;
+  }
+  nav.site a {
+    font-size: 0.92rem; color: var(--muted); text-decoration: none;
+    margin-left: 1.6rem;
+  }
+  nav.site a:hover { color: var(--ink); }
+
+  /* ---- hero -------------------------------------------------- */
+  .hero { padding-block: clamp(1rem, 4vw, 3rem) clamp(3rem, 7vw, 5.5rem); position: relative; }
+  .hero-mark { display: flex; justify-content: flex-end; }
+  .hero-mark canvas { display: block; width: min(100%, 780px); }
+  .hero-mark button.replay {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    background: none; border: 0; cursor: pointer; padding: 0;
+  }
+  .hero-mark { position: relative; }
+  .hero-copy { position: relative; z-index: 2; max-width: 30ch; }
+  @media (min-width: 1000px) {
+    .hero-mark canvas { width: min(72%, 780px); }
+    .hero-copy { margin-top: clamp(-140px, -11vw, -60px); }
+  }
+  .eyebrow {
+    font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 1.1rem; font-weight: 500;
+  }
+  h1.display {
+    font-size: clamp(2.6rem, 6.4vw, 4.6rem);
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+    margin-bottom: 1.4rem;
+  }
+  .u-ink { position: relative; white-space: nowrap; }
+  .u-ink svg {
+    position: absolute; left: -2%; right: -2%; bottom: -0.14em;
+    width: 104%; height: 0.28em; overflow: visible;
+  }
+  .u-ink svg path {
+    fill: none; stroke: var(--accent); stroke-width: 7;
+    stroke-linecap: round;
+    stroke-dasharray: 230; stroke-dashoffset: 230;
+    animation: inkline 700ms 1900ms cubic-bezier(.4,0,.3,1) forwards;
+  }
+  @keyframes inkline { to { stroke-dashoffset: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .u-ink svg path { animation: none; stroke-dashoffset: 0; }
+  }
+  .hero-sub { font-size: 1.15rem; color: var(--ink-soft); max-width: 46ch; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 1.8rem; }
+  .btn {
+    display: inline-block; font: inherit; font-size: 0.98rem; font-weight: 500;
+    text-decoration: none; border-radius: 999px;
+    padding: 0.72rem 1.5rem; border: 1px solid var(--ink);
+    transition: background-color 160ms, color 160ms;
+  }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .btn.primary:hover { background: var(--ink-soft); border-color: var(--ink-soft); }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--hairline-2); }
+  .btn.ghost:hover { border-color: var(--ink); }
+  .cta-note { font-size: 0.85rem; color: var(--faint); margin-top: 0.9rem; }
+
+  /* ---- section scaffolding: proof-sheet margin column -------- */
+  section.sheet {
+    border-top: 1px solid var(--hairline);
+    padding-block: clamp(2.6rem, 6vw, 4.6rem);
+  }
+  @media (min-width: 860px) {
+    section.sheet { display: grid; grid-template-columns: 130px 1fr; gap: 0 clamp(1.5rem, 4vw, 3.5rem); }
+  }
+  .folio {
+    font-family: var(--serif); font-size: 1rem; color: var(--faint);
+    font-variant-numeric: tabular-nums; padding-top: 0.45rem;
+  }
+  .folio .fnum { font-size: 1.9rem; display: block; line-height: 1; color: var(--hairline-2); }
+  h2.sec {
+    font-size: clamp(1.8rem, 3.4vw, 2.5rem); line-height: 1.12; margin-bottom: 1.3rem;
+    letter-spacing: -0.01em;
+  }
+  .sec-sub { color: var(--muted); }
+
+  /* ---- demo --------------------------------------------------- */
+  .demo { margin-top: 2rem; }
+  .menubar {
+    display: flex; align-items: center; gap: 1.1rem;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 0.42rem 0.9rem;
+    box-shadow: 0 1px 2px rgba(23,23,26,0.04);
+    font-size: 0.86rem;
+  }
+  .mb-app { font-weight: 600; }
+  .mb-menus { color: var(--faint); display: none; letter-spacing: 0.01em; }
+  @media (min-width: 640px) { .mb-menus { display: inline; } }
+  .mb-menus span { margin-right: 0.9rem; }
+  .mb-status { margin-left: auto; display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+  .mb-status canvas { display: block; }
+  .mb-task {
+    max-width: 11.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--ink-soft);
+  }
+  .mb-pct { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.82rem; }
+  .mb-clock { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 500; }
+
+  .desktop {
+    margin-top: 1.1rem;
+    display: grid; gap: 1rem;
+    grid-template-columns: repeat(12, 1fr);
+  }
+  .surface {
+    grid-column: span 12;
+    text-align: left; font: inherit; color: inherit; cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 0;
+    display: flex; flex-direction: column;
+    transition: border-color 180ms, box-shadow 180ms, opacity 180ms, transform 180ms;
+    min-width: 0;
+  }
+  @media (min-width: 720px) {
+    .surface:nth-child(1) { grid-column: 1 / span 7; }
+    .surface:nth-child(2) { grid-column: 8 / span 5; margin-top: 1.6rem; }
+    .surface:nth-child(3) { grid-column: 2 / span 5; margin-top: -0.5rem; }
+    .surface:nth-child(4) { grid-column: 7 / span 5; margin-top: 0.9rem; }
+  }
+  .surface:hover { border-color: var(--hairline-2); }
+  .surface[aria-pressed="true"] {
+    border-color: var(--ink);
+    box-shadow: 0 6px 22px rgba(23,23,26,0.09);
+    transform: translateY(-2px);
+  }
+  .demo.settled .surface[aria-pressed="false"] { opacity: 0.62; }
+  @media (prefers-reduced-motion: reduce) {
+    .surface, .surface[aria-pressed="true"] { transition: none; transform: none; }
+  }
+  .chrome {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 0.8rem; color: var(--muted);
+  }
+  .chrome i { width: 8px; height: 8px; border-radius: 50%; background: var(--hairline-2); flex: none; }
+  .wtitle { margin-left: 0.35rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sbody { padding: 0.9rem 0.9rem 0.7rem; flex: 1; }
+  .skel { height: 7px; border-radius: 4px; background: var(--hairline); margin-bottom: 8px; }
+  .skel.d { background: var(--hairline-2); }
+  .attr {
+    display: flex; align-items: baseline; gap: 0.6rem;
+    padding: 0.55rem 0.9rem 0.7rem;
+    border-top: 1px dashed var(--hairline);
+    font-size: 0.84rem;
+  }
+  .attr .task { color: var(--ink-soft); font-weight: 500; min-width: 0; }
+  .attr .pct { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: auto; flex: none; }
+  .snote { font-size: 0.78rem; color: var(--faint); padding: 0 0.9rem 0.75rem; }
+  .demo-caption { font-size: 0.85rem; color: var(--faint); margin-top: 1.2rem; max-width: var(--measure); }
+
+  /* ---- steps -------------------------------------------------- */
+  .steps { display: grid; gap: 2rem; }
+  @media (min-width: 860px) {
+    .steps { grid-template-columns: repeat(3, 1fr); gap: clamp(1.5rem, 3.5vw, 3rem); }
+    .steps .step:nth-child(2) { margin-top: 2.4rem; }
+    .steps .step:nth-child(3) { margin-top: 4.8rem; }
+  }
+  .step h3 { font-size: 1.35rem; margin-bottom: 0.6rem; }
+  .step .n {
+    font-family: var(--serif); color: var(--hairline-2); font-size: 2.2rem; line-height: 1;
+    display: block; margin-bottom: 0.7rem; font-variant-numeric: tabular-nums;
+  }
+  .step p { font-size: 0.98rem; color: var(--ink-soft); }
+
+  /* ---- privacy ------------------------------------------------ */
+  .privacy h2.big {
+    font-size: clamp(2.4rem, 6vw, 4.2rem);
+    line-height: 1.05; letter-spacing: -0.015em;
+    max-width: 14ch; margin-bottom: 2rem;
+  }
+  .privacy .cols { display: grid; gap: 1.5rem; }
+  @media (min-width: 860px) {
+    .privacy .cols { grid-template-columns: minmax(0, var(--measure)) 1fr; gap: clamp(2rem, 5vw, 4rem); }
+  }
+  .privacy .lede { font-size: 1.15rem; }
+  .marginal {
+    font-family: var(--serif); font-style: italic; font-size: 1.05rem;
+    color: var(--muted); border-left: 2px solid var(--accent);
+    padding-left: 1.1rem; max-width: 26ch; align-self: start;
+    margin-top: 0.3rem;
+  }
+  .rule-example {
+    font-family: var(--serif); font-style: italic;
+  }
+
+  /* ---- community & pro ---------------------------------------- */
+  .duo { display: grid; gap: 2.2rem; }
+  @media (min-width: 860px) { .duo { grid-template-columns: 7fr 5fr; gap: clamp(2rem, 5vw, 4rem); } }
+  .duo h3 { font-size: 1.5rem; margin-bottom: 0.8rem; }
+  .duo p { font-size: 0.99rem; color: var(--ink-soft); }
+  .tag {
+    display: inline-block; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); border: 1px solid var(--hairline-2); border-radius: 999px;
+    padding: 0.18rem 0.7rem; margin-bottom: 0.9rem;
+  }
+
+  /* ---- footer -------------------------------------------------- */
+  footer.site {
+    border-top: 1px solid var(--hairline);
+    padding-block: 2.2rem 3rem;
+    display: flex; flex-wrap: wrap; gap: 1rem 2.2rem; align-items: baseline;
+    font-size: 0.88rem; color: var(--muted);
+  }
+  footer.site a { color: var(--muted); }
+  footer.site .legal { margin-left: auto; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="page">
+
+  <header class="site">
+    <a class="wordmark" href="/">andeye</a>
+    <nav class="site" aria-label="Site">
+      <a href="/manual">Manual</a>
+      <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
+    </nav>
+  </header>
+
+  <!-- ================= hero ================= -->
+  <section class="hero" aria-label="Introduction">
+    <div class="hero-mark">
+      <canvas id="heroMark" aria-hidden="true"></canvas>
+      <button class="replay" id="heroReplay" aria-label="Replay the andeye mark drawing itself"></button>
+    </div>
+    <div class="hero-copy">
+      <p class="eyebrow">A menu-bar time tracker for macOS</p>
+      <h1 class="display">The timesheet writes <span class="u-ink">itself<svg viewBox="0 0 200 14" preserveAspectRatio="none" aria-hidden="true"><path d="M3,9 C46,3 118,12 197,5"/></svg></span>.</h1>
+      <p class="hero-sub">andeye sits in your Mac's menu bar, notices which window has your attention, and books each minute to the right task – with an honest figure for how certain it is. All of it on your machine. None of it anywhere else.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/andeyePro/andeyeTT">Star on GitHub</a>
+        <a class="btn ghost" href="mailto:hello@andeye.com?subject=andeye%20waitlist">Join the waitlist</a>
+      </div>
+      <p class="cta-note">Open source, AGPL&#8209;3.0 · build it from source today · requires macOS&nbsp;14 or later</p>
+    </div>
+  </section>
+
+  <!-- ================= demo ================= -->
+  <section class="sheet" aria-label="Live demonstration">
+    <div class="folio"><span class="fnum">¶</span>demo</div>
+    <div>
+      <h2 class="sec">Watch it decide.</h2>
+      <p class="sec-sub">A minute of andeye, simulated. Click a window to move your focus: the eye winks as it re&#8209;attributes, the clock restarts, and its ink runs from red to green with certainty.</p>
+
+      <div class="demo" id="demo">
+        <div class="menubar" aria-label="Simulated macOS menu bar">
+          <span class="mb-app">Finder</span>
+          <span class="mb-menus" aria-hidden="true"><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span></span>
+          <span class="mb-status">
+            <canvas id="mbMark" aria-hidden="true"></canvas>
+            <span class="mb-task" id="mbTask" aria-live="polite">starting…</span>
+            <span class="mb-pct" id="mbPct"></span>
+            <span class="mb-clock" id="mbClock">0:00</span>
+          </span>
+        </div>
+
+        <div class="desktop" id="desktop">
+
+          <button class="surface" data-i="0" aria-pressed="false">
+            <span class="chrome"><i></i><i></i><i></i><span class="wtitle">TimelineView.swift – andeyeTT</span></span>
+            <span class="sbody" aria-hidden="true">
+              <span class="skel d" style="width:38%"></span>
+              <span class="skel" style="width:74%;margin-left:6%"></span>
+              <span class="skel" style="width:61%;margin-left:6%"></span>
+              <span class="skel" style="width:82%;margin-left:12%"></span>
+              <span class="skel d" style="width:24%"></span>
+            </span>
+            <span class="attr"><span class="task">andeyeTT · timeline redraw</span><span class="pct" data-pct>96%</span></span>
+          </button>
+
+          <button class="surface" data-i="1" aria-pressed="false">
+            <span class="chrome"><i></i><i></i><i></i><span class="wtitle">Re: rebrand deck – J. Whitfield</span></span>
+            <span class="sbody" aria-hidden="true">
+              <span class="skel d" style="width:52%"></span>
+              <span class="skel" style="width:88%"></span>
+              <span class="skel" style="width:79%"></span>
+              <span class="skel" style="width:44%"></span>
+            </span>
+            <span class="attr"><span class="task">Acme · rebrand</span><span class="pct" data-pct>91%</span></span>
+            <span class="snote">pinned rule: mail from this client → this project</span>
+          </button>
+
+          <button class="surface" data-i="2" aria-pressed="false">
+            <span class="chrome"><i></i><i></i><i></i><span class="wtitle">Time entries API – OpenProject docs</span></span>
+            <span class="sbody" aria-hidden="true">
+              <span class="skel d" style="width:64%;height:10px;border-radius:6px"></span>
+              <span class="skel" style="width:90%"></span>
+              <span class="skel" style="width:83%"></span>
+              <span class="skel" style="width:57%"></span>
+            </span>
+            <span class="attr"><span class="task">Research · integrations</span><span class="pct" data-pct>78%</span></span>
+          </button>
+
+          <button class="surface" data-i="3" aria-pressed="false">
+            <span class="chrome"><i></i><i></i><i></i><span class="wtitle">Weekly review – Calendar</span></span>
+            <span class="sbody" aria-hidden="true">
+              <span class="skel" style="width:30%"></span>
+              <span class="skel d" style="width:70%"></span>
+              <span class="skel" style="width:30%"></span>
+              <span class="skel d" style="width:54%"></span>
+            </span>
+            <span class="attr"><span class="task">Admin · planning</span><span class="pct" data-pct>44%</span></span>
+            <span class="snote">below the auto-push threshold – held for your confirmation</span>
+          </button>
+
+        </div>
+        <p class="demo-caption">This simulation runs entirely inside this page, which is rather the point. The two ends of the gradient are the app's defaults; you can set your own.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= how it works ================= -->
+  <section class="sheet" aria-label="How it works">
+    <div class="folio"><span class="fnum">01</span>method</div>
+    <div>
+      <h2 class="sec">How it works.</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="n" aria-hidden="true">1</span>
+          <h3>Observe</h3>
+          <p>andeye notices which window and tab are frontmost – on your Mac, using your Mac. That stream of attention is all it collects, and it stays where it was made.</p>
+        </div>
+        <div class="step">
+          <span class="n" aria-hidden="true">2</span>
+          <h3>Attribute</h3>
+          <p>Each minute is matched to a task from your own backlog, and the match carries an honest certainty figure. 96% means it knows. 44% means it asks you rather than guessing quietly.</p>
+        </div>
+        <div class="step">
+          <span class="n" aria-hidden="true">3</span>
+          <h3>Post</h3>
+          <p>Time you confirm – or that clears your certainty threshold – posts to your own backlog. OpenProject today; more to come.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= privacy ================= -->
+  <section class="sheet privacy" aria-label="Privacy">
+    <div class="folio"><span class="fnum">02</span>the point</div>
+    <div>
+      <h2 class="big">Nothing leaves your Mac.</h2>
+      <div class="cols">
+        <div>
+          <p class="lede">Automatic time tracking is only tolerable when nobody else can read the record. So andeye keeps the whole apparatus local: observation happens on your machine, attribution happens on your machine, and the learning does too.</p>
+          <p>Your day is a file on your disk, not a row in somebody's database. When you teach it a rule – <span class="rule-example">mail from this client → this project</span> – the rule is written to your disk and consulted there. There is no account to create, no telemetry to opt out of, no server waiting for a sync that never needs to happen.</p>
+        </div>
+        <p class="marginal">This is the reason the product exists, not a feature added later.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= community & pro ================= -->
+  <section class="sheet" aria-label="Community and Pro">
+    <div class="folio"><span class="fnum">03</span>editions</div>
+    <div class="duo">
+      <div>
+        <span class="tag">Community · open source</span>
+        <h3>Open where it watches.</h3>
+        <p>The macOS app is open source under AGPL&#8209;3.0. Every line that observes your screen is there to be read, which is the only honest way to ship software that watches you work. Build it from source today.</p>
+        <p><a href="https://github.com/andeyePro/andeyeTT">andeyePro/andeyeTT on GitHub</a></p>
+      </div>
+      <div>
+        <span class="tag">andeyePro · later</span>
+        <h3>Paid connectivity, when it earns it.</h3>
+        <p>andeyePro will add the parts that cost money to run: connections to Xero and friends, and an iPhone companion. Paid, later, never required – the tracker itself stays open.</p>
+        <p><a href="mailto:hello@andeye.com?subject=andeye%20waitlist">Join the waitlist</a> to hear when it lands.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site">
+    <a href="/manual">Manual</a>
+    <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
+    <a href="mailto:hello@andeye.com?subject=andeye%20waitlist">Waitlist</a>
+    <span class="legal">© andeye Ltd · SC665704 · Scotland</span>
+  </footer>
+
+</div>
+
+<script>
+// ================================================================
+// Geometry — literal port of Sources/AndeyeTTCore/AndeyeLogo.swift,
+// verbatim from the verified logo-preview.html.
+// ================================================================
+
+// SVG viewBox is 365 x 235; everything normalises by the WIDTH, so the
+// mark lives in a box 1 wide and `aspect` tall (y up).
+const aspect = 235.0 / 365.0;
+
+// Stroke width from the SVG (17px on a 365-wide viewBox), as a fraction
+// of the box width.
+const strokeWidth = 17.0 / 365.0;
+
+// The SVG's group transform: translate(18.0915, 17.9436).
+const translate = { x: 18.0915, y: 17.9436 };
+
+// d="M145,157 C-95,-27 177,-2 59,76 C-37.95,140.08 54,236 122,137
+//    C205.86,14.91 311,137 311,137 C311,137 232,221 145,157 Z"
+// (Z is degenerate: the last cubic already returns to the M point.)
+// Each entry: [p0, c1, c2, p1] as {x, y}.
+function P(x, y) { return { x: x, y: y }; }
+const svgCubics = [
+  [P(145, 157), P(-95, -27), P(177, -2), P(59, 76)],
+  [P(59, 76), P(-37.95, 140.08), P(54, 236), P(122, 137)],
+  [P(122, 137), P(205.86, 14.91), P(311, 137), P(311, 137)],
+  [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
+];
+
+// SVG user space (y down) -> unit-width box (y up).
+function normalised(p) {
+  return P((p.x + translate.x) / 365.0,
+           (235.0 - (p.y + translate.y)) / 365.0);
+}
+
+// Closed-eye pose (SVG space): only the lid segments' control points move.
+const topLidClosed = { c1: P(171.03, 187.18), c2: P(258.9, 178.05) };
+const bottomLidClosed = { c1: P(311, 141), c2: P(232, 196) };
+
+function clamp01(v) { return Math.min(Math.max(v, 0), 1); }
+
+// The complete mark at blink amount `wink` (0 open ... 1 shut): an eyelid
+// close, not a squash — mirrors AndeyeLogo.fullStroke(wink:).
+function fullStroke(wink) {
+  const w = clamp01(wink);
+  const lerp = (a, b) => P(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w);
+  const svg = svgCubics.map(c => c.slice());
+  svg[2][1] = lerp(svg[2][1], topLidClosed.c1);
+  svg[2][2] = lerp(svg[2][2], topLidClosed.c2);
+  svg[3][1] = lerp(svg[3][1], bottomLidClosed.c1);
+  svg[3][2] = lerp(svg[3][2], bottomLidClosed.c2);
+  return svg.map(c => ({
+    p0: normalised(c[0]), c1: normalised(c[1]), c2: normalised(c[2]), p1: normalised(c[3]),
+  }));
+}
+
+// The mark revealed by arc length from its M point.
+function stroke(rawT, rawWink) {
+  const t = clamp01(rawT);
+  const wink = clamp01(rawWink);
+  return revealed(fullStroke(wink), t);
+}
+
+function pointOn(c, u) {
+  const v = 1 - u;
+  const a = v * v * v, b = 3 * v * v * u, d = 3 * v * u * u, e = u * u * u;
+  return P(a * c.p0.x + b * c.c1.x + d * c.c2.x + e * c.p1.x,
+           a * c.p0.y + b * c.c1.y + d * c.c2.y + e * c.p1.y);
+}
+
+// Flattened (24-sample) arc length.
+function lengthOfCubic(c) {
+  let total = 0.0;
+  let prev = c.p0;
+  for (let i = 1; i <= 24; i++) {
+    const p = pointOn(c, i / 24);
+    total += Math.sqrt((p.x - prev.x) * (p.x - prev.x)
+      + (p.y - prev.y) * (p.y - prev.y));
+    prev = p;
+  }
+  return total;
+}
+
+function lengthOfSegs(segs) {
+  return segs.reduce((acc, s) => acc + lengthOfCubic(s), 0);
+}
+
+// Leading part of `c` up to parameter `u` (de Casteljau split).
+function splitCubic(c, u) {
+  function lerp(a, b) {
+    return P(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u);
+  }
+  const q0 = lerp(c.p0, c.c1), q1 = lerp(c.c1, c.c2), q2 = lerp(c.c2, c.p1);
+  const r0 = lerp(q0, q1), r1 = lerp(q1, q2);
+  return { p0: c.p0, c1: q0, c2: r0, p1: lerp(r0, r1) };
+}
+
+// Parameter u whose leading arc length is `target` (sample-walked).
+function parameterForArcLength(target, c) {
+  if (!(target > 0)) return 0;
+  let acc = 0.0;
+  let prev = c.p0;
+  for (let i = 1; i <= 24; i++) {
+    const u = i / 24;
+    const p = pointOn(c, u);
+    const step = Math.sqrt((p.x - prev.x) * (p.x - prev.x)
+      + (p.y - prev.y) * (p.y - prev.y));
+    if (acc + step >= target) {
+      const inside = step > 0 ? (target - acc) / step : 0;
+      return u - (1 - inside) / 24;
+    }
+    acc += step;
+    prev = p;
+  }
+  return 1;
+}
+
+// First `fraction` of the path's total arc length, ending mid-segment
+// via a bezier split so the reveal front moves smoothly.
+function revealed(segs, fraction) {
+  if (!(fraction > 0)) return [];
+  if (!(fraction < 1)) return segs;
+  const target = fraction * lengthOfSegs(segs);
+  const out = [];
+  let acc = 0.0;
+  for (const seg of segs) {
+    const l = lengthOfCubic(seg);
+    if (acc + l >= target) {
+      const u = parameterForArcLength(target - acc, seg);
+      if (u > 1e-6) out.push(splitCubic(seg, u));
+      return out;
+    }
+    out.push(seg);
+    acc += l;
+  }
+  return segs;
+}
+
+// Rendering — literal port of AndeyeLogoImage.swift (y flipped for canvas):
+// inset the rect by half the stroke, uniform-fit the 1 x aspect box,
+// round caps/joins.
+function drawMark(ctx, cssW, cssH, segs, colour) {
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (segs.length === 0) return;
+  const lineWidthForInset = cssW * strokeWidth;
+  const insetW = cssW - lineWidthForInset;
+  const insetH = cssH - lineWidthForInset;
+  const scale = Math.min(insetW, insetH / aspect);
+  const originX = cssW / 2 - scale / 2;
+  const originY = cssH / 2 - scale * aspect / 2;
+  function atX(p) { return originX + scale * p.x; }
+  function atY(p) { return cssH - (originY + scale * p.y); }
+  ctx.beginPath();
+  ctx.moveTo(atX(segs[0].p0), atY(segs[0].p0));
+  for (const seg of segs) {
+    ctx.bezierCurveTo(atX(seg.c1), atY(seg.c1),
+                      atX(seg.c2), atY(seg.c2),
+                      atX(seg.p1), atY(seg.p1));
+  }
+  ctx.lineWidth = scale * strokeWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = colour;
+  ctx.stroke();
+}
+
+// ================================================================
+// Page wiring
+// ================================================================
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dpr = Math.max(window.devicePixelRatio || 1, 1);
+
+// A canvas holding one mark, with its own t / wink / colour state.
+function markView(canvas) {
+  const ctx = canvas.getContext('2d');
+  const view = { canvas, ctx, cssW: 0, cssH: 0, t: 1, wink: 0, colour: '#17171a', timer: null };
+  view.size = function (cssW) {
+    const cssH = Math.round(cssW * aspect);
+    view.cssW = cssW; view.cssH = cssH;
+    canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    view.render();
+  };
+  view.render = function () {
+    drawMark(ctx, view.cssW, view.cssH, stroke(view.t, view.wink), view.colour);
+  };
+  view.cancel = function () {
+    if (view.timer !== null) { clearTimeout(view.timer); view.timer = null; }
+    if (view.raf) { cancelAnimationFrame(view.raf); view.raf = null; }
+  };
+  return view;
+}
+
+// Draw-on: t stepping 0 -> 1 in 16 steps at 75 ms/frame (~1.2 s),
+// mirroring AppController.playDrawOn.
+function playDrawOn(view, done) {
+  view.cancel();
+  if (reduceMotion) { view.t = 1; view.render(); if (done) done(); return; }
+  const steps = 16;
+  let i = 0;
+  function frame() {
+    view.t = i / steps;
+    view.render();
+    if (i < steps) { i++; view.timer = setTimeout(frame, 75); }
+    else { view.timer = null; if (done) done(); }
+  }
+  frame();
+}
+
+// Wink: [1.0, 0.45, 0.0] at 120 ms/frame (shut -> half -> open, ~360 ms),
+// mirroring AppController.playWink. Optionally re-inks across the wink
+// (the lid closes in the old colour and opens in the new).
+function playWink(view, toColour, done) {
+  view.cancel();
+  view.t = 1;
+  if (reduceMotion) {
+    if (toColour) view.colour = toColour;
+    view.wink = 0; view.render(); if (done) done(); return;
+  }
+  const fromColour = view.colour;
+  const frames = [1.0, 0.45, 0.0];
+  let i = 0;
+  function frame() {
+    view.wink = frames[i];
+    if (toColour) view.colour = blendHex(fromColour, toColour, i / (frames.length - 1));
+    view.render();
+    i++;
+    if (i < frames.length) view.timer = setTimeout(frame, 120);
+    else { view.timer = null; if (done) done(); }
+  }
+  frame();
+}
+
+// Hero draw: the same arc-length reveal over the same 1200 ms span
+// (16 x 75 ms), interpolated per display frame so the big signature
+// moves like a pen rather than a shutter.
+function playHeroDraw(view, done) {
+  view.cancel();
+  if (reduceMotion) { view.t = 1; view.render(); if (done) done(); return; }
+  const duration = 16 * 75;
+  const start = performance.now();
+  function frame(now) {
+    const f = clamp01((now - start) / duration);
+    view.t = f;
+    view.render();
+    if (f < 1) view.raf = requestAnimationFrame(frame);
+    else { view.raf = null; if (done) done(); }
+  }
+  view.raf = requestAnimationFrame(frame);
+}
+
+// ---- certainty gradient (the app's defaults, Settings.swift) ----
+const COLOUR_LOW = '#FF3B30';   // certainty 0
+const COLOUR_HIGH = '#34C759';  // certainty 1
+
+function hexRGB(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+function rgbHex(r, g, b) {
+  return '#' + [r, g, b].map(c => Math.round(Math.min(Math.max(c, 0), 255))
+    .toString(16).padStart(2, '0')).join('');
+}
+function blendHex(a, b, f) {
+  const A = hexRGB(a), B = hexRGB(b);
+  return rgbHex(A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, A[2] + (B[2] - A[2]) * f);
+}
+// Linear blend between the gradient ends, as AppController.colour does.
+function certaintyColour(c) { return blendHex(COLOUR_LOW, COLOUR_HIGH, clamp01(c)); }
+// The same hue pulled down toward ink for AA text on paper.
+function certaintyText(c) { return blendHex(certaintyColour(c), '#17171a', 0.42); }
+
+// ---- hero ----
+const heroView = markView(document.getElementById('heroMark'));
+function sizeHero() {
+  // Let the responsive CSS width rule win, measure it, then pin the
+  // backing store to that size.
+  heroView.canvas.style.width = '';
+  heroView.canvas.style.height = '';
+  const w = Math.max(heroView.canvas.getBoundingClientRect().width, 260);
+  heroView.size(Math.round(w));
+}
+sizeHero();
+
+function heroSequence() {
+  playHeroDraw(heroView, () => {
+    heroView.timer = setTimeout(() => playWink(heroView, null, null), 650);
+  });
+}
+document.getElementById('heroReplay').addEventListener('click', heroSequence);
+window.addEventListener('resize', () => {
+  const before = heroView.cssW;
+  sizeHero();
+  if (heroView.cssW !== before) heroView.render();
+});
+heroSequence();
+
+// ---- menu-bar demo ----
+const SURFACES = [
+  { task: 'andeyeTT · timeline redraw', certainty: 0.96 },
+  { task: 'Acme · rebrand',            certainty: 0.91 },
+  { task: 'Research · integrations',   certainty: 0.78 },
+  { task: 'Admin · planning',          certainty: 0.44 },
+];
+
+const mbView = markView(document.getElementById('mbMark'));
+// Menu-bar size: height 18, width = round(18 / aspect) = 28, matching
+// AndeyeLogoImage's NSSize maths. (markView is width-led, so pass 28.)
+mbView.size(Math.round(18 / aspect));
+
+const mbTask = document.getElementById('mbTask');
+const mbPct = document.getElementById('mbPct');
+const mbClock = document.getElementById('mbClock');
+const demoEl = document.getElementById('demo');
+const surfaceEls = Array.from(document.querySelectorAll('.surface'));
+
+// Colour each card's certainty figure with its meaning.
+surfaceEls.forEach((el, i) => {
+  el.querySelector('[data-pct]').style.color = certaintyText(SURFACES[i].certainty);
+});
+
+let currentIdx = -1;
+let clockStart = Date.now();
+let beatTimer = null;
+let autoTimer = null;
+let interacted = false;
+
+function fmtElapsed(ms) {
+  const s = Math.max(Math.floor(ms / 1000), 0);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function tickClock() { mbClock.textContent = fmtElapsed(Date.now() - clockStart); }
+setInterval(tickClock, 1000);
+
+// Commit a switch to surface i: the lid closes in the old ink and opens
+// in the new; the label and clock change while the eye is shut.
+function commitSwitch(i) {
+  const s = SURFACES[i];
+  const tint = certaintyColour(s.certainty);
+  playWink(mbView, tint, null);
+  const apply = () => {
+    mbTask.textContent = s.task;
+    mbPct.textContent = Math.round(s.certainty * 100) + '%';
+    mbPct.style.color = certaintyText(s.certainty);
+    clockStart = Date.now();
+    tickClock();
+  };
+  if (reduceMotion) apply();
+  else setTimeout(apply, 120); // as the lid reaches shut
+}
+
+function focusSurface(i, viaUser) {
+  if (i === currentIdx) return;
+  currentIdx = i;
+  demoEl.classList.add('settled');
+  surfaceEls.forEach((el, j) => el.setAttribute('aria-pressed', j === i ? 'true' : 'false'));
+  if (beatTimer !== null) clearTimeout(beatTimer);
+  if (reduceMotion || !viaUser && !interacted && currentIdx === 0 && mbTask.textContent === 'starting…') {
+    // first attribution after load settles without ceremony under reduced motion
+  }
+  const beat = reduceMotion ? 0 : 700; // the app's switch grace, abbreviated
+  beatTimer = setTimeout(() => { beatTimer = null; commitSwitch(i); }, beat);
+}
+
+surfaceEls.forEach((el, i) => {
+  el.addEventListener('click', () => {
+    interacted = true;
+    if (autoTimer !== null) { clearInterval(autoTimer); autoTimer = null; }
+    focusSurface(i, true);
+  });
+});
+
+// Boot the demo: the menu-bar mark draws on with the product's own
+// stepped cadence, then attribution settles on the first surface and
+// a gentle auto-play wanders until the first click.
+const AUTO_ORDER = [0, 2, 1, 3];
+let autoPos = 0;
+playDrawOn(mbView, () => {
+  focusSurface(AUTO_ORDER[0], false);
+  if (!reduceMotion) {
+    autoTimer = setInterval(() => {
+      if (interacted) { clearInterval(autoTimer); autoTimer = null; return; }
+      autoPos = (autoPos + 1) % AUTO_ORDER.length;
+      focusSurface(AUTO_ORDER[autoPos], false);
+    }, 4800);
+  }
+});
+</script>

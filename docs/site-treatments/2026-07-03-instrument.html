@@ -1,0 +1,1119 @@
+<title>andeye — Instrument treatment</title>
+
+<style>
+  :root {
+    --bg: #0f0d0a;
+    --bg-deep: #0b0906;
+    --panel: #171410;
+    --panel-2: #1d1914;
+    --line: #2b2620;
+    --line-soft: #211d17;
+    --text: #e9e3d8;
+    --muted: #9b917f;
+    --dim: #6e6656;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --cert-lo: hsl(8 62% 58%);
+    --cert-mid: hsl(76 52% 52%);
+    --cert-hi: hsl(145 52% 50%);
+    --grad: linear-gradient(90deg, hsl(8 62% 58%), hsl(76 52% 52%), hsl(145 52% 50%));
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  ::selection { background: #3a332a; color: var(--text); }
+
+  a { color: var(--text); text-decoration: underline; text-decoration-color: var(--dim); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--text); }
+
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- shared shell ---------- */
+  .shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding-inline: clamp(20px, 5vw, 48px);
+  }
+
+  /* ---------- label plate ---------- */
+  .plate {
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-deep);
+  }
+  .plate-inner {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .plate-inner span { overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---------- header ---------- */
+  header.site {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .site-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding-block: 18px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+  }
+  .brand canvas { display: block; }
+  nav.top {
+    display: flex;
+    gap: clamp(14px, 3vw, 28px);
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  nav.top a { color: var(--muted); text-decoration: none; }
+  nav.top a:hover { color: var(--text); }
+
+  /* ---------- hero ---------- */
+  .hero { padding-block: clamp(48px, 8vw, 88px) clamp(40px, 6vw, 64px); }
+  .hero h1 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: clamp(30px, 5.4vw, 54px);
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    max-width: 17ch;
+    text-wrap: balance;
+  }
+  .hero .sub {
+    font-size: clamp(16px, 2vw, 18.5px);
+    color: var(--muted);
+    max-width: 58ch;
+    margin: 0 0 clamp(32px, 5vw, 48px);
+  }
+  .hero .sub strong { color: var(--text); font-weight: 500; }
+
+  /* ---------- demo ---------- */
+  .demo {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: radial-gradient(120% 140% at 50% 0%, #1a1610 0%, #12100b 55%, #0e0c08 100%);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 250, 240, 0.04) inset;
+  }
+
+  .menubar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    height: 30px;
+    padding-inline: 12px;
+    background: linear-gradient(180deg, rgba(46, 41, 33, 0.9), rgba(34, 30, 24, 0.9));
+    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+    font-size: 12.5px;
+    color: #cfc8ba;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .mb-left, .mb-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .mb-left { flex: 1 1 auto; overflow: hidden; }
+  .mb-sys {
+    width: 13px; height: 13px; flex: none;
+    border-radius: 3.5px;
+    background: #5a5344;
+  }
+  .mb-app { font-weight: 600; color: #e6dfd2; flex: none; }
+  .mb-menus { color: #97907f; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.01em; }
+  .mb-menus span { margin-right: 12px; }
+
+  .statusitem {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    min-width: 0;
+  }
+  .statusitem canvas { display: block; flex: none; }
+  .mb-task {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    max-width: 24ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.3s linear;
+  }
+  .mb-cert {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
+    transition: color 0.3s linear;
+  }
+  .mb-elapsed {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
+    color: #e6dfd2;
+  }
+  .mb-glyphs { display: flex; align-items: center; gap: 10px; color: #97907f; }
+  .mb-glyphs svg { display: block; }
+  .mb-clock { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11.5px; color: #cfc8ba; }
+
+  .desk {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: clamp(10px, 2vw, 18px);
+    padding: clamp(14px, 3vw, 26px);
+  }
+
+  .win {
+    appearance: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 150px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    background: #1a1712;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: 0.72;
+  }
+  .win:hover { opacity: 0.9; }
+  .win.active {
+    opacity: 1;
+    border-color: #3d362c;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  }
+
+  .w-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    background: #201c16;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .win.active .w-title { color: var(--muted); }
+  .tl { display: flex; gap: 5px; flex: none; }
+  .tl i { width: 9px; height: 9px; border-radius: 50%; background: #3d3830; }
+  .win.active .tl i:nth-child(1) { background: #ff5f57; }
+  .win.active .tl i:nth-child(2) { background: #febc2e; }
+  .win.active .tl i:nth-child(3) { background: #28c840; }
+  .w-name { overflow: hidden; text-overflow: ellipsis; }
+
+  .w-body { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; min-height: 0; overflow: hidden; }
+
+  .bar { height: 7px; border-radius: 3px; background: #3a342a; flex: none; }
+  .bar.dim { background: #2b2620; }
+  .bar.lit { background: #55503f; }
+
+  /* browser */
+  .urlpill {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    background: #16130e;
+    border: 1px solid var(--line-soft);
+    border-radius: 99px;
+    padding: 2px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .mailrow { display: flex; gap: 8px; align-items: center; }
+  .mailrow .bar:first-child { width: 22%; }
+  .mailrow.sel { background: #241f18; border-radius: 4px; padding: 3px 5px; margin: -3px -5px; }
+
+  /* editor */
+  .codeline { display: flex; gap: 10px; align-items: center; }
+  .gut { font-family: var(--mono); font-size: 9.5px; color: #4a4436; width: 14px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+  .ind1 { margin-left: 16px; }
+  .ind2 { margin-left: 32px; }
+
+  /* canvas app */
+  .artboard {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #211d17;
+    position: relative;
+    min-height: 70px;
+  }
+  .shape { position: absolute; border: 1px solid #55503f; }
+  .shape.r1 { left: 10%; top: 16%; width: 34%; height: 40%; border-radius: 3px; }
+  .shape.r2 { left: 52%; top: 34%; width: 30%; height: 44%; border-radius: 3px; background: #262119; }
+  .shape.c1 { left: 38%; top: 52%; width: 26px; height: 26px; border-radius: 50%; }
+
+  /* terminal */
+  .termline { font-family: var(--mono); font-size: 10.5px; color: #8a836f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .termline .p { color: #cfc8ba; }
+
+  .demo-hint {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .demo-hint::before { content: "▸"; color: var(--muted); }
+
+  /* ---------- CTA row ---------- */
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: clamp(28px, 4vw, 40px);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    letter-spacing: 0.01em;
+    padding: 11px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+    border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .btn.primary { background: var(--text); color: #14110d; border-color: var(--text); }
+  .btn.primary:hover { background: #fff; border-color: #fff; }
+  .btn.ghost { color: var(--text); }
+  .btn.ghost:hover { border-color: var(--muted); }
+  .req {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    color: var(--dim);
+    margin-top: 4px;
+  }
+
+  /* ---------- sections ---------- */
+  section.block {
+    border-top: 1px solid var(--line-soft);
+    padding-block: clamp(52px, 8vw, 84px);
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: clamp(28px, 4vw, 40px);
+  }
+  .eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(20px, 3vw, 36px);
+  }
+  .step h3 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 17px;
+    margin: 0 0 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .step h3 .n { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; max-width: 42ch; }
+  .step p strong { color: var(--text); font-weight: 500; }
+
+  .certscale { margin-top: 16px; max-width: 260px; }
+  .certscale .track {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--grad);
+    position: relative;
+  }
+  .certscale .mark {
+    position: absolute;
+    top: -4px;
+    left: 72%;
+    width: 1.5px;
+    height: 11px;
+    background: var(--text);
+  }
+  .certscale .lab {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- privacy ---------- */
+  .privacy-panel {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+    position: relative;
+  }
+  .privacy-panel::before {
+    content: "";
+    display: block;
+    height: 2px;
+    background: var(--grad);
+  }
+  .privacy-inner { padding: clamp(28px, 5vw, 56px); }
+  .privacy-inner h2 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: clamp(24px, 3.6vw, 36px);
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .privacy-inner .lede { color: var(--muted); max-width: 62ch; margin: 0 0 clamp(28px, 4vw, 40px); font-size: 16.5px; }
+
+  .ledger { display: flex; flex-direction: column; }
+  .ledger .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 20px;
+    padding-block: 13px;
+    border-top: 1px solid var(--line-soft);
+    flex-wrap: wrap;
+  }
+  .ledger .row:last-child { border-bottom: 1px solid var(--line-soft); }
+  .ledger .what { font-size: 15px; }
+  .ledger .what small { display: block; color: var(--dim); font-size: 12.5px; margin-top: 1px; }
+  .ledger .where {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .ledger .where .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cert-hi); flex: none; }
+  .ledger .where.out .dot { background: var(--cert-mid); }
+
+  .rules-note {
+    margin: clamp(24px, 4vw, 36px) 0 0;
+    color: var(--muted);
+    max-width: 62ch;
+    font-size: 15.5px;
+  }
+  .rules-note code {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  /* ---------- community ---------- */
+  .duo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(20px, 3vw, 36px);
+  }
+  .duo article {
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: clamp(20px, 3vw, 28px);
+    background: var(--panel);
+  }
+  .duo h3 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 15px;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .duo h3 .tag {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    border: 1px solid var(--line-soft);
+    border-radius: 99px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .duo p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- footer ---------- */
+  footer.site {
+    border-top: 1px solid var(--line-soft);
+    padding-block: 28px 40px;
+  }
+  .foot-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--dim);
+  }
+  .foot-inner a { color: var(--muted); text-decoration: none; }
+  .foot-inner a:hover { color: var(--text); }
+  .foot-links { display: flex; gap: 20px; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 780px) {
+    .steps { grid-template-columns: 1fr; }
+    .duo { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .mb-menus, .mb-glyphs, .mb-clock { display: none; }
+    .mb-task { max-width: 14ch; }
+    .desk { grid-template-columns: 1fr 1fr; }
+    .win { min-height: 120px; }
+    .plate-inner span:nth-child(2) { display: none; }
+  }
+  @media (max-width: 420px) {
+    .mb-app { display: none; }
+    .ledger .row { flex-direction: column; gap: 6px; align-items: flex-start; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<!-- label plate -->
+<div class="plate">
+  <div class="shell plate-inner">
+    <span>andeye · time instrument</span>
+    <span>attribution: on-device</span>
+    <span class="num">macOS 14+</span>
+  </div>
+</div>
+
+<header class="site">
+  <div class="shell site-inner">
+    <a class="brand" href="#" aria-label="andeye home">
+      <canvas id="brandMark" aria-hidden="true"></canvas>
+      <span>andeye</span>
+    </a>
+    <nav class="top" aria-label="Site">
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="/manual">Manual</a>
+      <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- hero -->
+  <section class="hero shell">
+    <h1>Your time, attributed while you just work.</h1>
+    <p class="sub">andeye lives in your Mac's menu bar. It notices which window is in front, books every minute to the right task with an honest certainty score, and never sends a byte of what it sees off your machine. <strong>This is a working simulation – try it.</strong></p>
+
+    <div class="demo" id="demo" aria-label="Interactive simulation of the andeye menu bar">
+      <div class="menubar">
+        <div class="mb-left">
+          <span class="mb-sys" aria-hidden="true"></span>
+          <span class="mb-app" id="mbApp">Editor</span>
+          <span class="mb-menus" id="mbMenus" aria-hidden="true"></span>
+        </div>
+        <div class="mb-right">
+          <span class="statusitem">
+            <canvas id="eye" aria-hidden="true"></canvas>
+            <span class="mb-task" id="mbTask" aria-live="polite">&nbsp;</span>
+            <span class="mb-cert num" id="mbCert">&nbsp;</span>
+            <span class="mb-elapsed num" id="mbElapsed">0s</span>
+          </span>
+          <span class="mb-glyphs" aria-hidden="true">
+            <svg width="14" height="11" viewBox="0 0 14 11" fill="none"><path d="M1 3.6C4.4-0.5 9.6-0.5 13 3.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M3.2 6.1c2.2-2.6 5.4-2.6 7.6 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="7" cy="9" r="1.3" fill="currentColor"/></svg>
+            <svg width="19" height="10" viewBox="0 0 19 10" fill="none"><rect x="0.5" y="0.5" width="15" height="9" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="9" height="6" rx="1" fill="currentColor"/><path d="M17 3.2v3.6c0.9-0.2 1.5-1 1.5-1.8s-0.6-1.6-1.5-1.8z" fill="currentColor"/></svg>
+          </span>
+          <span class="mb-clock" id="mbClock">Wed 09:41</span>
+        </div>
+      </div>
+
+      <div class="desk">
+        <button class="win" id="win-browser" aria-label="Switch to the browser, reading Gmail">
+          <span class="w-title"><span class="tl" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-name">Browser</span></span>
+          <span class="w-body">
+            <span class="urlpill">mail.google.com/mail/u/0</span>
+            <span class="mailrow"><span class="bar" style="width:22%"></span><span class="bar dim" style="width:48%"></span></span>
+            <span class="mailrow sel"><span class="bar lit" style="width:22%"></span><span class="bar" style="width:58%"></span></span>
+            <span class="mailrow"><span class="bar" style="width:22%"></span><span class="bar dim" style="width:40%"></span></span>
+            <span class="mailrow"><span class="bar dim" style="width:22%"></span><span class="bar dim" style="width:52%"></span></span>
+          </span>
+        </button>
+
+        <button class="win active" id="win-editor" aria-label="Switch to the code editor">
+          <span class="w-title"><span class="tl" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-name">Editor · AttributionEngine.swift</span></span>
+          <span class="w-body">
+            <span class="codeline"><span class="gut">41</span><span class="bar lit" style="width:34%"></span></span>
+            <span class="codeline"><span class="gut">42</span><span class="bar ind1" style="width:52%"></span></span>
+            <span class="codeline"><span class="gut">43</span><span class="bar dim ind2" style="width:44%"></span></span>
+            <span class="codeline"><span class="gut">44</span><span class="bar ind2" style="width:60%"></span></span>
+            <span class="codeline"><span class="gut">45</span><span class="bar dim ind1" style="width:28%"></span></span>
+            <span class="codeline"><span class="gut">46</span><span class="bar" style="width:12%"></span></span>
+          </span>
+        </button>
+
+        <button class="win" id="win-canvas" aria-label="Switch to the design canvas">
+          <span class="w-title"><span class="tl" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-name">Canvas · hero-board</span></span>
+          <span class="w-body">
+            <span class="artboard">
+              <span class="shape r1"></span>
+              <span class="shape r2"></span>
+              <span class="shape c1"></span>
+            </span>
+          </span>
+        </button>
+
+        <button class="win" id="win-term" aria-label="Switch to the terminal">
+          <span class="w-title"><span class="tl" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-name">Terminal · zsh</span></span>
+          <span class="w-body">
+            <span class="termline"><span class="p">$</span> swift build</span>
+            <span class="termline">Building for production...</span>
+            <span class="termline">Build complete! (2.41s)</span>
+            <span class="termline"><span class="p">$</span> swift test</span>
+            <span class="termline">Executed 148 tests, 0 failures</span>
+            <span class="termline"><span class="p">$</span> ▍</span>
+          </span>
+        </button>
+      </div>
+    </div>
+    <p class="demo-hint" id="demoHint">Autoplaying the loop – click any window to take over.</p>
+
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/andeyePro/andeyeTT">Star on GitHub</a>
+      <a class="btn ghost" href="mailto:hello@andeye.com?subject=andeye%20waitlist">Join the waitlist</a>
+      <p class="req">Requires macOS 14 or later · open source under AGPL-3.0 · no packaged download yet, build from source</p>
+    </div>
+  </section>
+
+  <!-- how it works -->
+  <section class="block" id="how">
+    <div class="shell">
+      <p class="eyebrow">How it works</p>
+      <div class="steps">
+        <div class="step">
+          <h3><span class="n">01</span>Observe</h3>
+          <p>andeye reads the title of your active window and tab, on-device, as you work. That signal is <strong>input, not upload</strong> – it never leaves the machine.</p>
+        </div>
+        <div class="step">
+          <h3><span class="n">02</span>Attribute</h3>
+          <p>Each minute is matched to a task in your backlog and scored. <strong>72% certain means 72%</strong> – the number is the matcher's honest output, never rounded up to reassure you.</p>
+          <div class="certscale" aria-hidden="true">
+            <div class="track"><span class="mark"></span></div>
+            <div class="lab"><span>0%</span><span>certainty</span><span>100%</span></div>
+          </div>
+        </div>
+        <div class="step">
+          <h3><span class="n">03</span>Post</h3>
+          <p>Time you confirm is booked to <strong>your own backlog</strong>. OpenProject today; more connectors to come.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- privacy -->
+  <section class="block" id="privacy">
+    <div class="shell">
+      <p class="eyebrow">Privacy</p>
+      <div class="privacy-panel">
+        <div class="privacy-inner">
+          <h2>Nothing leaves your Mac.</h2>
+          <p class="lede">Observation, attribution and learning all run locally. There is no server of ours to trust, because there is no server of ours. The one thing that ever leaves is a time entry you confirmed, posted to a backlog you own.</p>
+
+          <div class="ledger">
+            <div class="row">
+              <span class="what">Window and tab titles<small>what andeye sees</small></span>
+              <span class="where"><span class="dot" aria-hidden="true"></span>on-device · never leaves</span>
+            </div>
+            <div class="row">
+              <span class="what">Attribution and certainty scoring<small>how it decides</small></span>
+              <span class="where"><span class="dot" aria-hidden="true"></span>on-device · never leaves</span>
+            </div>
+            <div class="row">
+              <span class="what">Pinned rules<small>what it learns from you</small></span>
+              <span class="where"><span class="dot" aria-hidden="true"></span>your disk · never leaves</span>
+            </div>
+            <div class="row">
+              <span class="what">Confirmed time entries<small>what you choose to post</small></span>
+              <span class="where out"><span class="dot" aria-hidden="true"></span>your backlog · the one place it goes</span>
+            </div>
+          </div>
+
+          <p class="rules-note">When you pin a rule – <code>mail from this client → this project</code> – it is stored on your disk, applied by your Mac, and yours to read, change or delete. Your working patterns are not a product. They are your property.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- community & pro -->
+  <section class="block" id="community">
+    <div class="shell">
+      <p class="eyebrow">Community &amp; Pro</p>
+      <div class="duo">
+        <article>
+          <h3>andeye for macOS <span class="tag">AGPL-3.0</span></h3>
+          <p>The community app is open source – clone it, read every line, and <a href="https://github.com/andeyePro/andeyeTT">build it from source today</a>.</p>
+        </article>
+        <article>
+          <h3>andeyePro <span class="tag">later</span></h3>
+          <p>Paid connectivity when it's ready – Xero and friends, plus an iPhone companion. The community app stays open source.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="shell foot-inner">
+    <span>© andeye Ltd · <span class="num">SC665704</span> · Scotland</span>
+    <span class="foot-links">
+      <a href="/manual">Manual</a>
+      <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
+      <a href="mailto:hello@andeye.com?subject=andeye%20waitlist">hello@andeye.com</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+// ===================================================================
+// andeye mark — geometry ported verbatim from the verified preview
+// (literal port of Sources/AndeyeTTCore/AndeyeLogo.swift)
+// ===================================================================
+
+// SVG viewBox is 365 x 235; everything normalises by the WIDTH, so the
+// mark lives in a box 1 wide and `aspect` tall (y up).
+const aspect = 235.0 / 365.0;
+
+// Stroke width from the SVG (17px on a 365-wide viewBox), as a fraction
+// of the box width.
+const strokeWidth = 17.0 / 365.0;
+
+// The SVG's group transform: translate(18.0915, 17.9436).
+const translate = { x: 18.0915, y: 17.9436 };
+
+function P(x, y) { return { x: x, y: y }; }
+const svgCubics = [
+  [P(145, 157), P(-95, -27), P(177, -2), P(59, 76)],
+  [P(59, 76), P(-37.95, 140.08), P(54, 236), P(122, 137)],
+  [P(122, 137), P(205.86, 14.91), P(311, 137), P(311, 137)],
+  [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
+];
+
+// SVG user space (y down) -> unit-width box (y up).
+function normalised(p) {
+  return P((p.x + translate.x) / 365.0,
+           (235.0 - (p.y + translate.y)) / 365.0);
+}
+
+// Closed-eye pose (SVG space): only the lid segments' control points move.
+const topLidClosed = { c1: P(171.03, 187.18), c2: P(258.9, 178.05) };
+const bottomLidClosed = { c1: P(311, 141), c2: P(232, 196) };
+
+function clamp01(v) { return Math.min(Math.max(v, 0), 1); }
+
+// The complete mark at blink amount `wink` (0 open ... 1 shut): an eyelid
+// close, not a squash.
+function fullStroke(wink) {
+  const w = clamp01(wink);
+  const lerp = (a, b) => P(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w);
+  const svg = svgCubics.map(c => c.slice());
+  svg[2][1] = lerp(svg[2][1], topLidClosed.c1);
+  svg[2][2] = lerp(svg[2][2], topLidClosed.c2);
+  svg[3][1] = lerp(svg[3][1], bottomLidClosed.c1);
+  svg[3][2] = lerp(svg[3][2], bottomLidClosed.c2);
+  return svg.map(c => ({
+    p0: normalised(c[0]), c1: normalised(c[1]), c2: normalised(c[2]), p1: normalised(c[3]),
+  }));
+}
+
+// The mark revealed by arc length from its M point.
+function stroke(rawT, rawWink) {
+  const t = clamp01(rawT);
+  const wink = clamp01(rawWink);
+  return revealed(fullStroke(wink), t);
+}
+
+function pointOn(c, u) {
+  const v = 1 - u;
+  const a = v * v * v, b = 3 * v * v * u, d = 3 * v * u * u, e = u * u * u;
+  return P(a * c.p0.x + b * c.c1.x + d * c.c2.x + e * c.p1.x,
+           a * c.p0.y + b * c.c1.y + d * c.c2.y + e * c.p1.y);
+}
+
+// Flattened (24-sample) arc length.
+function lengthOfCubic(c) {
+  let total = 0.0;
+  let prev = c.p0;
+  for (let i = 1; i <= 24; i++) {
+    const p = pointOn(c, i / 24);
+    total += Math.sqrt((p.x - prev.x) * (p.x - prev.x)
+      + (p.y - prev.y) * (p.y - prev.y));
+    prev = p;
+  }
+  return total;
+}
+
+function lengthOfSegs(segs) {
+  return segs.reduce((acc, s) => acc + lengthOfCubic(s), 0);
+}
+
+// Leading part of `c` up to parameter `u` (de Casteljau split).
+function splitCubic(c, u) {
+  function lerp(a, b) {
+    return P(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u);
+  }
+  const q0 = lerp(c.p0, c.c1), q1 = lerp(c.c1, c.c2), q2 = lerp(c.c2, c.p1);
+  const r0 = lerp(q0, q1), r1 = lerp(q1, q2);
+  return { p0: c.p0, c1: q0, c2: r0, p1: lerp(r0, r1) };
+}
+
+// Parameter u whose leading arc length is `target` (sample-walked).
+function parameterForArcLength(target, c) {
+  if (!(target > 0)) return 0;
+  let acc = 0.0;
+  let prev = c.p0;
+  for (let i = 1; i <= 24; i++) {
+    const u = i / 24;
+    const p = pointOn(c, u);
+    const step = Math.sqrt((p.x - prev.x) * (p.x - prev.x)
+      + (p.y - prev.y) * (p.y - prev.y));
+    if (acc + step >= target) {
+      const inside = step > 0 ? (target - acc) / step : 0;
+      return u - (1 - inside) / 24;
+    }
+    acc += step;
+    prev = p;
+  }
+  return 1;
+}
+
+// First `fraction` of the path's total arc length, ending mid-segment
+// via a bezier split so the reveal front moves smoothly.
+function revealed(segs, fraction) {
+  if (!(fraction > 0)) return [];
+  if (!(fraction < 1)) return segs;
+  const target = fraction * lengthOfSegs(segs);
+  const out = [];
+  let acc = 0.0;
+  for (const seg of segs) {
+    const l = lengthOfCubic(seg);
+    if (acc + l >= target) {
+      const u = parameterForArcLength(target - acc, seg);
+      if (u > 1e-6) out.push(splitCubic(seg, u));
+      return out;
+    }
+    out.push(seg);
+    acc += l;
+  }
+  return segs;
+}
+
+// Draws `segs` (unit-width box coords, y up) into ctx sized cssW x cssH,
+// exactly as the Mac drawing handler does.
+function drawMark(ctx, cssW, cssH, segs, colour) {
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (segs.length === 0) return;
+  const lineWidthForInset = cssW * strokeWidth;
+  const insetW = cssW - lineWidthForInset;
+  const insetH = cssH - lineWidthForInset;
+  const scale = Math.min(insetW, insetH / aspect);
+  const originX = cssW / 2 - scale / 2;
+  const originY = cssH / 2 - scale * aspect / 2;
+  function atX(p) { return originX + scale * p.x; }
+  function atY(p) { return cssH - (originY + scale * p.y); }
+  ctx.beginPath();
+  ctx.moveTo(atX(segs[0].p0), atY(segs[0].p0));
+  for (const seg of segs) {
+    ctx.bezierCurveTo(atX(seg.c1), atY(seg.c1),
+                      atX(seg.c2), atY(seg.c2),
+                      atX(seg.p1), atY(seg.p1));
+  }
+  ctx.lineWidth = scale * strokeWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = colour;
+  ctx.stroke();
+}
+
+// ===================================================================
+// simulation
+// ===================================================================
+
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dpr = Math.max(window.devicePixelRatio || 1, 1);
+
+function setupCanvas(el, cssH) {
+  const cssW = Math.round(cssH / aspect);
+  el.width = cssW * dpr; el.height = cssH * dpr;
+  el.style.width = cssW + 'px'; el.style.height = cssH + 'px';
+  const ctx = el.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx: ctx, w: cssW, h: cssH };
+}
+
+const eye = setupCanvas(document.getElementById('eye'), 15);
+const brand = setupCanvas(document.getElementById('brandMark'), 17);
+
+const markState = { t: reduced ? 1 : 0, wink: 0 };
+const EYE_COLOUR = '#e6dfd2';
+let animTimer = null;
+
+function renderMark() {
+  const segs = stroke(markState.t, markState.wink);
+  drawMark(eye.ctx, eye.w, eye.h, segs, EYE_COLOUR);
+}
+drawMark(brand.ctx, brand.w, brand.h, stroke(1, 0), '#9b917f');
+
+function cancelAnim() {
+  if (animTimer !== null) { clearTimeout(animTimer); animTimer = null; }
+}
+
+// Draw-on: t stepping 0 -> 1 in 16 steps at 75 ms/frame (~1.2 s).
+function playDrawOn() {
+  if (reduced) { markState.t = 1; renderMark(); return; }
+  cancelAnim();
+  const steps = 16;
+  let i = 0;
+  function frame() {
+    markState.t = i / steps;
+    renderMark();
+    if (i < steps) { i++; animTimer = setTimeout(frame, 75); }
+    else animTimer = null;
+  }
+  frame();
+}
+
+// Wink: [1.0, 0.45, 0.0] at 120 ms/frame (shut -> half -> open, ~360 ms).
+function playWink() {
+  if (reduced) { markState.t = 1; markState.wink = 0; renderMark(); return; }
+  cancelAnim();
+  markState.t = 1;
+  const frames = [1.0, 0.45, 0.0];
+  let i = 0;
+  function frame() {
+    markState.wink = frames[i];
+    renderMark();
+    i++;
+    if (i < frames.length) animTimer = setTimeout(frame, 120);
+    else animTimer = null;
+  }
+  frame();
+}
+
+// --- apps + attribution ------------------------------------------
+
+const APPS = [
+  { id: 'browser', name: 'Browser', menus: ['File', 'Edit', 'View', 'History', 'Bookmarks'],
+    task: 'Harbour Works – client reply', cert: 72 },
+  { id: 'editor', name: 'Editor', menus: ['File', 'Edit', 'Selection', 'View', 'Go', 'Run'],
+    task: 'andeyeTT – attribution engine', cert: 96 },
+  { id: 'canvas', name: 'Canvas', menus: ['File', 'Edit', 'Object', 'Arrange', 'View'],
+    task: 'Website – hero board', cert: 88 },
+  { id: 'term', name: 'Terminal', menus: ['Shell', 'Edit', 'View', 'Profiles', 'Window'],
+    task: 'Ops – deploy pipeline', cert: 61 },
+];
+
+const mbApp = document.getElementById('mbApp');
+const mbMenus = document.getElementById('mbMenus');
+const mbTask = document.getElementById('mbTask');
+const mbCert = document.getElementById('mbCert');
+const mbElapsed = document.getElementById('mbElapsed');
+const mbClock = document.getElementById('mbClock');
+const demoHint = document.getElementById('demoHint');
+const wins = APPS.map(a => document.getElementById('win-' + a.id));
+
+let current = 1;            // start on the editor
+let startTs = null;         // when the current attribution began
+let pendingBeat = null;
+let settleRaf = null;
+let autoTimer = null;
+let userTookOver = false;
+
+// certainty 0..100 -> a point on the app's red -> green gradient
+function certColor(c) {
+  const t = clamp01(c / 100);
+  const hue = 8 + (145 - 8) * t;
+  return 'hsl(' + hue.toFixed(1) + ' 58% 58%)';
+}
+
+function setCertDisplay(c) {
+  const col = certColor(c);
+  mbCert.textContent = Math.round(c) + '%';
+  mbCert.style.color = col;
+  mbTask.style.color = col;
+}
+
+// certainty settles from low toward its honest final value, the tint
+// blending along the gradient as it goes.
+function settleCert(finalCert) {
+  if (settleRaf !== null) { cancelAnimationFrame(settleRaf); settleRaf = null; }
+  if (reduced) { setCertDisplay(finalCert); return; }
+  const from = Math.max(12, finalCert - 44);
+  const t0 = performance.now();
+  const dur = 900;
+  function step(now) {
+    const p = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    setCertDisplay(from + (finalCert - from) * e);
+    settleRaf = p < 1 ? requestAnimationFrame(step) : null;
+  }
+  settleRaf = requestAnimationFrame(step);
+}
+
+function fmtElapsed(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return m + 'm ' + String(rem).padStart(2, '0') + 's';
+}
+
+function renderElapsed() {
+  if (startTs === null) return;
+  mbElapsed.textContent = fmtElapsed(Date.now() - startTs);
+}
+
+function applyAttribution(app) {
+  mbTask.textContent = app.task;
+  startTs = Date.now();
+  renderElapsed();
+  settleCert(app.cert);
+}
+
+function focusApp(i) {
+  const app = APPS[i];
+  wins.forEach((w, j) => w.classList.toggle('active', j === i));
+  mbApp.textContent = app.name;
+  mbMenus.innerHTML = app.menus.map(m => '<span>' + m + '</span>').join('');
+}
+
+function switchTo(i) {
+  if (i === current) return;
+  current = i;
+  focusApp(i);
+  const app = APPS[i];
+  if (pendingBeat !== null) { clearTimeout(pendingBeat); pendingBeat = null; }
+  if (reduced) {
+    applyAttribution(app);
+    return;
+  }
+  // a beat while andeye notices, then the wink marks the moment of attribution
+  pendingBeat = setTimeout(() => {
+    pendingBeat = null;
+    playWink();
+    applyAttribution(app);
+  }, 750);
+}
+
+// --- autoplay until first interaction -----------------------------
+
+function stopAutoplay() {
+  if (autoTimer !== null) { clearInterval(autoTimer); autoTimer = null; }
+}
+
+function takeOver() {
+  if (userTookOver) return;
+  userTookOver = true;
+  stopAutoplay();
+  demoHint.textContent = 'Yours now – switch windows and watch the menu bar.';
+}
+
+wins.forEach((w, i) => {
+  w.addEventListener('click', () => { takeOver(); switchTo(i); });
+});
+
+document.getElementById('demo').addEventListener('pointerdown', takeOver);
+
+// --- boot ----------------------------------------------------------
+
+focusApp(current);
+// arrive mid-session: andeye has been tracking this task for a while
+startTs = Date.now() - 47000;
+mbTask.textContent = APPS[current].task;
+setCertDisplay(APPS[current].cert);
+renderElapsed();
+setInterval(renderElapsed, 1000);
+
+function renderClock() {
+  const d = new Date();
+  const wd = d.toLocaleDateString(undefined, { weekday: 'short' });
+  mbClock.textContent = wd + ' '
+    + String(d.getHours()).padStart(2, '0') + ':'
+    + String(d.getMinutes()).padStart(2, '0');
+}
+renderClock();
+setInterval(renderClock, 20000);
+
+playDrawOn();
+
+if (reduced) {
+  demoHint.textContent = 'Click a window – the menu bar attributes it.';
+} else {
+  autoTimer = setInterval(() => {
+    if (userTookOver) return;
+    switchTo((current + 1) % APPS.length);
+  }, 5600);
+}
+</script>

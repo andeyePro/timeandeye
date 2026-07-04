@@ -2,6 +2,23 @@
 
 ## 2026-07-04
 
+- [x] **Landing: Martin's demo refinements re-applied natively, original
+  voice restored.** The mechanics from the directed iterations (story cast
+  with Priya@x-accounts.com, click-to-open emails, four designer windows,
+  macOS traffic-light focus with dimmed background windows, no autoplay,
+  working menu bar [winking mark · elapsed · one-word task], line-art Chrome
+  tabs incl. the still kitten, clickable timeline + pie, orange hero, varied
+  red→green certainty) kept; the copy pass reverses the drift Martin flagged
+  ("the copy went downhill fast"): the hero lede is back to the original's
+  cadence ("attributes your time to tasks by itself &ndash; on your Mac,
+  never phoning home"), the demo intro carries the eye-follows/winks line
+  with the corrected red/green, and the privacy section returns to the
+  original's three tight blocks ("the eye answers to the person it watches",
+  "Learning stays local", "Your rules, on your disk") with the single false
+  claim patched honestly ("the only thing that ever leaves is a finished
+  time entry you approve"). All three bake-off treatments preserved at
+  docs/site-treatments/ for the record. Build green, 10 pages.
+
 - [x] **Ambitick removed from the codebase entirely (migrations are done).**
   Martin: he wants the old working name gone, kept only as a private note.
   The data-folder and keychain migrations have run on the only machine that
