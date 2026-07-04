@@ -17,3 +17,8 @@
 # in the private andeyePro/Pro repo; this folder only stages it until that
 # repo exists on this machine.
 /pro/
+
+# site/ – Astro + Starlight product site, built by Cloudflare Pages
+site/node_modules/
+site/dist/
+site/.astro/

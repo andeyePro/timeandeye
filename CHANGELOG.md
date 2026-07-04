@@ -2,6 +2,17 @@
 
 ## 2026-07-03
 
+- [x] **Website scaffold: Astro + Starlight in `site/`, built for Cloudflare
+  Pages.** One Astro project serves both the marketing landing page (`/`, a
+  swappable placeholder until the chosen treatment is productionised) and the
+  full manual (Starlight at `/manual`, search on). The manual is seeded by
+  splitting MANUAL.md into eight pages (getting started, auto-tracking &
+  attribution, pinning, the menu-bar popover, the time window, settings,
+  sync & safety, keyboard). Static output, no SSR adapter; `npm run build`
+  green (10 pages). `site/README.md` carries the exact Cloudflare dashboard
+  settings (root directory `site`, build `npm run build`, output `dist`).
+  Design decisions recorded in docs/superpowers/specs/2026-07-03-website-design.md.
+
 - [x] **A pinned Gmail surface can now reach the grain ladder — reopen a
   root site pin and it opens INTO the ladder, system grain selected.**
   Martin: "Going into various emails does not show [the ladder]" — one broad
