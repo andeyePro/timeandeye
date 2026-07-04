@@ -226,10 +226,12 @@ extension ContextIdentity.Segment {
         }
     }
 
-    /// The value an `EmailRule` at `kind.emailMatchLevel` should store — empty
-    /// for the system row ("any mail in this system", matching `EmailRule`'s
-    /// own convention), the segment's own value otherwise.
-    public var emailMatchValue: String { kind == .emailSystem ? "" : value }
+    /// The value an `EmailRule` at `kind.emailMatchLevel` should store: the
+    /// segment's own value, INCLUDING the system row — the card says
+    /// "everything in Gmail", so the committed rule must scope to Gmail (an
+    /// empty value would match every mail system, disagreeing with the label
+    /// the user clicked; `EmailRule.matches` treats a named system exactly).
+    public var emailMatchValue: String { value }
 }
 
 extension Attributor {

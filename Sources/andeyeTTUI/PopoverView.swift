@@ -87,10 +87,18 @@ struct PopoverView: View {
         // steal focus). Re-sync when tracking state changes (the controller
         // clears the note on task-switch/stop).
         .onChange(of: note) { _, new in controller.manualNote = new }
-        .onChange(of: controller.trackerState) { _, _ in
+        .onChange(of: controller.trackerState) { _, new in
             note = controller.manualNote
             todayNodes = controller.todaySpentNodes()
             showEvidenceCard = false
+            // Keep a freshly-set grain footer: picking a task CHANGES
+            // trackerState in the same transaction, so an unconditional
+            // reset here clobbers it before it ever renders (the footer is
+            // the replacement for the retired silent learnEmailRule — it
+            // must survive its own trigger). Clear only when tracking moved
+            // somewhere OTHER than the just-picked task (stop, or an
+            // unrelated switch making the footer stale).
+            if case .tracking(.task(let ref), _) = new, ref == justPicked?.task.ref { return }
             justPicked = nil
         }
         .onChange(of: controller.journalRevision) { _, _ in todayNodes = controller.todaySpentNodes() }

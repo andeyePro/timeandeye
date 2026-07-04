@@ -70,10 +70,12 @@ func emailGrainCommitMappingChecks(_ c: Checks) {
         }
     }
 
-    c.check("emailMatchValue: empty for the system row (any mail), the segment's own value otherwise") {
+    c.check("emailMatchValue: the segment's own value — the system row scopes to the NAMED system") {
+        // The card's label is "everything in Gmail"; an empty value would
+        // commit an every-mail-system rule that disagrees with that label.
         let id = ContextIdentity.from(gmailSignal())
         let system = try unwrap(id.segments.first { $0.kind == .emailSystem })
-        try expectEq(system.emailMatchValue, "")
+        try expectEq(system.emailMatchValue, "gmail")
         let domain = try unwrap(id.segments.first { $0.kind == .correspondentDomain })
         try expectEq(domain.emailMatchValue, "harborlane.example")
     }
