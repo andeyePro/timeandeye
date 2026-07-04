@@ -145,6 +145,33 @@ public struct ContextIdentity: Sendable, Equatable {
         let next = candidates.first { segments[$0].available } ?? current
         return next + 1
     }
+
+    /// The Evidence Card's default grain selection (2026-07-03 spec §5.2) —
+    /// deliberately NOT `defaultGrainCount` (the pin editor's most-specific-
+    /// available convention). This mirrors `learnEmailRule`'s own
+    /// conservatism: an org domain generalises to the company, a shared-
+    /// webmail correspondent stays per-person, and with no correspondent
+    /// captured at all the default falls back to the narrowest AVAILABLE row
+    /// (subject, or failing that the system) — spec §5.5's edge cases. nil
+    /// when the chain carries no email grain at all (a plain surface), where
+    /// the card degrades to the PinScope chain and `defaultGrainCount` applies
+    /// instead.
+    public var cardDefaultGrainIndex: Int? {
+        guard segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
+        if let i = segments.firstIndex(where: { $0.kind == .correspondentDomain && $0.available && !$0.shared }) {
+            return i + 1
+        }
+        if let i = segments.firstIndex(where: { $0.kind == .correspondent && $0.available }) {
+            return i + 1
+        }
+        if let i = segments.firstIndex(where: { $0.kind == .subject && $0.available }) {
+            return i + 1
+        }
+        if let i = segments.firstIndex(where: { $0.kind == .emailSystem && $0.available }) {
+            return i + 1
+        }
+        return nil
+    }
 }
 
 extension ContextIdentity.SegmentKind {
@@ -157,6 +184,25 @@ extension ContextIdentity.SegmentKind {
         switch self {
         case .emailSystem, .correspondentDomain, .correspondent, .subject: return true
         case .app, .urlHost, .urlPath, .recipeField: return false
+        }
+    }
+
+    /// The `EmailMatchLevel` this segment kind commits as (the Evidence
+    /// Card's Remember/Always — 2026-07-03 spec §5.2/§5.4), or nil for a
+    /// PinScope/recipe kind that stays on the Pin path. Unlike `pinPredicate`
+    /// below (the pin editor's Components strip, which keeps the system/site
+    /// grain on the PinScope path for its "Always" pin), the card's Always
+    /// writes a PINNED `EmailRule` for every email-flavoured grain INCLUDING
+    /// the system row — spec §5.4: "Always writes a PINNED EmailRule for
+    /// email grains, or a Pin for the site-section grain on a non-email
+    /// surface."
+    public var emailMatchLevel: EmailMatchLevel? {
+        switch self {
+        case .emailSystem: return .emailSystem
+        case .correspondentDomain: return .correspondentDomain
+        case .correspondent: return .correspondent
+        case .subject: return .subject
+        case .app, .urlHost, .urlPath, .recipeField: return nil
         }
     }
 }
@@ -179,6 +225,11 @@ extension ContextIdentity.Segment {
         case .emailSystem, .app, .urlHost, .urlPath, .recipeField: return nil
         }
     }
+
+    /// The value an `EmailRule` at `kind.emailMatchLevel` should store — empty
+    /// for the system row ("any mail in this system", matching `EmailRule`'s
+    /// own convention), the segment's own value otherwise.
+    public var emailMatchValue: String { kind == .emailSystem ? "" : value }
 }
 
 extension Attributor {

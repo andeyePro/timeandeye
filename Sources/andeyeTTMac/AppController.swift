@@ -1308,7 +1308,145 @@ public final class AppController: ObservableObject {
     /// timeline's "why was this tracked as X?" panel. Scored at the window's own
     /// time so the time-of-day prior matches what actually happened.
     public func explainSpan(_ span: FocusSpan) -> AttributionExplanation {
-        attributor.explain(span.signal, tasks: taskCache, now: span.signal.timestamp)
+        explain(span.signal, now: span.signal.timestamp)
+    }
+
+    // MARK: - Context rules: Evidence Card + un-learn (2026-07-03 spec)
+
+    /// Why a signal attributes the way it does, for a raw focus signal (not
+    /// tied to a journalled `FocusSpan`) — the popover host's Evidence Card
+    /// source. `explainSpan` above is the timeline's equivalent.
+    public func explain(_ signal: ActivitySignal, now: Date = Date()) -> AttributionExplanation {
+        attributor.explain(signal, tasks: taskCache, now: now)
+    }
+
+    /// The current focus signal, or nil when nothing is focused — the
+    /// popover host's Evidence Card source (the timeline host uses a
+    /// journalled `FocusSpan`'s own signal instead).
+    public func currentFocusSignal() -> ActivitySignal? {
+        tracker.currentFocusSignal
+    }
+
+    /// The full broad→narrow identity of a signal — the Evidence Card's grain
+    /// ladder / sees-line source, unconditionally (unlike `pinEmailIdentity()`,
+    /// which gates on an email grain for the pin editor's Components-strip
+    /// swap).
+    public func identity(of signal: ActivitySignal) -> ContextIdentity {
+        attributor.identity(of: signal)
+    }
+
+    /// What [✕ forget] would remove for this signal, or nil (pin / OP-URL /
+    /// nothing learned — see `Attributor.forgettable`).
+    public func forgettable(for signal: ActivitySignal, now: Date = Date()) -> Attributor.Unlearn? {
+        attributor.forgettable(for: signal, now: now)
+    }
+
+    /// The live "would then fall back to…" preview — never mutates (see
+    /// `Attributor.explainWithout`).
+    public func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
+                               now: Date = Date()) -> AttributionExplanation {
+        attributor.explainWithout(u, signal, tasks: taskCache, now: now)
+    }
+
+    /// An existing rule this commit would REPLACE (same level+value,
+    /// unpinned) — the card's "replaces: X → OldTask" warning before a
+    /// Remember/Always commit (2026-07-03 spec §5.5). Mirrors
+    /// `learnEmailRule`'s own replacement filter.
+    public func conflictingRule(level: EmailMatchLevel, value: String) -> EmailRule? {
+        attributor.emailRules.first {
+            $0.level == level && !$0.pinned && $0.value.caseInsensitiveCompare(value) == .orderedSame
+        }
+    }
+
+    /// The Evidence Card's [✕ forget] / [✕ suppress]: remove exactly what `u`
+    /// names, with a full undo (R2 — one action, never a leap of faith). State
+    /// is small enough to snapshot wholesale rather than deriving a bespoke
+    /// inverse per `Unlearn` case; a forgotten session sticky is restored by
+    /// re-asserting it through `assign` (the only public way to create one)
+    /// and then restoring the OTHER stores over its side effects, so the
+    /// round trip is exact.
+    public func forget(_ u: Attributor.Unlearn, signal: ActivitySignal) {
+        let savedRules = attributor.emailRules
+        let savedPrimes = attributor.primedSurfaces
+        let savedLearning = attributor.learning
+        var savedSticky: SessionSticky?
+        if case .sessionSticky = u {
+            savedSticky = attributor.stickyMatch(for: signal, now: Date())
+        }
+        attributor.forget(u, signal: signal)
+        persistAssociations()
+        tracker.reevaluate()
+        registerUndo(forgetUndoLabel(u)) { [weak self] in
+            guard let self else { return }
+            if let sticky = savedSticky {
+                self.attributor.assign(signal, target: sticky.target, now: sticky.day)
+            }
+            self.attributor.emailRules = savedRules
+            self.attributor.primedSurfaces = savedPrimes
+            self.attributor.replaceLearning(savedLearning)
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
+        objectWillChange.send()
+    }
+
+    private func forgetUndoLabel(_ u: Attributor.Unlearn) -> String {
+        switch u {
+        case .emailRule(let rule): return "forget rule \(rule.value)"
+        case .primedSurface: return "forget remembered surface"
+        case .sessionSticky: return "forget today's categorisation"
+        case .rankedAssociation(let target): return "suppress learning toward \(name(of: target))"
+        }
+    }
+
+    /// The Evidence Card's Remember (0.95, learned) / Always (1.0, pinned)
+    /// commit at the grain the user selected: an email-flavoured grain
+    /// (including the system row) writes an `EmailRule`; a plain PinScope
+    /// grain writes a `Pin` when pinned (Remember there is today's soft prime
+    /// + learned association, already applied by the caller's own pick — see
+    /// `PopoverView`/`TimelineView`). This is what replaces the retired
+    /// silent `learnEmailRule` call in `confirm`/`assign` (2026-07-03 spec
+    /// §5.2/§5.4).
+    public func commitGrain(_ identity: ContextIdentity, grainCount: Int, signal: ActivitySignal,
+                            to ref: TaskRef, pinned: Bool, now: Date = Date()) {
+        guard grainCount >= 1, grainCount <= identity.segments.count else { return }
+        let segment = identity.segments[grainCount - 1]
+        guard segment.available else { return }
+        if let level = segment.kind.emailMatchLevel {
+            attributor.learnEmailRule(signal, to: ref, level: level, value: segment.emailMatchValue,
+                                      pinned: pinned, origin: .card, now: now)
+            persistAssociations()
+            tracker.reevaluate()
+            objectWillChange.send()
+        } else if pinned, let id = PinScope.identity(of: signal) {
+            let prefix = Array(id.segments.prefix(grainCount))
+            guard !prefix.isEmpty else { return }
+            commitPin(kind: id.kind, prefix: prefix, to: ref)
+        }
+    }
+
+    // MARK: - Rules Ledger (Settings ▸ Context rules…)
+
+    /// Learned + pinned email rules grouped by task, for the ledger window.
+    public func rulesLedger(search: String = "") -> [RulesLedgerGroup] {
+        RulesLedger.grouped(attributor.emailRules, nameOf: { name(of: .task($0)) }, search: search)
+    }
+
+    /// Ledger row delete (✕) — the same undo mechanism as the card's forget.
+    public func deleteRule(_ rule: EmailRule) {
+        let saved = attributor.emailRules
+        attributor.emailRules.removeAll { $0.sameRule(as: rule) }
+        persistAssociations()
+        tracker.reevaluate()
+        registerUndo("delete rule \(rule.value)") { [weak self] in
+            guard let self else { return }
+            self.attributor.emailRules = saved
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
+        objectWillChange.send()
     }
 
     /// Teach the attributor that this window is `ref` (a strong correction, like

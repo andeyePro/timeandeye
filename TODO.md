@@ -145,9 +145,19 @@ and recorded rather than fixed blind:
   forget/explainWithout) landed WIP 2e6f784 — UNVERIFIED, suite not run.
   (d) pin-editor slice landed 2026-07-03 (this commit): the popover's
   Components strip pins by correspondent/domain/subject visually, no typed
-  expressions — see CHANGELOG. Still open: the Evidence Card itself (see-why,
-  un-learn, rules ledger, toasts — the context-rules-ux spec §5.2-§5.3/§5.6),
-  and Settings ▸ "shared" caution tint on the strip.
+  expressions — see CHANGELOG.
+  (b)/(c)/(d) Evidence Card UI phase landed 2026-07-04 (this commit) —
+  `EvidenceCardView` (BECAUSE + [✕ forget]/[✕ suppress] with a live
+  fallback preview, sees: line, grain ladder, Remember/Always, full
+  keyboard ↑↓↵⇧↵esc) reachable from the popover's why-caption (⌘E) and the
+  timeline's window panes; silent `learnEmailRule` retired from
+  `confirm`/`assign` per spec §5.4, replaced by the card + the popover's
+  post-pick grain footer; Rules Ledger (list + provenance + delete,
+  Settings ▸ Email → task matching ▸ "Context rules…") — UNVERIFIED, no
+  Mac to run checks/build on. Still open: first-learn/first-fire toasts,
+  screen-share suppression, site recipes beyond Gmail, review-queue grain
+  footer, multi-correspondent checkbox expansion, ledger row → card,
+  bulk-forget/export (spec §6 "later polish").
   (e) not started.
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —

@@ -1173,74 +1173,38 @@ struct TimelineView: View {
         )
     }
 
-    /// One data pane per selected window, in a horizontally scrollable set
-    /// directly below the strip — so a second selection adds a pane rather than
-    /// replacing the one detail view (the full record stays visible for every
-    /// window you pick).
+    /// One Evidence Card per selected window, in a horizontally scrollable set
+    /// directly below the strip — so a second selection adds a card rather
+    /// than replacing the one detail view (the full record stays visible for
+    /// every window you pick). Replaces the monospaced why-pane (2026-07-03
+    /// context-rules spec §5.3/§5.6): picking a task from a card's own
+    /// "Wrong? file as" reassigns JUST that window's time range.
     @ViewBuilder
     private func selectedSpanPanes(_ session: Session, spans: [FocusSpan]) -> some View {
         let idxs = selectedSpanIdx.sorted().filter { $0 < spans.count }
+        let isLive = session.id == AppController.liveSessionID
         ScrollView(.horizontal, showsIndicators: true) {
             HStack(alignment: .top, spacing: 8) {
                 ForEach(idxs, id: \.self) { i in
-                    // Each pane scrolls VERTICALLY so the full "why" is reachable
-                    // (it was clipped by the fixed height with no scroll).
+                    // Scrolls VERTICALLY so the full card is reachable even
+                    // when it's taller than the fixed pane height.
                     ScrollView(.vertical, showsIndicators: true) {
-                        Text(detailText(spans[i]))
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .padding(6)
-                            .frame(maxWidth: 360, alignment: .leading)
+                        EvidenceCardView(controller: controller, signal: spans[i].signal, host: .timeline,
+                                        onPick: { task in
+                            let target = isLive ? controller.commitLiveSlice() : session
+                            if let target {
+                                Task {
+                                    await controller.splitAndReassign(
+                                        target, ranges: [(spans[i].start, spans[i].end)], to: task.ref)
+                                }
+                            }
+                        })
                     }
                     .frame(width: 372)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
             .padding(.bottom, 2)
         }
-        .frame(maxHeight: 260)
-    }
-
-    private func detailText(_ span: FocusSpan) -> String {
-        let e = controller.explainSpan(span)
-        let chosen = e.chosen.map { controller.name(of: $0) } ?? "—"
-        var why = "why: \(whyLabel(e.source)) → \(chosen)"
-        if !e.lines.isEmpty {
-            let cands = e.lines.prefix(4).map {
-                "  \(controller.name(of: $0.target))  \(pct($0.score))  (learned \(pct($0.learned)) · prior \(pct($0.prior)))"
-            }.joined(separator: "\n")
-            why += "\ncandidates:\n\(cands)"
-        }
-        if !e.features.isEmpty {
-            why += "\nlearns on: \(e.features.joined(separator: ", "))"
-        }
-        return """
-        \(span.signal.app)\(span.signal.windowTitle.map { " – \($0)" } ?? "")
-        \(span.start.formatted(date: .omitted, time: .standard)) – \(span.end.formatted(date: .omitted, time: .standard))  (\(Int(span.end.timeIntervalSince(span.start)))s)
-        attributed: \(controller.name(of: span.target))  certainty \(pct(span.certainty))
-        url: \(span.signal.tabURL ?? "-")
-
-        \(why)
-
-        To fix future tracking: Move this window to the right task below — that
-        teaches it (boosts the learned weight), so this window attributes there
-        next time.
-        """
-    }
-
-    private func pct(_ d: Double) -> String { String(format: "%.0f%%", d * 100) }
-
-    private func whyLabel(_ s: AttributionExplanation.Source) -> String {
-        switch s {
-        case .pin:           return "pinned (100%)"
-        case .sessionSticky: return "you categorised this today (sticky until midnight)"
-        case .opTaskURL:     return "OpenProject task URL in the tab"
-        case .opTaskTitle:   return "OpenProject id in the title"
-        case .emailRule:     return "a learned email correspondent → task rule"
-        case .pendingPrime:  return "a just-opened OP task primed it"
-        case .primedSurface: return "remembered from a past correction"
-        case .ranked:        return "learned associations + status/recency priors"
-        case .none:          return "nothing matched"
-        }
+        .frame(maxHeight: 320)
     }
 }

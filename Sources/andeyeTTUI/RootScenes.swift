@@ -58,6 +58,11 @@ public enum AndeyeScenes {
             SettingsView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 460, height: 480)
+
+        Window("andeye Context Rules", id: "rules") {
+            RulesLedgerView(controller: controller).openOnActiveSpace()
+        }
+        .defaultSize(width: 460, height: 420)
     }
 }
 

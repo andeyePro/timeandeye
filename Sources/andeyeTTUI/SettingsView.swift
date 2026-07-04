@@ -5,6 +5,7 @@ import andeyeTTMac
 struct SettingsView: View {
     @ObservedObject var controller: AppController
     @Environment(\.openURL) private var openURL
+    @Environment(\.openWindow) private var openWindow
     @State private var apiKey = ""
     @State private var keySaved = false
     @State private var buildCopied = false
@@ -271,6 +272,11 @@ struct SettingsView: View {
             Section("Email → task matching") {
                 Text("When a message matches several rules, the most specific wins. Order is general (top) → specific (bottom); the bottom-most matching level takes precedence.")
                     .font(.caption).foregroundStyle(.secondary)
+                Button("Context rules…") {
+                    openWindow(id: "rules")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .help("Every learned + pinned email rule, with provenance (origin, created, fired, last fired) — forget any of them.")
                 ForEach(Array(controller.settings.emailMatchOrder.enumerated()), id: \.element) { i, level in
                     HStack {
                         Text("\(i + 1). \(level.label)")

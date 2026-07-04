@@ -69,15 +69,36 @@ only becomes its own slice once you've held it past the Switch Buffer (and never
 below one displayed minute), so glancing at Slack mid-task does not fragment your
 timeline.
 
-### Why was this tracked as X?
+### Context rules: see why, un-learn in one click
 
-Open the Time window's timeline, click a slice, then click a window in its detail
-strip. The pane explains the decision: the source (pinned / OP URL / remembered /
-learned, etc.), the candidate tasks with each score split into its learned and
-prior parts, and the exact signal features the learner keys on (app, title
-words, URL host). To fix future tracking, move that window to the right task in
-the strip below - that teaches the learner, so the window files correctly next
-time.
+In the popover, the certainty line grows a "why?" suffix whenever a signal is
+tracking (**⌘E**, or click it) - it expands the Evidence Card in place. In the
+Time window's timeline, click a slice then a window in its detail strip to see
+the same card full-size.
+
+The card shows, top to bottom:
+
+- **BECAUSE** - the source that fired (pinned, a learned email rule,
+  remembered, learned associations...), with the rule's provenance when one
+  fired (when it was learned, how many times it's fired). If something LEARNED
+  drove the decision, a **✕ forget** (or **✕ suppress** for a learned
+  association, which can't be deleted outright, only counter-taught) removes
+  exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you
+  click.
+- **sees:** - the evidence andeye actually captured: app and site/title
+  always, plus the correspondent, domain and subject when the surface is an
+  email. A field it didn't capture shows as "not captured", never hidden.
+- **Wrong? file as** - search for the right task, then choose how durably to
+  fix it: **Once** (today, this thread - today's soft correction, no lasting
+  rule), **Remember** (a revisable rule at the grain you pick - correspondent,
+  domain, subject or the whole mail system), or **Always 📌** (a pinned rule,
+  100% and standing law).
+
+Picking a task from the popover's own list on an email surface also offers a
+one-line "remember for..." footer underneath - the same Remember, without
+opening the card. Every learned + pinned email rule lives in **Settings ▸
+Email → task matching ▸ Context rules…**, listed with its provenance; forget
+any of them from there too.
 
 ## Pinning
 
@@ -198,12 +219,21 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 
 - **⌘T** - flip the list between Switch-to and Change-to.
 - **⌘P** - pin the current window/site (or, when pinned, open the pin editor).
+- **⌘E** - open the Evidence Card (why this was tracked here, un-learn, fix).
 - **⌘.** - stop tracking. **⌘R** - resume the last task.
 - **⌘Z** - back to the previous task (same as the quiet ← button).
 - **↵** in the filter - pick the top task in the list.
 - **⌘↵** - claim the "you were away" idle gap as work.
 - **⌘Y** - open the Time window. **⌘U** - open the Review queue.
 - **⌘,** - Settings. **⌘Q** - quit andeye.
+
+### Evidence Card
+
+- Click a grain row (or **↑ / ↓**) to choose how durably to remember the fix.
+- **↵** - Remember (a revisable rule at the chosen grain).
+- **⇧↵** - Always (a pinned rule, 100%).
+- **esc** - Once (today's soft correction only, same as picking a task
+  normally).
 
 ### Pin editor
 
