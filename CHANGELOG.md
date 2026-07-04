@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-04
+
+- [x] **Landing page: the "Watchful" treatment (Fable-authored original) is
+  the `/` route.** Martin picked it from the three-way bake-off (Instrument /
+  Ink / Watchful — all three authored by Fable 5 subagents just before the
+  session credit limit; the drafts were never committed, which mis-attributed
+  the page to the later session that wrapped it). The hero is a playable
+  menu-bar demo: the living andeye mark (verbatim AndeyeLogo.swift geometry —
+  draw-on, eyelid-close wink), clickable app surfaces, attribution following
+  focus. This is the ORIGINAL treatment; the demo-refinement iterations
+  Martin directed later (story cast, macOS traffic-light focus, clickable
+  timeline/pie, red→green certainty fix et al.) live on the `opus4.8` branch,
+  to be merged or re-applied here. `npm run build` green, 10 pages.
+
 ## 2026-07-03
 
 - [x] **Root CLAUDE.md: orientation map for agents and humans.** Module
