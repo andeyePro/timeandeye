@@ -13,6 +13,14 @@ struct PopoverView: View {
     @State private var changeMode = false
     @FocusState private var noteFocused: Bool
     @FocusState private var filterFocused: Bool
+    // The Evidence Card's inline expansion under the why-caption (⌘E) — see
+    // the 2026-07-03 context-rules spec §5.3.
+    @State private var showEvidenceCard = false
+    // The popover's post-pick grain footer: set the moment a task is picked
+    // on a surface that carries email evidence, offering the ONE optional
+    // follow-up durable-rule commit (this is what replaced the retired
+    // silent `learnEmailRule` — spec §5.4). Cleared on dismiss or commit.
+    @State private var justPicked: (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)?
     // Inline pin editor: blue = the chosen prefix, grey = the rest;
     // ← widens, → narrows, ↵ pins, esc abandons.
     @State private var pinning = false
@@ -50,9 +58,22 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             if pinning { pinEditor }
+            if showEvidenceCard, !pinning, let sig = controller.currentFocusSignal() {
+                EvidenceCardView(controller: controller, signal: sig, host: .popover,
+                                 onPick: { task in
+                    if changeMode {
+                        controller.changeCurrentTask(to: task.ref)
+                        changeMode = false
+                    } else {
+                        controller.userPicked(task)
+                    }
+                    showEvidenceCard = false
+                })
+            }
             Divider()
             promptSection
             switchList
+            if let jp = justPicked { grainFooter(jp) }
             Divider()
             footer
         }
@@ -66,7 +87,12 @@ struct PopoverView: View {
         // steal focus). Re-sync when tracking state changes (the controller
         // clears the note on task-switch/stop).
         .onChange(of: note) { _, new in controller.manualNote = new }
-        .onChange(of: controller.trackerState) { _, _ in note = controller.manualNote; todayNodes = controller.todaySpentNodes() }
+        .onChange(of: controller.trackerState) { _, _ in
+            note = controller.manualNote
+            todayNodes = controller.todaySpentNodes()
+            showEvidenceCard = false
+            justPicked = nil
+        }
         .onChange(of: controller.journalRevision) { _, _ in todayNodes = controller.todaySpentNodes() }
         // Focus the filter when the popover opens so you can type-to-search
         // immediately (the "type to search…" hint promised typing would work).
@@ -130,9 +156,24 @@ struct PopoverView: View {
                         .keyboardShortcut("p", modifiers: .command)
                         .help("Pinned — click to adjust the scope or unpin (⌘P)")
                     } else {
-                        Text("\(controller.elapsedText)  ·  \(Int((certainty * 100).rounded()))% certain")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Text("\(controller.elapsedText)  ·  \(Int((certainty * 100).rounded()))% certain")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if let sig = controller.currentFocusSignal() {
+                                Button { showEvidenceCard.toggle() } label: {
+                                    HStack(spacing: 2) {
+                                        Text(whyGlyph(controller.explain(sig))).lineLimit(1)
+                                        Image(systemName: showEvidenceCard ? "chevron.up" : "chevron.down")
+                                    }
+                                    .font(.caption2)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .keyboardShortcut("e", modifiers: .command)
+                                .help("Why this was tracked here — evidence + un-learn (⌘E)")
+                            }
+                        }
                     }
                     Spacer()
                     // Pin the current window/site to the running task at 100%.
@@ -726,14 +767,64 @@ struct PopoverView: View {
     }
 
     /// Pick a task (switch or relabel, per mode). Shared by a row click and the
-    /// filter's ↵.
+    /// filter's ↵. On an email/recipe surface this ALSO offers the post-pick
+    /// grain footer (2026-07-03 spec §5.3) — the one optional follow-up that
+    /// replaced the retired silent `learnEmailRule`.
     private func pick(_ task: WorkTask) {
+        let sig = controller.currentFocusSignal()
         if changeMode {
             controller.changeCurrentTask(to: task.ref)
             changeMode = false
             filter = ""
         } else {
             controller.userPicked(task)
+        }
+        if let sig {
+            let identity = controller.identity(of: sig)
+            justPicked = identity.segments.contains { $0.kind.isEmailGrain }
+                ? (task, sig, identity) : nil
+        } else {
+            justPicked = nil
+        }
+    }
+
+    /// Short "why?" label for the caption suffix — the winning rule's value
+    /// when a learned email rule fired, else a terse source name.
+    private func whyGlyph(_ e: AttributionExplanation) -> String {
+        if let rule = e.matchedEmailRule { return "✉ \(rule.value.isEmpty ? "any mail" : rule.value)" }
+        switch e.source {
+        case .sessionSticky: return "categorised today"
+        case .primedSurface: return "remembered"
+        case .pendingPrime: return "just opened"
+        case .ranked: return "learned"
+        case .opTaskURL, .opTaskTitle: return "OP task"
+        case .pin, .emailRule, .none: return ""
+        }
+    }
+
+    /// The post-pick grain footer: the conservative default grain for the
+    /// surface just picked, with a one-click Remember and a dismiss. Ignoring
+    /// it (or picking another task) is "once" — the express path never blocks.
+    @ViewBuilder
+    private func grainFooter(_ jp: (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)) -> some View {
+        if let count = jp.identity.cardDefaultGrainIndex, count >= 1, count <= jp.identity.segments.count {
+            let seg = jp.identity.segments[count - 1]
+            HStack(spacing: 6) {
+                Text("remember for").font(.caption2).foregroundStyle(.secondary)
+                Text(seg.display).font(.caption2).lineLimit(1)
+                Spacer()
+                Button("Remember") {
+                    controller.commitGrain(jp.identity, grainCount: count, signal: jp.signal,
+                                           to: jp.task.ref, pinned: false)
+                    justPicked = nil
+                }
+                .font(.caption2).buttonStyle(.borderless)
+                Button { justPicked = nil } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
+                    .help("Dismiss — once (today's soft correction stays; no durable rule)")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
     }
 

@@ -35,12 +35,15 @@ func sessionStickyChecks(_ c: Checks) {
     c.check("the sticky expires at the day boundary — the LEARNED rule takes over") {
         let a = Attributor(instanceHost: host)
         a.assign(email(title: "Compose"), target: .task(.op(2)), now: now)
+        // The grain footer's explicit commit — `assign` itself no longer
+        // writes a rule (2026-07-03 §5.4 retirement).
+        a.learnEmailRule(email(title: "Compose"), to: .op(2), now: now)
         try expectEq(a.explain(email(title: "Compose"), tasks: tasks, now: now).source,
                      .sessionSticky, "today the sticky answers")
         let tomorrow = now.addingTimeInterval(86_400 * 2)   // safely next day in any TZ
         let later = a.explain(email(title: "Compose"), tasks: tasks, now: tomorrow)
         try expectEq(later.source, .emailRule,
-                     "tomorrow the durable rule the assignment taught answers instead")
+                     "tomorrow the durable rule the grain commit taught answers instead")
         try expectEq(later.chosen, .task(.op(2)))
         try expectEq(a.sessionStickies.count, 0, "expired stickies are pruned")
     }

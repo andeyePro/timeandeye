@@ -304,7 +304,10 @@ func attributorChecks(_ c: Checks) {
         let s = mail(["r.naismith@harborlane.example", "t.calder@harborlane.example"],
                      subject: "RE: Insurance Renewals")
         try expect(a.emailRuleMatch(s) == nil, "nothing learned yet")
-        a.confirm(s, task: .op(1))                       // user files it under Insurance
+        // A plain confirm() no longer writes a rule (2026-07-03 §5.4
+        // retirement) — this is the explicit grain commit that replaces it
+        // (the card/footer's Remember, at the conservative auto-detect grain).
+        a.learnEmailRule(s, to: .op(1))
         // Org domain → another person at the same company auto-attributes.
         let s2 = mail(["a.broker@harborlane.example"], subject: "New quote")
         try expectEq(a.emailRuleMatch(s2)?.target, .op(1))
@@ -315,7 +318,7 @@ func attributorChecks(_ c: Checks) {
 
     c.check("email rule: shared webmail learns the person, not the whole domain") {
         let a = Attributor(instanceHost: host)
-        a.confirm(mail(["alice@gmail.com"], subject: "hi"), task: .op(2))
+        a.learnEmailRule(mail(["alice@gmail.com"], subject: "hi"), to: .op(2))
         try expect(a.emailRuleMatch(mail(["bob@gmail.com"], subject: "x")) == nil,
                    "a different gmail person must NOT inherit it")
         try expectEq(a.emailRuleMatch(mail(["alice@gmail.com"], subject: "y"))?.target, .op(2))

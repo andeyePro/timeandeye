@@ -299,28 +299,49 @@ public final class Attributor {
         "protonmail.com", "gmx.com", "mail.com",
     ]
 
-    /// Conservatively learn an email rule from a correction: an org domain
-    /// generalises to the whole company; a shared-webmail correspondent stays
-    /// per-person. Replaces any existing rule with the same level+value.
-    public func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef, now: Date = Date()) {
-        guard let ctx = EmailContext.from(signal), let cp = ctx.correspondents.first else { return }
-        let level: EmailMatchLevel
-        let value: String
-        if let domain = EmailSignal.domain(of: cp), !Self.sharedWebmailDomains.contains(domain) {
-            level = .correspondentDomain; value = domain
+    /// Learn an email rule: either the conservative auto-detected grain (an
+    /// org domain generalises to the whole company; a shared-webmail
+    /// correspondent stays per-person — the default when `level`/`value` are
+    /// nil), or the EXPLICIT grain a caller has already resolved (the
+    /// Evidence Card's Remember/Always, the popover's post-pick grain footer,
+    /// the Rules Ledger's "+ rule"). Replaces any existing UNPINNED rule with
+    /// the same level+value (a pinned rule is never silently replaced).
+    /// `confirm`/`assign` no longer call this silently (2026-07-03
+    /// context-rules spec §5.4 — a plain correction proposes via the card /
+    /// footer instead of writing a durable rule behind the user's back); the
+    /// conservative auto-detect path stays available for direct callers.
+    public func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef,
+                               level: EmailMatchLevel? = nil, value: String? = nil,
+                               pinned: Bool = false, origin: EmailRule.Origin = .correction,
+                               now: Date = Date()) {
+        let resolvedLevel: EmailMatchLevel
+        let resolvedValue: String
+        if let level, let value {
+            resolvedLevel = level
+            resolvedValue = value
         } else {
-            level = .correspondent; value = cp
+            guard let ctx = EmailContext.from(signal), let cp = ctx.correspondents.first else { return }
+            if let domain = EmailSignal.domain(of: cp), !Self.sharedWebmailDomains.contains(domain) {
+                resolvedLevel = .correspondentDomain; resolvedValue = domain
+            } else {
+                resolvedLevel = .correspondent; resolvedValue = cp
+            }
         }
-        emailRules.removeAll { $0.level == level && $0.value.caseInsensitiveCompare(value) == .orderedSame && !$0.pinned }
-        emailRules.append(EmailRule(level: level, value: value, target: task,
-                                    createdAt: now, origin: .correction))
+        emailRules.removeAll {
+            $0.level == resolvedLevel && $0.value.caseInsensitiveCompare(resolvedValue) == .orderedSame && !$0.pinned
+        }
+        emailRules.append(EmailRule(level: resolvedLevel, value: resolvedValue, target: task, pinned: pinned,
+                                    createdAt: now, origin: origin))
     }
 
     /// Explicit user confirmation (popover click + return, or any direct pick).
+    /// Sticky + soft-prime fire unconditionally; a durable email rule is no
+    /// longer written here (2026-07-03 spec §5.4) — the Evidence Card / post-
+    /// pick grain footer propose one instead, so declining it never loses
+    /// today's fix.
     public func confirm(_ signal: ActivitySignal, task: TaskRef, now: Date = Date()) {
         recordSticky(signal, target: .task(task), now: now)
         learnSurface(signal, to: task, weight: 2)
-        learnEmailRule(signal, to: task, now: now)
     }
 
     /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
@@ -333,12 +354,13 @@ public final class Attributor {
 
     /// Review-window or prompt assignment, including "Do not track". Always a
     /// SOFT prime (caps at 0.95) — explicit 100 % pinning goes through `pin`.
+    /// A durable email rule is no longer written here either (2026-07-03 spec
+    /// §5.4) — see `confirm`.
     public func assign(_ signal: ActivitySignal, target: Target, now: Date = Date()) {
         recordSticky(signal, target: target, now: now)
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
             primedSurfaces[surface] = t
-            learnEmailRule(signal, to: t, now: now)
         } else {
             primedSurfaces[surface] = nil
         }

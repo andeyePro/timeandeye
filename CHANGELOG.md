@@ -2,6 +2,46 @@
 
 ## 2026-07-04
 
+- [x] **Context rules UI phase: the Evidence Card, un-learn, and the Rules
+  Ledger** (2026-07-03-context-rules-ux.md, Option A + grafts, MVP items
+  4/5/7 of §6; Core items 1-3 landed earlier WIP 2e6f784). New
+  `EvidenceCardView` (andeyeTTUI) — one view, two hosts — shows BECAUSE (the
+  source that fired, with the matched rule's/pin's provenance), a live
+  `[✕ forget]` / `[✕ suppress]` with the "would then fall back to…" preview
+  rendered BEFORE the click, the `sees:` evidence line (ghosts for
+  not-captured fields, never hidden), and a `Wrong? file as` fix flow with
+  the grain ladder rendered as labelled full-width rows (↑/↓ move the
+  grain, Once/Remember/Return/⇧Return/Always). Reachable from the popover's
+  new why-caption (⌘E, inline expansion under the header) and from the
+  timeline's per-window panes (replacing the old monospaced `detailText`
+  dump). Retired the silent `learnEmailRule` call from `Attributor.confirm`/
+  `assign` per spec §5.4 — a plain correction no longer writes a durable
+  rule behind the user's back; the card and the popover's new post-pick
+  grain footer propose one instead, undoable like everything else via the
+  existing `UndoStack`. New Rules Ledger window (Settings ▸ Email → task
+  matching ▸ "Context rules…") lists every learned + pinned rule grouped by
+  task with provenance (origin, created, fired, last fired) and a per-row
+  delete. Core additions: `Attributor.learnEmailRule` gained an explicit
+  level/value/pinned/origin path (the auto-detect default stays for direct
+  callers); `ContextIdentity.cardDefaultGrainIndex` (the card's own
+  conservative default — domain for an org, address for shared webmail,
+  narrowest-available when no correspondent captured — deliberately NOT the
+  pin editor's most-specific-available `defaultGrainCount`);
+  `SegmentKind.emailMatchLevel`/`Segment.emailMatchValue` (the grain→rule
+  commit mapping, unlike `pinPredicate` treats the system row as a real
+  EmailRule level so "Always: everything in Gmail" is representable); new
+  `RulesLedger.grouped` (pure sort/filter). 13 new checks (CardDefaultGrain,
+  EmailGrainCommitMapping, RulesLedger suites) plus 6 existing checks
+  updated whose scenarios depended on the retired silent call (confirm/
+  assign now teach a rule only when the check calls `learnEmailRule`
+  directly, matching the new UI-driven flow). Deferred to later polish
+  (spec §6, unchanged from the diagnosis): first-learn/first-fire toasts +
+  screen-share suppression, site recipes beyond Gmail, review-queue grain
+  footer, multi-correspondent checkbox expansion, ledger row opens the
+  card, bulk-forget/export. UNVERIFIED — no Mac available to build/run
+  `andeyeTTChecks` or eyeball the SwiftUI; every signature was grepped
+  against the landed Core, not compiled.
+
 - [x] **Finished the Ambitick residual sweep.** The 2026-07-03 rename passes
   left reader-facing mentions behind: the README's H1 area carried a "the
   original working name was Ambitick" parenthetical (removed - public

@@ -243,10 +243,39 @@ func emailRuleMetadataChecks(_ c: Checks) {
 
     c.check("learnEmailRule stamps provenance (createdAt = correction time, origin = correction)") {
         let a = Attributor(instanceHost: "op.example.com")
-        a.confirm(gmailSignal(), task: .op(1), now: t0)
+        // Called directly: `confirm` no longer calls this silently (2026-07-03
+        // §5.4) — see the retirement check below.
+        a.learnEmailRule(gmailSignal(), to: .op(1), now: t0)
         let rule = try unwrap(a.emailRules.first)
         try expectEq(rule.createdAt, t0)
         try expectEq(rule.origin, .correction)
+    }
+
+    c.check("confirm/assign no longer silently learn an email rule (retired 2026-07-03 §5.4)") {
+        let a = Attributor(instanceHost: "op.example.com")
+        a.confirm(gmailSignal(), task: .op(1), now: t0)
+        try expect(a.emailRules.isEmpty,
+                   "a plain correction proposes via the card/footer, never writes silently")
+        let b = Attributor(instanceHost: "op.example.com")
+        b.assign(gmailSignal(), target: .task(.op(2)), now: t0)
+        try expect(b.emailRules.isEmpty)
+    }
+
+    c.check("learnEmailRule with an explicit level/value bypasses auto-detection (the card/footer's write path)") {
+        let a = Attributor(instanceHost: "op.example.com")
+        // An explicit ADDRESS grain even though the domain isn't shared — the
+        // card lets the user pick a narrower grain than the conservative
+        // default the auto-detect path would have chosen.
+        a.learnEmailRule(gmailSignal(), to: .op(1),
+                         level: .correspondent, value: "r.naismith@harborlane.example",
+                         pinned: true, origin: .card, now: t0)
+        let rule = try unwrap(a.emailRules.first)
+        try expectEq(rule.level, .correspondent)
+        try expectEq(rule.pinned, true)
+        try expectEq(rule.origin, .card)
+        // A different person at the same domain must NOT match (address-grain,
+        // not the domain the auto-detect path would have chosen).
+        try expectNil(a.emailRuleMatch(gmailSignal(correspondents: ["a.broker@harborlane.example"])))
     }
 
     c.check("explain() carries the matched rule with its metadata (the card never re-derives)") {
@@ -411,12 +440,17 @@ func forgetChecks(_ c: Checks) {
         let a = Attributor(instanceHost: host)
         let sig = gmailSignal()
         a.assign(sig, target: .task(.op(2)), now: t0)
+        // The grain footer's explicit commit — `assign` itself no longer
+        // writes a rule (2026-07-03 §5.4 retirement) — same domain grain
+        // `learnEmailRule`'s auto-detect would have picked, so the
+        // ladder-order test intent below is unchanged.
+        a.learnEmailRule(sig, to: .op(2), now: t0)
         guard case .sessionSticky(let key)? = a.forgettable(for: sig, now: t0) else {
             throw CheckFailure(description: "expected the sticky to be the forgettable item")
         }
         a.forget(.sessionSticky(key), signal: sig)
         try expect(a.stickyMatch(for: sig, now: t0) == nil, "the sticky is gone")
-        // …which uncovers the email rule the same assign taught.
+        // …which uncovers the email rule the explicit commit taught.
         guard case .emailRule(let rule)? = a.forgettable(for: sig, now: t0) else {
             throw CheckFailure(description: "expected the email rule next on the ladder")
         }
@@ -449,7 +483,8 @@ func forgetChecks(_ c: Checks) {
     c.check("explainWithout previews the fallback and NEVER mutates") {
         let a = Attributor(instanceHost: host)
         let sig = gmailSignal()
-        a.assign(sig, target: .task(.op(2)), now: t0)   // sticky + rule + prime + learning
+        a.assign(sig, target: .task(.op(2)), now: t0)   // sticky + prime + learning
+        a.learnEmailRule(sig, to: .op(2), now: t0)       // the grain footer's explicit rule commit
         try expectEq(a.explain(sig, tasks: tasks, now: t0).source, .sessionSticky)
         // Without the sticky, the email rule answers.
         let u = try unwrap(a.forgettable(for: sig, now: t0))
