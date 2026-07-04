@@ -132,7 +132,7 @@ func pinGrainChecks(_ c: Checks) {
         try expectNil(system.pinPredicate, "system/site grains keep the .components(PinScope) path")
         let plain = ContextIdentity.from(ActivitySignal(
             app: "Google Chrome", windowTitle: "GitHub",
-            tabURL: "https://github.com/aqueum/ambitick/issues", timestamp: t0))
+            tabURL: "https://github.com/andeyePro/andeyeTT/issues", timestamp: t0))
         for seg in plain.segments {
             try expectNil(seg.pinPredicate, "\(seg.kind) is a PinScope kind, never an Expression leaf")
         }
@@ -187,7 +187,7 @@ func pinGrainChecks(_ c: Checks) {
         // A plain, non-mail URL: no email-kind segment anywhere in the chain.
         let plain = ContextIdentity.from(ActivitySignal(
             app: "Google Chrome", windowTitle: "GitHub",
-            tabURL: "https://github.com/aqueum/ambitick/issues", timestamp: t0))
+            tabURL: "https://github.com/andeyePro/andeyeTT/issues", timestamp: t0))
         try expect(!plain.segments.contains { $0.kind.isEmailGrain },
                    "a plain URL chain carries no email grain to gate on")
         // A detected mail host, even capture-off, DOES carry one (the system row).

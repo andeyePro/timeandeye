@@ -2,6 +2,56 @@
 
 ## 2026-07-04
 
+- [x] **Finished the Ambitick residual sweep.** The 2026-07-03 rename passes
+  left reader-facing mentions behind: the README's H1 area carried a "the
+  original working name was Ambitick" parenthetical (removed - public
+  baggage), the README cited the old `2026-06-10-ambitick-design.md` spec by
+  name (dropped), two `github.com/aqueum/ambitick` test-fixture URLs in
+  ContextRulesChecks (→ `andeyePro/andeyeTT`), and a stale "(previously
+  'Ambitick Time')" TODO parenthetical (removed). Genuinely load-bearing
+  strings (the legacy Application-Support dir migration in AppSupport /
+  MacChecks, the `ambitick-dev` keychain path in make-app.sh, the OP scratch
+  subject) and dated historical specs/plans are deliberately kept. Local
+  Xcode `xcschememanagement.plist` still names old schemes - regenerates on
+  the next `xcodegen`, not hand-edited.
+
+- [x] **Landing page major revision: story-driven demo, honest certainty
+  colours, honest privacy claim, real timeline + pie, hover-reactive CTA.**
+  Five coherent changes to `site/src/pages/index.astro` (still fully
+  self-contained, CSP-safe, reduced-motion respected, body never scrolls
+  horizontally):
+  - *Certainty colour fixed to the app's truth.* The old copy/demo said the
+    tint was "grey when unsure, amber when sure" — wrong. `MenuTitle.colour`
+    blends `#FF3B30` (systemRed) → `#34C759` (systemGreen) linearly by
+    certainty, so the mark is RED when unsure and GREEN when sure. The demo's
+    `certRGB` and the caption/how-it-works copy now match.
+  - *Story-driven demo.* Replaced the generic clickable surfaces with a
+    freelancer's Tuesday morning. An email client with three correspondents —
+    Maren Vale (a rebrand/website client → "Maren · rebrand"), Priya the
+    accountant (→ "Accounts · Q2 invoices"), and Anthropic (→ "Claude
+    integration") — plus a browser with three tabs: Maren's staging site and a
+    localhost tab (work) and a kitten video (an honest, non-billable break).
+    Click any email or tab and andeye attributes the time to the job that
+    correspondence/tab belongs to; the clock restarts, the eye winks, the tint
+    blends red→green by confidence. Auto-plays a scripted loop until first
+    interaction, then hands over.
+  - *Real timeline + real pie below the demo,* fed by the demo's accumulated
+    attribution and growing as the story plays. Slices/wedges are coloured by
+    project via the app's HSB(hue, 0.55, 0.85) palette (AppController.colour);
+    the pie is a donut-with-a-hole (time-by-project) with a legend that flags
+    the break as not billable.
+  - *Hover/focus-reactive CTA subtext.* One line under the buttons that changes
+    on hover or keyboard focus: a build-from-source line for "Star on GitHub",
+    a plain-English "a ready-to-download app is coming, we'll email you" line
+    for "Join the waitlist", and a neutral default otherwise.
+  - *Privacy claim reframed honestly.* Dropped the false "nothing ever leaves"
+    framing. New centrepiece: the raw signal (what you looked at, page
+    contents, correspondents, attribution, learning, pin rules, the SQLite
+    journal) never leaves your Mac and andeye Ltd receives nothing; the ONLY
+    thing that travels is the finished time entries you approve, to your own
+    OpenProject / Xero. Also fixed the meta description and the OBSERVE step.
+  `npm run build` green at 10 pages; node_modules removed after build.
+
 - [x] **Landing page: the "Watchful" treatment (Fable-authored original) is
   the `/` route.** Martin picked it from the three-way bake-off (Instrument /
   Ink / Watchful — all three authored by Fable 5 subagents just before the

@@ -3,7 +3,7 @@
 ## Time-window polish (Martin, 2026-06-27)
 
 - [x] Window titles (DONE 2026-06-28): the Time window is titled "Timeline" when showing the
-  timeline and "Time Pie" when showing the pie (previously "Ambitick Time").
+  timeline and "Time Pie" when showing the pie.
 - [x] Pie view — closeable highlight-calendar (DONE 2026-06-28). Anchorable
   `TimePeriod` in Core (unit-checked); a `MonthCalendar` grid bottom-right (below
   the key) highlights the shown range and re-anchors on a tapped day; the period

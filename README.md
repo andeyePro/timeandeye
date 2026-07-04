@@ -1,8 +1,5 @@
 # andeye
 
-(The original working name was **Ambitick** — it survives only in the
-legacy data-folder migration.)
-
 Automatic time tracking against your project-management tool's tasks. A macOS
 menu-bar app that watches which window, app or browser tab is active and
 attributes the time to the most likely task, learning from your confirmations
@@ -15,8 +12,7 @@ supported today, **Xero** is next, and **standalone** (no backend at all)
 works now — local tasks, full timeline/pie, CSV/Markdown timesheet export
 from Settings ▸ Maintenance.
 
-Day-to-day usage: **[MANUAL.md](MANUAL.md)**. Spec:
-`docs/superpowers/specs/2026-06-10-ambitick-design.md`. Status: v0.1 pre-alpha.
+Day-to-day usage: **[MANUAL.md](MANUAL.md)**. Status: v0.1 pre-alpha.
 
 ## Build
 
