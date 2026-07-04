@@ -5,6 +5,10 @@ andeye time tracker: everything here builds a fully functional app
 (OpenProject backend + standalone included); paid backends live in a separate
 private package and never gate anything you find here.
 
+New here? [CLAUDE.md](CLAUDE.md) is the orientation map – agents and humans
+both start there. It has the module layout, the build/check commands, and
+the handful of "do not clean this up" rules that will bite you otherwise.
+
 ## Build and test
 
 ```bash
@@ -33,14 +37,24 @@ green — CI runs them on every push.
 
 ## Licence and contributor agreement
 
-andeye is licensed under the GNU AGPL-3.0 (see LICENSE). andeye Ltd also
-ships the same code in proprietary builds (for example the App Store
-releases), which is possible because the company holds sufficient rights
-in every line.
+andeye is licensed under the GNU AGPL-3.0 (see LICENSE). We chose the AGPL
+deliberately: it keeps this codebase and everything built on it open, for
+good.
 
-To keep that true, contributions are accepted under the andeye Individual
-Contributor Licence Agreement (CLA.md): you keep ownership of your work
-and grant andeye Ltd a licence broad enough to distribute it under both
-the AGPL and the proprietary build terms. State your agreement in your
-first pull request; PRs from authors who have not agreed cannot be
-merged.
+But the AGPL and Apple's App Store are incompatible – Apple's terms and the
+AGPL's source-distribution requirements can't both be satisfied, which is
+why projects like VLC had to be pulled from the store, and why an AGPL app
+can't simply be published there. So for andeye to exist both as a genuinely
+copyleft community app here AND as an iPhone / App Store app (and the paid
+andeyePro build), one party needs to hold rights broad enough to ship under
+both sets of terms. That party is andeye Ltd, and the CLA is how it gets
+those rights without you giving up yours.
+
+Contributions are therefore accepted under the andeye Individual
+Contributor Licence Agreement ([CLA.md](CLA.md)): you keep ownership of your
+work, it stays under the AGPL here forever, and you additionally grant
+andeye Ltd a licence broad enough to distribute it under the proprietary
+build terms too. It's a three-minute read with a plain-English summary at
+the top. To sign, state your agreement in your first pull request and add
+your name to [CONTRIBUTORS.md](CONTRIBUTORS.md); PRs from authors who have
+not agreed cannot be merged.

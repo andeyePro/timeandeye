@@ -16,6 +16,16 @@
 
 ## 2026-07-03
 
+- [x] **Contributor-facing governance: CONTRIBUTORS roster, CLA
+  plain-English summary, CONTRIBUTING explanation.** Adds CONTRIBUTORS.md
+  (the signing roster CLA.md already references), a plain-English summary
+  box at the top of CLA.md (additive; the binding clauses are unchanged),
+  and a CONTRIBUTING.md rewrite that links CLAUDE.md and explains honestly
+  why the CLA exists (AGPL and the App Store are incompatible, per the VLC
+  precedent, so dual-licensing is what lets one codebase be the community
+  app and the iPhone/Pro app). Note for review: the CLA still has no
+  explicit governing-law clause.
+
 - [x] **Root CLAUDE.md: orientation map for agents and humans.** Module
   layout (lowercase `andeyeTT*`/`andeyeApp` targets, UpperCamelCase types),
   build/check/run commands, the load-bearing legacy-string and

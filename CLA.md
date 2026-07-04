@@ -1,5 +1,25 @@
 # andeye Individual Contributor Licence Agreement
 
+> **In plain terms** (this box is a friendly summary, not the agreement –
+> the numbered clauses below are what actually binds):
+>
+> - You keep your copyright. Nothing here signs your work away.
+> - Your contribution stays available under the AGPL-3.0, forever, in this
+>   repo. That can't be taken back.
+> - You additionally let andeye Ltd relicense it, including under
+>   proprietary terms. That is the one thing that lets the same code ship
+>   as an iPhone / App Store app and as the paid andeyePro build – the App
+>   Store cannot distribute AGPL software, so without this the community
+>   app and the paid app could not share a codebase.
+> - You grant a patent licence covering your contribution, and confirm the
+>   work is yours to give.
+> - Signing is one line in your first pull request, plus your name in
+>   CONTRIBUTORS.md. No forms, no scanning, no wet signature.
+>
+> This document was drafted with AI assistance and is not legal advice.
+> Read the clauses before relying on it; if you are contributing on behalf
+> of an employer, check clause 5 applies to you.
+
 An agreement in the style of the Apache ICLA / Harmony agreements. It
 exists because andeye Ltd dual-licenses this codebase (AGPL-3.0 in this
 repo, proprietary terms for the App Store builds), which requires the
