@@ -11,13 +11,12 @@ APP="$OUT/andeye.app"
 # (the "menu bar icon disappeared" deaths).
 INSTALL=0
 [ $# -eq 0 ] && INSTALL=1
-# Quit whichever name is running (pre-rename installs are "Ambitick").
-if pgrep -xq andeye || pgrep -xq Ambitick; then
+# Quit a running copy so the bundle swaps cleanly.
+if pgrep -xq andeye; then
     if [ "$INSTALL" = 1 ]; then
         echo "Quitting running app to replace it…"
         osascript -e 'quit app "andeye"' 2>/dev/null || true
-        osascript -e 'quit app "Ambitick"' 2>/dev/null || true
-        for _ in $(seq 1 10); do (pgrep -xq andeye || pgrep -xq Ambitick) || break; sleep 0.5; done
+        for _ in $(seq 1 10); do pgrep -xq andeye || break; sleep 0.5; done
     else
         APP="$OUT/andeye+.app"
         echo "NOTE: app is running; building to $APP - quit the old one and rename to swap."
@@ -72,20 +71,6 @@ BUILD_STAMP="$(date '+%Y-%m-%d %H:%M')"
 IDENTITY="andeye Dev"
 KC="$HOME/andeyett-dev.keychain-db"
 KCPASS="andeyett-build"
-# One-shot migration from the pre-rename keychain: MOVE the file — the
-# "andeye Dev" identity inside travels bit-for-bit, so the app's signature
-# (and every TCC grant keyed to it) is untouched. Letting ensure_identity
-# mint a fresh cert in a new keychain instead would void all grants. The
-# keychain password is renamed with it; if the old password ever mismatches,
-# the fallback is the existing ad-hoc warning path, never a hang.
-LEGACY_KC="$HOME/ambitick-dev.keychain-db"
-if [ ! -f "$KC" ] && [ -f "$LEGACY_KC" ]; then
-    mv "$LEGACY_KC" "$KC"
-    security set-keychain-password -o "ambitick-build" -p "$KCPASS" "$KC" 2>/dev/null || true
-    # Re-point the user search list at the moved file, dropping the stale path.
-    security list-keychains -d user -s "$KC" \
-        $(security list-keychains -d user | tr -d '"' | grep -v "dev.keychain-db")
-fi
 ensure_identity() {
     security list-keychains -d user | grep -q "$KC" || {
         security create-keychain -p "$KCPASS" "$KC" 2>/dev/null || true
@@ -143,7 +128,7 @@ echo "Built $APP"
 # old /Applications copy.
 if [ "$INSTALL" = 1 ]; then
     DEST="/Applications/andeye.app"
-    rm -rf "$DEST" "/Applications/Ambitick.app"   # retire the pre-rename install
+    rm -rf "$DEST"
     ditto "$APP" "$DEST"          # preserves the signature + bundle structure
     echo "Installed to $DEST"
     open "$DEST"

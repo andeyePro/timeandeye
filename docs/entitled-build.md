@@ -211,7 +211,7 @@ Gotchas specific to this repo:
   requirement again, so Accessibility + Automation grants reset **one final
   time** on the first Developer ID build – and then never again, on any
   machine. The make-app.sh keychain/self-signed machinery
-  (`ensure_identity`, `~/ambitick-dev.keychain-db`) becomes dead code for
+  (`ensure_identity`, `~/andeyett-dev.keychain-db`) becomes dead code for
   release builds; keep it as the no-Apple-account dev fallback path.
 - The launch-kill failure mode: if entitlements and profile disagree (wrong
   TEAMID, container not assigned to the App ID, profile missing), the app

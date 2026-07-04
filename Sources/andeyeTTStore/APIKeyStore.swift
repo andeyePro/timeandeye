@@ -14,10 +14,9 @@ import Foundation
 /// same directory, so this matches the existing on-disk posture. No keychain,
 /// no prompt. Renamed from `KeychainStore` so the name stops implying a keychain.
 public enum APIKeyStore {
-    /// Resolves through AppSupport so the key follows the data-home rename
-    /// migration (hardcoding "Ambitick" here caused the post-rename
-    /// "No API key yet" bug — the key had moved with the folder, the lookup
-    /// hadn't).
+    /// Resolves through AppSupport so the key always follows the one data
+    /// home; a hardcoded folder name here would silently look in the wrong
+    /// place (the "No API key yet" class of bug).
     private static func fileURL() -> URL {
         fileURL(in: AppSupport.directory())
     }

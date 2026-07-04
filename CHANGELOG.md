@@ -2,6 +2,39 @@
 
 ## 2026-07-04
 
+- [x] **Ambitick removed from the codebase entirely (migrations are done).**
+  Martin: he wants the old working name gone, kept only as a private note.
+  The data-folder and keychain migrations have run on the only machine that
+  matters, so the backward-compat code was now dead and safe to drop:
+  `AppSupport.directory` no longer moves a legacy `Ambitick/` dir (just
+  returns the `andeye` home); the four migration checks in MacChecks are
+  replaced by two plain data-home checks; `make-app.sh` drops the
+  `ambitick-dev` keychain-migration block and the `Ambitick.app`/process-name
+  handling; `install-andeye.command`, `APIKeyStore`, the integration scratch
+  subject, CLAUDE.md's hard-rules and entitled-build's keychain reference are
+  all cleaned. 
+  NOTE: removing the auto-migration means a machine still holding
+  Ambitick-era data would start fresh rather than adopt it - there are none,
+  but it's no longer a safety net. Checks not run here (no Swift toolchain);
+  run `swift run andeyeTTChecks` on the Mac (net -2 checks in the suite).
+
+- [x] **Landing accuracy fixes, manual leads with auto-tracking, image
+  strategy.** From the adversarial accuracy review (no blockers): the OBSERVE
+  copy drops the absolute "that is the whole feed" claim (the AGPL-visible
+  `MicMonitor` makes an exhaustive "this is everything we watch" statement
+  false), so the page is selective without over-claiming - the untested
+  mic-in-use sensor is left unmentioned rather than advertised, since naming
+  it reads as eavesdropping on calls; "what a message was about" tightened to
+  "its subject line"; "files in your home folder" corrected to andeye's own
+  folder.
+  The manual now leads with Auto-tracking and attribution (sidebar + Overview
+  both reordered; the Overview opens on "there is no start button" - the
+  automatic experience is the starting point). Added a manual image strategy
+  spec (docs/superpowers/specs/2026-07-04-manual-image-strategy.md): where
+  images live (src/assets, Astro-optimised), PNG-for-UI/SVG-for-diagrams,
+  light+dark for key shots, alt-text and a staleness manifest, and the split
+  between Mac-captured screenshots and agent-authorable diagrams.
+
 - [x] **Finished the Ambitick residual sweep.** The 2026-07-03 rename passes
   left reader-facing mentions behind: the README's H1 area carried a "the
   original working name was Ambitick" parenthetical (removed - public

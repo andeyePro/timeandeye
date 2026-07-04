@@ -65,7 +65,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("JournalStore[InMemory]", inMemoryJournalChecks),
     ("JournalStore[SQLite]", sqliteJournalChecks),
     ("MenuTitle", menuTitleChecks),
-    ("SupportDirMigration", supportDirMigrationChecks),
+    ("SupportDir", supportDirChecks),
     ("AIAssist", aiAssistChecks),
     ("Settings", settingsChecks),
     ("DuplicateReconcile", duplicateReconcileChecks),

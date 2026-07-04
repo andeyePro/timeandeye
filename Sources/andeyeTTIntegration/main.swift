@@ -72,9 +72,9 @@ func run() async throws {
     print("running as: \(myName)")
 
     // 2. Scratch work package (find by subject, else create in the IT project).
-    let scratchSubject = "Ambitick integration scratch (auto-created, safe to delete)"
+    let scratchSubject = "andeyeTT integration scratch (auto-created, safe to delete)"
     var scratchID: Int?
-    let filters = #"[{"subject":{"operator":"~","values":["Ambitick integration scratch"]}}]"#
+    let filters = #"[{"subject":{"operator":"~","values":["andeyeTT integration scratch"]}}]"#
         .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
     let found = try await api("GET", "api/v3/work_packages?filters=\(filters)&pageSize=5")
     if let embedded = found["_embedded"] as? [String: Any],

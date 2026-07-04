@@ -22,9 +22,6 @@ mkdir -p "$HOME/Applications"
 
 # Quit the running copy so the bundle swaps cleanly.
 osascript -e 'tell application "andeye" to quit' >/dev/null 2>&1 || true
-osascript -e 'tell application "Ambitick" to quit' >/dev/null 2>&1 || true
-pkill -x Ambitick >/dev/null 2>&1 || true
-for _ in $(seq 1 25); do pgrep -xq Ambitick || break; sleep 0.2; done
 
 # Unpack the zip and install at the canonical path in your own account.
 TMP="$(mktemp -d)"

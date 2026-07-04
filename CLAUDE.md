@@ -54,15 +54,11 @@ on a Mac – don't claim a check result you haven't actually seen.
 
 ## Hard rules – do not "clean up" these
 
-- The `Ambitick` strings in `Sources/andeyeTTStore/AppSupport.swift` and
-  `scripts/make-app.sh` (the legacy `~/ambitick-dev.keychain-db` path, the
-  `Ambitick.app`/process-name checks) are LOAD-BEARING migration and
-  identity values for pre-rename installs. Never rename or remove them.
 - The dev signing identity lives in the `andeyett-dev` keychain
-  (`make-app.sh`); it's migrated in place from the old keychain to
-  preserve TCC grants (Accessibility/Automation permissions survive
-  rebuilds only if the identity doesn't change). Don't re-mint a cert or
-  create a fresh keychain casually.
+  (`make-app.sh`). Its stability is what preserves TCC grants
+  (Accessibility/Automation permissions survive rebuilds only if the
+  signing identity doesn't change), so don't re-mint a cert or create a
+  fresh keychain casually.
 
 ## TODO.md / CHANGELOG.md
 

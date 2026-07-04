@@ -11,59 +11,30 @@ func sqliteJournalChecks(_ c: Checks) {
     }
 }
 
-func supportDirMigrationChecks(_ c: Checks) {
+func supportDirChecks(_ c: Checks) {
     func tempBase() -> URL {
         let u = FileManager.default.temporaryDirectory
-            .appendingPathComponent("andeye-migrate-\(UUID().uuidString)")
+            .appendingPathComponent("andeye-support-\(UUID().uuidString)")
         try! FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         return u
     }
 
-    c.check("fresh install: andeye dir, no legacy involved") {
+    c.check("data home is the andeye dir under Application Support") {
         let base = tempBase()
         defer { try? FileManager.default.removeItem(at: base) }
         let dir = AppController.supportDirectory(under: base)
         try expectEq(dir.lastPathComponent, "andeye")
     }
 
-    c.check("legacy Ambitick dir MOVES (not copies) with its contents intact") {
+    c.check("the API key resolves through AppSupport (regression: 'No API key yet')") {
         let base = tempBase()
         defer { try? FileManager.default.removeItem(at: base) }
-        let legacy = base.appendingPathComponent("Ambitick")
-        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
-        try Data("journal-bytes".utf8).write(to: legacy.appendingPathComponent("journal.sqlite"))
-        let dir = AppController.supportDirectory(under: base)
-        try expectEq(String(data: try Data(contentsOf: dir.appendingPathComponent("journal.sqlite")),
-                            encoding: .utf8), "journal-bytes", "data travelled")
-        try expect(!FileManager.default.fileExists(atPath: legacy.path),
-                   "legacy dir GONE — dual dirs would fork the journal")
-    }
-
-    c.check("the API key survives the rename migration (regression: 'No API key yet')") {
-        let base = tempBase()
-        defer { try? FileManager.default.removeItem(at: base) }
-        let legacy = base.appendingPathComponent("Ambitick")
-        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
-        try Data("sekrit".utf8).write(to: legacy.appendingPathComponent("op-api-key"))
-        let dir = AppSupport.directory(under: base)   // migrates
-        let key = try Data(contentsOf: APIKeyStore.fileURL(in: dir))
-        try expectEq(String(data: key, encoding: .utf8), "sekrit",
-                     "key travels with the folder AND the lookup follows it")
-    }
-
-    c.check("migration is one-shot: existing andeye dir wins, legacy untouched") {
-        let base = tempBase()
-        defer { try? FileManager.default.removeItem(at: base) }
-        let newDir = base.appendingPathComponent("andeye")
-        let legacy = base.appendingPathComponent("Ambitick")
-        try FileManager.default.createDirectory(at: newDir, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
-        try Data("new".utf8).write(to: newDir.appendingPathComponent("marker"))
-        _ = AppController.supportDirectory(under: base)
-        try expectEq(String(data: try Data(contentsOf: newDir.appendingPathComponent("marker")),
-                            encoding: .utf8), "new", "existing data never overwritten")
-        try expect(FileManager.default.fileExists(atPath: legacy.path),
-                   "stale legacy dir left alone once andeye exists")
+        let dir = AppSupport.directory(under: base)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("sekrit".utf8).write(to: APIKeyStore.fileURL(in: dir))
+        try expectEq(String(data: try Data(contentsOf: APIKeyStore.fileURL(in: dir)),
+                            encoding: .utf8), "sekrit",
+                     "the key lookup follows the data home")
     }
 }
 
