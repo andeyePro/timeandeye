@@ -264,10 +264,11 @@
   .mb-tracker.idle #mbClock, .mb-tracker.idle #mbTask { color: var(--faint); }
   .mb-sys { color: var(--faint); }
 
-  /* the four windows on the desktop */
+  /* the desktop: three work windows on top, andeye's own Time window beneath,
+     so the timeline and pie are in view from the very first frame */
   .desktop {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     padding: 22px;
     background: radial-gradient(120% 130% at 50% 0%, #1a2233 0%, #121722 58%, #0e1220 100%);
@@ -285,17 +286,23 @@
     cursor: pointer;
     transition: opacity 0.35s, box-shadow 0.35s;
   }
-  .win:not(.focused):hover { opacity: 0.78; }
+  .win:not(.focused):not(.win-andeye):hover { opacity: 0.78; }
   .win.focused {
     opacity: 1;
     cursor: default;
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
   }
-  /* the try-me hint: windows breathe gently until the first click */
-  .desktop.idle .win { animation: hintpulse 2.4s ease-in-out infinite; }
+  /* andeye's own window: always legible, never a tracked surface */
+  .win.win-andeye {
+    grid-column: 1 / -1;
+    opacity: 1;
+    cursor: default;
+    min-height: 0;
+  }
+  /* the try-me hint: work windows breathe gently until the first click */
+  .desktop.idle .win:not(.win-andeye) { animation: hintpulse 2.4s ease-in-out infinite; }
   .desktop.idle .win:nth-child(2) { animation-delay: 0.3s; }
   .desktop.idle .win:nth-child(3) { animation-delay: 0.6s; }
-  .desktop.idle .win:nth-child(4) { animation-delay: 0.9s; }
   @keyframes hintpulse {
     0%, 100% { opacity: 0.5; box-shadow: 0 0 0 0 rgba(240, 161, 58, 0); }
     50% { opacity: 0.7; box-shadow: 0 0 0 3px rgba(240, 161, 58, 0.13); }
@@ -409,35 +416,25 @@
     background: #0e1220;
   }
 
-  /* inline line-art canvases (browser content + design app) */
+  /* inline line-art canvases (browser content + proposal document) */
   .art { width: 100%; height: auto; max-height: 148px; color: #4d566e; display: block; margin: auto; }
 
-  /* design app */
-  .design-body { flex: 1; padding: 10px 12px; display: flex; background: #0e1220; }
+  /* the proposal document */
+  .doc-body { flex: 1; padding: 10px 12px; display: flex; background: #0e1220; }
 
-  /* messages / chat */
-  .chat-body { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; justify-content: flex-end; background: #0e1220; }
-  .bubble { font-size: 0.74rem; line-height: 1.4; max-width: 82%; padding: 7px 11px; border-radius: 13px; }
-  .bubble.in { align-self: flex-start; background: #1c2436; color: var(--text); border-bottom-left-radius: 4px; }
-  .bubble.out { align-self: flex-end; background: rgba(240, 161, 58, 0.16); color: #f4d3a3; border-bottom-right-radius: 4px; }
+  /* ---------- the andeye Time window: real timeline + real pie, in frame ---------- */
 
-  /* ---------- analytics: real timeline + real pie, fed by the demo ---------- */
-
-  .analytics {
+  .time-body {
+    flex: 1;
     display: grid;
     grid-template-columns: 1.55fr 1fr;
-    gap: 20px;
-    margin-top: 20px;
+    gap: 22px;
+    padding: 13px 16px 12px;
+    background: #10141f;
   }
-  .panel-card {
-    background: var(--panel);
-    border: 1px solid var(--line-soft);
-    border-radius: 12px;
-    padding: 16px 16px 14px;
-  }
-  .panel-card h4 {
-    margin: 0 0 12px;
-    font-size: 0.78rem;
+  .time-label {
+    margin: 0 0 9px;
+    font-size: 0.72rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--faint);
@@ -498,6 +495,16 @@
   .legend-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
   .legend-val { color: var(--faint); font-variant-numeric: tabular-nums; }
   .legend-note { font-size: 0.68rem; color: var(--faint); font-style: italic; }
+  .legend-bill {
+    margin-top: 7px;
+    padding: 6px 4px 0;
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .legend-bill b { color: var(--text); font-weight: 700; }
 
   .readout {
     margin-top: 10px;
@@ -614,10 +621,12 @@
     .steps { grid-template-columns: 1fr; }
     .tiers { grid-template-columns: 1fr; }
     .mb-menus { display: none; }
+    .desktop { grid-template-columns: 1fr 1fr; }
+    .win-doc { grid-column: 1 / -1; }
   }
   @media (max-width: 640px) {
     .desktop { grid-template-columns: 1fr; padding: 14px; gap: 14px; }
-    .analytics { grid-template-columns: 1fr; }
+    .time-body { grid-template-columns: 1fr; }
     #mbTask { max-width: 90px; }
     .mb-sys { display: none; }
     .tab { max-width: 40%; }
@@ -653,8 +662,8 @@
 
     <div class="demo reveal" style="--d:0.46s" id="demo">
       <div class="demo-head">
-        <h2>A designer's Tuesday morning</h2>
-        <p>It's 9:41 and you're mid-rebrand. Click around like you're working &ndash; the eye follows, winks when you switch, and its tint is its confidence: <span style="color:#FF3B30">red when unsure</span>, <span style="color:#34C759">green when sure</span>.</p>
+        <h2>Your Tuesday morning, 9:41</h2>
+        <p>Click around like it's your desk &ndash; answer Maren, settle the accountant's question, sneak a kitten. The eye follows, winks when you switch, and its tint is its confidence: <span style="color:#FF3B30">red when unsure</span>, <span style="color:#34C759">green when sure</span>.</p>
       </div>
       <div class="demo-note"><span id="driveState">Click an email or a tab &ndash; watch andeye follow you</span></div>
       <div class="mac">
@@ -676,11 +685,11 @@
             <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Mail &ndash; Inbox</span></div>
             <div class="mail-body">
               <div class="mail-list" id="mailList">
-                <button class="mailrow unread" data-focus="mail-maren" aria-label="Open Maren Vale's email about the rebrand">
+                <button class="mailrow unread" data-focus="mail-maren" aria-label="Open Maren Vale's email about the proposal">
                   <span class="avatar" style="background:#c9a7ea">MV</span>
                   <span class="mtext">
                     <span class="mfrom">Maren Vale</span>
-                    <span class="msubj">Re: the new logo &ndash; it looks wonderful</span>
+                    <span class="msubj">Re: the proposal &ndash; where do I sign?</span>
                   </span>
                   <span class="mtime tnum">9:12</span>
                 </button>
@@ -709,70 +718,68 @@
           <div class="win win-web" id="winWeb">
             <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Chrome</span></div>
             <div class="tabbar" id="tabBar">
-              <button class="tab" data-focus="tab-staging" aria-label="The client's staging site tab">
-                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="2" y1="6" x2="14" y2="6"/></svg>staging
+              <button class="tab" data-focus="tab-client" aria-label="Maren Vale's website tab">
+                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="2" y1="6" x2="14" y2="6"/></svg>marenvale.co
               </button>
-              <button class="tab" data-focus="tab-ref" aria-label="A design reference tab">
-                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>reference
+              <button class="tab" data-focus="tab-research" aria-label="A research article tab">
+                <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 13 L3 3 L10 3 L13 6 L13 13 Z"/><line x1="5.5" y1="7" x2="10.5" y2="7"/><line x1="5.5" y1="10" x2="9" y2="10"/></svg>research
               </button>
               <button class="tab" data-focus="tab-kitten" aria-label="A kitten video tab">
                 <svg class="fav" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="4.5"/><path d="M4.5 5 L3.5 2.3 L6.2 4.3"/><path d="M11.5 5 L12.5 2.3 L9.8 4.3"/></svg>kittens
               </button>
             </div>
-            <div class="urlbar" id="webUrl">staging.marenvale.co/home</div>
+            <div class="urlbar" id="webUrl">marenvale.co/about</div>
             <div class="webbody" id="webBody"><!-- filled by the script --></div>
           </div>
 
-          <!-- Design app: the rebrand on the canvas -->
-          <div class="win win-design" id="winDesign">
-            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Studio &ndash; marenvale-rebrand</span></div>
-            <div class="design-body">
+          <!-- The proposal: the deliverable Maren is saying yes to -->
+          <div class="win win-doc" id="winDoc">
+            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Pages &ndash; Maren Vale proposal</span></div>
+            <div class="doc-body">
               <svg class="art" viewBox="0 0 240 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <rect x="8" y="12" width="16" height="126" rx="6" stroke-opacity="0.4"/>
-                <circle cx="16" cy="26" r="3"/><circle cx="16" cy="40" r="3"/><rect x="12" y="52" width="8" height="8" rx="2"/><circle cx="16" cy="74" r="3"/>
-                <rect x="40" y="16" width="150" height="118" rx="6" stroke-opacity="0.6"/>
-                <path d="M70 96 C60 60 120 58 108 88 C102 104 130 108 140 84" stroke="#f0a13a" stroke-width="3"/>
-                <circle cx="150" cy="86" r="12" stroke="#f0a13a" stroke-width="3"/>
-                <line x1="72" y1="118" x2="150" y2="118" stroke-opacity="0.5"/>
-                <rect x="204" y="16" width="28" height="118" rx="6" stroke-opacity="0.4"/>
-                <line x1="210" y1="30" x2="226" y2="30" stroke-opacity="0.6"/><line x1="210" y1="42" x2="222" y2="42" stroke-opacity="0.6"/>
-                <rect x="210" y="54" width="16" height="10" rx="2" fill="#f0a13a" fill-opacity="0.2" stroke="#f0a13a"/>
-                <line x1="210" y1="76" x2="226" y2="76" stroke-opacity="0.6"/>
+                <rect x="46" y="8" width="148" height="136" rx="5" stroke-opacity="0.55"/>
+                <line x1="62" y1="28" x2="146" y2="28" stroke="#f0a13a" stroke-width="3"/>
+                <line x1="62" y1="42" x2="178" y2="42" stroke-opacity="0.6"/>
+                <line x1="62" y1="51" x2="170" y2="51" stroke-opacity="0.6"/>
+                <line x1="62" y1="60" x2="176" y2="60" stroke-opacity="0.6"/>
+                <line x1="62" y1="69" x2="128" y2="69" stroke-opacity="0.6"/>
+                <rect x="62" y="82" width="10" height="26" rx="2" stroke-opacity="0.7"/>
+                <rect x="78" y="74" width="10" height="34" rx="2" stroke-opacity="0.7"/>
+                <rect x="94" y="64" width="10" height="44" rx="2" fill="#f0a13a" fill-opacity="0.18" stroke="#f0a13a"/>
+                <line x1="58" y1="112" x2="110" y2="112" stroke-opacity="0.4"/>
+                <line x1="126" y1="88" x2="178" y2="88" stroke-opacity="0.6"/>
+                <line x1="126" y1="97" x2="168" y2="97" stroke-opacity="0.6"/>
+                <line x1="126" y1="106" x2="174" y2="106" stroke-opacity="0.6"/>
+                <path d="M62 128 q10 -9 18 0 t16 -2" stroke-opacity="0.8"/>
+                <line x1="120" y1="131" x2="178" y2="131" stroke-opacity="0.4"/>
               </svg>
             </div>
           </div>
 
-          <!-- Messages: the client back-and-forth -->
-          <div class="win win-chat" id="winChat">
-            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">Messages &ndash; Maren Vale</span></div>
-            <div class="chat-body">
-              <div class="bubble in">morning! did the curl on the mark survive the night?</div>
-              <div class="bubble out">it did &ndash; pushing the wordmark a touch warmer now, 2 mins</div>
-              <div class="bubble in">you're a star. no rush at all</div>
+          <!-- andeye's own Time window: the timeline and pie, live on the same desktop -->
+          <div class="win win-andeye" id="winAndeye" aria-label="The andeye Time window: timeline and pie of the morning so far">
+            <div class="chrome"><span class="traffic"><i class="tl-c"></i><i class="tl-m"></i><i class="tl-z"></i></span><span class="wtitle">andeye Time</span></div>
+            <div class="time-body">
+              <div>
+                <div class="tl-head"><span>Timeline &middot; this morning</span><span id="tlTotal" class="tnum">0:00</span></div>
+                <div class="tl-strip" id="tlStrip"><span class="tl-empty">click a window to start tracking</span></div>
+                <div class="tl-axis"><span>9:41</span><span id="tlNow">now</span></div>
+                <div class="readout" id="tlReadout">Hover a slice to see the task and time.</div>
+              </div>
+              <div>
+                <p class="time-label">Time by project</p>
+                <div class="pie-wrap">
+                  <canvas id="pieCanvas" width="112" height="112" aria-hidden="true"></canvas>
+                  <div class="legend" id="legend"></div>
+                </div>
+                <div class="readout" id="pieReadout">Hover a wedge to see the project and time.</div>
+              </div>
             </div>
           </div>
 
         </div>
       </div>
-
-      <!-- Real timeline + real pie, populated by the demo's attribution -->
-      <div class="analytics">
-        <div class="panel-card">
-          <div class="tl-head"><span>Timeline &middot; this morning</span><span id="tlTotal" class="tnum">0:00</span></div>
-          <div class="tl-strip" id="tlStrip"><span class="tl-empty">click a window to start tracking</span></div>
-          <div class="tl-axis"><span>9:41</span><span id="tlNow">now</span></div>
-          <div class="readout" id="tlReadout">Hover a slice to see the task and time.</div>
-        </div>
-        <div class="panel-card">
-          <h4>Time by project</h4>
-          <div class="pie-wrap">
-            <canvas id="pieCanvas" width="112" height="112" aria-hidden="true"></canvas>
-            <div class="legend" id="legend"></div>
-          </div>
-          <div class="readout" id="pieReadout">Hover a wedge to see the project and time.</div>
-        </div>
-      </div>
-      <p class="demo-caption">Colours are your projects. The big eye up top is just andeye saying hello.</p>
+      <p class="demo-caption">The bottom window is andeye's own &ndash; your morning, attributed as you go. At the end of a real day, the billable slice is your invoice, and you never wrote anything down.</p>
     </div>
   </div>
 </header>
@@ -790,7 +797,7 @@
       <div class="step">
         <span class="num">02 &ndash; ATTRIBUTE</span>
         <h3>Every minute finds its task</h3>
-        <p>Each minute lands on a task with an honest certainty score. 94% sure that thread was Maren's rebrand; not at all sure the newsletter was work &ndash; and it says so. A kitten break is a break. It never rounds up.</p>
+        <p>Each minute lands on a task with an honest certainty score. 94% sure that thread was Maren's proposal; not at all sure the newsletter was work &ndash; and it says so. A kitten break is a break. It never rounds up.</p>
       </div>
       <div class="step">
         <span class="num">03 &ndash; POST</span>
@@ -1066,11 +1073,13 @@ function hsb(h, s, v) {
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
+// Only client work is billable: your own books, your reading and your breaks
+// are all honestly tracked, and honestly not on anyone's invoice.
 const PROJECTS = {
-  maren:    { label: 'Maren',     rgb: hsb(265, 0.55, 0.85), billable: true },
-  accounts: { label: 'Accounts',  rgb: hsb(205, 0.55, 0.85), billable: true },
-  reading:  { label: 'Anthropic', rgb: hsb(338, 0.55, 0.85), billable: false },
-  brk:      { label: 'Kittens',   rgb: hsb(150, 0.10, 0.62), billable: false },
+  maren:    { label: 'Maren',     rgb: hsb(265, 0.55, 0.85), billable: true,  note: 'billable' },
+  accounts: { label: 'Accounts',  rgb: hsb(205, 0.55, 0.85), billable: false, note: 'your books' },
+  reading:  { label: 'Anthropic', rgb: hsb(338, 0.55, 0.85), billable: false, note: 'reading' },
+  brk:      { label: 'Kittens',   rgb: hsb(150, 0.10, 0.62), billable: false, note: 'break' },
 };
 const PROJ_ORDER = ['maren', 'accounts', 'reading', 'brk'];
 
@@ -1178,60 +1187,78 @@ function drawStaticMark(cv, w, colour) {
   drawMark(ctx, w, h, stroke(1, 0), colour);
 }
 
-// --- the demo: a freelance designer's Tuesday morning ---
-// The VIEWER is the designer. The cast are the correspondents, tabs and apps:
-//   Maren Vale  – the rebrand client (her mail, her staging tab, the canvas, the chat)
-//   Priya@x-accounts.com – the accounts firm (Accounts)
-//   Anthropic   – an ambiguous designer newsletter (low certainty, red-ish)
-//   a kitten video – an honest break, tracked but not billable.
-// Certainty varies so the red->green range is visible as you click around.
+// --- the demo: YOUR Tuesday morning – no career attached ---
+// The VIEWER is the protagonist; the work is anyone's who bills for time.
+// The cast are the correspondents, tabs and apps:
+//   Maren Vale  – the client saying yes to the proposal (her mail, her site, the document)
+//   Priya@x-accounts.com – your accountant (Accounts: real work, not billable to a client)
+//   Anthropic   – an ambiguous newsletter (low certainty, red-ish)
+//   a kitten video – an honest break, tracked but never billed.
+// Certainty varies so the red->green range is visible as you click around;
+// the research tab sits mid-range because research genuinely is ambiguous.
 
 const FOCUS = {
-  'mail-maren':     { app: 'Mail',     task: 'Maren',    proj: 'maren',    cert: 0.94, win: 'winMail' },
-  'mail-priya':     { app: 'Mail',     task: 'Accounts', proj: 'accounts', cert: 0.90, win: 'winMail' },
-  'mail-anthropic': { app: 'Mail',     task: 'Anthropic',proj: 'reading',  cert: 0.38, win: 'winMail' },
-  'tab-staging':    { app: 'Chrome',   task: 'Maren',    proj: 'maren',    cert: 0.92, win: 'winWeb', url: 'staging.marenvale.co/home' },
-  'tab-ref':        { app: 'Chrome',   task: 'Maren',    proj: 'maren',    cert: 0.88, win: 'winWeb', url: 'type.reference.example/grotesque' },
-  'tab-kitten':     { app: 'Chrome',   task: 'Kittens',  proj: 'brk',      cert: 0.30, win: 'winWeb', url: 'videos.example/kittens-vs-box' },
-  'design':         { app: 'Studio',   task: 'Maren',    proj: 'maren',    cert: 0.95, win: 'winDesign' },
-  'chat':           { app: 'Messages', task: 'Maren',    proj: 'maren',    cert: 0.93, win: 'winChat' },
+  'mail-maren':     { app: 'Mail',   task: 'Maren',    proj: 'maren',    cert: 0.94, win: 'winMail' },
+  'mail-priya':     { app: 'Mail',   task: 'Accounts', proj: 'accounts', cert: 0.90, win: 'winMail' },
+  'mail-anthropic': { app: 'Mail',   task: 'Anthropic',proj: 'reading',  cert: 0.38, win: 'winMail' },
+  'tab-client':     { app: 'Chrome', task: 'Maren',    proj: 'maren',    cert: 0.87, win: 'winWeb', url: 'marenvale.co/about' },
+  'tab-research':   { app: 'Chrome', task: 'Maren',    proj: 'maren',    cert: 0.56, win: 'winWeb', url: 'sector.review.example/market-outlook' },
+  'tab-kitten':     { app: 'Chrome', task: 'Kittens',  proj: 'brk',      cert: 0.18, win: 'winWeb', url: 'videos.example/kitten-vs-yarn' },
+  'doc':            { app: 'Pages',  task: 'Maren',    proj: 'maren',    cert: 0.96, win: 'winDoc' },
 };
 
 // Line-art browser bodies, swapped per active tab (inline SVG, no text placeholders).
 const WEB_ART = {
-  'tab-staging':
+  // Maren's own site: her mark front and centre, nav above, two calls to action.
+  'tab-client':
     '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
-    + '<rect x="10" y="10" width="200" height="130" rx="6" stroke-opacity="0.5"/>'
-    + '<line x1="10" y1="34" x2="210" y2="34" stroke-opacity="0.5"/>'
-    + '<circle cx="22" cy="22" r="4"/><line x1="150" y1="22" x2="165" y2="22"/><line x1="175" y1="22" x2="198" y2="22"/>'
-    + '<rect x="24" y="48" width="80" height="44" rx="4" stroke="#f0a13a"/>'
-    + '<line x1="120" y1="52" x2="196" y2="52"/><line x1="120" y1="64" x2="180" y2="64"/><line x1="120" y1="76" x2="192" y2="76"/>'
-    + '<rect x="24" y="104" width="52" height="26" rx="4"/><rect x="84" y="104" width="52" height="26" rx="4"/><rect x="144" y="104" width="52" height="26" rx="4"/>'
+    + '<line x1="12" y1="16" x2="52" y2="16" stroke-width="3"/>'
+    + '<line x1="146" y1="16" x2="160" y2="16" stroke-opacity="0.6"/><line x1="170" y1="16" x2="184" y2="16" stroke-opacity="0.6"/><line x1="194" y1="16" x2="208" y2="16" stroke-opacity="0.6"/>'
+    + '<line x1="12" y1="28" x2="208" y2="28" stroke-opacity="0.3"/>'
+    + '<circle cx="110" cy="64" r="21" stroke="#f0a13a" stroke-width="2.5"/>'
+    + '<path d="M99 68 q11 -15 22 0" stroke="#f0a13a" stroke-width="2.5"/>'
+    + '<line x1="70" y1="98" x2="150" y2="98" stroke-opacity="0.75"/>'
+    + '<line x1="84" y1="108" x2="136" y2="108" stroke-opacity="0.45"/>'
+    + '<rect x="72" y="120" width="40" height="14" rx="7" fill="#f0a13a" fill-opacity="0.18" stroke="#f0a13a"/>'
+    + '<rect x="122" y="120" width="40" height="14" rx="7" stroke-opacity="0.6"/>'
     + '</svg>',
-  'tab-ref':
-    '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
-    + '<rect x="14" y="14" width="58" height="42" rx="5"/>'
-    + '<rect x="82" y="14" width="58" height="42" rx="5" fill="#f0a13a" fill-opacity="0.16" stroke="#f0a13a"/>'
-    + '<rect x="150" y="14" width="56" height="42" rx="5"/>'
-    + '<rect x="14" y="66" width="58" height="42" rx="5" fill="#c9a7ea" fill-opacity="0.16" stroke="#c9a7ea"/>'
-    + '<rect x="82" y="66" width="58" height="42" rx="5"/>'
-    + '<rect x="150" y="66" width="56" height="42" rx="5"/>'
-    + '<line x1="14" y1="126" x2="120" y2="126"/><line x1="14" y1="136" x2="88" y2="136"/>'
+  // A sector-outlook article: headline, body, a rising chart with a dashed forecast.
+  'tab-research':
+    '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<line x1="12" y1="16" x2="152" y2="16" stroke-width="3"/>'
+    + '<line x1="12" y1="26" x2="96" y2="26" stroke-opacity="0.45"/>'
+    + '<line x1="12" y1="40" x2="206" y2="40" stroke-opacity="0.6"/><line x1="12" y1="49" x2="198" y2="49" stroke-opacity="0.6"/><line x1="12" y1="58" x2="160" y2="58" stroke-opacity="0.6"/>'
+    + '<path d="M26 76 L26 128 L202 128" stroke-opacity="0.5"/>'
+    + '<path d="M26 120 L62 110 L98 114 L134 94 L168 82" stroke="#f0a13a" stroke-width="3"/>'
+    + '<path d="M168 82 L200 72" stroke="#f0a13a" stroke-width="2" stroke-dasharray="5 5"/>'
+    + '<circle cx="134" cy="94" r="3" fill="#f0a13a" stroke="none"/><circle cx="168" cy="82" r="3" fill="#f0a13a" stroke="none"/>'
+    + '<line x1="26" y1="140" x2="120" y2="140" stroke-opacity="0.35"/>'
     + '</svg>',
+  // The break, honestly: a kitten mid-pounce after a ball of yarn, in a video
+  // player with a scrubber and a queue of thumbnails.
   'tab-kitten':
     '<svg class="art" viewBox="0 0 220 150" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    + '<path d="M120 96 L120 132 L188 132 L188 96"/>'
-    + '<path d="M112 96 L120 96 L134 84 L126 84 Z"/><path d="M196 96 L188 96 L174 84 L182 84 Z"/>'
-    + '<line x1="112" y1="96" x2="196" y2="96"/>'
-    + '<circle cx="64" cy="86" r="26"/>'
-    + '<path d="M46 66 L40 44 L60 60"/><path d="M82 66 L88 44 L68 60"/>'
-    + '<circle cx="55" cy="84" r="2.4" fill="currentColor"/><circle cx="73" cy="84" r="2.4" fill="currentColor"/>'
-    + '<path d="M64 90 l-4 5 M64 90 l4 5"/>'
-    + '<line x1="30" y1="86" x2="48" y2="90"/><line x1="30" y1="96" x2="48" y2="96"/>'
-    + '<line x1="98" y1="86" x2="80" y2="90"/><line x1="98" y1="96" x2="80" y2="96"/>'
-    + '<path d="M40 108 q24 18 48 0"/>'
-    + '<circle cx="150" cy="58" r="16" stroke-opacity="0.7"/>'
-    + '<path d="M145 50 L145 66 L159 58 Z" fill="currentColor" stroke="none"/>'
+    + '<rect x="8" y="8" width="150" height="106" rx="6" stroke-opacity="0.5"/>'
+    + '<path d="M40 44 L35 30 L47 40"/><path d="M58 42 L64 29 L52 39"/>'
+    + '<circle cx="49" cy="52" r="12"/>'
+    + '<circle cx="53" cy="51" r="1.8" fill="currentColor" stroke="none"/>'
+    + '<path d="M60 56 l8 -1 M60 59 l8 2"/>'
+    + '<path d="M56 62 C72 52 92 56 100 68" />'
+    + '<path d="M58 66 C70 76 88 76 98 72" />'
+    + '<path d="M98 68 L110 78 M94 71 L104 82"/>'
+    + '<path d="M60 66 L54 78"/>'
+    + '<path d="M57 58 C48 48 40 50 38 58"/>'
+    + '<circle cx="124" cy="88" r="11"/>'
+    + '<path d="M115 84 q9 -6 18 2 M114 92 q10 6 19 -2"/>'
+    + '<path d="M135 92 q9 6 15 1"/>'
+    + '<line x1="16" y1="104" x2="148" y2="104" stroke-opacity="0.35"/>'
+    + '<line x1="16" y1="104" x2="66" y2="104" stroke="#f0a13a" stroke-width="3"/>'
+    + '<circle cx="66" cy="104" r="3" fill="#f0a13a" stroke="none"/>'
+    + '<line x1="8" y1="128" x2="104" y2="128" stroke-opacity="0.6"/>'
+    + '<line x1="8" y1="139" x2="64" y2="139" stroke-opacity="0.35"/>'
+    + '<rect x="168" y="8" width="44" height="30" rx="4" stroke-opacity="0.55"/><path d="M184 18 L184 28 L192 23 Z" fill="currentColor" fill-opacity="0.5" stroke="none"/>'
+    + '<rect x="168" y="46" width="44" height="30" rx="4" stroke-opacity="0.55"/><path d="M184 56 L184 66 L192 61 Z" fill="currentColor" fill-opacity="0.5" stroke="none"/>'
+    + '<rect x="168" y="84" width="44" height="30" rx="4" stroke-opacity="0.55"/><path d="M184 94 L184 104 L192 99 Z" fill="currentColor" fill-opacity="0.5" stroke="none"/>'
     + '</svg>',
 };
 
@@ -1240,9 +1267,9 @@ const WEB_ART = {
 const EMAILS = {
   'mail-maren': {
     from: 'Maren Vale', addr: 'maren@marenvale.co', avatar: '#c9a7ea', initials: 'MV',
-    subj: 'Re: the new logo – it looks wonderful',
-    body: ['Morning! I finally sat with the latest round and I love where the mark is going. That little curl at the end feels like us.',
-           'Could we nudge the wordmark a touch warmer to match? Otherwise I am so happy with it. Thank you.'],
+    subj: 'Re: the proposal – where do I sign?',
+    body: ['Morning! I read the proposal on the train and it is exactly what we talked about. Phase one, the numbers, all of it – yes.',
+           'One thing: could phase two start a month earlier? Otherwise, send it over and I will sign today.'],
   },
   'mail-priya': {
     from: 'Priya@x-accounts.com', addr: 'Priya@x-accounts.com', avatar: '#8fb6e8', initials: 'P',
@@ -1252,8 +1279,8 @@ const EMAILS = {
   },
   'mail-anthropic': {
     from: 'Anthropic', addr: 'news@anthropic.com', avatar: '#e6a97a', initials: 'A',
-    subj: 'Designing with Claude – a few ideas this week',
-    body: ['This week: three ways designers are speeding up moodboards, plus a prompt pack you can lift straight into your own work.',
+    subj: 'Working with Claude – a few ideas this week',
+    body: ['This week: three ways people are getting first drafts done faster, plus a prompt pack you can lift straight into your own work.',
            'A friendly nudge, nothing urgent. Read it when the kettle is on.'],
   },
 };
@@ -1279,13 +1306,12 @@ const surfaces = Array.prototype.slice.call(document.querySelectorAll('[data-foc
 const WINS = {
   winMail: document.getElementById('winMail'),
   winWeb: document.getElementById('winWeb'),
-  winDesign: document.getElementById('winDesign'),
-  winChat: document.getElementById('winChat'),
+  winDoc: document.getElementById('winDoc'),
 };
 
 let currentProj = null;      // the running task's project (null before first click)
 let currentMailId = 'mail-maren';
-let currentTabId = 'tab-staging';
+let currentTabId = 'tab-client';
 let taskStart = 0;
 let doneSeconds = 0;
 let curBlock = null;
@@ -1401,8 +1427,7 @@ surfaces.forEach(function (el) {
 });
 WINS.winMail.addEventListener('click', function () { switchTo(currentMailId); });
 WINS.winWeb.addEventListener('click', function () { switchTo(currentTabId); });
-WINS.winDesign.addEventListener('click', function () { switchTo('design'); });
-WINS.winChat.addEventListener('click', function () { switchTo('chat'); });
+WINS.winDoc.addEventListener('click', function () { switchTo('doc'); });
 
 // The clock ticks; the current block grows; the pie breathes.
 setInterval(function () {
@@ -1492,14 +1517,17 @@ function drawPie() {
 
 function drawLegend(secs) {
   let html = '';
+  let billable = 0;
   PROJ_ORDER.forEach(function (p) {
     const proj = PROJECTS[p];
+    if (proj.billable) billable += secs[p];
     html += '<button type="button" class="legend-row' + (p === hoveredProj ? ' hi' : '') + '" data-proj="' + p + '">'
       + '<span class="legend-sw" style="background:' + cssRGB(proj.rgb) + '"></span>'
       + '<span class="legend-name">' + proj.label
-      + (proj.billable ? '' : ' <span class="legend-note">not billable</span>')
+      + ' <span class="legend-note">' + proj.note + '</span>'
       + '</span><span class="legend-val">' + fmtDur(secs[p]) + '</span></button>';
   });
+  html += '<div class="legend-bill"><span>Billable so far</span><b class="tnum">' + fmtDur(billable) + '</b></div>';
   legendEl.innerHTML = html;
 }
 

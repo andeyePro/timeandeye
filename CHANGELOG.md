@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-05
+
+- [x] **Site demo back to basics: second-person story, andeye Time window
+  on the demo desktop** (site/src/pages/index.astro). The demo drops the
+  named-career persona (the freelance designer) for a career-neutral
+  second person — "Your Tuesday morning, 9:41" — since any career label
+  forces the visitor to identify with someone else, and the paying
+  audience (people who invoice; the Xero tier) only needs to recognise
+  their own desk: an inbox, a client saying yes to *the proposal*
+  ("where do I sign?"), the accountant, a mid-certainty research tab,
+  one honest kitten. The timeline + pie stop being a separate section
+  below the Mac frame and become the **andeye Time window on the demo
+  desktop itself** — truer to the product and it restores the everything-
+  visible-at-once layout the four-window grid had broken. Three work
+  windows on top (Mail, Chrome, Pages proposal doc; design app and chat
+  removed), andeye Time full width beneath, never a tracked surface and
+  excluded from the idle hint pulse. Billable framing made honest and
+  explicit: only client work is billable (Accounts = "your books",
+  Anthropic = "reading", Kittens = "break") with a live "Billable so
+  far" total under the legend, and the caption lands the money hook:
+  "the billable slice is your invoice, and you never wrote anything
+  down". All three browser-tab drawings plus the proposal document are
+  fresh compositions (the kitten is now mid-pounce after a ball of yarn
+  in a video player — nothing shared with the earlier head-and-box art).
+  Astro build green; adversarial review clean bar one stale comment,
+  fixed.
+
 ## 2026-07-04
 
 - [x] **Context rules UI phase: the Evidence Card, un-learn, and the Rules
