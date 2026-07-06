@@ -15,6 +15,8 @@
 // sector-outlook research tab and a kitten video break. Below the fake Mac
 // frame sit andeye's own timeline and time pie - two always-visible boxes,
 // never inside a fake window, filling in live as you click.
+import { getEntry } from 'astro:content';
+const copy = (await getEntry('copy', 'home')).data;
 ---
 <!doctype html>
 <html lang="en">
@@ -706,22 +708,22 @@
     <div class="eyewrap">
       <canvas id="heroEye" role="img" aria-label="The andeye mark: a single-stroke ampersand that closes into an eye"></canvas>
     </div>
-    <p class="eyebrow reveal" style="--d:0s">andeye &middot; automatic time tracking for macOS</p>
-    <h1 class="reveal" style="--d:0.08s">andeye watches.<br>You just work.</h1>
-    <p class="sub lede reveal" style="--d:0.16s">A menu-bar tracker that attributes your time to tasks by itself &ndash; on your Mac, never phoning home.</p>
+    <p class="eyebrow reveal" style="--d:0s">{copy.hero.eyebrow}</p>
+    <h1 class="reveal" style="--d:0.08s">{copy.hero.h1[0]}<br>{copy.hero.h1[1]}</h1>
+    <p class="sub lede reveal" style="--d:0.16s">{copy.hero.lede}</p>
     <div class="ctas reveal" style="--d:0.26s">
-      <a class="btn btn-primary" id="ctaStar" href="https://github.com/andeyePro/andeyeTT">Star on GitHub</a>
-      <a class="btn btn-ghost" id="ctaWaitlist" href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">Join the waitlist</a>
+      <a class="btn btn-primary" id="ctaStar" href="https://github.com/andeyePro/andeyeTT">{copy.hero.cta_star_label}</a>
+      <a class="btn btn-ghost" id="ctaWaitlist" href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">{copy.hero.cta_waitlist_label}</a>
     </div>
-    <p class="cta-sub reveal" id="ctaSub" style="--d:0.3s" aria-live="polite">Free and open source today. A ready-to-download app is on the way.</p>
-    <p class="fineprint reveal" style="--d:0.34s">macOS 14+ &middot; free and open source &middot; build from source today</p>
+    <p class="cta-sub reveal" id="ctaSub" style="--d:0.3s" aria-live="polite">{copy.hero.sub_default}</p>
+    <p class="fineprint reveal" style="--d:0.34s">{copy.hero.fineprint}</p>
 
     <div class="demo reveal" style="--d:0.46s" id="demo">
       <div class="demo-head">
-        <h2 id="demoHeading">It&rsquo;s Tuesday, 9:41</h2>
-        <p>Click around like it&rsquo;s your desk &ndash; answer Sarah, settle the accountant&rsquo;s question, sneak a kitten. The eye follows, winks when you switch, and its tint is its confidence: <span class="cert-gradient">red when unsure, green when sure</span>.</p>
+        <h2 id="demoHeading">{copy.demo.heading_fallback}</h2>
+        <p set:html={copy.demo.intro_html} />
       </div>
-      <div class="demo-note"><span id="driveState">Click an email or a tab &ndash; watch andeye follow you</span></div>
+      <div class="demo-note"><span id="driveState">{copy.demo.drive_idle}</span></div>
       <div class="mac">
         <div class="menubar" aria-live="polite">
           <span class="mb-app" id="mbApp">Finder</span>
@@ -812,102 +814,111 @@
           <div class="readout" id="pieReadout">Hover a wedge to see the project and time.</div>
         </div>
       </div>
-      <p class="demo-caption">Those two boxes are andeye&rsquo;s own timeline and time pie, filling in live as you click. At the end of a real day, the billable slice is your invoice, and you never wrote anything down.</p>
+      <p class="demo-caption">{copy.demo.caption}</p>
     </div>
   </div>
 </header>
 
 <section id="how">
   <div class="wrap">
-    <div class="eyebrow-row"><canvas id="eyebrowHow" aria-hidden="true"></canvas><p class="eyebrow">How it works</p></div>
-    <h2>Your timesheet writes itself in three moves</h2>
+    <div class="eyebrow-row"><canvas id="eyebrowHow" aria-hidden="true"></canvas><p class="eyebrow">{copy.flow.eyebrow}</p></div>
+    <h2>{copy.flow.h2}</h2>
     <div class="flow" id="flow" role="group" aria-label="observe, attribute, post">
       <button type="button" class="flow-node" id="flowObserve" data-flow="observe" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12 C4 6 9 4 12 4 C15 4 20 6 23 12 C20 18 15 20 12 20 C9 20 4 18 1 12 Z"/><circle cx="12" cy="12" r="3.4"/></svg>
-        <span>observe</span>
+        <span>{copy.flow.nodes.observe.label}</span>
       </button>
       <svg class="flow-arrow" width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="6" x2="21" y2="6"/><path d="M16 1 L21 6 L16 11"/></svg>
       <button type="button" class="flow-node" id="flowAttribute" data-flow="attribute" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L12 13"/><path d="M7 9 L12 14 L17 9"/><rect x="4" y="16" width="16" height="6" rx="1.5"/></svg>
-        <span>attribute</span>
+        <span>{copy.flow.nodes.attribute.label}</span>
       </button>
       <svg class="flow-arrow" width="26" height="12" viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="6" x2="21" y2="6"/><path d="M16 1 L21 6 L16 11"/></svg>
       <button type="button" class="flow-node" id="flowPost" data-flow="post" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 L11 13"/><path d="M22 2 L15 22 L11 13 L2 9 Z"/></svg>
-        <span>post</span>
+        <span>{copy.flow.nodes.post.label}</span>
       </button>
     </div>
     <div class="flow-detail" id="flowDetail" aria-live="polite">
-      <p>It reads the room, so every minute finds its task, and completes your timesheets for you.</p>
+      <p>{copy.flow.default_line}</p>
     </div>
   </div>
 </section>
 
 <section class="privacy" id="privacy">
   <div class="wrap">
-    <div class="eyebrow-row"><canvas id="eyebrowPrivacy" aria-hidden="true"></canvas><p class="eyebrow">Privacy</p></div>
-    <h2>It watches for you.<br>Not on you.</h2>
-    <p class="lede">Most tracking software points the camera at the worker and hands the film to someone else. andeye inverts that: the eye answers to the person it watches, and to no one else.</p>
+    <div class="eyebrow-row"><canvas id="eyebrowPrivacy" aria-hidden="true"></canvas><p class="eyebrow">{copy.privacy.eyebrow}</p></div>
+    <h2 set:html={copy.privacy.h2_html} />
+    <p class="lede">{copy.privacy.lede}</p>
     <div class="acc" id="acc">
       <div class="acc-item" id="acc1">
         <button type="button" class="acc-head" aria-expanded="false" aria-controls="acc1body">
-          <h3>Your day stays on your Mac.</h3>
+          <h3>{copy.privacy.claims[0].head}</h3>
           <svg class="acc-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 L8 11 L13 5"/></svg>
         </button>
         <div class="acc-body" id="acc1body">
-          <p>Observation, attribution and learning all run on-device. There is no server, no account, no telemetry.</p>
+          <p>{copy.privacy.claims[0].body}</p>
         </div>
       </div>
       <div class="acc-item" id="acc2">
         <button type="button" class="acc-head" aria-expanded="false" aria-controls="acc2body">
-          <h3>Only what you approve ever leaves.</h3>
+          <h3>{copy.privacy.claims[1].head}</h3>
           <svg class="acc-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 L8 11 L13 5"/></svg>
         </button>
         <div class="acc-body" id="acc2body">
-          <p>The only thing that ever leaves is a finished time entry you approve, sent to your own OpenProject &ndash; or your Xero (and others), later. Never to us.</p>
+          <p>{copy.privacy.claims[1].body}</p>
         </div>
       </div>
       <div class="acc-item" id="acc3">
         <button type="button" class="acc-head" aria-expanded="false" aria-controls="acc3body">
-          <h3>Learning stays local.</h3>
+          <h3>{copy.privacy.claims[2].head}</h3>
           <svg class="acc-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 L8 11 L13 5"/></svg>
         </button>
         <div class="acc-body" id="acc3body">
-          <p>The model of how you work is built on your Mac and lives on your Mac. It gets smarter about you without anyone else getting smarter about you.</p>
+          <p>{copy.privacy.claims[2].body}</p>
         </div>
       </div>
       <div class="acc-item" id="acc4">
         <button type="button" class="acc-head" aria-expanded="false" aria-controls="acc4body">
-          <h3>Your rules, on your disk.</h3>
+          <h3>{copy.privacy.claims[3].head}</h3>
           <svg class="acc-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 L8 11 L13 5"/></svg>
         </button>
         <div class="acc-body" id="acc4body">
-          <p>Pin rules like &ldquo;mail from this client goes to this project&rdquo; are files on your Mac. Read them, edit them, delete them.</p>
+          <p>{copy.privacy.claims[3].body}</p>
         </div>
       </div>
     </div>
   </div>
 </section>
 
+<section id="light">
+  <div class="wrap">
+    <div class="eyebrow-row"><canvas id="eyebrowLight" aria-hidden="true"></canvas><p class="eyebrow">{copy.light.eyebrow}</p></div>
+    <h2>{copy.light.h2}</h2>
+    <p class="lede">{copy.light.lede}</p>
+    <p class="lede">{copy.light.line2}</p>
+  </div>
+</section>
+
 <section id="community">
   <div class="wrap">
-    <div class="eyebrow-row"><canvas id="eyebrowCommunity" aria-hidden="true"></canvas><p class="eyebrow">Community &amp; Pro</p></div>
-    <h2>Open where it matters</h2>
+    <div class="eyebrow-row"><canvas id="eyebrowCommunity" aria-hidden="true"></canvas><p class="eyebrow">{copy.tiers.eyebrow}</p></div>
+    <h2>{copy.tiers.h2}</h2>
     <div class="ctabs" id="ctabs" role="tablist">
-      <button type="button" class="ctab pinned" id="ctabTracker" data-tab="tracker" role="tab" aria-selected="true" aria-controls="cpanel">Tracker &ndash; free forever</button>
-      <button type="button" class="ctab" id="ctabPro" data-tab="pro" role="tab" aria-selected="false" aria-controls="cpanel">andeyePro</button>
+      <button type="button" class="ctab pinned" id="ctabTracker" data-tab="tracker" role="tab" aria-selected="true" aria-controls="cpanel">{copy.tiers.tracker_label}</button>
+      <button type="button" class="ctab" id="ctabPro" data-tab="pro" role="tab" aria-selected="false" aria-controls="cpanel">{copy.tiers.pro_label}</button>
       <span class="ctab-underline" id="ctabUnderline"></span>
     </div>
     <div class="cpanel" id="cpanel" role="tabpanel" aria-live="polite">
-      <p>The macOS app is open source under AGPL-3.0. Clone the repo and build it today &ndash; observation, attribution, certainty scores and the OpenProject connector, all included.</p>
-      <a href="https://github.com/andeyePro/andeyeTT">Star on GitHub &rarr;</a>
+      <p>{copy.tiers.tracker_body}</p>
+      <a href="https://github.com/andeyePro/andeyeTT">{copy.tiers.tracker_cta_label}</a>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <span>&copy; andeye Ltd &middot; SC665704 &middot; Scotland</span>
+    <span>{copy.footer.company_line}</span>
     <nav>
       <a href="/manual">Manual</a>
       <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
@@ -916,6 +927,26 @@
   </div>
 </footer>
 
+<script is:inline define:vars={{ COPY: {
+  subDefault: copy.hero.sub_default,
+  subTech: copy.hero.sub_tech,
+  subApp: copy.hero.sub_app,
+  driveActive: copy.demo.drive_active,
+  flowDefault: copy.flow.default_line,
+  flowObserveBody: copy.flow.nodes.observe.body,
+  flowObserveManualHref: copy.flow.nodes.observe.manual_href,
+  flowObserveManualLabel: copy.flow.nodes.observe.manual_label,
+  flowAttributeBody: copy.flow.nodes.attribute.body,
+  flowAttributeManualHref: copy.flow.nodes.attribute.manual_href,
+  flowAttributeManualLabel: copy.flow.nodes.attribute.manual_label,
+  flowPostBody: copy.flow.nodes.post.body,
+  flowPostManualHref: copy.flow.nodes.post.manual_href,
+  flowPostManualLabel: copy.flow.nodes.post.manual_label,
+  trackerBody: copy.tiers.tracker_body,
+  trackerCtaLabel: copy.tiers.tracker_cta_label,
+  proBody: copy.tiers.pro_body,
+  proCtaLabel: copy.tiers.pro_cta_label,
+} }}></script>
 <script is:inline>
 (function () {
 'use strict';
@@ -1474,7 +1505,7 @@ function firstInteraction() {
   started = true;
   desktop.classList.remove('idle');
   mbTracker.classList.remove('idle');
-  driveState.textContent = "andeye is following you – keep clicking around";
+  driveState.textContent = COPY.driveActive;
   driveState.classList.add('driving');
   const e = tlStrip.querySelector('.tl-empty');
   if (e) e.remove();
@@ -1725,9 +1756,9 @@ legendEl.addEventListener('click', function (e) {
 const ctaSub = document.getElementById('ctaSub');
 const ctaStar = document.getElementById('ctaStar');
 const ctaWaitlist = document.getElementById('ctaWaitlist');
-const SUB_DEFAULT = 'Free and open source today. A ready-to-download app is on the way.';
-const SUB_TECH = "It's free and open source. Clone the repo and build it on your Mac today – every last line of it.";
-const SUB_APP = "Not a coder? No problem. Join the list and we'll email you the moment andeye is a normal app you just download and open – nothing to build, nothing to set up.";
+const SUB_DEFAULT = COPY.subDefault;
+const SUB_TECH = COPY.subTech;
+const SUB_APP = COPY.subApp;
 
 function setSub(text, cls) {
   ctaSub.textContent = text;
@@ -1755,19 +1786,22 @@ ctaWaitlist.addEventListener('mouseenter', function () {
 
 const FLOW = {
   observe: {
-    text: 'andeye watches your active window, tab and app as you work – and who a piece of mail is from. No screenshots, no keystrokes. It all stays on your Mac.',
-    slug: 'auto-tracking-and-attribution',
+    text: COPY.flowObserveBody,
+    href: COPY.flowObserveManualHref,
+    label: COPY.flowObserveManualLabel,
   },
   attribute: {
-    text: 'Each minute lands on a task with a certainty score. 94% sure that thread was the Coleman retainer; not at all sure the newsletter was work – and it says so. A kitten break is a break. It never rounds up.',
-    slug: 'auto-tracking-and-attribution',
+    text: COPY.flowAttributeBody,
+    href: COPY.flowAttributeManualHref,
+    label: COPY.flowAttributeManualLabel,
   },
   post: {
-    text: 'The hours you approve post to your own tools – OpenProject today, Xero (and others) via Pro later. You keep the final say on every entry, and it only goes where you already keep your work.',
-    slug: 'data-sync-and-safety',
+    text: COPY.flowPostBody,
+    href: COPY.flowPostManualHref,
+    label: COPY.flowPostManualLabel,
   },
 };
-const FLOW_DEFAULT = 'It reads the room, so every minute finds its task, and completes your timesheets for you.';
+const FLOW_DEFAULT = COPY.flowDefault;
 const flowDetail = document.getElementById('flowDetail');
 const flowNodes = Array.prototype.slice.call(document.querySelectorAll('.flow-node'));
 let flowPinned = null;
@@ -1776,7 +1810,7 @@ function renderFlowDetail(key) {
   if (!key) { flowDetail.innerHTML = '<p>' + FLOW_DEFAULT + '</p>'; return; }
   const f = FLOW[key];
   flowDetail.innerHTML = '<p>' + f.text
-    + (f.slug ? ' <a href="/manual/' + f.slug + '/" target="_blank" rel="noopener">more in the manual &rarr;</a>' : '')
+    + (f.href ? ' <a href="' + f.href + '" target="_blank" rel="noopener">' + f.label + '</a>' : '')
     + '</p>';
 }
 flowNodes.forEach(function (btn) {
@@ -1815,10 +1849,10 @@ Array.prototype.slice.call(document.querySelectorAll('.acc-item')).forEach(funct
 // --- Community & Pro tabs: hover previews, click pins (same paradigm as the flow) ---
 
 const CTAB_CONTENT = {
-  tracker: '<p>The macOS app is open source under AGPL-3.0. Clone the repo and build it today – observation, attribution, certainty scores and the OpenProject connector, all included.</p>'
-    + '<a href="https://github.com/andeyePro/andeyeTT">Star on GitHub &rarr;</a>',
-  pro: '<p>andeyePro adds the paid extras: Xero (and others), plus an iPhone companion. The tracker itself stays free, local and yours.</p>'
-    + '<a href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">Join the waitlist &rarr;</a>',
+  tracker: '<p>' + COPY.trackerBody + '</p>'
+    + '<a href="https://github.com/andeyePro/andeyeTT">' + COPY.trackerCtaLabel + '</a>',
+  pro: '<p>' + COPY.proBody + '</p>'
+    + '<a href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">' + COPY.proCtaLabel + '</a>',
 };
 const ctabButtons = Array.prototype.slice.call(document.querySelectorAll('.ctab'));
 const ctabUnderline = document.getElementById('ctabUnderline');
@@ -1857,7 +1891,7 @@ function revealAll() {
 }
 
 sizeAll();
-['eyebrowHow', 'eyebrowPrivacy', 'eyebrowCommunity'].forEach(makeEyebrowMark);
+['eyebrowHow', 'eyebrowPrivacy', 'eyebrowLight', 'eyebrowCommunity'].forEach(makeEyebrowMark);
 webBody.innerHTML = WEB_ART[currentTabId];
 drawPie();
 desktop.classList.add('idle');

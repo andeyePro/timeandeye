@@ -24,6 +24,21 @@
 
 
 
+- [x] **Front-page copy now lives in one editable file + "Light by design"
+  section** (site/src/content/copy/home.md, content.config.ts,
+  index.astro). Every owner-editable sentence on the landing page – hero,
+  demo intro/caption, flowsheet nodes, privacy claims, tier panels, footer
+  – is commented YAML frontmatter in home.md; the page interpolates it at
+  build time (a define:vars COPY island feeds the strings the demo script
+  needs). Edit the file, rebuild, done – no code touched. Deliberately NOT
+  extracted: the demo's simulated inbox/tab content (coupled to the demo's
+  state keys; noted in the file header). New "Light by design" section
+  between privacy and Community/Pro makes the honest climate case: no
+  server, no per-minute cloud-AI inference, a handful of local rules in
+  the Mac's idle time – no CO2 numbers, no competitor names, and the
+  human-footprint-per-hour claim deliberately left out as unsurvivable
+  under scrutiny.
+
 - [x] **Demo correction per Martin's review** (site/src/pages/index.astro).
   Timeline and time pie moved OUT of the fake Mac screen into two separate
   always-visible boxes beneath it (the in-screen andeye window and its
