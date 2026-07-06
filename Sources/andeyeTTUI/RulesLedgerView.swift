@@ -9,6 +9,17 @@ import andeyeTTMac
 struct RulesLedgerView: View {
     @ObservedObject var controller: AppController
     @State private var search = ""
+    // Row delete is a two-step affordance: confirm before removing (it's easy
+    // to misclick in a dense list), then an on-screen Undo right after — ⌘Z
+    // alone wasn't discoverable enough (Martin's hardware-test feedback,
+    // 2026-07-06: the delete control existed but he "could not find it").
+    @State private var pendingDelete: EmailRule?
+    @State private var justDeleted: EmailRule?
+    // Undo-stack depth captured at delete time. controller.undo() is a
+    // global LIFO pop, so the banner's Undo is only safe while our delete
+    // is still the top entry - any later undoable action elsewhere in the
+    // app retires the banner instead of letting it undo the wrong thing.
+    @State private var undoCountAtDelete = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,24 +44,60 @@ struct RulesLedgerView: View {
                     }
                 }
             }
+            if let deleted = justDeleted {
+                HStack(spacing: 6) {
+                    Text("Deleted “\(deleted.value.isEmpty ? "any mail" : deleted.value)”.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Button("Undo") {
+                        controller.undo()
+                        justDeleted = nil
+                    }
+                    .font(.caption2).buttonStyle(.borderless)
+                    Spacer()
+                }
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .onChange(of: controller.undoCount) { _, new in
+                    // Another action registered (or undo ran) elsewhere:
+                    // our delete is no longer top of the stack, so Undo
+                    // here would pop the wrong action. Retire the banner.
+                    if new != undoCountAtDelete { justDeleted = nil }
+                }
+            }
         }
         .frame(minWidth: 420, minHeight: 320)
         .textSelection(.enabled)
+        .confirmationDialog("Forget this rule?", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        ), presenting: pendingDelete) { rule in
+            Button("Forget", role: .destructive) {
+                controller.deleteRule(rule)
+                justDeleted = rule
+                undoCountAtDelete = controller.undoCount
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { rule in
+            Text("“\(rule.value.isEmpty ? "any mail" : rule.value)” → \(controller.name(of: .task(rule.target))). Undoable right after (⌘Z).")
+        }
     }
 
     private func ruleRow(_ rule: EmailRule) -> some View {
         HStack {
             Image(systemName: rule.pinned ? "pin.fill" : "envelope")
-                .foregroundStyle(rule.pinned ? Color.accentColor : .secondary)
+                .foregroundStyle(rule.pinned ? AndeyeColors.highlight : .secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(rule.level.label): \(rule.value.isEmpty ? "any mail" : rule.value)")
                     .font(.callout)
                 Text(provenance(rule)).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { controller.deleteRule(rule) } label: { Image(systemName: "xmark.circle") }
+            // Always visible (never hover-gated) — a dense list makes a
+            // hover-only control easy to miss entirely.
+            Button { pendingDelete = rule } label: { Image(systemName: "trash") }
                 .buttonStyle(.plain)
-                .help("Forget this rule (undoable, ⌘Z)")
+                .foregroundStyle(.red)
+                .help("Forget this rule — confirms first, then undoable (⌘Z)")
         }
     }
 

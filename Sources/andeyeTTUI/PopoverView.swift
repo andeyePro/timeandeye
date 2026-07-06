@@ -195,7 +195,7 @@ struct PopoverView: View {
                     }
                     Button { controller.setAway(!controller.away) } label: {
                         Image(systemName: controller.away ? "figure.walk.motion" : "figure.walk")
-                            .foregroundStyle(controller.away ? Color.accentColor : .primary)
+                            .foregroundStyle(controller.away ? AndeyeColors.highlight : .primary)
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut("l", modifiers: [.command, .shift])
@@ -286,9 +286,13 @@ struct PopoverView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                Button { commitPinning() } label: { Image(systemName: "return") }
-                    .buttonStyle(.plain).help("Pin (↵)")
-                // The hamburger sits between Pin and Cancel — switch editor mode.
+                // Dismiss and the hamburger sit LEFT of Pin: Pin (↵) is the
+                // rightmost control, since users instinctively hit the
+                // rightmost icon — it must be the confirm, not the ✕ dismiss
+                // (2026-07 hardware-test feedback).
+                Button { cancelPinning() } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .help(pinEditingID != nil ? "Unpin (esc)" : "Don't pin (esc)")
                 Menu {
                     Button { switchMode(.components) } label: {
                         Label("Components", systemImage: pinMode == .components ? "checkmark" : "rectangle.split.3x1")
@@ -304,9 +308,8 @@ struct PopoverView: View {
                 }
                 .menuStyle(.borderlessButton).fixedSize()
                 .help("Pin mode: Components or Expression")
-                Button { cancelPinning() } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                    .help(pinEditingID != nil ? "Unpin (esc)" : "Don't pin (esc)")
+                Button { commitPinning() } label: { Image(systemName: "return") }
+                    .buttonStyle(.plain).help("Pin (↵)")
             }
         }
         .padding(6)
@@ -323,7 +326,7 @@ struct PopoverView: View {
                 ForEach(Array(pinSegments.enumerated()), id: \.offset) { i, seg in
                     let piece = (i == 0 ? "" : PinScope.separator(for: pinKind)) + seg
                     Button { pinCount = i + 1 } label: {
-                        Text(piece).foregroundColor(i < pinCount ? .accentColor : .secondary)
+                        Text(piece).foregroundColor(i < pinCount ? AndeyeColors.highlight : .secondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -360,12 +363,12 @@ struct PopoverView: View {
                     } label: {
                         Text(piece)
                             .foregroundColor(!seg.available ? Color.secondary.opacity(0.4)
-                                             : i < pinCount ? .accentColor : .secondary)
+                                             : i < pinCount ? AndeyeColors.highlight : .secondary)
                             .italic(!seg.available)
                     }
                     .buttonStyle(.plain)
                     .disabled(!seg.available)
-                    .help(seg.available ? "Pin at this grain" : "not captured on this site")
+                    .help(seg.available ? "Pin at this grain" : "not captured on this window")
                 }
             }
         }
@@ -721,7 +724,7 @@ struct PopoverView: View {
             HStack {
                 Text(changeMode ? "Change to" : "Switch to")
                     .font(.caption)
-                    .foregroundStyle(changeMode ? Color.accentColor : .secondary)
+                    .foregroundStyle(changeMode ? AndeyeColors.highlight : .secondary)
                 if changeMode {
                     Button { changeMode = false } label: { Image(systemName: "xmark.circle") }
                         .buttonStyle(.plain).font(.caption2)

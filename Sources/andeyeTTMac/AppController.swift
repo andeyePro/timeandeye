@@ -35,6 +35,37 @@ public enum MenuTitle {
         return body
     }
 
+    /// Upper-bound width templates for `text(elapsed:certainty:showPercent:)`,
+    /// covering every digit-count `text` can emit while `elapsed` stays in the
+    /// SAME bracket (seconds under a minute / minutes under an hour / hours) —
+    /// the bracket that ticks at 1 Hz and is where a width change is a visible
+    /// jiggle, not a once-a-minute-or-rarer nudge. The figure-space pad on
+    /// text() assumes U+2007 renders exactly as wide as a tabular digit under
+    /// .monospacedDigit() — that assumption doesn't always hold (fonts define
+    /// the figure space's advance at design time; the tnum OpenType feature
+    /// can retarget digit widths without touching it), which is why the pad
+    /// alone didn't fully kill the jiggle. RootScenes overlays these templates,
+    /// hidden, behind the real text in a ZStack: the container is sized to
+    /// whichever candidate lays out widest, so the logo's position depends on
+    /// actual rendered width, not on an assumption about glyph metrics.
+    /// Crossing INTO the next bracket (59s -> 1m, 59m -> 1h 00m) is a real,
+    /// infrequent width change and is deliberately left unreserved — the same
+    /// call already made against padding minutes to a "1h 59m" worst case.
+    public static func sizingTemplates(elapsed: TimeInterval, certainty: Double?,
+                                       showPercent: Bool) -> [String] {
+        let total = Int(elapsed.rounded())
+        let bodies: [String]
+        if total < 60 {
+            bodies = ["\u{2007}0s", "00s"]
+        } else if total < 3600 {
+            bodies = ["0m", "00m"]
+        } else {
+            bodies = ["0h 00m", "00h 00m"]
+        }
+        guard showPercent, certainty != nil else { return bodies }
+        return bodies.map { "\($0) 100%" }   // widest percent suffix is 3 digits
+    }
+
     /// Optional task tag after the time in the menu bar: the first `chars` of
     /// the task name, so a glance reads "21m andey" rather than just "21m".
     /// No ellipsis — the truncation is implicit and it saves a character.
@@ -107,6 +138,10 @@ public struct IdleGap: Equatable, Sendable {
 public final class AppController: ObservableObject {
     @Published public private(set) var trackerState: TrackerState = .stopped
     @Published public private(set) var menuText = "–"
+    /// Hidden-text sizing candidates for menuText — see MenuTitle.sizingTemplates
+    /// and RootScenes' ZStack. Empty while stopped: "–" never changes width, so
+    /// there's nothing to reserve against.
+    @Published public private(set) var menuSizingTemplates: [String] = []
     /// Elapsed time only (no task name) for the popover, which shows the task as
     /// its headline — see refreshTitle.
     @Published public private(set) var elapsedText = "–"
@@ -728,10 +763,12 @@ public final class AppController: ObservableObject {
     /// changes.
     private func refreshTitle(force: Bool) {
         let newText: String
+        let newSizingTemplates: [String]
         let newColour: NSColor
         switch trackerState {
         case .stopped:
             newText = "–"
+            newSizingTemplates = []
             newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
             lastDisplayedTarget = nil
@@ -779,10 +816,19 @@ public final class AppController: ObservableObject {
             // menuTaskChars == 0 → withTaskName returns the body unchanged (off).
             newText = MenuTitle.withTaskName(name(of: target), chars: settings.menuTaskChars,
                                              body: body)
+            // Same task-name suffix on every template as on the real text —
+            // keeps every candidate a full apples-to-apples string, though the
+            // suffix is a constant shift and doesn't change which one is widest.
+            newSizingTemplates = MenuTitle.sizingTemplates(
+                elapsed: elapsed, certainty: certainty, showPercent: settings.showPercent
+            ).map { MenuTitle.withTaskName(name(of: target), chars: settings.menuTaskChars, body: $0) }
             newColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
         }
         if force || newText != menuText { menuText = newText }
+        if force || newSizingTemplates != menuSizingTemplates {
+            menuSizingTemplates = newSizingTemplates
+        }
         if force || !newColour.isEqual(menuColour) {
             menuColour = newColour
             renderLogo()   // the mark carries the certainty tint
@@ -1346,6 +1392,14 @@ public final class AppController: ObservableObject {
     public func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
                                now: Date = Date()) -> AttributionExplanation {
         attributor.explainWithout(u, signal, tasks: taskCache, now: now)
+    }
+
+    /// What the fallback preview's own [✕ forget] would remove — the
+    /// "forget that fallback too" affordance on the same preview line
+    /// (never mutates; see `Attributor.forgettableWithout`).
+    public func forgettableWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
+                                   now: Date = Date()) -> Attributor.Unlearn? {
+        attributor.forgettableWithout(u, signal, now: now)
     }
 
     /// An existing rule this commit would REPLACE (same level+value,
@@ -1954,7 +2008,7 @@ public final class AppController: ObservableObject {
             out += "subject: \(s.emailSubject ?? "nil")\n"
             let id = attributor.identity(of: s)
             out += "identity: " + id.segments.map {
-                "\($0.kind)\($0.available ? "" : "(ghost)")=\($0.display)"
+                "\($0.kind)\($0.available ? "" : "(not captured)")=\($0.display)"
             }.joined(separator: " ▸ ") + "\n"
             out += "pinEmailIdentity: \(pinEmailIdentity() != nil ? "LADDER" : "nil → classic strip")\n"
         } else {

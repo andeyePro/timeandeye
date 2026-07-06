@@ -2,6 +2,82 @@
 
 ## 2026-07-06
 
+- [x] **Four hardware-test UI fixes: contrast, pin-editor confirm placement,
+  Evidence Card wrap/stability + fallback forget, Rules Ledger delete
+  discoverability.** All from Martin's 2026-07-06 hardware pass on the
+  Evidence Card / un-learn / rules-ledger phase (2026-07-05 merge).
+  (1) Contrast — the pin editor's blue/grey Components strip, the pinned
+  glyph in the Evidence Card and Rules Ledger, the "away" icon and the
+  Change-to label all read `Color.accentColor` (the user's system accent,
+  often a dark systemBlue) straight onto the popover's dark vibrancy
+  background. New `AndeyeColors.highlight` (Sources/andeyeTTUI/
+  AndeyeColors.swift) is one brighter, cyan-leaning constant used for
+  TEXT/glyph foreground in place of those raw accentColor reads;
+  decorative fills/strokes (calendar highlight, timeline selection) are
+  untouched. (2) Pin editor — the confirm (↵ Pin) button sat left of the
+  hamburger and the ✕ dismiss, so the instinctive rightmost click hit
+  dismiss; reordered so ✕ dismiss → hamburger → ↵ Pin, confirm now
+  rightmost (PopoverView.pinEditor). (3) Evidence Card — `becauseLabel`,
+  the pinned-rule label, the fallback-preview line, `seesLine`,
+  `candidatesSection` and the grain-ladder row text all truncated
+  (`lineLimit`) instead of wrapping; switched to
+  `.fixedSize(horizontal: false, vertical: true)` throughout. The
+  truncate→wrap change made row heights variable, and SwiftUI's implicit
+  animation on that height change was visibly disturbing neighbouring
+  rows on click ("mangled" per Martin) — `.animation(nil, value: ...)`
+  on the unlearn block, the grain ladder (keyed on `grainCount`) and the
+  filtered-task list (keyed on `pickedTask`) turns that off. The
+  `.help` text and the diagnostic dump in `probeEmailSender()`
+  (AppController.swift) said "ghost"/"not captured on this site"; the
+  card's ghost SEGMENTS already render `display: "not captured"` at the
+  Core level (ContextIdentity.swift) — only the tooltips needed the
+  plain-English "not captured on this window" wording, now consistent
+  between the pin editor and the card. (4) Fallback forget — the card
+  only let you forget the memory CURRENTLY firing; the live "would then
+  fall back to…" preview offered no way to remove that fallback itself,
+  so an old wrong rule sat there as a standing possibility even while the
+  current attribution was correct. New `Attributor.forgettableWithout` /
+  `AppController.forgettableWithout` (mirrors `explainWithout`'s
+  snapshot-forget-restore, but previews `forgettable` instead of
+  `explain`) surfaces a second "✕ forget that fallback too" button on the
+  same preview line, reusing the existing `forget`/undo machinery
+  unchanged. (5) Rules Ledger — per-row delete already existed
+  (`deleteRule`, undoable) but Martin couldn't find it; the ✕ is now a
+  red `trash` icon (was a plain secondary `xmark.circle`), gated behind a
+  `confirmationDialog` ("Forget this rule?"), with an inline "Deleted … ·
+  Undo" banner after removal so the correction doesn't depend on knowing
+  ⌘Z exists. Container has no macOS — Mac verification pending (see
+  TODO.md).
+
+- [x] **Menu-bar jiggle killed for real — measured width, not assumed
+  glyph metrics.** Martin verified on hardware that the logo still moved
+  after the 2026-07-03 fix (figure-space pad + `.monospacedDigit()`).
+  Root cause: that fix assumed U+2007 FIGURE SPACE renders exactly one
+  tabular digit wide once `.monospacedDigit()` is applied — true on some
+  fonts, not guaranteed on all (the OpenType `tnum` feature retargets
+  digit advance widths; the figure space's own advance is baked in at
+  font-design time and isn't necessarily touched by the same feature), so
+  the padded single-digit second could still differ in width from its
+  two-digit neighbour by a hair, and the logo dragged with it every
+  second during the first minute of tracking. Fix: stop trusting glyph
+  metrics — `MenuTitle.sizingTemplates(elapsed:certainty:showPercent:)`
+  (Sources/andeyeTTMac/AppController.swift) returns every digit-count
+  `MenuTitle.text` can emit within the SAME bracket (seconds-under-a-
+  minute / minutes-under-an-hour / hours, plus the widest 3-digit percent
+  suffix when shown); `AppController.menuSizingTemplates` publishes them
+  alongside `menuText`; RootScenes' MenuBarExtra label overlays them,
+  `.hidden()`, behind the real `Text` in a `ZStack` so the container is
+  sized to whichever candidate SwiftUI actually measures as widest — the
+  logo's position now depends on real layout, not on an assumption about
+  a specific character's advance width. Crossing INTO the next bracket
+  (59s → 1m, 59m → 1h 00m) is still left unreserved, same call as before:
+  a real, infrequent width change, not the 1 Hz jiggle. New check
+  ("sizing templates cover every digit-count text() can emit within a
+  bracket", Sources/andeyeTTChecks/MacChecks.swift) asserts every
+  template is at least as wide, in characters, as anything `text()` can
+  actually produce in that bracket. NOT COMMITTED — Martin verifies on
+  the Mac first.
+
 
 
 

@@ -15,13 +15,25 @@ public enum AndeyeScenes {
         } label: {
             HStack(spacing: 4) {
                 Image(nsImage: controller.logoImage)
-                // Tabular digits: without this the 1 Hz seconds text changes
-                // width every tick and the right-anchored status item drags
-                // the logo with it. Pairs with MenuTitle.text's figure-space
-                // pad on single-digit seconds, which is digit-width only
-                // under monospaced digits.
-                Text(controller.menuText)
-                    .monospacedDigit()
+                // Tabular digits alone weren't enough: the figure-space pad on
+                // single-digit seconds (MenuTitle.text) assumes U+2007 is
+                // exactly one tabular-digit wide, which isn't guaranteed by
+                // every font — so the real text could still render a hair
+                // narrower or wider than its padded neighbour and drag the
+                // right-anchored status item's logo with it. Overlaying
+                // MenuTitle.sizingTemplates hidden behind the real text makes
+                // the ZStack size itself to whichever candidate actually lays
+                // out widest, measured, not assumed — the logo stops moving
+                // regardless of glyph metrics.
+                ZStack(alignment: .leading) {
+                    ForEach(controller.menuSizingTemplates, id: \.self) { template in
+                        Text(template)
+                            .monospacedDigit()
+                            .hidden()
+                    }
+                    Text(controller.menuText)
+                        .monospacedDigit()
+                }
             }
             .onAppear {
                 NSApp.setActivationPolicy(.accessory)

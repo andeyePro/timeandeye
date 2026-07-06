@@ -62,6 +62,43 @@ func menuTitleChecks(_ c: Checks) {
                      "9s and 10s occupy the same glyph count")
     }
 
+    c.check("sizing templates cover every digit-count text() can emit within a bracket") {
+        // Seconds bracket: both the padded single-digit shape and the plain
+        // two-digit shape must be present, so the ZStack has both candidates
+        // regardless of which one the font actually renders widest.
+        try expectEq(MenuTitle.sizingTemplates(elapsed: 9, certainty: nil, showPercent: false),
+                     ["\u{2007}0s", "00s"])
+        try expectEq(MenuTitle.sizingTemplates(elapsed: 47, certainty: nil, showPercent: false),
+                     ["\u{2007}0s", "00s"],
+                     "same bracket (under a minute) regardless of which second within it")
+        // Minutes bracket: one- and two-digit minute counts.
+        try expectEq(MenuTitle.sizingTemplates(elapsed: 402, certainty: nil, showPercent: false),
+                     ["0m", "00m"])
+        // Hours bracket: one- and two-digit hour counts, minutes always 2-digit.
+        try expectEq(MenuTitle.sizingTemplates(elapsed: 5_400, certainty: nil, showPercent: false),
+                     ["0h 00m", "00h 00m"])
+        // Percent suffix reserves its own widest (3-digit) form onto every template.
+        try expectEq(MenuTitle.sizingTemplates(elapsed: 60, certainty: 0.87, showPercent: true),
+                     ["0m 100%", "00m 100%"])
+        // showPercent on but certainty nil (attribution uncertain) → still no
+        // suffix, matching text()'s own showPercent-needs-a-certainty gate.
+        try expectEq(MenuTitle.sizingTemplates(elapsed: 60, certainty: nil, showPercent: true),
+                     ["0m", "00m"])
+
+        // Every template must be at least as long, in characters, as the
+        // actual text it stands in for — the invariant RootScenes' ZStack
+        // relies on to guarantee the container never shrinks below any
+        // candidate the real text could take within the bracket.
+        for elapsed in [TimeInterval(0), 5, 9, 10, 30, 59, 60, 90, 600, 3_599,
+                        3_600, 5_400, 7_260] {
+            let body = MenuTitle.text(elapsed: elapsed, certainty: nil, showPercent: false)
+            let templates = MenuTitle.sizingTemplates(elapsed: elapsed, certainty: nil,
+                                                      showPercent: false)
+            try expect(templates.contains { $0.count >= body.count },
+                       "no template as wide as \"\(body)\" (elapsed \(elapsed)) in \(templates)")
+        }
+    }
+
     c.check("menu-bar task name suffix") {
         try expectEq(MenuTitle.withTaskName("andeyeTT design", chars: 5, body: "21m"), "21m andey")
         try expectEq(MenuTitle.withTaskName("Inv", chars: 5, body: "21m"), "21m Inv",

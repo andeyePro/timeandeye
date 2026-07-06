@@ -447,3 +447,15 @@ and recorded rather than fixed blind:
   All/Tracked/Untracked) – spec at
   docs/superpowers/specs/2026-07-06-colour-strategy.md. Awaits Martin's
   review (7 front-loaded open questions) before any /vs build.
+
+## Hardware-test UI fixes (Martin, 2026-07-06) — Mac verification pending
+
+- [ ] Martin to verify on the Mac (container has no macOS, can't build/run):
+  contrast fix (`AndeyeColors.highlight` replacing accentColor-as-text in the
+  pin editor, Evidence Card, Rules Ledger), pin-editor confirm now rightmost,
+  Evidence Card wrap-not-truncate + click-stability (`.animation(nil, ...)`),
+  fallback "✕ forget that fallback too" button, Rules Ledger delete as a red
+  trash icon behind a confirm dialog + inline Undo banner. See CHANGELOG
+  2026-07-06 for the full breakdown; `swift run andeyeTTChecks` covers the
+  pure logic (`forgettableWithout`) but none of the SwiftUI layout/animation
+  claims — those need eyes on real hardware.

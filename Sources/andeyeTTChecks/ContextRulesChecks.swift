@@ -505,6 +505,52 @@ func forgetChecks(_ c: Checks) {
         try expectEq(a.learning, before)
     }
 
+    c.check("forgettableWithout previews the FALLBACK's own forget target, and never mutates") {
+        // The card's "forget that fallback too" affordance (2026-07-06): what
+        // [✕ forget] would remove from the fallback preview, without first
+        // forgetting the thing that's currently (correctly) firing.
+        let a = Attributor(instanceHost: host)
+        let sig = gmailSignal()
+        a.assign(sig, target: .task(.op(2)), now: t0)   // sticky + prime + learning
+        a.learnEmailRule(sig, to: .op(2), now: t0)      // the grain footer's explicit rule commit
+        let u = try unwrap(a.forgettable(for: sig, now: t0))
+        guard case .sessionSticky = u else {
+            throw CheckFailure(description: "expected the sticky to be forgettable, got \(u)")
+        }
+        // Without the sticky, the email rule is next on the ladder — THAT is
+        // what "forget that fallback too" should target.
+        let fallbackForget = try unwrap(a.forgettableWithout(u, sig, now: t0))
+        guard case .emailRule(let rule) = fallbackForget else {
+            throw CheckFailure(description: "expected the email rule as the fallback's own forget target, got \(fallbackForget)")
+        }
+        try expectEq(rule.target, .op(2))
+        // Nothing moved: the sticky is still the live decision, the rule is
+        // still there, and forgettable(for:) still names the sticky first.
+        try expectEq(a.explain(sig, tasks: tasks, now: t0).source, .sessionSticky)
+        try expectEq(a.emailRules.count, 1)
+        guard case .sessionSticky = try unwrap(a.forgettable(for: sig, now: t0)) else {
+            throw CheckFailure(description: "forgettable(for:) must still name the sticky — the preview must not have mutated it")
+        }
+        // Forgetting the previewed fallback target for real removes exactly
+        // that rule, leaving the (still-current) sticky untouched.
+        a.forget(fallbackForget, signal: sig)
+        try expectNil(a.emailRuleMatch(sig), "the fallback rule is gone")
+        try expectEq(a.explain(sig, tasks: tasks, now: t0).source, .sessionSticky,
+                     "the current attribution is unaffected by forgetting the fallback")
+    }
+
+    c.check("forgettableWithout is nil when the fallback has nothing left to forget") {
+        let a = Attributor(instanceHost: host)
+        a.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["Ghostty"])), task: .op(1)))
+        let sig = ActivitySignal(app: "Ghostty", timestamp: t0)
+        try expectNil(a.forgettable(for: sig, now: t0), "a pin is law — nothing forgettable at all")
+        // learnEmailRule below never fires here (not an email surface), so
+        // there's no "current" thing to preview a fallback for either —
+        // exercise forgettableWithout directly with an arbitrary Unlearn to
+        // confirm it degrades to nil rather than throwing/crashing.
+        try expectNil(a.forgettableWithout(.rankedAssociation(.task(.op(1))), sig, now: t0))
+    }
+
     c.check("THE scenario: Gmail → 'University Teaching' stops after forget") {
         let a = Attributor(instanceHost: host)
         let gut = TaskRef.op(1)

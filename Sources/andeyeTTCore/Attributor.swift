@@ -559,6 +559,29 @@ public final class Attributor {
         forget(u, signal: signal)
         return explain(signal, tasks: tasks, now: now)
     }
+
+    /// What the fallback preview's OWN [✕ forget] would remove, i.e. what's
+    /// forgettable after `u` is (hypothetically) gone — never mutates. Drives
+    /// the Evidence Card's "forget that fallback too" affordance so the user
+    /// can strip an upsetting old rule out of the escape path WITHOUT first
+    /// forgetting the thing that's currently (correctly) firing.
+    public func forgettableWithout(_ u: Unlearn, _ signal: ActivitySignal,
+                                   now: Date) -> Unlearn? {
+        let savedRules = emailRules
+        let savedPrimes = primedSurfaces
+        let savedStickies = sessionStickies
+        let savedLearning = learning
+        let savedPending = pendingPrime
+        defer {
+            emailRules = savedRules
+            primedSurfaces = savedPrimes
+            sessionStickies = savedStickies
+            learning = savedLearning
+            pendingPrime = savedPending
+        }
+        forget(u, signal: signal)
+        return forgettable(for: signal, now: now)
+    }
 }
 
 extension Attributor {

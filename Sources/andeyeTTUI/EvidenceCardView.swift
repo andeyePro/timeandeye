@@ -59,27 +59,51 @@ struct EvidenceCardView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .top, spacing: 4) {
                 Text("BECAUSE").font(.caption2).bold().foregroundStyle(.secondary)
-                Text(becauseLabel).font(.caption).lineLimit(2)
+                // Wrap rather than truncate — a long task name or email
+                // subject was clipping instead of reading in full.
+                Text(becauseLabel).font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let rule = explanation.matchedEmailRule {
                 Text(ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
             }
             if let pin = explanation.matchedPin {
                 HStack(spacing: 4) {
-                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(Color.accentColor)
-                    Text(pin.rule.shortLabel).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(AndeyeColors.highlight)
+                    Text(pin.rule.shortLabel).font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let u = unlearn {
-                HStack(alignment: .top, spacing: 6) {
-                    Button { controller.forget(u, signal: signal) } label: {
-                        Text(forgetLabel(u)).font(.caption2)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Button { controller.forget(u, signal: signal) } label: {
+                            Text(forgetLabel(u)).font(.caption2)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove exactly what fired here (undoable, ⌘Z)")
+                        Text("→ would then fall back to: \(fallbackText(u))")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .buttonStyle(.borderless)
-                    .help("Remove exactly what fired here (undoable, ⌘Z)")
-                    Text("→ would then fall back to: \(fallbackText(u))")
-                        .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    // The fallback isn't hypothetical to Martin — a wrong old
+                    // rule sitting there as a POSSIBILITY is itself unwelcome
+                    // (2026-07 feedback). Offer to remove it directly, without
+                    // first forgetting what's currently (correctly) firing.
+                    if let fu = controller.forgettableWithout(u, signal) {
+                        Button { controller.forget(fu, signal: signal) } label: {
+                            Text(forgetFallbackLabel(fu)).font(.caption2)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.orange)
+                        .help("Also remove the fallback itself, so it's never offered again (undoable, ⌘Z)")
+                    }
                 }
+                // Disable the implicit animation SwiftUI would otherwise apply
+                // to this whole block on click — with wrapping text, a height
+                // change here was bleeding into an unwanted reflow/animation
+                // of the row(s) below it ("mangled" on click).
+                .animation(nil, value: unlearn)
             }
         }
     }
@@ -113,6 +137,11 @@ struct EvidenceCardView: View {
         return "✕ forget"
     }
 
+    private func forgetFallbackLabel(_ u: Attributor.Unlearn) -> String {
+        if case .rankedAssociation = u { return "✕ suppress that fallback too" }
+        return "✕ forget that fallback too"
+    }
+
     private func fallbackText(_ u: Attributor.Unlearn) -> String {
         let preview = controller.explainWithout(u, signal)
         let name = preview.chosen.map { controller.name(of: $0) } ?? "nothing"
@@ -122,7 +151,8 @@ struct EvidenceCardView: View {
     // MARK: - sees: / candidates:
 
     private var seesSection: some View {
-        Text("sees: " + seesLine).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+        Text("sees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var seesLine: String {
@@ -150,7 +180,8 @@ struct EvidenceCardView: View {
             Text("candidates: " + explanation.lines.prefix(3).map {
                 "\(controller.name(of: $0.target)) \(pct($0.score))"
             }.joined(separator: " · "))
-                .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                .font(.caption2).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -169,16 +200,23 @@ struct EvidenceCardView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         ForEach(controller.searchTasks(filter).prefix(6), id: \.ref) { t in
                             Button { pickedTask = t; filter = "" } label: {
-                                Text(t.subject).font(.caption2).lineLimit(1)
+                                Text(t.subject).font(.caption2)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
                 .frame(maxHeight: 90)
+                // No implicit animation on picking a row — the filtered list
+                // swaps for the picked-task/grain-ladder block in the SAME
+                // click, and an implicit height animation there was
+                // "mangling" (glitching) whatever sits below it.
+                .animation(nil, value: pickedTask)
             }
             if let picked = pickedTask {
-                Text("→ \(picked.subject)").font(.caption).bold().lineLimit(1)
+                Text("→ \(picked.subject)").font(.caption).bold()
+                    .fixedSize(horizontal: false, vertical: true)
                 grainLadder(for: picked)
                 HStack(spacing: 10) {
                     Button("Once") { commit(picked, pinned: nil) }
@@ -214,7 +252,10 @@ struct EvidenceCardView: View {
                     HStack(spacing: 4) {
                         Image(systemName: grainCount == count ? "largecircle.fill.circle" : "circle")
                             .font(.system(size: 9))
-                        Text(seg.display).font(.caption2).lineLimit(1)
+                        // Wrap rather than truncate — long correspondents/
+                        // subjects were clipping instead of reading in full.
+                        Text(seg.display).font(.caption2)
+                            .fixedSize(horizontal: false, vertical: true)
                         if seg.shared {
                             Text("shared").font(.caption2).foregroundStyle(.orange)
                         }
@@ -227,9 +268,13 @@ struct EvidenceCardView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!seg.available)
-                .help(seg.available ? "Grain: \(seg.display)" : "not captured on this site")
+                .help(seg.available ? "Grain: \(seg.display)" : "not captured on this window")
             }
         }
+        // No implicit animation on selecting a grain — clicking a row was
+        // visibly disturbing the NEXT row (a height/reflow glitch) once rows
+        // could wrap to more than one line.
+        .animation(nil, value: grainCount)
         // ↑ / ↓ move the grain selection, skipping ghost rows — the same
         // stepping the pin editor uses for ←/→ (2026-07-03 spec §5.2).
         .focusable()
