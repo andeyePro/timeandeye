@@ -921,6 +921,8 @@ const copy = (await getEntry('copy', 'home')).data;
     <span>{copy.footer.company_line}</span>
     <nav>
       <a href="/manual">Manual</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
       <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
       <a href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">time@andeye.com</a>
     </nav>
@@ -946,7 +948,28 @@ const copy = (await getEntry('copy', 'home')).data;
   trackerCtaLabel: copy.tiers.tracker_cta_label,
   proBody: copy.tiers.pro_body,
   proCtaLabel: copy.tiers.pro_cta_label,
-} }}></script>
+} }}>
+// Astro wraps define:vars scripts in an IIFE, so `COPY` is scoped to this
+// block and is NOT a global on its own. Export it explicitly - the main
+// script below reads it. Removing this line kills the whole page script.
+window.COPY = COPY;
+</script>
+<script is:inline>
+// Failsafe, deliberately separate from the big script below: if that script
+// ever dies (an uncaught error, a missing global), the .reveal choreography
+// never runs and the hero + demo would stay invisible. This tiny independent
+// watchdog reveals everything on any uncaught error, and again shortly after
+// load as a catch-all. Adding "in" to an already-revealed element is a no-op,
+// so it never fights the normal choreography.
+(function () {
+  function show() {
+    var els = document.querySelectorAll('.reveal:not(.in)');
+    for (var i = 0; i < els.length; i++) els[i].classList.add('in');
+  }
+  window.addEventListener('error', function () { setTimeout(show, 0); });
+  window.addEventListener('load', function () { setTimeout(show, 2500); });
+})();
+</script>
 <script is:inline>
 (function () {
 'use strict';

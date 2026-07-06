@@ -1,0 +1,13 @@
+---
+// https://andeye.com/terms – registered with Xero; the URL must not change.
+// The prose is the single source of truth in docs/terms.md – edit there.
+import LegalPage from '../layouts/LegalPage.astro';
+import { Content as Terms } from '../../docs/terms.md';
+---
+<LegalPage
+  title="Terms and conditions"
+  description="The terms and conditions for the andeye app and the andeye.com website."
+  path="/terms/"
+>
+  <Terms />
+</LegalPage>

@@ -1,0 +1,130 @@
+---
+// Shared shell for the legal pages (/privacy and /terms). Both URLs are
+// registered with Xero and MUST NOT change. The prose itself lives in
+// docs/privacy.md and docs/terms.md – edit those, not this file.
+// Styling is the landing page's dark family (see src/pages/index.astro).
+interface Props {
+  title: string;
+  description: string;
+  path: string; // canonical path, e.g. "/privacy/"
+}
+const { title, description, path } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title} - andeye</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={new URL(path, Astro.site).href} />
+<style>
+  :root {
+    --bg: #0c0f16;
+    --panel: #131826;
+    --line: #232b40;
+    --line-soft: #1b2233;
+    --text: #eef1f6;
+    --muted: #98a0b3;
+    --faint: #6a7382;
+    --accent: #f0a13a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "SF Pro Display", Segoe UI, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--accent); color: #14100a; }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header.top {
+    padding: 28px 0 0;
+  }
+  .back {
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--muted);
+  }
+  .back:hover { color: var(--accent); }
+
+  main {
+    padding: 24px 0 72px;
+  }
+
+  article :global(h1) {
+    font-size: clamp(2rem, 5vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0.6em 0 0.7em;
+  }
+  article :global(h2) {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 2em 0 0.6em;
+  }
+  article :global(p) {
+    margin: 0 0 1rem;
+    color: var(--muted);
+  }
+  article :global(strong) { color: var(--text); }
+  article :global(a) { color: var(--accent); }
+  article :global(a:hover) { text-decoration: underline; }
+
+  footer {
+    border-top: 1px solid var(--line-soft);
+    padding: 40px 0 56px;
+    color: var(--faint);
+    font-size: 0.88rem;
+  }
+  footer .wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="back" href="/">&larr; andeye</a>
+  </div>
+</header>
+<main>
+  <article class="wrap">
+    <slot />
+  </article>
+</main>
+<footer>
+  <div class="wrap">
+    <span>&copy; andeye Ltd &middot; SC665704 &middot; Scotland</span>
+    <nav>
+      <a href="/manual">Manual</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="https://github.com/andeyePro/andeyeTT">GitHub</a>
+      <a href="mailto:time@andeye.com">time@andeye.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
