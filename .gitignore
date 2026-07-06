@@ -27,3 +27,7 @@ site/.astro/
 .vs/cycle-*/
 __pycache__/
 *.pyc
+
+# Per-machine Xcode state (public-repo hygiene)
+xcuserdata/
+*.xcuserstate
