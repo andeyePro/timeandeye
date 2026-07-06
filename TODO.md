@@ -423,3 +423,10 @@ and recorded rather than fixed blind:
 
 
 
+
+## Billable flag + multi-backend (2026-07-06)
+
+- [ ] Billable flag (andeyeTT) + multi-backend fan-out (postings ledger,
+  backend classes pm/finance, per-project routing) – spec at
+  docs/superpowers/specs/2026-07-06-billable-flag-multibackend.md. Awaits
+  Martin's review (6 front-loaded open questions) before any /vs build.
