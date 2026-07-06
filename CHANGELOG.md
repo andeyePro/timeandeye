@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-06
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## 2026-07-05
 
 - [x] **Site demo back to basics: second-person story, andeye Time window
