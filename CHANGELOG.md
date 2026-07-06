@@ -2,6 +2,32 @@
 
 ## 2026-07-06
 
+- [x] **Site demo rebuilt: fixed-size windows, one andeye Time view at a
+  time, live local clock, second-person story v2** (site/src/pages/
+  index.astro). The Mail window never changes size again: reading view is
+  a preview-rail + pane grid inside a fixed-height window, click-outside
+  returns to the inbox – and the root cause of the original "window grows"
+  bug is fixed properly (`[hidden]` loses to author `display` rules per
+  the CSS cascade; a `[hidden]{display:none!important}` reset now wins).
+  The andeye Time window shows the timeline OR the pie, switched by
+  orange-underlined chrome buttons, like the real app. Story: client is
+  now Sarah Coleman (a person) who runs a bakery, saying yes to "the
+  spring retainer – where do I sign?"; research is the first Chrome tab
+  and its own tracked project; all three tab drawings are fresh,
+  render-verified compositions (kitten-and-yarn video page, bakery site,
+  sector-outlook article). The whole demo anchors to the visitor's local
+  clock (heading daypart, menu-bar clock, email times, timeline start;
+  no-JS fallbacks kept). Sitewide: no ALL-CAPS anywhere (andeye is
+  lowercase), "Your timesheet writes itself in three moves" as a
+  hover/click flowsheet with a reserved detail panel, privacy split into
+  four click-accordions (gist headline + dig-in body, "Only what you
+  approve ever leaves" now its own entry), Community/Pro as tabs with a
+  sliding orange underline, eyebrow mini-logos that draw on and wink per
+  section, the red→green certainty phrase set in an actual gradient,
+  menu-bar logo/clock gap closed, waitlist mailtos → time@andeye.com.
+  Adversarial review: one major (the [hidden] cascade bug), two nits, all
+  fixed; needs a Mac-browser eyeball for the reserved panel heights.
+
 - [x] **Manual: winking logo header, "Getting help" page, standing rules**
   (site/src/components/AndeyeSiteTitle.astro, site/astro.config.mjs,
   site/src/content/docs/manual/{getting-help,index}.md, CLAUDE.md). The
