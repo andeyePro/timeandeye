@@ -200,6 +200,17 @@ struct SettingsView: View {
                        isOn: $controller.settings.trackLeisureLocally)
             }
 
+            Section("Billing") {
+                TextField("Currency symbol", text: Binding(
+                    get: { controller.settings.currencySymbolOverride ?? "" },
+                    set: { controller.settings.currencySymbolOverride = $0.isEmpty ? nil : $0 }),
+                    prompt: Text(CurrencyDefault.symbol()))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+                Text("Shown wherever billable totals appear; leave blank for your locale's symbol (\(CurrencyDefault.symbol())). Projects default to non-billable — right-click a project or task in the Time Spent legend to opt it in, or set a per-task override.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Licence") {
                 if let l = controller.license {
                     Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"

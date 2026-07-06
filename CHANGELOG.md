@@ -2,6 +2,42 @@
 
 ## 2026-07-06
 
+- [x] **Multi-backend seam + billable flag (task_002, unblocks andeyePro/Xero).**
+  The posting path is no longer one-backend-one-slot. A connector-agnostic
+  `BackendRegistry` (Sources/andeyeTTCore/BackendRegistry.swift) holds N
+  `(TaskBackend, class)` entries — `class` is an extensible role, `pm` and
+  `finance` today — and `AppController.register(backend:id:class:)` is the
+  documented seam andeyePro calls to add Xero alongside OpenProject. The
+  journal gains a per-(session, backend) posting ledger
+  (pending/posted/failed/skipped + backend entry id; `posting_ledger` table
+  in SQLiteJournalStore, protocol methods on JournalStore) whose
+  (session, backend) key is the idempotency key: retries only update their
+  own row, one backend failing never blocks another, and a session can be
+  posted to OP while pending to a finance backend. A one-time, per-row-
+  idempotent migration maps every legacy `pushedToOP`/`opTimeEntryID` row to
+  a posted ledger row against the OP id, so the ledger-driven sync can never
+  double-post upgraded history; the legacy fields survive as the primary-pm
+  mirror the timeline PATCH/delete and summary keep reading. SyncEngine now
+  fans out per registered backend: pm = owns()-scoped confirmed time
+  (exactly the old behaviour with one pm registered); finance = ONLY
+  effectively-billable time, deliberately bypassing owns(); personal
+  `.local` tasks reach no backend of any class, ever. Billable model in Core
+  (Billing.swift): project-level Bool + task tri-state
+  (inherit/billable/non-billable), DEFAULT NON-BILLABLE, persisted in a
+  user-ownable billing.json keyed by stable backend-scoped project ids (the
+  OP conformer now captures the project id from the work-package project
+  href; title-keyed fallback migrates to id keys on the first refresh after
+  ids are known). Flips are prospective-only via a per-flag `since` gate;
+  the Time Spent legend gets right-click billable toggles and the cascade
+  alert reports manually-set tasks left behind plus the stranded uninvoiced
+  hours; one currency-symbol Settings field defaults from
+  `Locale.currencySymbol`. andeyeTTChecks adds Billing + MultiBackendSync
+  suites (ledger conformance for both stores, migration losslessness,
+  class filtering, cascade/left-behind, stranded-hours arithmetic, and the
+  mandatory two-backends-of-different-classes concurrent scenario), and the
+  SyncEngine/idempotency suites were reworked for the report-based,
+  failure-isolated engine.
+
 - [x] **Four hardware-test UI fixes: contrast, pin-editor confirm placement,
   Evidence Card wrap/stability + fallback forget, Rules Ledger delete
   discoverability.** All from Martin's 2026-07-06 hardware pass on the

@@ -49,7 +49,14 @@ public enum Target: Hashable, Codable, Sendable {
 public struct WorkTask: Equatable, Codable, Sendable {
     public var ref: TaskRef
     public var subject: String
+    /// Display TITLE of the containing project (what lists/pies group by).
     public var project: String?
+    /// STABLE backend id of the containing project ("14" for an OP project),
+    /// captured from the project link so billable flags can key on identity
+    /// rather than the rename-fragile title. nil for local tasks and for
+    /// caches written before the capture existed (title-keyed fallback +
+    /// one-time migration cover those — see BillableRules).
+    public var projectID: String?
     public var status: String
     public var lastConfirmedAt: Date?
     public var assignee: String?
@@ -60,10 +67,12 @@ public struct WorkTask: Equatable, Codable, Sendable {
     }
 
     public init(ref: TaskRef, subject: String, project: String? = nil,
-                status: String, lastConfirmedAt: Date? = nil, assignee: String? = nil) {
+                projectID: String? = nil, status: String,
+                lastConfirmedAt: Date? = nil, assignee: String? = nil) {
         self.ref = ref
         self.subject = subject
         self.project = project
+        self.projectID = projectID
         self.status = status
         self.lastConfirmedAt = lastConfirmedAt
         self.assignee = assignee

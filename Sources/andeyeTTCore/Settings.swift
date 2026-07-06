@@ -99,6 +99,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// store behaves exactly pre-sync. Flipping on stamps the backlog and
     /// starts the replica cycle (needs the CloudKit-entitled build).
     public var journalSyncEnabled: Bool
+    /// Currency symbol shown wherever billable totals render. nil/empty =
+    /// the locale's own symbol (CurrencyDefault.symbol()); ONE override
+    /// field, no settings sprawl.
+    public var currencySymbolOverride: String?
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -127,7 +131,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 taskColours: [String: String] = [:],
                 emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
                 licenseKey: String? = nil,
-                journalSyncEnabled: Bool = false) {
+                journalSyncEnabled: Bool = false,
+                currencySymbolOverride: String? = nil) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
@@ -156,6 +161,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.emailMatchOrder = emailMatchOrder
         self.licenseKey = licenseKey
         self.journalSyncEnabled = journalSyncEnabled
+        self.currencySymbolOverride = currencySymbolOverride
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -199,6 +205,20 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         emailMatchOrder = Set(mapped) == Set(EmailMatchLevel.allCases) ? mapped : defaults.emailMatchOrder
         licenseKey = ((try? c.decodeIfPresent(String.self, forKey: .licenseKey)) ?? nil) ?? defaults.licenseKey
         journalSyncEnabled = c.lenient(.journalSyncEnabled, or: defaults.journalSyncEnabled)
+        currencySymbolOverride = ((try? c.decodeIfPresent(String.self, forKey: .currencySymbolOverride)) ?? nil)
+            ?? defaults.currencySymbolOverride
+    }
+}
+
+public extension AndeyeSettings {
+    /// The symbol billable totals render with: the one override field when
+    /// set, else the locale default.
+    var effectiveCurrencySymbol: String {
+        if let symbol = currencySymbolOverride?.trimmingCharacters(in: .whitespaces),
+           !symbol.isEmpty {
+            return symbol
+        }
+        return CurrencyDefault.symbol()
     }
 }
 

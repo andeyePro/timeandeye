@@ -164,6 +164,94 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try s.assign([seg1.id], to: .task(.op(7)))
         try expectEq(try s.pendingReview().map(\.id), [seg2.id])
     }
+
+    // MARK: Posting ledger — the per-(session, backend) replacement for the
+    // single pushed/opTimeEntryID slot. Same suite for both stores, so the
+    // SQLite table and the in-memory map obey one contract.
+
+    c.check("posting records upsert on the (session, backend) key and round-trip") {
+        let s = make()
+        let a = session(0.9)
+        try s.save(a)
+        try expectNil(try s.postingRecord(session: a.id, backendID: "fin"),
+                      "no row = pending by definition")
+        try s.setPostingRecord(PostingRecord(sessionID: a.id, backendID: "fin",
+                                             state: .failed, lastError: "boom",
+                                             attempts: 1, updatedAt: t0))
+        // Retry on the SAME key overwrites — the idempotency guarantee.
+        try s.setPostingRecord(PostingRecord(sessionID: a.id, backendID: "fin",
+                                             state: .posted, entryID: "e-9",
+                                             attempts: 1, updatedAt: t0))
+        try s.setPostingRecord(PostingRecord(sessionID: a.id, backendID: "pm",
+                                             state: .posted, entryID: "42", updatedAt: t0))
+        let rows = try s.postingRecords(session: a.id)
+        try expectEq(rows.count, 2, "one row per backend, not per attempt")
+        try expectEq(try s.postingRecord(session: a.id, backendID: "fin")?.state, .posted)
+        try expectEq(try s.postingRecord(session: a.id, backendID: "fin")?.entryID, "e-9")
+        try expectEq(try s.postingRecord(session: a.id, backendID: "pm")?.entryID, "42")
+        try s.clearPostingRecord(session: a.id, backendID: "pm")
+        try expectNil(try s.postingRecord(session: a.id, backendID: "pm"),
+                      "cleared row re-enters that backend's queue")
+        try expectEq(try s.postingRecord(session: a.id, backendID: "fin")?.state, .posted,
+                     "clearing one backend's row never touches another's")
+    }
+
+    c.check("needingPostTo is per-backend: posted to A stays pending for B; failed retries; skipped is terminal") {
+        let s = make()
+        let a = session(0.9)                                 // will be posted to A
+        let b = session(0.85, task: .op(2))                  // failed on A: retries
+        let skipped = session(0.9, task: .op(3))             // skipped on A: terminal
+        let low = session(0.5, task: .op(4))                 // below threshold
+        let personal = session(0.99, task: .local(UUID()))   // NEVER for any backend
+        for x in [a, b, skipped, low, personal] { try s.save(x) }
+        try s.setPostingRecord(PostingRecord(sessionID: a.id, backendID: "A",
+                                             state: .posted, entryID: "1", updatedAt: t0))
+        try s.setPostingRecord(PostingRecord(sessionID: b.id, backendID: "A",
+                                             state: .failed, attempts: 1, updatedAt: t0))
+        try s.setPostingRecord(PostingRecord(sessionID: skipped.id, backendID: "A",
+                                             state: .skipped, updatedAt: t0))
+        try expectEq(Set(try s.sessions(needingPostTo: "A", atOrAbove: 0.8).map(\.id)),
+                     Set([b.id]), "posted+skipped are terminal for A; failed retries")
+        // Backend B has no rows at all: everything confirmed and remote is
+        // pending for it — the simultaneity AC2 pins (posted to A, pending to B).
+        try expectEq(Set(try s.sessions(needingPostTo: "B", atOrAbove: 0.8).map(\.id)),
+                     Set([a.id, b.id, skipped.id]))
+    }
+
+    c.check("single-slot migration: pushed rows become posted ledger rows, losslessly and once") {
+        let s = make()
+        var pushed = session(0.9, pushed: true)
+        pushed.opTimeEntryID = "977"
+        try s.save(pushed)
+        try s.save(session(0.9, task: .op(2)))                       // unpushed: no row
+        let subMinute = Session(task: .op(3), start: t0, end: t0.addingTimeInterval(30),
+                                certainty: 0.9, pushedToOP: true)    // handled, no entry id
+        try s.save(subMinute)
+        let checkpoint = Session(task: .op(9), start: t0, end: t0.addingTimeInterval(600),
+                                 certainty: 0.9, pushedToOP: true)   // sentinel: excluded
+        try s.save(checkpoint)
+
+        let migrated = try s.migrateSingleSlotPostings(to: "op", excluding: [checkpoint.id])
+        try expectEq(migrated, 2, "both handled rows migrate; unpushed + excluded don't")
+        try expectEq(try s.postingRecord(session: pushed.id, backendID: "op")?.state, .posted)
+        try expectEq(try s.postingRecord(session: pushed.id, backendID: "op")?.entryID, "977",
+                     "the backend entry id survives the migration")
+        try expectEq(try s.postingRecord(session: subMinute.id, backendID: "op")?.state, .posted)
+        try expectNil(try s.postingRecord(session: checkpoint.id, backendID: "op"))
+        // THE no-double-post guarantee: no migrated row is eligible for op.
+        // (The excluded sentinel still shows at store level — excluding
+        // checkpoint ids from a PASS is the engine's job, not the query's.)
+        let eligible = try s.sessions(needingPostTo: "op", atOrAbove: 0.8)
+        try expectEq(Set(eligible.map(\.task)), Set([.op(2), .op(9)]),
+                     "the pushed history is never re-eligible after upgrade")
+        // Idempotent: a second run writes nothing and changes nothing.
+        try expectEq(try s.migrateSingleSlotPostings(to: "op", excluding: [checkpoint.id]), 0)
+        try expectEq(try s.postingRecord(session: pushed.id, backendID: "op")?.entryID, "977")
+        // And the migrated history is STILL pending for a different backend —
+        // posted to op, pending to a finance backend, simultaneously.
+        try expect(try s.sessions(needingPostTo: "xero-org", atOrAbove: 0.8)
+            .contains { $0.id == pushed.id })
+    }
 }
 
 func inMemoryJournalChecks(_ c: Checks) {
@@ -200,7 +288,8 @@ func opClientChecks(_ c: Checks) async {
             (200, """
             {"total": 3, "count": 2, "_embedded": {"elements": [
               {"id": 1, "subject": "andeyeTT build",
-               "_links": {"status": {"title": "Now"}, "project": {"title": "andeyeTT"}}},
+               "_links": {"status": {"title": "Now"},
+                          "project": {"title": "andeyeTT", "href": "/api/v3/projects/14"}}},
               {"id": 2, "subject": "Timesheets",
                "_links": {"status": {"title": "Closed"}, "project": {"title": "Admin"}}}
             ]}}
@@ -215,7 +304,9 @@ func opClientChecks(_ c: Checks) async {
         let tasks = try await makeClient(transport).fetchTasks(pageSize: 2)
         try expectEq(tasks.count, 3)
         try expectEq(tasks[0], WorkTask(ref: .op(1), subject: "andeyeTT build",
-                                        project: "andeyeTT", status: "Now"))
+                                        project: "andeyeTT", projectID: "14", status: "Now"))
+        try expectNil(tasks[1].projectID,
+                      "no href (older instance / cached page) → title-keyed fallback")
         try expectEq(transport.requests.count, 2)
         try expectEq(transport.requests[0].value(forHTTPHeaderField: "Authorization"),
                      "Basic " + Data("apikey:SECRET".utf8).base64EncodedString())
@@ -339,19 +430,22 @@ func syncEngineChecks(_ c: Checks) async {
         let transport = MockTransport()
         let backend = OPBackend(baseURL: URL(string: "https://op.example.com")!,
                                 apiKey: "k", transport: transport)
-        return (SyncEngine(journal: journal, backend: backend), journal, transport)
+        return (SyncEngine(journal: journal, backend: backend, id: "op", class: .pm),
+                journal, transport)
     }
 
-    await c.check("pushes eligible and marks") {
+    await c.check("pushes eligible, marks the ledger AND the legacy mirror") {
         let (engine, journal, transport) = makeWorld()
-        transport.responses = [(201, "{}")]
-        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(1800),
-                                 certainty: 0.9, comment: "Ghostty – andeyeTT"))
+        transport.responses = [(201, #"{"id":977}"#)]
+        let eligible = Session(task: .op(42), start: t0, end: t0.addingTimeInterval(1800),
+                               certainty: 0.9, comment: "Ghostty – andeyeTT")
+        try journal.save(eligible)
         try journal.save(Session(task: .op(43), start: t0, end: t0.addingTimeInterval(60),
                                  certainty: 0.4))   // below threshold: stays local
-        let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
-                                                   includeComments: true)
-        try expectEq(pushed, 1)
+        let reports = await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                includeComments: true)
+        try expectEq(reports.first?.posted, 1)
+        try expectNil(reports.first?.error)
         try expectEq(transport.requests.count, 1)
         let body = try unwrap(try JSONSerialization.jsonObject(
             with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
@@ -359,7 +453,16 @@ func syncEngineChecks(_ c: Checks) async {
         try expectEq((body["comment"] as? [String: String])?["raw"], "Ghostty – andeyeTT")
         try expectEq(body["startTime"] as? String, "2025-06-15T15:06:40Z",
                      "ISO 8601 UTC date-time, not HH:mm")
-        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [])
+        try expectEq(try journal.sessions(needingPostTo: "op", atOrAbove: 0.8), [])
+        // Ledger row = source of truth; legacy fields mirror it for the
+        // summary/PATCH surfaces (behaviour-compatible single-pm mode).
+        try expectEq(try journal.postingRecord(session: eligible.id, backendID: "op")?.state,
+                     .posted)
+        try expectEq(try journal.postingRecord(session: eligible.id, backendID: "op")?.entryID,
+                     "977")
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [],
+                     "legacy mirror keeps pushedToOP in step")
+        try expectEq(try journal.allSessions().first?.opTimeEntryID, "977")
     }
 
     await c.check("activity override per task; comments excludable") {
@@ -367,9 +470,9 @@ func syncEngineChecks(_ c: Checks) async {
         transport.responses = [(201, "{}")]
         try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
                                  certainty: 1, comment: "should not appear"))
-        _ = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
-                                          activityOverrides: [.op(42): 9],
-                                          includeComments: false)
+        _ = await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                      activityOverrides: [.op(42): 9],
+                                      includeComments: false)
         let body = try unwrap(try JSONSerialization.jsonObject(
             with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
         let links = try unwrap(body["_links"] as? [String: [String: String]])
@@ -382,8 +485,8 @@ func syncEngineChecks(_ c: Checks) async {
         transport.responses = [(201, "{}")]
         try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
                                  certainty: 1))
-        let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: false)
-        try expectEq(pushed, 1)
+        let reports = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(reports.first?.posted, 1)
         let body = try unwrap(try JSONSerialization.jsonObject(
             with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
         let links = try unwrap(body["_links"] as? [String: [String: String]])
@@ -399,8 +502,8 @@ func syncEngineChecks(_ c: Checks) async {
                                  certainty: 1))
         try journal.save(Session(task: .op(43), start: t0.addingTimeInterval(700),
                                  end: t0.addingTimeInterval(1400), certainty: 1))
-        let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: false)
-        try expectEq(pushed, 2)
+        let reports = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(reports.first?.posted, 2)
         try expectEq(transport.requests.count, 3, "one retry, then no more startTime attempts")
         let retryBody = try unwrap(try JSONSerialization.jsonObject(
             with: unwrap(transport.requests[1].httpBody)) as? [String: Any])
@@ -410,28 +513,54 @@ func syncEngineChecks(_ c: Checks) async {
         try expectNil(secondEntry["startTime"])
     }
 
-    await c.check("sub-minute sessions are cleared without a POST") {
+    await c.check("sub-minute sessions are cleared without a POST (skipped ledger row + legacy mark)") {
         let (engine, journal, transport) = makeWorld()
-        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(30),
-                                 certainty: 1))
-        let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
-                                                   includeComments: false)
-        try expectEq(pushed, 0)
+        let short = Session(task: .op(42), start: t0, end: t0.addingTimeInterval(30),
+                            certainty: 1)
+        try journal.save(short)
+        let reports = await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                includeComments: false)
+        try expectEq(reports.first?.posted, 0)
         try expectEq(transport.requests.count, 0, "no zero-duration entries in OP")
-        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [],
+        try expectEq(try journal.sessions(needingPostTo: "op", atOrAbove: 0.8), [],
                      "short sessions must not clog the queue")
+        try expectEq(try journal.postingRecord(session: short.id, backendID: "op")?.state,
+                     .skipped)
+        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [],
+                     "legacy queue cleared exactly as before")
     }
 
-    await c.check("failed push leaves session unmarked") {
+    await c.check("failed push records a retryable failed row and stays queued") {
         let (engine, journal, transport) = makeWorld()
         transport.responses = [(500, "{}")]
-        try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
-                                 certainty: 1))
-        let pushed = try? await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
-                                                    includeComments: false)
-        try expect(pushed != 1, "push must not report success")
-        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8).count, 1,
+        let s = Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                        certainty: 1)
+        try journal.save(s)
+        let reports = await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                includeComments: false)
+        try expectEq(reports.first?.posted, 0)
+        try expect(reports.first?.error != nil, "the failure must be reported, not swallowed")
+        try expectEq(try journal.sessions(needingPostTo: "op", atOrAbove: 0.8).count, 1,
                      "failed push must remain queued")
+        let row = try unwrap(try journal.postingRecord(session: s.id, backendID: "op"))
+        try expectEq(row.state, .failed)
+        try expectEq(row.attempts, 1)
+        try expect(row.lastError?.isEmpty == false, "the error text lands on the row")
+    }
+
+    await c.check("excludedSessionIDs keeps the live-checkpoint sentinel out of every pass") {
+        let (engine, journal, transport) = makeWorld()
+        transport.responses = [(201, "{}")]
+        // A checkpoint-style sentinel: pushed=true but NO ledger row — without
+        // the exclusion, ledger-driven selection would post it every minute.
+        let checkpoint = Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                                 certainty: 1, pushedToOP: true)
+        try journal.save(checkpoint)
+        engine.excludedSessionIDs = [checkpoint.id]
+        let reports = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(reports.first?.posted, 0)
+        try expectEq(transport.requests.count, 0,
+                     "the crash-safety row is internal state, never tracked time")
     }
 }
 
@@ -474,25 +603,29 @@ func syncEngineOwnershipChecks(_ c: Checks) async {
         let backend = StubGUIDBackend()
         try journal.save(Session(task: .remote("task-guid-9"), start: t0,
                                  end: t0.addingTimeInterval(1800), certainty: 0.95))
-        let pushed = try await SyncEngine(journal: journal, backend: backend)
+        let reports = await SyncEngine(journal: journal, backend: backend,
+                                       id: "guid-pm", class: .pm)
             .pushEligible(threshold: 0.8, includeComments: false)
-        try expectEq(pushed, 1)
+        try expectEq(reports.first?.posted, 1)
         try expectEq(backend.created.first?.taskID, "task-guid-9",
                      "the GUID travels verbatim")
         try expectEq(try journal.allSessions().first?.opTimeEntryID, "entry-guid-1")
+        try expectEq(try journal.postingRecord(session: try unwrap(try journal.allSessions().first?.id),
+                                               backendID: "guid-pm")?.entryID, "entry-guid-1")
     }
 
-    await c.check("ownership guard: an eligible .op session is SKIPPED by a GUID backend — not pushed, not marked") {
+    await c.check("ownership guard: an eligible .op session is SKIPPED by a GUID pm backend — not pushed, not marked") {
         let journal = InMemoryJournalStore()
         let backend = StubGUIDBackend()
         try journal.save(Session(task: .op(42), start: t0,
                                  end: t0.addingTimeInterval(1800), certainty: 0.95))
-        let pushed = try await SyncEngine(journal: journal, backend: backend)
+        let reports = await SyncEngine(journal: journal, backend: backend,
+                                       id: "guid-pm", class: .pm)
             .pushEligible(threshold: 0.8, includeComments: false)
-        try expectEq(pushed, 0)
+        try expectEq(reports.first?.posted, 0)
         try expectEq(backend.created.count, 0)
-        try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8).count, 1,
-                     "stays queued for ITS backend — never silently marked")
+        try expectEq(try journal.sessions(needingPostTo: "guid-pm", atOrAbove: 0.8).count, 1,
+                     "stays queued for ITS backend — never silently marked or skipped")
     }
 }
 
@@ -812,13 +945,14 @@ func endToEndChecks(_ c: Checks) async {
                    "confirm lifts the in-flight span; got \(sessions[0].certainty)")
 
         // 5. sync pushes exactly one PT0H20M entry
-        let engine = SyncEngine(journal: journal, backend: backend)
-        let pushed = try await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
-                                                   includeComments: true)
-        try expectEq(pushed, 1)
+        let engine = SyncEngine(journal: journal, backend: backend, id: "op", class: .pm)
+        let reports = await engine.pushEligible(threshold: 0.8, defaultActivityID: 4,
+                                                includeComments: true)
+        try expectEq(reports.first?.posted, 1)
         let body = try unwrap(try JSONSerialization.jsonObject(
             with: unwrap(transport.requests[0].httpBody)) as? [String: Any])
         try expectEq(body["hours"] as? String, "PT0H20M")
+        try expectEq(try journal.sessions(needingPostTo: "op", atOrAbove: 0.8), [])
         try expectEq(try journal.sessions(needingPushAtOrAbove: 0.8), [])
     }
 }

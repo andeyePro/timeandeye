@@ -5,6 +5,14 @@ import Foundation
 /// (instances can have start times disabled), page/PWA-title recognition, and
 /// the work-package URL scheme.
 public final class OPBackend: TaskBackend {
+    /// The built-in OpenProject connection's STABLE registry/ledger id (see
+    /// RegisteredBackend.id). One OP instance per app in v1, so a constant is
+    /// exactly stable; per-connection minted ids arrive with the deferred
+    /// duplicate-instance (TaskRef identity) work. The single-slot →
+    /// posting-ledger migration maps every legacy `pushedToOP` row to this id,
+    /// so it must never change.
+    public static let stableID = "openproject"
+
     private let client: OPClient
     private let baseURL: URL
     public var onDebug: (String) -> Void = { _ in }

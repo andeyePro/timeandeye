@@ -40,6 +40,9 @@ struct SpentView: View {
     private typealias Selection = PieGeometry.Selection
 
     @State private var reassignFilter = ""
+    /// The last billable flip's report — presents the cascade/stranded alert.
+    @State private var flipReport: BillableFlipReport?
+    @State private var showFlipAlert = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -93,6 +96,11 @@ struct SpentView: View {
         }
         .padding(12)
         .background { shortcutKeys }
+        .alert("Billable setting changed", isPresented: $showFlipAlert, presenting: flipReport) { _ in
+            Button("OK") { flipReport = nil }
+        } message: { report in
+            Text(flipMessage(report))
+        }
         .onReceive(timer) { _ in reloadNodes(); reloadBlock() }
         .onChange(of: selStart) { _, _ in reloadNodes() }
         .onChange(of: selEnd) { _, _ in reloadNodes() }
@@ -615,6 +623,11 @@ struct SpentView: View {
                                     .padding(.horizontal, 3)
                                     .background(.quaternary, in: Capsule())
                             }
+                            if controller.isProjectBillable(named: node.label) {
+                                Text("billable").font(.system(size: 8))
+                                    .padding(.horizontal, 3)
+                                    .background(.quaternary, in: Capsule())
+                            }
                             Spacer()
                             Text(hm(node.seconds)).foregroundStyle(.secondary)
                         }
@@ -622,6 +635,7 @@ struct SpentView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .contextMenu { projectBillableMenu(node.label) }
                     if activeProjectIndex() == i {
                         ForEach(Array(node.children.enumerated()), id: \.offset) { j, task in
                             HStack(spacing: 6) {
@@ -635,6 +649,8 @@ struct SpentView: View {
                             .padding(.leading, 14)
                             .background(isActiveTask(j)
                                 ? Color.accentColor.opacity(0.12) : .clear)
+                            .contentShape(Rectangle())
+                            .contextMenu { taskBillableMenu(task) }
                         }
                     }
                 }
@@ -644,5 +660,69 @@ struct SpentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Billable toggles (right-click a legend row)
+
+    @ViewBuilder private func projectBillableMenu(_ projectName: String) -> some View {
+        let billable = controller.isProjectBillable(named: projectName)
+        Button(billable ? "Mark project non-billable" : "Mark project billable") {
+            present(controller.setProjectBillable(named: projectName, billable: !billable))
+        }
+    }
+
+    /// Tri-state task override: inherit (project decides) / billable /
+    /// non-billable. Only shown for nodes that still resolve to a real task.
+    @ViewBuilder private func taskBillableMenu(_ node: TimeAggregator.Node) -> some View {
+        if let ref = node.ref,
+           let task = controller.taskCache.first(where: { $0.ref == ref }) {
+            let current = controller.taskBillableState(ref)
+            Menu("Billable") {
+                ForEach(BillableState.allCases, id: \.self) { state in
+                    Button {
+                        present(controller.setTaskBillable(task, state: state))
+                    } label: {
+                        HStack {
+                            if state == current { Image(systemName: "checkmark") }
+                            Text(billableLabel(state))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func billableLabel(_ state: BillableState) -> String {
+        switch state {
+        case .inherit: return "Inherit from project"
+        case .billable: return "Billable"
+        case .nonBillable: return "Non-billable"
+        }
+    }
+
+    private func present(_ report: BillableFlipReport?) {
+        guard let report else { return }
+        flipReport = report
+        showFlipAlert = true
+    }
+
+    /// The alert body: what changed, which manually-set tasks the cascade
+    /// left alone, and the stranded-time warning with the currency symbol —
+    /// the one place billable totals render today.
+    private func flipMessage(_ report: BillableFlipReport) -> String {
+        var lines = [
+            "\(report.name) is now \(report.billable ? "billable" : "non-billable").",
+        ]
+        if !report.leftBehind.isEmpty {
+            let names = report.leftBehind.map(\.subject).joined(separator: ", ")
+            lines.append("\(report.leftBehind.count) task\(report.leftBehind.count == 1 ? "" : "s") kept their manual setting: \(names).")
+        }
+        if report.strandedSeconds >= 60 {
+            let symbol = controller.settings.effectiveCurrencySymbol
+            lines.append(report.billable
+                ? "\(hm(report.strandedSeconds)) of earlier confirmed time stays uninvoiced (\(symbol)) – flips apply to new time only; a catch-up invoice is a future feature."
+                : "\(hm(report.strandedSeconds)) of confirmed time was awaiting invoicing (\(symbol)) and will no longer post.")
+        }
+        return lines.joined(separator: "\n")
     }
 }

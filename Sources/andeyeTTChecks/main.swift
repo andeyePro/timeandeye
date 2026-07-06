@@ -99,6 +99,7 @@ let suites: [(String, (Checks) -> Void)] = [
     }),
     ("SQLiteSyncStamping", sqliteSyncStampingChecks),
     ("License", licenseChecks),
+    ("Billing", billingChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),
@@ -108,6 +109,7 @@ let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("OPClient", opClientChecks),
     ("SyncEngine", syncEngineChecks),
     ("SyncIdempotency", syncIdempotencyChecks),
+    ("MultiBackendSync", multiBackendSyncChecks),
     ("EndToEnd", endToEndChecks),
 ]
 

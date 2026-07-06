@@ -426,10 +426,11 @@ and recorded rather than fixed blind:
 
 ## Billable flag + multi-backend (2026-07-06)
 
-- [ ] Billable flag (andeyeTT) + multi-backend fan-out (postings ledger,
-  backend classes pm/finance, per-project routing) – spec at
-  docs/superpowers/specs/2026-07-06-billable-flag-multibackend.md. Awaits
-  Martin's review (6 front-loaded open questions) before any /vs build.
+- [x] Billable flag (andeyeTT) + multi-backend fan-out (postings ledger,
+  backend classes pm/finance) – spec at
+  docs/superpowers/specs/2026-07-06-billable-flag-multibackend.md.
+  BUILT 2026-07-06 as /vs task_002 (see that section below); per-project
+  finance routing stays a long-term item there.
 
 ## Approvals drawer (2026-07-06)
 
@@ -459,3 +460,27 @@ and recorded rather than fixed blind:
   2026-07-06 for the full breakdown; `swift run andeyeTTChecks` covers the
   pure logic (`forgettableWithout`) but none of the SwiftUI layout/animation
   claims — those need eyes on real hardware.
+
+## /vs task_002 – multi-backend + billable (2026-07-06)
+
+- [x] Build the multi-backend seam + billable flag per .vs/spec.md
+  (BUILT 2026-07-06, cycle 1; fuzzy mode – Reviewer verdict + Martin's
+  `swift run andeyeTTChecks` on the Mac pending). BackendRegistry +
+  pm/finance classes, per-(session, backend) posting ledger with one-time
+  single-slot migration, billable project Bool + task tri-state in
+  billing.json (stable project-id keys via the OP conformer's new href
+  capture), prospective-only flips with the stranded-hours alert, currency
+  symbol setting, `AppController.register(backend:id:class:)` seam,
+  Billing/MultiBackendSync check suites. See CHANGELOG 2026-07-06.
+- [ ] Long-term (billable): per-project finance-backend routing (which
+  Xero org invoices which project); catch-up "special invoice" for time
+  stranded by a billable flag-flip (warning ships in task_002; mechanism
+  later).
+- [ ] Ledger follow-ups (from the task_002 build): posting-ledger rows do
+  not yet join the CloudKit journal sync (single-pusher lease covers one
+  device today – a second device could re-post; wire ledger rows into the
+  2026-07-02 sync design before multi-device + backends coexist); timeline
+  edits PATCH/delete only the primary pm entry – a posted finance entry is
+  left as-is by later edits/deletes (prospective-only by design, but a
+  reconcile-style finance read-back tool would close the gap); journal
+  summary counts ("awaiting push") remain pm-centric.

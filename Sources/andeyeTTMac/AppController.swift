@@ -193,9 +193,15 @@ public final class AppController: ObservableObject {
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
     private let pinsStore: JSONFileStore<[Pin]>
     private let emailRulesStore: JSONFileStore<[EmailRule]>
-    /// The connected task backend (OpenProject today; Xero next). nil =
-    /// standalone / unconfigured — nothing syncs, everything tracks locally.
-    private var backend: (any TaskBackend)?
+    private let billingStore: JSONFileStore<BillableRules>
+    /// All registered backends (the community build registers at most the
+    /// one pm OpenProject entry; andeyePro adds its connectors through
+    /// `register(backend:id:class:)`). Empty = standalone — nothing syncs,
+    /// everything tracks locally.
+    private let registry = BackendRegistry()
+    /// The primary pm backend — what the single-backend surfaces (task list,
+    /// timeline PATCH/DELETE, "Open in <backend>") talk to. nil = standalone.
+    private var backend: (any TaskBackend)? { registry.primaryPM?.backend }
     private var titleTimer: Timer?
     private var taskRefreshTimer: Timer?
     /// System-wide ⌘⇧L "Away" toggle (Carbon RegisterEventHotKey). The
@@ -242,11 +248,20 @@ public final class AppController: ObservableObject {
         primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
         pinsStore = JSONFileStore<[Pin]>(url: dir.appendingPathComponent("pins.json"))
         emailRulesStore = JSONFileStore<[EmailRule]>(url: dir.appendingPathComponent("emailrules.json"))
+        billingStore = JSONFileStore<BillableRules>(url: dir.appendingPathComponent("billing.json"))
+        billing = (try? billingStore.load().flatMap { $0 }) ?? BillableRules()
         let loadedSettings = (try? settingsStore.load().flatMap { $0 })
             ?? AndeyeSettings(opBaseURL: "")
         settings = loadedSettings
         journal = (try? SQLiteJournalStore(path: dir.appendingPathComponent("journal.sqlite").path))
             ?? InMemoryJournalStore()
+        // One-time single-slot → posting-ledger upgrade: every historical
+        // pushedToOP row becomes a posted ledger row against the built-in OP
+        // id, so the ledger-driven sync can never re-post (double-post) what
+        // the old code already pushed. Idempotent per row; the live-checkpoint
+        // sentinel is excluded (its pushed flag is a sentinel, not a post).
+        try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
+                                               excluding: [Self.liveCheckpointID])
 
         let host = URL(string: loadedSettings.opBaseURL)?.host ?? ""
         let learning = (try? learningStore.load().flatMap { $0 }) ?? LearningStore()
@@ -621,7 +636,7 @@ public final class AppController: ObservableObject {
     /// Every dead-end here reports WHY via lastError — silent guards cost a
     /// debugging round-trip on 2026-06-11.
     private func rebuildClient() {
-        backend = nil
+        registry.remove(id: OPBackend.stableID)
         connectedAs = nil
         let raw = settings.opBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         attributor.instanceHost = URL(string: raw)?.host ?? ""
@@ -648,9 +663,39 @@ public final class AppController: ObservableObject {
         }
         let op = OPBackend(baseURL: url, apiKey: key, transport: URLSessionTransport())
         op.onDebug = { DebugLog.write("backend: \($0)") }
-        backend = op
+        registry.register(op, id: OPBackend.stableID, class: .pm)
         attributor.customRecognizer = op.pageRecognizer
         lastError = nil
+    }
+
+    // MARK: - Multi-backend registry (THE andeyePro seam)
+
+    /// Register an additional backend for the sync fan-out. THIS is the
+    /// integration point the andeyePro repo calls to wire its paid connectors
+    /// (XeroBackend etc.) — keep the call shape stable.
+    ///
+    /// - `backend`: any TaskBackend conformer; this package never needs to
+    ///   know the product behind it.
+    /// - `id`: a STABLE identity for this connection, unchanged across
+    ///   launches — it keys the per-(session, backend) posting ledger, so a
+    ///   changed id would re-post history. Mint one at connect time and
+    ///   persist it with the connection's own settings.
+    /// - `class`: routing role. `.pm` receives all confirmed time it
+    ///   `owns()`; `.finance` receives ONLY effectively-billable time
+    ///   (bypassing `owns()`), and never sees non-billable projects or
+    ///   personal tasks. Registering the same id again replaces the entry
+    ///   (reconnects are idempotent).
+    public func register(backend: any TaskBackend, id: String,
+                         class backendClass: BackendClass) {
+        registry.register(backend, id: id, class: backendClass)
+        Task { await syncIfEnabled() }
+    }
+
+    /// Remove a registered backend. Its ledger rows stay (history of what was
+    /// posted where is never destroyed); re-registering the same id resumes
+    /// exactly where it left off.
+    public func unregister(backendID: String) {
+        registry.remove(id: backendID)
     }
 
     // MARK: - Away ("I'm leaving my desk") and scheduled stop
@@ -1268,6 +1313,28 @@ public final class AppController: ObservableObject {
 
     public static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
 
+    // MARK: - Posting-ledger mirrors of the legacy pushed flags
+    //
+    // The edit paths below reset `pushedToOP`/`opTimeEntryID` so a slice
+    // re-enters the push queue (or record that it is handled). Eligibility is
+    // now ledger-driven, so each of those resets must move the PRIMARY PM
+    // ledger row the same way — and ONLY that row: a finance backend's posted
+    // entry is never deleted by a timeline edit (prospective-only), so
+    // clearing its row would re-post a duplicate.
+
+    /// The primary pm row is gone: the session re-enters the pm queue.
+    private func clearPrimaryPosting(_ id: UUID) {
+        try? journal.clearPostingRecord(session: id, backendID: OPBackend.stableID)
+    }
+
+    /// The primary pm backend holds `entryID` for this session (a PATCH-in-
+    /// place or reconcile re-point): record it so sync never re-creates it.
+    private func setPrimaryPosted(_ id: UUID, entryID: RemoteEntryID?) {
+        try? journal.setPostingRecord(PostingRecord(
+            sessionID: id, backendID: OPBackend.stableID,
+            state: .posted, entryID: entryID))
+    }
+
     /// One reusable ISO-8601 formatter for OP pushes — it was allocated per
     /// push in several paths (allocating a formatter is not cheap).
 
@@ -1317,6 +1384,7 @@ public final class AppController: ObservableObject {
             if var s = try? journal.session(id: sid) {
                 s.opTimeEntryID = action.survivorID
                 try? journal.update(s)
+                setPrimaryPosted(sid, entryID: action.survivorID)   // ledger follows
             }
         }
         updateJournalSummary()
@@ -1730,6 +1798,7 @@ public final class AppController: ObservableObject {
             }
             session.opTimeEntryID = nil
             session.pushedToOP = false
+            clearPrimaryPosting(session.id)   // re-enter the pm queue
             teachAssociation(for: session)
         }
         // A sub-minute session was marked handled without an OP entry; if an
@@ -1737,6 +1806,7 @@ public final class AppController: ObservableObject {
         if session.pushedToOP, session.opTimeEntryID == nil,
            session.end.timeIntervalSince(session.start) >= 60 {
             session.pushedToOP = false
+            clearPrimaryPosting(session.id)   // drop the skipped ledger row too
         }
         try? journal.update(session)
         try? journal.escalateOrigin(session.id, to: .edited)
@@ -1798,6 +1868,9 @@ public final class AppController: ObservableObject {
             }
         }
         try? journal.deleteSession(session.id)
+        // The pm entry is deleted below, so the pm row must go too (an undo
+        // restore re-pushes). Finance rows stay: their entries are untouched.
+        clearPrimaryPosting(session.id)
         if let entryID = session.opTimeEntryID, let backend {
             try? await backend.deleteTimeEntry(id: entryID)
         }
@@ -1827,6 +1900,7 @@ public final class AppController: ObservableObject {
             session.task = task
             session.opTimeEntryID = nil
             session.pushedToOP = false
+            clearPrimaryPosting(session.id)   // recreate under the new task
             try? journal.update(session)
             try? journal.escalateOrigin(session.id, to: .edited)
             teachAssociation(for: session)   // stop the same window mis-filing again
@@ -1899,6 +1973,7 @@ public final class AppController: ObservableObject {
         let survivors = Set(merged.map(\.id))
         for o in original where !survivors.contains(o.id) {
             try? journal.deleteSession(o.id)
+            clearPrimaryPosting(o.id)   // absorbed: its pm entry is deleted below
             if let e = o.opTimeEntryID, let backend { try? await backend.deleteTimeEntry(id: e) }
         }
         for m in merged where original.first(where: { $0.id == m.id }) != m {
@@ -1918,11 +1993,13 @@ public final class AppController: ObservableObject {
                         activityID: settings.activityOverrides[survivor.task] ?? settings.defaultActivityID,
                         comment: survivor.comment)
                     survivor.pushedToOP = true   // updated in place; don't re-create
+                    setPrimaryPosted(survivor.id, entryID: entryID)
                     DebugLog.write("coalesce patched backend entry \(entryID)")
                 } catch {
                     // Keep it handled rather than risk a duplicate; the stale
                     // entry can be re-synced by a later edit.
                     survivor.pushedToOP = true
+                    setPrimaryPosted(survivor.id, entryID: entryID)
                     lastError = "\(backend.displayName) merge-update failed: \(error)"
                 }
             }
@@ -2116,6 +2193,7 @@ public final class AppController: ObservableObject {
                 return task
             }
             applyJournalRecency()   // durable recency, not just this session's
+            migrateTitleKeyedBilling()   // ids now known: move title-keyed flags
 
             if activities.isEmpty, backend.supportsActivities {
                 activities = (try? await backend.fetchActivities()) ?? []
@@ -2130,32 +2208,193 @@ public final class AppController: ObservableObject {
     }
 
     public func syncIfEnabled() async {
-        guard let backend else { return }
+        guard !registry.isEmpty else { return }
         // Non-reentrant: if a push is already in flight, just ask it to run once
         // more when it finishes (a concurrent run would re-POST the same session
         // across its network await — duplicate backend entries).
         if syncing { syncRequested = true; return }
         syncing = true
         defer { syncing = false }
-        let engine = SyncEngine(journal: journal, backend: backend)
+        let engine = SyncEngine(journal: journal, backends: registry.entries)
+        engine.excludedSessionIDs = [Self.liveCheckpointID]
         engine.onDebug = { DebugLog.write("sync: \($0)") }
         repeat {
             syncRequested = false
-            do {
-                let pushed = try await engine.pushEligible(
-                    threshold: settings.certaintyAutoPushThreshold,
-                    defaultActivityID: settings.defaultActivityID,   // nil = OP's default
-                    activityOverrides: settings.activityOverrides,
-                    includeComments: settings.autoComment)
-                if pushed > 0 { DebugLog.write("pushed \(pushed) entries to \(backend.displayName)") }
-                if let op = backend as? OPBackend, !op.startTimesSupported {
-                    lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
-                }
-            } catch {
-                lastError = "\(backend.displayName) push failed: \(error)"
+            // Snapshot billability into VALUES before the off-main awaits: the
+            // engine resumes off the main actor, so the closure must not read
+            // live controller state.
+            let rules = billing
+            let projectKeys = projectKeyByTask()
+            let reports = await engine.pushEligible(
+                threshold: settings.certaintyAutoPushThreshold,
+                defaultActivityID: settings.defaultActivityID,   // nil = OP's default
+                activityOverrides: settings.activityOverrides,
+                includeComments: settings.autoComment,
+                financeEligible: { session in
+                    rules.financeEligible(task: session.task,
+                                          projectKey: projectKeys[session.task],
+                                          sessionStart: session.start)
+                })
+            for report in reports where report.posted > 0 {
+                let name = registry.entry(id: report.backendID)?.backend.displayName
+                    ?? report.backendID
+                DebugLog.write("pushed \(report.posted) entries to \(name)")
+            }
+            if let op = backend as? OPBackend, !op.startTimesSupported {
+                lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"
+            }
+            if let failing = reports.first(where: { $0.error != nil }), let error = failing.error {
+                let name = registry.entry(id: failing.backendID)?.backend.displayName
+                    ?? failing.backendID
+                lastError = "\(name) push failed: \(error)"
             }
         } while syncRequested
         updateJournalSummary()
+    }
+
+    // MARK: - Billable flags (project Bool, task tri-state)
+
+    /// The user's billable rules — its own user-ownable file (billing.json),
+    /// keyed by stable backend-scoped project ids. Default non-billable.
+    @Published public private(set) var billing: BillableRules
+
+    private func saveBilling() {
+        try? billingStore.save(billing)
+    }
+
+    /// Stable project key for a task's containing project (see BillableRules
+    /// key builders): id-based when the backend project id was captured,
+    /// title-based fallback until the next task refresh migrates it, name-
+    /// based for local projects. nil when the task has no project at all.
+    public func projectKey(for task: WorkTask) -> String? {
+        if case .local = task.ref {
+            return BillableRules.localProjectKey(task.project ?? "Personal")
+        }
+        let owner = registry.entries.first { $0.backend.owns(task.ref) }?.id
+            ?? OPBackend.stableID
+        if let projectID = task.projectID {
+            return BillableRules.projectKey(backendID: owner, projectID: projectID)
+        }
+        guard let title = task.project else { return nil }
+        return BillableRules.titleProjectKey(backendID: owner, title: title)
+    }
+
+    /// Snapshot of every cached task's project key, for the sync closure.
+    private func projectKeyByTask() -> [TaskRef: String] {
+        Dictionary(uniqueKeysWithValues: taskCache.compactMap { task in
+            projectKey(for: task).map { (task.ref, $0) }
+        })
+    }
+
+    /// The cached tasks belonging to a project as DISPLAYED (the pie/legend
+    /// label) — the cascade's membership and the flip's stranded-time scope.
+    public func tasksInProject(named name: String) -> [WorkTask] {
+        taskCache.filter { $0.project == name }
+    }
+
+    public func isProjectBillable(named name: String) -> Bool {
+        guard let first = tasksInProject(named: name).first else { return false }
+        return billing.projectBillable(projectKey(for: first))
+    }
+
+    public func taskBillableState(_ ref: TaskRef) -> BillableState {
+        billing.taskState(ref)
+    }
+
+    /// Effective billability of one task (override else project else
+    /// non-billable) — drives the UI's checkmarks.
+    public func isTaskBillable(_ task: WorkTask) -> Bool {
+        billing.effectiveBillable(task: task.ref, projectKey: projectKey(for: task))
+    }
+
+    /// Flip a project's billable flag. Cascades to INHERITING tasks only
+    /// (inheritance is resolved at read time, so no task rows are touched);
+    /// the report carries the manually-set tasks left behind and the
+    /// confirmed hours the flip strands uninvoiced — the UI alert's data.
+    /// Undoable. Returns nil when the project has no cached tasks to key on.
+    @discardableResult
+    public func setProjectBillable(named name: String, billable: Bool) -> BillableFlipReport? {
+        let members = tasksInProject(named: name)
+        guard let first = members.first, let key = projectKey(for: first) else { return nil }
+        guard billing.projectBillable(key) != billable else { return nil }
+        let report = BillableFlipReport(
+            name: name, billable: billable,
+            leftBehind: billing.manuallySetTasks(in: members),
+            strandedSeconds: strandedFinanceSeconds(tasks: Set(members.map(\.ref))))
+        let previous = billing
+        registerUndo("mark \(name) \(billable ? "billable" : "non-billable")") { [weak self] in
+            self?.billing = previous
+            self?.saveBilling()
+        }
+        billing.setProject(key, billable: billable)
+        saveBilling()
+        Task { await syncIfEnabled() }   // prospective: new time follows the new flag
+        return report
+    }
+
+    /// Set one task's tri-state override (`.inherit` clears it). Undoable;
+    /// the report warns about stranded time exactly like a project flip.
+    @discardableResult
+    public func setTaskBillable(_ task: WorkTask, state: BillableState) -> BillableFlipReport? {
+        guard billing.taskState(task.ref) != state else { return nil }
+        let becomesBillable = state == .billable
+            || (state == .inherit && billing.projectBillable(projectKey(for: task)))
+        let report = BillableFlipReport(
+            name: task.subject, billable: becomesBillable, leftBehind: [],
+            strandedSeconds: strandedFinanceSeconds(tasks: [task.ref]))
+        let previous = billing
+        registerUndo("billable setting \(task.subject)") { [weak self] in
+            self?.billing = previous
+            self?.saveBilling()
+        }
+        billing.setTask(task.ref, state: state)
+        saveBilling()
+        Task { await syncIfEnabled() }
+        return report
+    }
+
+    /// Confirmed, uninvoiced seconds on `tasks`: what a billability flip
+    /// strands (billable→off stops these posting; off→billable leaves them
+    /// behind the prospective-only gate). "Uninvoiced" = no `.posted` ledger
+    /// row against any finance-class backend — with none registered (the
+    /// community build), everything unposted counts, which is exactly the
+    /// history that will never invoice.
+    private func strandedFinanceSeconds(tasks: Set<TaskRef>) -> TimeInterval {
+        let sessions = ((try? journal.allSessions()) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        let financeIDs = Set(registry.entries(class: .finance).map(\.id))
+        var posted: Set<UUID> = []
+        if !financeIDs.isEmpty {
+            for session in sessions where tasks.contains(session.task) {
+                let rows = (try? journal.postingRecords(session: session.id)) ?? []
+                if rows.contains(where: { financeIDs.contains($0.backendID) && $0.state == .posted }) {
+                    posted.insert(session.id)
+                }
+            }
+        }
+        return Billing.strandedSeconds(sessions: sessions, tasks: tasks,
+                                       threshold: settings.certaintyAutoPushThreshold,
+                                       postedSessionIDs: posted)
+    }
+
+    /// One-time title-key → id-key billing migration: once a task refresh has
+    /// captured project ids, any flag still keyed by title moves to the id
+    /// key (so subsequent renames keep it). Idempotent; runs after every
+    /// refresh, doing nothing once no title keys remain.
+    private func migrateTitleKeyedBilling() {
+        var mapping: [String: String] = [:]
+        for task in taskCache {
+            guard !task.isLocalOnly, let projectID = task.projectID,
+                  let title = task.project else { continue }
+            let owner = registry.entries.first { $0.backend.owns(task.ref) }?.id
+                ?? OPBackend.stableID
+            let titleKey = BillableRules.titleProjectKey(backendID: owner, title: title)
+            guard billing.projects[titleKey] != nil else { continue }
+            mapping[titleKey] = BillableRules.projectKey(backendID: owner, projectID: projectID)
+        }
+        guard !mapping.isEmpty else { return }
+        billing.migrateProjectKeys(mapping)
+        saveBilling()
     }
 }
 

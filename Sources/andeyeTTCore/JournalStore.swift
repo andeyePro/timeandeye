@@ -19,10 +19,45 @@ public protocol JournalStore {
     /// checkpoint row) — the durable-recency feed. An aggregate query, so it
     /// must never decode the whole table.
     func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date]
-    /// Sessions eligible for backend push: certainty >= threshold, not yet
-    /// pushed, and on a remote (.op / .remote) task (local-only never push).
+    /// LEGACY single-slot eligibility: certainty >= threshold, `pushedToOP`
+    /// false, and on a remote (.op / .remote) task. Retained for the journal
+    /// summary and behaviour-frozen checks; posting SELECTION now runs on the
+    /// per-backend ledger (`sessions(needingPostTo:atOrAbove:)`).
     func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session]
+    /// LEGACY single-slot mark, now the primary-pm MIRROR of a ledger row —
+    /// it keeps `Session.pushedToOP`/`opTimeEntryID` (which timeline PATCH /
+    /// delete / summary read) in step with the ledger.
     func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws
+
+    // MARK: Posting ledger (per-session, per-backend)
+
+    /// Every ledger row for a session, any backend. A backend with no row is
+    /// `.pending` by definition.
+    func postingRecords(session: UUID) throws -> [PostingRecord]
+    /// One (session, backend) row; nil = never attempted (`.pending`).
+    func postingRecord(session: UUID, backendID: String) throws -> PostingRecord?
+    /// Upsert keyed by (sessionID, backendID) — the idempotency key. A retry
+    /// can only ever update its own row.
+    func setPostingRecord(_ record: PostingRecord) throws
+    /// Remove one (session, backend) row so the session re-enters that
+    /// backend's queue — the ledger analogue of resetting `pushedToOP` after
+    /// a timeline delete/reassign.
+    func clearPostingRecord(session: UUID, backendID: String) throws
+    /// Sessions eligible to post to ONE backend: certainty >= threshold, on a
+    /// remote task (personal `.local` tasks never appear for ANY backend),
+    /// and without a terminal (`posted`/`skipped`) row for `backendID`.
+    /// `failed` rows are retryable and DO appear. Ledger keys are
+    /// per-backend, so one backend's posted rows never hide a session from
+    /// another backend.
+    func sessions(needingPostTo backendID: String, atOrAbove threshold: Double) throws -> [Session]
+    /// ONE-TIME upgrade from the single-slot fields: every `pushedToOP`
+    /// session (minus `excluding`, e.g. the live-checkpoint sentinel) gains a
+    /// `.posted` row against `backendID` carrying its `opTimeEntryID`, so the
+    /// ledger-driven sync can never re-post history the old code already
+    /// pushed. Idempotent per row (existing rows are never touched); returns
+    /// how many rows were written.
+    @discardableResult
+    func migrateSingleSlotPostings(to backendID: String, excluding: Set<UUID>) throws -> Int
     /// Timeline edits: replace the stored session (matched by id).
     func update(_ session: Session) throws
     func deleteSession(_ id: UUID) throws
@@ -54,6 +89,12 @@ public final class InMemoryJournalStore: JournalStore {
     private var segments: [ReviewSegment] = []
     private var allSpans: [FocusSpan] = []
     private var comments: [String: [(date: Date, text: String)]] = [:]
+    /// Posting ledger keyed "sessionID|backendID" — the idempotency key.
+    private var ledger: [String: PostingRecord] = [:]
+
+    private func ledgerKey(_ session: UUID, _ backendID: String) -> String {
+        "\(session.uuidString)|\(backendID)"
+    }
 
     public init() {}
 
@@ -100,6 +141,51 @@ public final class InMemoryJournalStore: JournalStore {
         guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[i].pushedToOP = true
         sessions[i].opTimeEntryID = opTimeEntryID
+    }
+
+    // MARK: Posting ledger
+
+    public func postingRecords(session: UUID) throws -> [PostingRecord] {
+        ledger.values.filter { $0.sessionID == session }
+            .sorted { $0.backendID < $1.backendID }
+    }
+
+    public func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
+        ledger[ledgerKey(session, backendID)]
+    }
+
+    public func setPostingRecord(_ record: PostingRecord) throws {
+        ledger[ledgerKey(record.sessionID, record.backendID)] = record
+    }
+
+    public func clearPostingRecord(session: UUID, backendID: String) throws {
+        ledger[ledgerKey(session, backendID)] = nil
+    }
+
+    public func sessions(needingPostTo backendID: String,
+                         atOrAbove threshold: Double) throws -> [Session] {
+        sessions.filter { session in
+            guard session.task.isRemote, session.certainty >= threshold else { return false }
+            switch ledger[ledgerKey(session.id, backendID)]?.state {
+            case .posted, .skipped: return false      // terminal for this backend
+            case .failed, .pending, nil: return true  // retryable / untried
+            }
+        }
+        .sorted { $0.start < $1.start }
+    }
+
+    public func migrateSingleSlotPostings(to backendID: String,
+                                          excluding: Set<UUID>) throws -> Int {
+        var migrated = 0
+        for session in sessions
+        where session.pushedToOP && session.task.isRemote && !excluding.contains(session.id) {
+            let key = ledgerKey(session.id, backendID)
+            guard ledger[key] == nil else { continue }
+            ledger[key] = PostingRecord(sessionID: session.id, backendID: backendID,
+                                        state: .posted, entryID: session.opTimeEntryID)
+            migrated += 1
+        }
+        return migrated
     }
 
     public func update(_ session: Session) throws {

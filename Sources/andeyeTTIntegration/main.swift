@@ -141,9 +141,12 @@ func run() async throws {
     // 4. Real push.
     let backend = OPBackend(baseURL: baseURL, apiKey: apiKey, transport: URLSessionTransport())
     backend.onDebug = { print("BACKEND DEBUG: \($0)") }
-    let engine = SyncEngine(journal: journal, backend: backend)
+    let engine = SyncEngine(journal: journal, backend: backend,
+                            id: OPBackend.stableID, class: .pm)
     engine.onDebug = { print("SYNC DEBUG: \($0)") }
-    let pushed = try await engine.pushEligible(threshold: 0.8, includeComments: true)
+    let reports = await engine.pushEligible(threshold: 0.8, includeComments: true)
+    if let error = reports.first?.error { fail("push failed: \(error)") }
+    let pushed = reports.first?.posted ?? 0
     guard pushed == 1 else { fail("expected 1 pushed entry, got \(pushed)") }
     guard backend.startTimesSupported else { fail("instance rejected startTime") }
 

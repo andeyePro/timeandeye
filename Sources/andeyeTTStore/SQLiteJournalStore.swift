@@ -83,6 +83,25 @@ public final class SQLiteJournalStore: JournalStore {
         );
         CREATE INDEX IF NOT EXISTS task_comments_key ON task_comments(task_key, created)
         """)
+        // Per-(session, backend) posting ledger — replaces the single
+        // pushed/opTimeEntryID slot as the source of truth for what was
+        // posted where. The composite primary key IS the idempotency key.
+        // The legacy `pushed` column stays as the primary-pm mirror (see
+        // JournalStore.markPushed) so existing summary/PATCH surfaces and the
+        // frozen wire shape are untouched.
+        try exec("""
+        CREATE TABLE IF NOT EXISTS posting_ledger (
+            session_id TEXT NOT NULL,
+            backend_id TEXT NOT NULL,
+            state TEXT NOT NULL,
+            entry_id TEXT,
+            last_error TEXT,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            updated REAL NOT NULL,
+            PRIMARY KEY (session_id, backend_id)
+        );
+        CREATE INDEX IF NOT EXISTS posting_ledger_backend ON posting_ledger(backend_id, state)
+        """)
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
@@ -285,6 +304,157 @@ public final class SQLiteJournalStore: JournalStore {
             session.pushedToOP = true
             session.opTimeEntryID = opTimeEntryID
             try save(session)
+        }
+    }
+
+    // MARK: - Posting ledger
+
+    /// Decode one ledger row from a `SELECT session_id, backend_id, state,
+    /// entry_id, last_error, attempts, updated` statement. An unknown future
+    /// state string reads as `.posted` — the never-double-post direction.
+    private func postingRow(_ stmt: OpaquePointer?) -> PostingRecord? {
+        guard let idText = sqlite3_column_text(stmt, 0),
+              let sessionID = UUID(uuidString: String(cString: idText)),
+              let backendText = sqlite3_column_text(stmt, 1) else { return nil }
+        let stateRaw = sqlite3_column_text(stmt, 2).map { String(cString: $0) } ?? ""
+        return PostingRecord(
+            sessionID: sessionID,
+            backendID: String(cString: backendText),
+            state: PostingState(rawValue: stateRaw) ?? .posted,
+            entryID: sqlite3_column_text(stmt, 3).map { String(cString: $0) },
+            lastError: sqlite3_column_text(stmt, 4).map { String(cString: $0) },
+            attempts: Int(sqlite3_column_int(stmt, 5)),
+            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 6)))
+    }
+
+    private static let postingColumns =
+        "session_id, backend_id, state, entry_id, last_error, attempts, updated"
+
+    public func postingRecords(session: UUID) throws -> [PostingRecord] {
+        var out: [PostingRecord] = []
+        try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE session_id = ? ORDER BY backend_id",
+                  bind: { sqlite3_bind_text($0, 1, session.uuidString, -1, Self.transient) }) { stmt in
+            if let record = self.postingRow(stmt) { out.append(record) }
+        }
+        return out
+    }
+
+    public func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
+        var out: [PostingRecord] = []
+        try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE session_id = ? AND backend_id = ?",
+                  bind: {
+                      sqlite3_bind_text($0, 1, session.uuidString, -1, Self.transient)
+                      sqlite3_bind_text($0, 2, backendID, -1, Self.transient)
+                  }) { stmt in
+            if let record = self.postingRow(stmt) { out.append(record) }
+        }
+        return out.first
+    }
+
+    public func setPostingRecord(_ record: PostingRecord) throws {
+        try locked {
+            var stmt: OpaquePointer?
+            let sql = """
+            INSERT OR REPLACE INTO posting_ledger
+                (session_id, backend_id, state, entry_id, last_error, attempts, updated)
+            VALUES (?,?,?,?,?,?,?)
+            """
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, record.sessionID.uuidString, -1, Self.transient)
+            sqlite3_bind_text(stmt, 2, record.backendID, -1, Self.transient)
+            sqlite3_bind_text(stmt, 3, record.state.rawValue, -1, Self.transient)
+            if let entryID = record.entryID {
+                sqlite3_bind_text(stmt, 4, entryID, -1, Self.transient)
+            } else {
+                sqlite3_bind_null(stmt, 4)
+            }
+            if let lastError = record.lastError {
+                sqlite3_bind_text(stmt, 5, lastError, -1, Self.transient)
+            } else {
+                sqlite3_bind_null(stmt, 5)
+            }
+            sqlite3_bind_int(stmt, 6, Int32(record.attempts))
+            sqlite3_bind_double(stmt, 7, record.updatedAt.timeIntervalSince1970)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+        }
+    }
+
+    public func clearPostingRecord(session: UUID, backendID: String) throws {
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                db, "DELETE FROM posting_ledger WHERE session_id = ? AND backend_id = ?",
+                -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, session.uuidString, -1, Self.transient)
+            sqlite3_bind_text(stmt, 2, backendID, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+        }
+    }
+
+    public func sessions(needingPostTo backendID: String,
+                         atOrAbove threshold: Double) throws -> [Session] {
+        // NOT EXISTS on the terminal states only: failed rows retry, and a
+        // row for ANOTHER backend never hides the session from this one —
+        // the per-backend key is what lets one session be posted to OP and
+        // pending to a finance backend at the same time. The legacy `pushed`
+        // column is deliberately ignored here (migrated rows carry ledger
+        // rows instead).
+        var out: [Session] = []
+        try query("""
+            SELECT json FROM sessions s
+            WHERE s.is_op = 1 AND s.deleted = 0 AND s.certainty >= ?
+              AND NOT EXISTS (SELECT 1 FROM posting_ledger l
+                              WHERE l.session_id = s.id AND l.backend_id = ?
+                                AND l.state IN ('posted','skipped'))
+            ORDER BY s.start
+            """,
+                  bind: {
+                      sqlite3_bind_double($0, 1, threshold)
+                      sqlite3_bind_text($0, 2, backendID, -1, Self.transient)
+                  }) { stmt in
+            out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
+        }
+        return out
+    }
+
+    public func migrateSingleSlotPostings(to backendID: String,
+                                          excluding: Set<UUID>) throws -> Int {
+        try locked {
+            // Tombstoned rows are included: a resurrected (synced-back) slice
+            // must still know it was posted, or the next pass double-posts.
+            let notIn = excluding.isEmpty ? "" : " AND s.id NOT IN ("
+                + excluding.map { "'\($0.uuidString)'" }.joined(separator: ",") + ")"
+            var stmt: OpaquePointer?
+            let sql = """
+            INSERT INTO posting_ledger
+                (session_id, backend_id, state, entry_id, last_error, attempts, updated)
+            SELECT s.id, ?, 'posted', json_extract(s.json, '$.opTimeEntryID'), NULL, 0, ?
+            FROM sessions s
+            WHERE s.pushed = 1 AND s.is_op = 1\(notIn)
+              AND NOT EXISTS (SELECT 1 FROM posting_ledger l
+                              WHERE l.session_id = s.id AND l.backend_id = ?)
+            """
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, backendID, -1, Self.transient)
+            sqlite3_bind_double(stmt, 2, Date().timeIntervalSince1970)
+            sqlite3_bind_text(stmt, 3, backendID, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            return Int(sqlite3_changes(db))
         }
     }
 

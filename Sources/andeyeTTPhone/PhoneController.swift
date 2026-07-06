@@ -46,6 +46,10 @@ public final class PhoneController: ObservableObject {
             ?? AndeyeSettings(opBaseURL: "")
         journal = (try? SQLiteJournalStore(path: dir.appendingPathComponent("journal.sqlite").path))
             ?? InMemoryJournalStore()
+        // Same one-time single-slot → posting-ledger upgrade as the Mac (this
+        // journal pushed with the same legacy fields); idempotent per row.
+        try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
+                                               excluding: [Self.liveCheckpointID])
         restoreLiveSlice()
         mergeLocalTasks()
         rebuildBackend()
@@ -187,8 +191,10 @@ public final class PhoneController: ObservableObject {
 
     private func pushIfEligible() async {
         guard let backend else { return }
-        let engine = SyncEngine(journal: journal, backend: backend)
-        _ = try? await engine.pushEligible(
+        let engine = SyncEngine(journal: journal, backend: backend,
+                                id: OPBackend.stableID, class: .pm)
+        engine.excludedSessionIDs = [Self.liveCheckpointID]
+        _ = await engine.pushEligible(
             threshold: settings.certaintyAutoPushThreshold,
             defaultActivityID: settings.defaultActivityID,
             activityOverrides: settings.activityOverrides,

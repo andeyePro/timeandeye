@@ -75,13 +75,29 @@ public final class OPClient {
     private struct WPElement: Decodable {
         struct Links: Decodable {
             struct Titled: Decodable { let title: String? }
+            /// Title plus href: the project link's href carries the STABLE
+            /// project id ("/api/v3/projects/14"), which the billable flag
+            /// map keys on — titles are rename-fragile.
+            struct TitledLink: Decodable {
+                let title: String?
+                let href: String?
+            }
             let status: Titled?
-            let project: Titled?
+            let project: TitledLink?
             let assignee: Titled?
         }
         let id: Int
         let subject: String
         let _links: Links
+    }
+
+    /// The trailing numeric id of a project href ("/api/v3/projects/14" →
+    /// "14"); nil when absent or non-numeric (never guess an identity).
+    static func projectID(fromHref href: String?) -> String? {
+        guard let last = href?.split(separator: "/").last, Int(last) != nil else {
+            return nil
+        }
+        return String(last)
     }
 
     /// Pages through ALL work packages visible to the API key — including
@@ -102,6 +118,7 @@ public final class OPClient {
             tasks += decoded._embedded.elements.map {
                 WorkTask(ref: .op($0.id), subject: $0.subject,
                          project: $0._links.project?.title,
+                         projectID: Self.projectID(fromHref: $0._links.project?.href),
                          status: $0._links.status?.title ?? "Unknown",
                          assignee: $0._links.assignee?.title)
             }
