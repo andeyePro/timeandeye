@@ -438,3 +438,12 @@ and recorded rather than fixed blind:
   aging-to-archive, time-shaped badge) – spec at
   docs/superpowers/specs/2026-07-06-approvals-drawer.md. Awaits Martin's
   answers to the 6 front-loaded open questions before any /vs build.
+
+## Colour strategy (2026-07-06)
+
+- [ ] Colour strategy – stable project/task/window colours (max-distinct
+  project hues, in-spectrum task shades, inherit/fixed with "i" swatch
+  marker, click-swatch editing, colours.json store, Life period with
+  All/Tracked/Untracked) – spec at
+  docs/superpowers/specs/2026-07-06-colour-strategy.md. Awaits Martin's
+  review (7 front-loaded open questions) before any /vs build.
