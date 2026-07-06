@@ -71,7 +71,24 @@ narrative`. Both commit in the SAME commit as the code they describe.
 ## Elsewhere in the repo
 
 - `site/` – the Astro + Starlight product website (Cloudflare Pages); the
-  user manual is published there at `/manual`, sourced from `MANUAL.md`.
+  user manual is published there at `/manual`. `site/src/content/docs/manual/`
+  is the hand-maintained source for those pages – it was seeded by splitting
+  root `MANUAL.md` once, but the two have since diverged and there is no
+  generator; edit the page under `site/` directly, and register new pages in
+  `site/astro.config.mjs`'s `sidebar`. `MANUAL.md` at the repo root is a
+  separate, README-linked doc for the same audience – keep both current when
+  you touch user-facing behaviour, but they are not kept in sync mechanically.
 - `docs/superpowers/specs/` – dated design specs; read the relevant one
   before a non-trivial feature change.
 - Licence/contributor terms: see `LICENSE`, `CLA.md`, `CONTRIBUTING.md`.
+
+## Manual standing rules
+
+The manual (both `site/src/content/docs/manual/` and root `MANUAL.md`) must
+keep up with the app, but never at the cost of user-friendliness –
+comprehensive but concise and clear beats exhaustive. Write for the fresh
+reader: it never explains why something changed from X to Y, never
+apologises for a past version, and never carries failure-mode history – that
+context belongs in commit messages, not user-facing docs. Illustrations are
+code-drawn (SVG/canvas), never screenshots, so UI polish doesn't invalidate
+them.

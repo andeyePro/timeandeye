@@ -30,3 +30,5 @@ repository's `README.md`.
 - [Data, sync and safety](/manual/data-sync-and-safety/) – where your data
   lives, what syncs, and crash safety.
 - [Keyboard](/manual/keyboard/) – every shortcut, by surface.
+- [Getting help](/manual/getting-help/) – reporting bugs and ideas on GitHub,
+  and the fast email channel for andeyePro subscribers.

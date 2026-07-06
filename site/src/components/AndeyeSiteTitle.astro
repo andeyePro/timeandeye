@@ -1,0 +1,273 @@
+---
+// Starlight SiteTitle override: the andeye mark, drawn on load and winking
+// occasionally, instead of a static logo image. Clicking it goes to `/`,
+// the one-page app where the same mark lives full-size.
+const MARK_H = 20;
+const ASPECT = 235.0 / 365.0; // SVG viewBox 365 x 235 – see the geometry below.
+const MARK_W = Math.round(MARK_H / ASPECT);
+---
+
+<a href="/" class="andeye-site-title sl-flex" aria-label="andeye – back to the andeye home page">
+	<canvas
+		id="andeye-site-title-mark"
+		style={`width:${MARK_W}px;height:${MARK_H}px;`}
+		width={MARK_W}
+		height={MARK_H}
+	></canvas>
+	<span translate="no">andeye manual</span>
+</a>
+
+<style>
+	@layer starlight.core {
+		.andeye-site-title {
+			align-items: center;
+			gap: var(--sl-nav-gap);
+			font-size: var(--sl-text-h4);
+			font-weight: 600;
+			color: var(--sl-color-text-accent);
+			text-decoration: none;
+			white-space: nowrap;
+			min-width: 0;
+		}
+		.andeye-site-title span {
+			overflow: hidden;
+		}
+		.andeye-site-title canvas {
+			display: block;
+			flex-shrink: 0;
+		}
+	}
+</style>
+
+<script is:inline>
+(function () {
+'use strict';
+
+var canvas = document.getElementById('andeye-site-title-mark');
+if (!canvas) return;
+var ctx = canvas.getContext('2d');
+
+// geometry is a verbatim port of Sources/andeyeTTCore/AndeyeLogo.swift via
+// index.astro – keep all three in sync
+
+// SVG viewBox is 365 x 235; everything normalises by the WIDTH, so the
+// mark lives in a box 1 wide and `aspect` tall (y up).
+var aspect = 235.0 / 365.0;
+
+// Stroke width from the SVG (17px on a 365-wide viewBox), as a fraction
+// of the box width.
+var strokeWidth = 17.0 / 365.0;
+
+// The SVG's group transform: translate(18.0915, 17.9436).
+var translate = { x: 18.0915, y: 17.9436 };
+
+// d="M145,157 C-95,-27 177,-2 59,76 C-37.95,140.08 54,236 122,137
+//    C205.86,14.91 311,137 311,137 C311,137 232,221 145,157 Z"
+// (Z is degenerate: the last cubic already returns to the M point.)
+// Each entry: [p0, c1, c2, p1] as {x, y}.
+function P(x, y) { return { x: x, y: y }; }
+var svgCubics = [
+  [P(145, 157), P(-95, -27), P(177, -2), P(59, 76)],
+  [P(59, 76), P(-37.95, 140.08), P(54, 236), P(122, 137)],
+  [P(122, 137), P(205.86, 14.91), P(311, 137), P(311, 137)],
+  [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
+];
+
+// SVG user space (y down) -> unit-width box (y up).
+function normalised(p) {
+  return P((p.x + translate.x) / 365.0,
+           (235.0 - (p.y + translate.y)) / 365.0);
+}
+
+// Closed-eye pose (SVG space): only the lid segments' control points move.
+// Endpoints (the eye's corners) and the whole left side stay fixed; the top
+// lid comes down a lot, the bottom lid rises a little, and at wink 1 both
+// lie along the same gentle smile arc (they render as one line).
+var topLidClosed = { c1: P(171.03, 187.18), c2: P(258.9, 178.05) };
+var bottomLidClosed = { c1: P(311, 141), c2: P(232, 196) };
+
+function clamp01(v) { return Math.min(Math.max(v, 0), 1); }
+
+// The complete mark at blink amount `wink` (0 open ... 1 shut): an eyelid
+// close, not a squash – mirrors AndeyeLogo.fullStroke(wink:).
+function fullStroke(wink) {
+  var w = clamp01(wink);
+  var lerp = function (a, b) { return P(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w); };
+  var svg = svgCubics.map(function (c) { return c.slice(); });
+  svg[2][1] = lerp(svg[2][1], topLidClosed.c1);
+  svg[2][2] = lerp(svg[2][2], topLidClosed.c2);
+  svg[3][1] = lerp(svg[3][1], bottomLidClosed.c1);
+  svg[3][2] = lerp(svg[3][2], bottomLidClosed.c2);
+  return svg.map(function (c) {
+    return { p0: normalised(c[0]), c1: normalised(c[1]), c2: normalised(c[2]), p1: normalised(c[3]) };
+  });
+}
+
+// The mark revealed by arc length from its M point.
+function stroke(rawT, rawWink) {
+  var t = clamp01(rawT);
+  var wink = clamp01(rawWink);
+  return revealed(fullStroke(wink), t);
+}
+
+function pointOn(c, u) {
+  var v = 1 - u;
+  var a = v * v * v, b = 3 * v * v * u, d = 3 * v * u * u, e = u * u * u;
+  return P(a * c.p0.x + b * c.c1.x + d * c.c2.x + e * c.p1.x,
+           a * c.p0.y + b * c.c1.y + d * c.c2.y + e * c.p1.y);
+}
+
+// Flattened (24-sample) arc length.
+function lengthOfCubic(c) {
+  var total = 0.0;
+  var prev = c.p0;
+  for (var i = 1; i <= 24; i++) {
+    var p = pointOn(c, i / 24);
+    total += Math.sqrt((p.x - prev.x) * (p.x - prev.x)
+      + (p.y - prev.y) * (p.y - prev.y));
+    prev = p;
+  }
+  return total;
+}
+
+function lengthOfSegs(segs) {
+  return segs.reduce(function (acc, s) { return acc + lengthOfCubic(s); }, 0);
+}
+
+// Leading part of `c` up to parameter `u` (de Casteljau split).
+function splitCubic(c, u) {
+  function lerp(a, b) {
+    return P(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u);
+  }
+  var q0 = lerp(c.p0, c.c1), q1 = lerp(c.c1, c.c2), q2 = lerp(c.c2, c.p1);
+  var r0 = lerp(q0, q1), r1 = lerp(q1, q2);
+  return { p0: c.p0, c1: q0, c2: r0, p1: lerp(r0, r1) };
+}
+
+// Parameter u whose leading arc length is `target` (sample-walked).
+function parameterForArcLength(target, c) {
+  if (!(target > 0)) return 0;
+  var acc = 0.0;
+  var prev = c.p0;
+  for (var i = 1; i <= 24; i++) {
+    var u = i / 24;
+    var p = pointOn(c, u);
+    var step = Math.sqrt((p.x - prev.x) * (p.x - prev.x)
+      + (p.y - prev.y) * (p.y - prev.y));
+    if (acc + step >= target) {
+      var inside = step > 0 ? (target - acc) / step : 0;
+      return u - (1 - inside) / 24;
+    }
+    acc += step;
+    prev = p;
+  }
+  return 1;
+}
+
+// First `fraction` of the path's total arc length, ending mid-segment
+// via a bezier split so the reveal front moves smoothly.
+function revealed(segs, fraction) {
+  if (!(fraction > 0)) return [];
+  if (!(fraction < 1)) return segs;
+  var target = fraction * lengthOfSegs(segs);
+  var out = [];
+  var acc = 0.0;
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    var l = lengthOfCubic(seg);
+    if (acc + l >= target) {
+      var u = parameterForArcLength(target - acc, seg);
+      if (u > 1e-6) out.push(splitCubic(seg, u));
+      return out;
+    }
+    out.push(seg);
+    acc += l;
+  }
+  return segs;
+}
+
+// Draws `segs` (unit-width box coords, y up) into ctx sized cssW x cssH,
+// exactly as the Mac drawing handler does: inset the rect by half the
+// stroke, uniform-fit the 1 x aspect box, round caps/joins.
+function drawMark(ctx, cssW, cssH, segs, colour) {
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (segs.length === 0) return;
+  var lineWidthForInset = cssW * strokeWidth;
+  var insetW = cssW - lineWidthForInset;
+  var insetH = cssH - lineWidthForInset;
+  var scale = Math.min(insetW, insetH / aspect);
+  var originX = cssW / 2 - scale / 2;               // inset.midX - scale/2
+  var originY = cssH / 2 - scale * aspect / 2;      // inset.midY - ... (y up)
+  // y-up -> canvas y-down: yCanvas = cssH - (originY + scale * p.y)
+  function atX(p) { return originX + scale * p.x; }
+  function atY(p) { return cssH - (originY + scale * p.y); }
+  ctx.beginPath();
+  ctx.moveTo(atX(segs[0].p0), atY(segs[0].p0));
+  for (var i = 0; i < segs.length; i++) {
+    var seg = segs[i];
+    ctx.bezierCurveTo(atX(seg.c1), atY(seg.c1),
+                      atX(seg.c2), atY(seg.c2),
+                      atX(seg.p1), atY(seg.p1));
+  }
+  ctx.lineWidth = scale * strokeWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = colour;
+  ctx.stroke();
+}
+
+var ACCENT = '#f0a13a'; // brand orange – reads on both Starlight themes
+
+var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var dpr = Math.max(window.devicePixelRatio || 1, 1);
+
+var cssW = canvas.clientWidth || parseInt(canvas.style.width, 10) || Math.round(20 / aspect);
+var cssH = canvas.clientHeight || parseInt(canvas.style.height, 10) || 20;
+canvas.width = cssW * dpr;
+canvas.height = cssH * dpr;
+ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+var t = reduced ? 1 : 0, wink = 0, timer = null, blinkTimer = null;
+function render() { drawMark(ctx, cssW, cssH, stroke(t, wink), ACCENT); }
+
+// Draw-on: t 0 -> 1 in 16 steps at 75 ms/frame (~1.2 s), mirroring
+// AppController.playDrawOn / the hero mark on the one-page app.
+function drawOn(done) {
+  if (timer !== null) { clearTimeout(timer); timer = null; }
+  var steps = 16, i = 0;
+  (function frame() {
+    t = i / steps; render();
+    if (i < steps) { i++; timer = setTimeout(frame, 75); }
+    else { timer = null; if (done) done(); }
+  })();
+}
+
+// Occasional wink: eyelid close [1.0, 0.45, 0.0] at 120 ms/frame.
+function winkPlay(done) {
+  if (reduced) { if (done) done(); return; }
+  if (timer !== null) { clearTimeout(timer); timer = null; }
+  t = 1;
+  var fr = [1.0, 0.45, 0.0], i = 0;
+  (function frame() {
+    wink = fr[i]; render(); i++;
+    if (i < fr.length) timer = setTimeout(frame, 120);
+    else { timer = null; if (done) done(); }
+  })();
+}
+
+function scheduleBlink() {
+  if (reduced) return;
+  clearTimeout(blinkTimer);
+  blinkTimer = setTimeout(function () {
+    if (timer === null && document.visibilityState === 'visible') winkPlay();
+    scheduleBlink();
+  }, 6000 + Math.random() * 8000);
+}
+
+if (reduced) {
+  render();
+} else {
+  drawOn(scheduleBlink);
+}
+})();
+</script>

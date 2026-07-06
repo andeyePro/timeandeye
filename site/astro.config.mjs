@@ -10,6 +10,9 @@ export default defineConfig({
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/andeyePro/andeyeTT' },
       ],
+      components: {
+        SiteTitle: './src/components/AndeyeSiteTitle.astro',
+      },
       sidebar: [
         { label: 'Overview', slug: 'manual' },
         { label: 'The menu-bar popover', slug: 'manual/menu-bar-popover' },
@@ -19,6 +22,7 @@ export default defineConfig({
         { label: 'Settings', slug: 'manual/settings' },
         { label: 'Data, sync and safety', slug: 'manual/data-sync-and-safety' },
         { label: 'Keyboard', slug: 'manual/keyboard' },
+        { label: 'Getting help', slug: 'manual/getting-help' },
       ],
     }),
   ],

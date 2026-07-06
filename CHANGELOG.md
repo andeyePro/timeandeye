@@ -2,6 +2,23 @@
 
 ## 2026-07-06
 
+- [x] **Manual: winking logo header, "Getting help" page, standing rules**
+  (site/src/components/AndeyeSiteTitle.astro, site/astro.config.mjs,
+  site/src/content/docs/manual/{getting-help,index}.md, CLAUDE.md). The
+  manual's Starlight header now carries the andeye mark as a live canvas –
+  draws itself on at load, winks occasionally (eyelid close, visibility-
+  and reduced-motion-aware), and clicks back to the one-page app; geometry
+  is a verbatim port of AndeyeLogo.swift via index.astro with a
+  keep-in-sync comment. New "Getting help" page: GitHub Issues/Discussions
+  walkthrough for everyone (written for non-developers), time@andeye.com as
+  the andeyePro support channel, and an honest paragraph on why
+  person-to-person support is one of the things Pro pays for. CLAUDE.md
+  gained the manual's standing rules: keep up with the app but never at the
+  cost of user-friendliness; comprehensive but concise; written for the
+  fresh reader (no X→Y change history, no self-flagellation); code-drawn
+  illustrations, never screenshots. Adversarial review: clean bar two nits
+  (em-dash comments, opener register), fixed.
+
 
 
 
