@@ -430,3 +430,11 @@ and recorded rather than fixed blind:
   backend classes pm/finance, per-project routing) – spec at
   docs/superpowers/specs/2026-07-06-billable-flag-multibackend.md. Awaits
   Martin's review (6 front-loaded open questions) before any /vs build.
+
+## Approvals drawer (2026-07-06)
+
+- [ ] Approvals drawer overhaul (retro auto-acceptance + digest/undo,
+  grouped bulk accept, weekly summary ritual, invoice-range approve,
+  aging-to-archive, time-shaped badge) – spec at
+  docs/superpowers/specs/2026-07-06-approvals-drawer.md. Awaits Martin's
+  answers to the 6 front-loaded open questions before any /vs build.
