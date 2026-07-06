@@ -120,3 +120,144 @@ func rulesLedgerChecks(_ c: Checks) {
         try expect(RulesLedger.grouped([], nameOf: nameOf).isEmpty)
     }
 }
+
+// MARK: - Pre-correction snapshot (the card's honesty fix, 2026-07-05 report)
+
+// Martin's verbatim hardware-test verdict: the card said "Apple 71% certain,
+// learned", he corrected it, and the card then claimed the corrected task was
+// "the only thing I ever thought it could be, I never ever thought it was X".
+// These checks pin the fix: the displaced belief is captured when the pick
+// lands and stays visible in the explanation until the correction itself dies.
+
+func correctionHistoryChecks(_ c: Checks) {
+    let host = "op.example.com"
+    let apple = TaskRef.op(1)
+    let amazon = TaskRef.op(2)
+    let third = TaskRef.op(3)
+    let tasks = [WorkTask(ref: apple, subject: "Apple hardware", status: "Now"),
+                 WorkTask(ref: amazon, subject: "Amazon returns", status: "Now"),
+                 WorkTask(ref: third, subject: "andeye", status: "Now")]
+    func ruled() -> Attributor {
+        let a = Attributor(instanceHost: host)
+        a.emailRules = [EmailRule(level: .correspondentDomain,
+                                  value: "harborlane.example", target: apple)]
+        return a
+    }
+
+    c.check("THE report: a pick snapshots the displaced belief; the explanation carries it") {
+        let a = ruled()
+        let sig = gmailSignal()
+        try expectEq(a.explain(sig, tasks: tasks, now: t0).chosen, .task(apple),
+                     "precondition: the engine believes Apple before the pick")
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let e = a.explain(sig, tasks: tasks, now: t0)
+        try expectEq(e.source, .sessionSticky)
+        try expectEq(e.chosen, .task(amazon))
+        let prior = try unwrap(e.priorToCorrection, "the displaced belief must surface")
+        try expectEq(prior.chosen, .task(apple))
+        try expectEq(prior.source, .emailRule)
+        try expectClose(prior.score, 0.95)
+    }
+
+    c.check("no history when the engine already agreed with the pick") {
+        let a = ruled()
+        let sig = gmailSignal()
+        a.confirm(sig, task: apple, tasks: tasks, now: t0)
+        try expectNil(a.explain(sig, tasks: tasks, now: t0).priorToCorrection,
+                      "agreeing isn't a displacement — nothing to keep straight")
+    }
+
+    c.check("a ranked (learned-weight) belief snapshots with its real score") {
+        let a = Attributor(instanceHost: host)
+        var store = LearningStore()
+        store.learn(gmailSignal(), target: .task(apple), weight: 2)
+        a.replaceLearning(store)
+        let sig = gmailSignal()
+        let before = a.explain(sig, tasks: tasks, now: t0)
+        try expectEq(before.source, .ranked, "precondition: the ranker answers")
+        try expectEq(before.chosen, .task(apple))
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let prior = try unwrap(a.explain(sig, tasks: tasks, now: t0).priorToCorrection)
+        try expectEq(prior.source, .ranked)
+        try expectEq(prior.chosen, .task(apple))
+        try expectClose(prior.score, before.chosenScore,
+                        "the snapshot keeps the PRE-correction score, not a recomputed one")
+    }
+
+    c.check("re-correcting keeps the ORIGINAL belief, not the intermediate pick") {
+        let a = ruled()
+        let sig = gmailSignal()
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        a.confirm(sig, task: third, tasks: tasks, now: t0)
+        let e = a.explain(sig, tasks: tasks, now: t0)
+        try expectEq(e.chosen, .task(third), "last word wins the decision")
+        let prior = try unwrap(e.priorToCorrection)
+        try expectEq(prior.chosen, .task(apple),
+                     "…but the history stays anchored to what the MACHINE thought")
+    }
+
+    c.check("the forget preview lands on the pre-correction winner (the card can say so)") {
+        let a = ruled()
+        let sig = gmailSignal()
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let u = try unwrap(a.forgettable(for: sig, now: t0))
+        guard case .sessionSticky = u else {
+            throw CheckFailure(description: "expected the sticky to be forgettable, got \(u)")
+        }
+        let preview = a.explainWithout(u, sig, tasks: tasks, now: t0)
+        let prior = try unwrap(a.explain(sig, tasks: tasks, now: t0).priorToCorrection)
+        try expectEq(preview.chosen, prior.chosen,
+                     "forgetting the correction falls back to what it thought before")
+        try expect(a.explain(sig, tasks: tasks, now: t0).priorToCorrection != nil,
+                   "the preview must not have consumed the snapshot")
+    }
+
+    c.check("the snapshot dies with its correction: forget and day-rollover both clear it") {
+        let a = ruled()
+        let sig = gmailSignal()
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let u = try unwrap(a.forgettable(for: sig, now: t0))
+        a.forget(u, signal: sig)
+        try expect(a.displacedByCorrection.isEmpty, "forget removes the history with the sticky")
+        let b = ruled()
+        b.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let tomorrow = t0.addingTimeInterval(86_400 * 2)   // safely next day in any TZ
+        let later = b.explain(sig, tasks: tasks, now: tomorrow)
+        try expectNil(later.priorToCorrection, "an expired correction leaves no orphan history")
+        try expect(b.displacedByCorrection.isEmpty, "…and the store pruned with the sticky")
+    }
+
+    c.check("forget then re-correct starts a FRESH history, never the old ghost") {
+        // Review-caught contract half: after forgetting a correction, the
+        // NEXT correction on the same key must snapshot what the engine
+        // believes THEN - not resurrect the pre-forget story.
+        let a = ruled()
+        let sig = gmailSignal()
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let u = try unwrap(a.forgettable(for: sig, now: t0))
+        a.forget(u, signal: sig)
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let again = a.explain(sig, tasks: tasks, now: t0)
+        let prior = try unwrap(again.priorToCorrection,
+                               "a fresh snapshot is captured after forget")
+        try expectEq(prior.chosen, .task(apple.ref),
+                     "…of the engine's live belief, not a stale ghost")
+    }
+
+    c.check("cross-midnight re-correct does not resurrect yesterday's history") {
+        // Review-caught: the prune must run BEFORE the first-displacement
+        // guard, or a day-1 snapshot survives when the day-2 correction is
+        // the first touch of the day (no explain tick in between).
+        let a = ruled()
+        let sig = gmailSignal()
+        a.confirm(sig, task: amazon, tasks: tasks, now: t0)
+        let tomorrow = t0.addingTimeInterval(86_400 * 2)
+        // First touch of day 2 is the correction itself - no explain first.
+        a.confirm(sig, task: amazon, tasks: tasks, now: tomorrow)
+        let today = a.explain(sig, tasks: tasks, now: tomorrow)
+        let prior = try unwrap(today.priorToCorrection,
+                               "day-2 correction captures a day-2 snapshot")
+        try expectEq(prior.chosen, .task(apple.ref),
+                     "…of what the engine believed at day-2, freshly pruned")
+    }
+}

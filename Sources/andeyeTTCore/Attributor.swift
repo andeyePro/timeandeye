@@ -9,7 +9,9 @@ import Foundation
 /// URL recognition, ranker); only an explicit pin (1.0, standing law) sits
 /// above it. Ephemeral by design: dies at end of day or app relaunch.
 public struct SessionSticky: Equatable, Sendable {
-    public enum Key: Equatable, Sendable {
+    /// Hashable so the pre-correction snapshot store can key on it (see
+    /// `Attributor.displacedByCorrection`).
+    public enum Key: Hashable, Sendable {
         /// Email thread identity: the normalised subject (re:/fwd: stripped,
         /// lowercased). Chosen over the raw Surface because a draft's window
         /// title mutates as you type — the subject is what stays put.
@@ -75,6 +77,19 @@ public struct AttributionExplanation: Equatable, Sendable {
             self.target = target; self.score = score; self.learned = learned; self.prior = prior
         }
     }
+    /// What the engine believed BEFORE the user's correction displaced it —
+    /// captured the moment the correction lands (`confirm`/`assign`) so the
+    /// Evidence Card can keep the story straight instead of pretending it
+    /// always agreed (2026-07-05 hardware-test report: "I'm confident it's
+    /// X" → correction → "I'm confident it's Y, I never thought it was X").
+    public struct Prior: Equatable, Sendable {
+        public var source: Source
+        public var chosen: Target
+        public var score: Double
+        public init(source: Source, chosen: Target, score: Double) {
+            self.source = source; self.chosen = chosen; self.score = score
+        }
+    }
     public var source: Source
     public var chosen: Target?
     public var chosenScore: Double
@@ -89,12 +104,19 @@ public struct AttributionExplanation: Equatable, Sendable {
     /// them and can never disagree with the decision.
     public var matchedEmailRule: EmailRule?
     public var matchedPin: Pin?
+    /// Set only when the source is a correction (`.sessionSticky`) that
+    /// displaced a real prior belief — the card's "before your correction:
+    /// Apple 71% (learned)" history line. nil when the engine already agreed
+    /// with the pick, or believed nothing.
+    public var priorToCorrection: Prior?
     public init(source: Source, chosen: Target?, chosenScore: Double,
                 lines: [Line], features: [String],
-                matchedEmailRule: EmailRule? = nil, matchedPin: Pin? = nil) {
+                matchedEmailRule: EmailRule? = nil, matchedPin: Pin? = nil,
+                priorToCorrection: Prior? = nil) {
         self.source = source; self.chosen = chosen; self.chosenScore = chosenScore
         self.lines = lines; self.features = features
         self.matchedEmailRule = matchedEmailRule; self.matchedPin = matchedPin
+        self.priorToCorrection = priorToCorrection
     }
 }
 
@@ -137,6 +159,15 @@ public final class Attributor {
     /// Today's explicit categorisations, by context (see SessionSticky).
     /// Deliberately not persisted — a sticky is a same-day working decision.
     public private(set) var sessionStickies: [SessionSticky] = []
+    /// What the engine believed before a correction displaced it, keyed by
+    /// the sticky that correction wrote — the Evidence Card's "before your
+    /// correction: Apple 71%" history line, so a correction never rewrites
+    /// history into "Y is the only thing I ever thought it could be"
+    /// (2026-07-05 hardware-test report). Shares the sticky's lifetime
+    /// exactly (pruned at day rollover, removed on forget, dies at relaunch).
+    /// Public var, like the other stores, so the app's undo can snapshot and
+    /// restore it wholesale.
+    public var displacedByCorrection: [SessionSticky.Key: AttributionExplanation.Prior] = [:]
 
     public init(instanceHost: String, learning: LearningStore = LearningStore(),
                 ranker: TaskRanker = TaskRanker()) {
@@ -231,8 +262,41 @@ public final class Attributor {
     /// as a side effect (they are dead weight once the day rolls over).
     public func stickyMatch(for signal: ActivitySignal, now: Date) -> SessionSticky? {
         sessionStickies.removeAll { !Calendar.current.isDate(now, inSameDayAs: $0.day) }
+        // The pre-correction snapshot shares its sticky's lifetime: prune any
+        // whose sticky is gone (day rollover above, or a forget).
+        if !displacedByCorrection.isEmpty {
+            displacedByCorrection = displacedByCorrection.filter { key, _ in
+                sessionStickies.contains { $0.key == key }
+            }
+        }
         let key = Self.stickyKey(for: signal)
         return sessionStickies.last { $0.key == key }
+    }
+
+    /// Capture what the engine believed at the moment a correction lands, so
+    /// the Evidence Card can keep the story straight afterwards. Only the
+    /// FIRST displacement per sticky key is kept — re-correcting must not
+    /// overwrite the machine's original belief with the intermediate
+    /// correction. Nothing is captured when the engine already agreed with
+    /// the pick, or believed nothing: there is no story to straighten.
+    /// Called BEFORE `recordSticky`, while the displaced belief still answers.
+    private func recordDisplaced(_ signal: ActivitySignal, by target: Target,
+                                 tasks: [WorkTask], now: Date) {
+        // Prune BEFORE consulting the store: a day-old snapshot must not
+        // survive midnight just because this correction is the first touch
+        // of the day (explain() below would prune too late - the guard
+        // would already have kept the stale entry, and the fresh sticky
+        // written after us would then shield it indefinitely).
+        _ = stickyMatch(for: signal, now: now)
+        let key = Self.stickyKey(for: signal)
+        guard displacedByCorrection[key] == nil else { return }
+        let before = explain(signal, tasks: tasks, now: now)
+        guard let chosen = before.chosen, chosen != target, before.source != .none else { return }
+        // A zero-evidence ranked "belief" is noise, not a displaced story -
+        // don't enshrine "Do not track 0%" as history on a cold start.
+        guard before.chosenScore > 0.01 else { return }
+        displacedByCorrection[key] = .init(source: before.source, chosen: chosen,
+                                           score: before.chosenScore)
     }
 
     private func recordSticky(_ signal: ActivitySignal, target: Target, now: Date) {
@@ -338,8 +402,12 @@ public final class Attributor {
     /// Sticky + soft-prime fire unconditionally; a durable email rule is no
     /// longer written here (2026-07-03 spec §5.4) — the Evidence Card / post-
     /// pick grain footer propose one instead, so declining it never loses
-    /// today's fix.
-    public func confirm(_ signal: ActivitySignal, task: TaskRef, now: Date = Date()) {
+    /// today's fix. `tasks` lets the pre-correction snapshot capture a
+    /// ranked belief's real score ([] degrades gracefully: rule/prime/URL
+    /// sources still snapshot correctly).
+    public func confirm(_ signal: ActivitySignal, task: TaskRef,
+                        tasks: [WorkTask] = [], now: Date = Date()) {
+        recordDisplaced(signal, by: .task(task), tasks: tasks, now: now)
         recordSticky(signal, target: .task(task), now: now)
         learnSurface(signal, to: task, weight: 2)
     }
@@ -355,8 +423,10 @@ public final class Attributor {
     /// Review-window or prompt assignment, including "Do not track". Always a
     /// SOFT prime (caps at 0.95) — explicit 100 % pinning goes through `pin`.
     /// A durable email rule is no longer written here either (2026-07-03 spec
-    /// §5.4) — see `confirm`.
-    public func assign(_ signal: ActivitySignal, target: Target, now: Date = Date()) {
+    /// §5.4) — see `confirm` (including its `tasks` note).
+    public func assign(_ signal: ActivitySignal, target: Target,
+                       tasks: [WorkTask] = [], now: Date = Date()) {
+        recordDisplaced(signal, by: target, tasks: tasks, now: now)
         recordSticky(signal, target: target, now: now)
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
@@ -445,7 +515,8 @@ public final class Attributor {
             return .init(source: .sessionSticky, chosen: sticky.target,
                          chosenScore: Self.inferredCeiling,
                          lines: scoredComponents(signal, tasks: tasks, now: now),
-                         features: feats)
+                         features: feats,
+                         priorToCorrection: displacedByCorrection[sticky.key])
         }
         if let url = signal.tabURL, recognizer.taskRef(inURL: url) != nil {
             return .init(source: .opTaskURL, chosen: bestURLTarget(signal), chosenScore: Self.inferredCeiling,
@@ -534,6 +605,7 @@ public final class Attributor {
             if pendingPrime?.surface == surface { pendingPrime = nil }
         case .sessionSticky(let key):
             sessionStickies.removeAll { $0.key == key }
+            displacedByCorrection[key] = nil   // history dies with its correction
         case .rankedAssociation(let target):
             learning.forget(target: target, features: LearningStore.features(from: signal))
         }
@@ -549,12 +621,14 @@ public final class Attributor {
         let savedStickies = sessionStickies
         let savedLearning = learning
         let savedPending = pendingPrime
+        let savedDisplaced = displacedByCorrection
         defer {
             emailRules = savedRules
             primedSurfaces = savedPrimes
             sessionStickies = savedStickies
             learning = savedLearning
             pendingPrime = savedPending
+            displacedByCorrection = savedDisplaced
         }
         forget(u, signal: signal)
         return explain(signal, tasks: tasks, now: now)
@@ -572,12 +646,14 @@ public final class Attributor {
         let savedStickies = sessionStickies
         let savedLearning = learning
         let savedPending = pendingPrime
+        let savedDisplaced = displacedByCorrection
         defer {
             emailRules = savedRules
             primedSurfaces = savedPrimes
             sessionStickies = savedStickies
             learning = savedLearning
             pendingPrime = savedPending
+            displacedByCorrection = savedDisplaced
         }
         forget(u, signal: signal)
         return forgettable(for: signal, now: now)

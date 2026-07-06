@@ -2,6 +2,33 @@
 
 ## 2026-07-06
 
+- [x] **Evidence Card keeps the story straight after a correction (honesty
+  fix, 2026-07-05 hardware test).** Correcting an attribution used to rewrite
+  history: "Apple 71% certain, learned" became "BECAUSE you categorised this
+  today → Amazon" with Apple gone from the candidates entirely — "that's the
+  only thing I ever thought it could be". Core now snapshots the displaced
+  belief the moment a pick lands (`Attributor.recordDisplaced`, called from
+  `confirm`/`assign` before the sticky is written; stored in
+  `displacedByCorrection`, keyed by — and sharing the exact lifetime of — the
+  sticky it belongs to: pruned at day rollover, removed on forget, restored
+  wholesale by the forget-undo, never persisted). The explanation payload
+  carries it as `AttributionExplanation.priorToCorrection`, and the card says
+  it in three places: a "before your correction: Apple 71% (learned rule)"
+  history line under BECAUSE; the candidates line labels the correction-born
+  winner "– your correction" and RETAINS the displaced belief at its
+  pre-correction score instead of silently dropping it; and the forget
+  preview appends "– what it thought before your correction" when the
+  fallback lands back on the displaced winner (it already did mechanically —
+  now it says so). Only the FIRST displacement per context is kept, so
+  re-correcting can't overwrite the machine's original belief with the
+  intermediate pick, and nothing is captured when the engine already agreed.
+  `confirm`/`assign` gained a defaulted `tasks:` parameter so ranked beliefs
+  snapshot with their real score; SessionTracker/AppController call sites
+  pass their task lists. New CorrectionHistory suite in andeyeTTChecks
+  (snapshot captured on pick, surfaced in the payload, original belief held
+  across re-corrections, fallback preview names the pre-correction winner,
+  history dies with its correction).
+
 - [x] **Multi-backend seam + billable flag (task_002, unblocks andeyePro/Xero).**
   The posting path is no longer one-backend-one-slot. A connector-agnostic
   `BackendRegistry` (Sources/andeyeTTCore/BackendRegistry.swift) holds N

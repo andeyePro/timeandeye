@@ -64,6 +64,14 @@ struct EvidenceCardView: View {
                 Text(becauseLabel).font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Keep the story straight after a correction (2026-07-05 report):
+            // the engine DID believe something else before the user corrected
+            // it — say so, instead of pretending Y was its only idea ever.
+            if let prior = explanation.priorToCorrection {
+                Text("before your correction: \(priorLabel(prior))")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let rule = explanation.matchedEmailRule {
                 Text(ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
             }
@@ -145,7 +153,32 @@ struct EvidenceCardView: View {
     private func fallbackText(_ u: Attributor.Unlearn) -> String {
         let preview = controller.explainWithout(u, signal)
         let name = preview.chosen.map { controller.name(of: $0) } ?? "nothing"
-        return "\(name) \(pct(preview.chosenScore))"
+        var text = "\(name) \(pct(preview.chosenScore))"
+        // Forgetting the correction lands back on the displaced belief: name
+        // that continuity, so the preview reads as history, not coincidence.
+        if let prior = explanation.priorToCorrection, preview.chosen == prior.chosen {
+            text += " – what it thought before your correction"
+        }
+        return text
+    }
+
+    /// "Apple 71% (learned)" — the displaced belief, with a plain word for
+    /// where it came from (mirrors `becauseLabel`'s vocabulary, compressed).
+    private func priorLabel(_ prior: AttributionExplanation.Prior) -> String {
+        "\(controller.name(of: prior.chosen)) \(pct(prior.score)) (\(priorSourceWord(prior.source)))"
+    }
+
+    private func priorSourceWord(_ source: AttributionExplanation.Source) -> String {
+        switch source {
+        case .pin: return "pinned"
+        case .sessionSticky: return "categorised earlier today"
+        case .opTaskURL, .opTaskTitle: return "OP page"
+        case .emailRule: return "learned rule"
+        case .pendingPrime: return "just-opened OP task"
+        case .primedSurface: return "past correction"
+        case .ranked: return "learned"
+        case .none: return "nothing"
+        }
     }
 
     // MARK: - sees: / candidates:
@@ -176,13 +209,34 @@ struct EvidenceCardView: View {
 
     @ViewBuilder
     private var candidatesSection: some View {
-        if !explanation.lines.isEmpty {
-            Text("candidates: " + explanation.lines.prefix(3).map {
-                "\(controller.name(of: $0.target)) \(pct($0.score))"
-            }.joined(separator: " · "))
+        let items = candidateItems
+        if !items.isEmpty {
+            Text("candidates: " + items.joined(separator: " · "))
                 .font(.caption2).foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// The top-ranked candidates — honestly labelled after a correction: the
+    /// correction-born winner says so ("90% – your correction", the 90% is
+    /// learned FROM the pick, not independent evidence), and the displaced
+    /// belief is RETAINED at its pre-correction score instead of silently
+    /// vanishing from the list (2026-07-05 report: Apple went from "71%
+    /// certain" to gone entirely).
+    private var candidateItems: [String] {
+        let prior = explanation.priorToCorrection
+        var items: [String] = explanation.lines
+            .filter { line in prior.map { line.target != $0.chosen } ?? true }
+            .prefix(3)
+            .map { line in
+                let entry = "\(controller.name(of: line.target)) \(pct(line.score))"
+                return (prior != nil && line.target == explanation.chosen)
+                    ? entry + " – your correction" : entry
+            }
+        if let prior {
+            items.append("\(controller.name(of: prior.chosen)) \(pct(prior.score)) before your correction")
+        }
+        return items
     }
 
     // MARK: - WRONG? / grain ladder / fix

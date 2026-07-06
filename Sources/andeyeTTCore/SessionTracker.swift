@@ -198,7 +198,7 @@ public final class SessionTracker {
             spans[i].certainty = 0.95
         }
         if let signal = currentSignal {
-            attributor.confirm(signal, task: task)
+            attributor.confirm(signal, task: task, tasks: tasks())
         }
         state = .tracking(.task(task), certainty: 0.95)
     }
@@ -251,7 +251,7 @@ public final class SessionTracker {
         pendingSwitch = nil
         pendingNotify = nil
         if let signal = currentSignal {
-            attributor.confirm(signal, task: task)
+            attributor.confirm(signal, task: task, tasks: tasks())
         }
         if case .tracking = state {
             state = .tracking(.task(task), certainty: 0.95)

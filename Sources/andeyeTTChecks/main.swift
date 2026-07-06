@@ -81,6 +81,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("CardDefaultGrain", cardDefaultGrainChecks),
     ("EmailGrainCommitMapping", emailGrainCommitMappingChecks),
     ("RulesLedger", rulesLedgerChecks),
+    ("CorrectionHistory", correctionHistoryChecks),
     ("TimesheetExport", timesheetExportChecks),
     ("JournalPrune", journalPruneChecks),
     ("HLC", hlcChecks),

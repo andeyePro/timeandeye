@@ -449,7 +449,7 @@ public final class AppController: ObservableObject {
         // now (confirm = soft 0.95 prime + learn) and lift the in-flight span,
         // the same way commitPin does, so attribution doesn't lag a focus cycle.
         if primeToCurrentSurface, let signal = tracker.currentFocusSignal {
-            attributor.confirm(signal, task: .local(def.id))
+            attributor.confirm(signal, task: .local(def.id), tasks: taskCache)
             persistAssociations()
             tracker.reevaluate()
         }
@@ -1071,7 +1071,7 @@ public final class AppController: ObservableObject {
         // old task when focus returns (Martin: "Change to andeye" kept
         // reverting to a 70%-certain KLARC on every return).
         if let signal = tracker.currentFocusSignal {
-            attributor.assign(signal, target: .task(ref))
+            attributor.assign(signal, target: .task(ref), tasks: taskCache)
             persistAssociations()
         }
         // Preserve the displayed clock onto the corrected task and continue.
@@ -1180,7 +1180,7 @@ public final class AppController: ObservableObject {
         if let segment = pendingReview.first(where: { ids.contains($0.id) }) {
             let signal = ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
                                         tabURL: segment.tabURL, timestamp: segment.start)
-            attributor.assign(signal, target: target)
+            attributor.assign(signal, target: target, tasks: taskCache)
             persistAssociations()
         }
         reloadReview()
@@ -1491,6 +1491,7 @@ public final class AppController: ObservableObject {
         let savedRules = attributor.emailRules
         let savedPrimes = attributor.primedSurfaces
         let savedLearning = attributor.learning
+        let savedDisplaced = attributor.displacedByCorrection
         var savedSticky: SessionSticky?
         if case .sessionSticky = u {
             savedSticky = attributor.stickyMatch(for: signal, now: Date())
@@ -1506,6 +1507,9 @@ public final class AppController: ObservableObject {
             self.attributor.emailRules = savedRules
             self.attributor.primedSurfaces = savedPrimes
             self.attributor.replaceLearning(savedLearning)
+            // After the re-assert above (which may itself capture a fresh
+            // snapshot): the exact pre-forget history, wholesale.
+            self.attributor.displacedByCorrection = savedDisplaced
             self.persistAssociations()
             self.tracker.reevaluate()
             self.objectWillChange.send()
@@ -1575,7 +1579,7 @@ public final class AppController: ObservableObject {
     /// a confirmation): future time on it attributes here. The visible "edit the
     /// weighting" action behind the why-panel.
     public func teachSurface(_ span: FocusSpan, to ref: TaskRef) {
-        attributor.confirm(span.signal, task: ref)
+        attributor.confirm(span.signal, task: ref, tasks: taskCache)
         persistAssociations()
         tracker.reevaluate()
         objectWillChange.send()
@@ -1839,7 +1843,7 @@ public final class AppController: ObservableObject {
     /// reassigned session, so future time on that window stops mis-filing.
     private func teachAssociation(for session: Session) {
         guard let dominant = dominantSpan(of: session) else { return }
-        attributor.assign(dominant.signal, target: .task(session.task))
+        attributor.assign(dominant.signal, target: .task(session.task), tasks: taskCache)
         persistAssociations()
     }
 
@@ -1849,7 +1853,7 @@ public final class AppController: ObservableObject {
     /// Used to undo e.g. an away stretch you didn't actually work.
     public func markSessionDoNotTrack(_ session: Session) async {
         if let dominant = dominantSpan(of: session) {
-            attributor.assign(dominant.signal, target: .doNotTrack)
+            attributor.assign(dominant.signal, target: .doNotTrack, tasks: taskCache)
             persistAssociations()
         }
         await deleteTimelineSession(session)
