@@ -2,6 +2,28 @@
 
 ## 2026-07-06
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 - [x] **Site demo rebuilt: fixed-size windows, one andeye Time view at a
   time, live local clock, second-person story v2** (site/src/pages/
   index.astro). The Mail window never changes size again: reading view is

@@ -25,3 +25,5 @@ site/.astro/
 
 # /vs harness state
 .vs/cycle-*/
+__pycache__/
+*.pyc
