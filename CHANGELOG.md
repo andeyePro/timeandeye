@@ -24,6 +24,15 @@
 
 
 
+- [x] **Demo correction per Martin's review** (site/src/pages/index.astro).
+  Timeline and time pie moved OUT of the fake Mac screen into two separate
+  always-visible boxes beneath it (the in-screen andeye window and its
+  view flip removed; pie back to full size); the mail reading view now
+  keeps the real inbox in the left third with the reading pane opening
+  beside it (mini preview-rail deleted); the demo heading is now
+  "It's {Weekday}, {time}" live, and the timeline box header carries the
+  same live clock as the demo's menu bar.
+
 - [x] **Site demo rebuilt: fixed-size windows, one andeye Time view at a
   time, live local clock, second-person story v2** (site/src/pages/
   index.astro). The Mail window never changes size again: reading view is
