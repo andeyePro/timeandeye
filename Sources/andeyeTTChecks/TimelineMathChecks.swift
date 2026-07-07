@@ -120,6 +120,61 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(pieces[0].end, t(240))
     }
 
+    c.check("splitAcross moves windows lying in DIFFERENT rows of one block") {
+        // Regression: the live block folds earlier contiguous same-task journal
+        // rows into ONE displayed slice, so a window selected in the strip can
+        // belong to an earlier row than the caller's own. The old code split
+        // only that one row and dropped the rest — the move did nothing. Here a
+        // window is selected in each of two rows; BOTH must reassign.
+        let s1 = session(from: 0, to: 600, task: 1)
+        let s2 = session(from: 600, to: 1200, task: 1)
+        let work = TimelineMath.splitAcross([s1, s2],
+                                            reassign: [(t(120), t(300)), (t(700), t(900))],
+                                            to: .op(2))
+        try expectEq(work.count, 2)                 // both rows changed
+        let w1 = try unwrap(work.first { $0.session.id == s1.id })
+        try expectEq(w1.pieces.map(\.task), [.op(1), .op(2), .op(1)])
+        let w2 = try unwrap(work.first { $0.session.id == s2.id })
+        try expectEq(w2.pieces.map(\.task), [.op(1), .op(2), .op(1)])
+    }
+
+    c.check("splitAcross touches only the rows the ranges hit") {
+        // Selecting one window early in the block moves JUST that window: the
+        // current (latest) row AND an unselected same-task row between them are
+        // left untouched, so nothing but the picked window changes task.
+        let early = session(from: 0, to: 600, task: 1)
+        let middle = session(from: 600, to: 1200, task: 1)   // unselected, same task
+        let latest = session(from: 1200, to: 1800, task: 1)  // the live tail
+        let work = TimelineMath.splitAcross([early, middle, latest],
+                                            reassign: [(t(120), t(300))], to: .op(2))
+        try expectEq(work.count, 1)
+        try expectEq(work[0].session.id, early.id)
+        try expectEq(work[0].pieces.map(\.task), [.op(1), .op(2), .op(1)])
+    }
+
+    c.check("split never reattributes UNSELECTED sub-minute time at a range edge") {
+        // A selection ending 30s before the session end leaves a sub-minute
+        // tail on the ORIGINAL task. The old absorb-tiny-fragment logic flipped
+        // that 30s to the target — moving time the user never selected. It must
+        // stay put, even as a short sliver.
+        let s = session(from: 0, to: 600, task: 1)
+        let pieces = TimelineMath.split(s, reassign: [(t(120), t(570))], to: .op(2))
+        try expectEq(pieces.map(\.task), [.op(1), .op(2), .op(1)])
+        try expectEq(pieces[2].start, t(570)); try expectEq(pieces[2].end, t(600))
+        // Conservation: the pieces still tile the whole session, no gap.
+        try expectEq(pieces.first?.start, t(0)); try expectEq(pieces.last?.end, t(600))
+    }
+
+    c.check("split MOVES a genuinely-selected sub-minute window") {
+        // A selected window under a minute used to be absorbed back onto the
+        // original task — a silent no-op, the very bug class this fixes. It
+        // must now move.
+        let s = session(from: 0, to: 600, task: 1)
+        let pieces = TimelineMath.split(s, reassign: [(t(120), t(150))], to: .op(2))
+        try expectEq(pieces.map(\.task), [.op(1), .op(2), .op(1)])
+        try expectEq(pieces[1].start, t(120)); try expectEq(pieces[1].end, t(150))
+    }
+
     c.check("mergeAdjacent fuses butting same-task slices, keeps data") {
         let a = Session(task: .op(1), start: t(0), end: t(300), certainty: 0.9, comment: "first")
         let b = Session(task: .op(1), start: t(300), end: t(600), certainty: 0.7, comment: "second")

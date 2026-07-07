@@ -2024,13 +2024,29 @@ public final class AppController: ObservableObject {
 
     /// Split a slice: the given time ranges (selected windows in the detail
     /// strip) move to `target`, the rest stays. One undo step.
+    ///
+    /// The block those windows came from can be backed by MORE THAN ONE journal
+    /// session — the live block folds earlier contiguous same-task rows into a
+    /// single displayed slice (see `timelineSessions`), and a post-flush
+    /// coalesce can lag. Splitting only `session` silently dropped any selected
+    /// window living in an earlier row: the clip in `TimelineMath.split` emptied,
+    /// the guard returned, and the move did nothing. So gather EVERY same-task
+    /// session overlapping the selected ranges and split each. `session` names
+    /// the block's task; live callers pass the just-committed tail (via
+    /// `commitLiveSlice`) so its own windows are already a real row here.
     public func splitAndReassign(_ session: Session,
                                  ranges: [(start: Date, end: Date)],
                                  to target: TaskRef) async {
-        let pieces = TimelineMath.split(session, reassign: ranges, to: target)
-        guard pieces.count > 1 || pieces.first?.task != session.task else { return }
+        guard let lo = ranges.map({ $0.start }).min(),
+              let hi = ranges.map({ $0.end }).max() else { return }
+        let sessions = ((try? journal.sessions(from: lo.addingTimeInterval(-2),
+                                               to: hi.addingTimeInterval(2))) ?? [])
+            .filter { $0.task == session.task
+                        && $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
+        let work = TimelineMath.splitAcross(sessions, reassign: ranges, to: target)
+        guard !work.isEmpty else { return }
         await undoGroup("split \(name(of: .task(session.task)))") {
-            await replaceSession(session, with: pieces)
+            for (original, pieces) in work { await replaceSession(original, with: pieces) }
         }
     }
 

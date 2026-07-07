@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-07
+
+- [x] **"Move N windows to →" now works on the live block's earlier windows
+  (2026-07-05 hardware test).** On a long single-task morning, selecting a
+  window in the timeline strip and clicking a task under "Move N windows to
+  →" did nothing. Root cause: the live block folds earlier contiguous
+  same-task journal rows into ONE displayed slice (`timelineSessions`), but
+  the reassign split only a single row — the just-committed live tail
+  (`commitLiveSlice` returns one `.max(by: end)` session). Any selected
+  window living in an earlier row fell outside that row, so
+  `TimelineMath.split`'s clip emptied, `splitAndReassign`'s guard returned,
+  and nothing moved. Fix: `splitAndReassign` (AppController) now gathers
+  EVERY same-task journal session overlapping the selected ranges
+  (`journal.sessions` is true-overlap) and splits each, in one undo step, via
+  a new pure `TimelineMath.splitAcross` (returns only the rows a range
+  actually changes, so an unselected same-task row between two picked windows
+  is left alone). Live callers still commit the tail first, so its own
+  windows are a real row and tracking stays continuous; the write path bumps
+  `journalRevision` as before, so the timeline refreshes. The per-window
+  Evidence Card "Wrong? file as" reassign goes through the same method, so it
+  is fixed too. Hard invariant made airtight (review-caught): ONLY selected
+  time ever changes task — the old sub-minute "absorb tiny fragment" step
+  could flip up to 60s of UNSELECTED time onto the target at a range edge,
+  and silently swallowed a genuinely-selected sub-minute window; a fragment
+  now merges into its neighbour only when they already share a task, so an
+  honest short sliver is kept rather than misattributing a second of tracked
+  time (`minPiece` retired). New splitAcross + split checks in andeyeTTChecks
+  (windows in two different rows both move; only the rows the ranges hit
+  change; an unselected sub-minute edge tail stays put; a selected sub-minute
+  window moves).
+
 ## 2026-07-06
 
 - [x] **Evidence Card keeps the story straight after a correction (honesty

@@ -501,3 +501,14 @@ and recorded rather than fixed blind:
 
 
 
+
+## Window detail selection helpers (Martin, 2026-07-07)
+
+- [ ] [+all] button — top-right of each window row in a slice's detail
+  strip, shown ONLY when the slice holds more than one IDENTICAL window
+  (identical = the raw app+title the window reported on itself, e.g.
+  "Calendar – Calendar", NOT the start/end times). Click selects every
+  identical window in the slice. Ship this first.
+- [ ] [+similar] button (later, non-critical) — pressable repeatedly to
+  accumulate windows similar to the current one; a paired [-similar] steps
+  the accumulation back so you can undo over-pressing. After [+all].

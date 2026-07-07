@@ -72,10 +72,12 @@ public enum TimelineMath {
 
     /// Split a session: time inside any `reassign` range becomes `target`,
     /// the rest stays on the session's task. Returns the replacement pieces
-    /// (new ids, ≥ minPiece each — shorter fragments merge into the previous
-    /// piece). Pure, so it is unit-checkable.
+    /// (new ids). ONLY the selected ranges ever change task — a fragment is
+    /// merged into its neighbour only when they share a task, so no unselected
+    /// time is ever silently reattributed, even a sub-minute sliver at a
+    /// range edge. Pure, so it is unit-checkable.
     public static func split(_ session: Session, reassign ranges: [(start: Date, end: Date)],
-                             to target: TaskRef, minPiece: TimeInterval = 60) -> [Session] {
+                             to target: TaskRef) -> [Session] {
         // Clip + merge the reassign ranges within the session.
         let clipped = ranges
             .map { (max($0.start, session.start), min($0.end, session.end)) }
@@ -103,19 +105,45 @@ public enum TimelineMath {
             let inReassign = merged.contains { $0.0 <= mid && mid < $0.1 }
             let task = inReassign ? target : session.task
             if var last = pieces.last, last.task == task {
+                // same task as the neighbour — merge, no attribution change
                 last.end = e
                 pieces[pieces.count - 1] = last
-            } else if let last = pieces.last,
-                      e.timeIntervalSince(s) < minPiece {
-                // tiny fragment: absorb into the previous piece's time
-                pieces[pieces.count - 1].end = e
-                _ = last
             } else {
+                // different task — ALWAYS its own piece, even under a minute.
+                // The old code absorbed a short different-task fragment into its
+                // neighbour, which silently flipped that time to the neighbour's
+                // task: it moved unselected time at a range edge AND swallowed a
+                // genuinely-selected sub-minute window. An honest short sliver
+                // beats misattributing a second of tracked time.
                 pieces.append(Session(task: task, start: s, end: e,
                                       certainty: session.certainty, comment: session.comment))
             }
         }
         return pieces.isEmpty ? [session] : pieces
+    }
+
+    /// Split-and-reassign across a SET of sessions. A displayed block can be
+    /// backed by more than one journal row — the live block folds earlier
+    /// contiguous same-task slices into one displayed slice, and a coalesce can
+    /// lag — so a window selected in the strip may live in a different row than
+    /// the one the caller starts from. Split every session; return only those
+    /// the ranges actually change (as `(original, pieces)`), so untouched rows —
+    /// including a same-task row that merely sits between two selected windows —
+    /// are left alone. Pure, so it is unit-checkable.
+    public static func splitAcross(_ sessions: [Session],
+                                   reassign ranges: [(start: Date, end: Date)],
+                                   to target: TaskRef)
+        -> [(session: Session, pieces: [Session])] {
+        var out: [(session: Session, pieces: [Session])] = []
+        for s in sessions {
+            let pieces = split(s, reassign: ranges, to: target)
+            // A no-op split (ranges miss this row, or don't change its task)
+            // returns the row unchanged — skip it, so we neither churn its id
+            // nor open an empty undo step.
+            guard pieces.count > 1 || pieces.first?.task != s.task else { continue }
+            out.append((s, pieces))
+        }
+        return out
     }
 
     /// Merge same-task sessions that butt up against each other (end ≈ start,
