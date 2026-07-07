@@ -391,19 +391,24 @@ public final class AppController: ObservableObject {
     /// an expired subscription key reports itself rather than silently
     /// downgrading with no explanation.
     private func revalidateLicense() {
-        defer { registry.license = license }   // the entitlement gate reads it
+        // Runs hourly (F16) as well as on key change — assign only on a real
+        // change so the @Published pair doesn't churn SwiftUI every tick.
+        func publish(_ newLicense: License?, _ newProblem: String?) {
+            if license != newLicense { license = newLicense }
+            if licenseProblem != newProblem { licenseProblem = newProblem }
+            registry.license = newLicense   // the entitlement gate reads it
+        }
         guard let key = settings.licenseKey?.trimmingCharacters(in: .whitespacesAndNewlines),
               !key.isEmpty else {
-            license = nil
-            licenseProblem = nil
+            publish(nil, nil)
             return
         }
         switch LicenseVerifier.production.validate(key) {
         case .success(let l):
-            license = l
-            licenseProblem = nil
+            publish(l, nil)
         case .failure(let e):
-            license = nil
+            var licenseProblem: String?
+            defer { publish(nil, licenseProblem) }
             switch e {
             case .expired(let date):
                 licenseProblem = "Licence expired \(date.formatted(date: .abbreviated, time: .omitted))"
@@ -2277,7 +2282,16 @@ public final class AppController: ObservableObject {
         }
     }
 
+    /// F16: a menu-bar app can run for weeks; a lease that lapsed (or a key
+    /// that was renewed) must take effect without a relaunch. Cheap and pure,
+    /// re-run hourly off the sync tick.
+    private var lastLicenseRevalidation = Date.distantPast
+
     public func syncIfEnabled() async {
+        if Date().timeIntervalSince(lastLicenseRevalidation) > 3_600 {
+            lastLicenseRevalidation = Date()
+            revalidateLicense()
+        }
         guard !registry.isEmpty else { return }
         // Non-reentrant: if a push is already in flight, just ask it to run once
         // more when it finishes (a concurrent run would re-POST the same session
@@ -2304,7 +2318,10 @@ public final class AppController: ObservableObject {
                     rules.financeEligible(task: session.task,
                                           projectKey: projectKeys[session.task],
                                           sessionStart: session.start)
-                })
+                },
+                financePostFloor: settings.financeAutoPostWindowDays > 0
+                    ? Date().addingTimeInterval(-settings.financeAutoPostWindowDays * 86_400)
+                    : nil)
             for report in reports where report.posted > 0 {
                 let name = registry.entry(id: report.backendID)?.backend.displayName
                     ?? report.backendID

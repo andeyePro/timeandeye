@@ -2,6 +2,17 @@
 
 ## 2026-07-08
 
+- [x] **F15 + F16: reconnect-backfill age gate; licence re-evaluation without
+  relaunch.** (F15) Finance backends now auto-post only sessions younger than
+  `financeAutoPostWindowDays` (default 14; 0 = off): after a long-idle
+  reconnect (lapsed lease → dead Xero grant → re-subscribe months later) the
+  accumulated billable backlog stays VISIBLY PENDING instead of flooding the
+  books in one pass – release is a deliberate act, and released backlog posts
+  exactly once. pm backends are unaffected. (F16) The licence is revalidated
+  hourly off the sync tick (assign-on-change so SwiftUI doesn't churn): a
+  lease lapsing mid-run downgrades without a relaunch, and a renewed key takes
+  effect the hour it lands. Mac-verified: 447 passed, 0 failed.
+
 - [x] **F13: resurrection reconcile – a posted entry deleted at the backend
   re-posts exactly once.** Cross-device sequence: device A tombstones a posted
   session and deletes its backend entry; a newer edit resurrects the session

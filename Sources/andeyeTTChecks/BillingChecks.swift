@@ -461,6 +461,35 @@ func multiBackendSyncChecks(_ c: Checks) async {
         try expectEq(pm.created.map(\.taskID), ["2", "1"], "clearing the row retries it")
     }
 
+    await c.check("F15 backfill gate: finance skips sessions older than the floor — pending, not terminal; pm unaffected") {
+        let journal = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        let finance = FakeBackend(owns: .nothing)
+        let entries = [RegisteredBackend(id: "pm-a", class: .pm, backend: pm),
+                       RegisteredBackend(id: "fin-b", class: .finance, backend: finance)]
+        let old = session(.op(1), offset: -40 * 86_400)      // 40 days back
+        let recent = session(.op(1))
+        for s in [old, recent] { try journal.save(s) }
+        var rules = BillableRules()
+        rules.setProject("pm-a/id:7", billable: true, at: t0.addingTimeInterval(-90 * 86_400))
+        let eligible: (Session) -> Bool = {
+            rules.financeEligible(task: $0.task, projectKey: projectKeys[$0.task],
+                                  sessionStart: $0.start)
+        }
+        let engine = SyncEngine(journal: journal, backends: entries)
+        let floor = t0.addingTimeInterval(-14 * 86_400)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                      financeEligible: eligible, financePostFloor: floor)
+        try expectEq(pm.created.count, 2, "pm posts EVERYTHING it owns — the gate is finance-only")
+        try expectEq(finance.created.count, 1, "finance posts only the recent session")
+        try expectNil((try? journal.postingRecord(session: old.id, backendID: "fin-b")) ?? nil,
+                      "the old session is PENDING (no row) — releasable, never terminal")
+        // Deliberate release: lift the floor and the backlog posts.
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                      financeEligible: eligible, financePostFloor: nil)
+        try expectEq(finance.created.count, 2, "released backlog posts exactly once")
+    }
+
     await c.check("crash window with the entry landed: reconcile ADOPTS it — never a second create (F12/D3)") {
         let journal = InMemoryJournalStore()
         let pm = FakeBackend(owns: .op)

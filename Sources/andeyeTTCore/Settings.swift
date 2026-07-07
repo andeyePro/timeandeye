@@ -106,6 +106,12 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// the locale's own symbol (CurrencyDefault.symbol()); ONE override
     /// field, no settings sprawl.
     public var currencySymbolOverride: String?
+    /// Finance backends auto-post only sessions younger than this many days
+    /// (F15): after a long-idle reconnect (lapsed licence, dead Xero grant,
+    /// a long holiday) months of billable backlog must NOT flood the books
+    /// unasked — older sessions stay visibly pending until deliberately
+    /// released. 0 = no gate.
+    public var financeAutoPostWindowDays: Double
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -136,6 +142,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
                 licenseKey: String? = nil,
                 journalSyncEnabled: Bool = false,
+                financeAutoPostWindowDays: Double = 14,
                 currencySymbolOverride: String? = nil) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
@@ -167,6 +174,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.licenseKey = licenseKey
         self.journalSyncEnabled = journalSyncEnabled
         self.currencySymbolOverride = currencySymbolOverride
+        self.financeAutoPostWindowDays = financeAutoPostWindowDays
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -213,6 +221,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         journalSyncEnabled = c.lenient(.journalSyncEnabled, or: defaults.journalSyncEnabled)
         currencySymbolOverride = ((try? c.decodeIfPresent(String.self, forKey: .currencySymbolOverride)) ?? nil)
             ?? defaults.currencySymbolOverride
+        financeAutoPostWindowDays = c.lenient(.financeAutoPostWindowDays,
+                                              or: defaults.financeAutoPostWindowDays)
     }
 }
 

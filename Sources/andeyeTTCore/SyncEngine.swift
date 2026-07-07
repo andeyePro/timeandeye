@@ -228,6 +228,7 @@ public final class SyncEngine {
                              activityOverrides: [TaskRef: Int] = [:],
                              includeComments: Bool,
                              financeEligible: (Session) -> Bool = { _ in false },
+                             financePostFloor: Date? = nil,
                              now: Date = Date()) async -> [BackendReport] {
         // Re-assert the single-slot migration before every pass. It is
         // per-row idempotent (NOT EXISTS guard), so this is near-free - and
@@ -273,6 +274,15 @@ public final class SyncEngine {
                     // THEIR backend — skipped silently, never marked.
                     guard entry.backend.owns(session.task) else { continue }
                 case .finance:
+                    // Backfill age gate (F15): after a long-idle reconnect
+                    // (lapsed licence → dead Xero grant → months later), the
+                    // accumulated billable backlog must not flood the books
+                    // in one pass. Older-than-floor sessions stay VISIBLY
+                    // PENDING (no row — deliberate release posts them later),
+                    // never silently skipped-terminal.
+                    if let financePostFloor, session.start < financePostFloor {
+                        continue
+                    }
                     guard financeEligible(session) else {
                         // A retryable failure whose session is no longer
                         // billable is closed off: the flip stops future
