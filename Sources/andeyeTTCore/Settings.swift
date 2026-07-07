@@ -72,6 +72,9 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// How long after an idle stop the one-tap "count the gap as <task>" offer
     /// stays available (the gap defaults to a break if untouched).
     public var idleBackfillWindowSeconds: Double
+    /// Show the prominent "worked on X while away?" popover button at all.
+    /// Off by default — the offer is opt-in, not a surprise prompt.
+    public var offerIdleBackfill: Bool
     /// First N characters of the tracked task name shown in the menu bar; 0 = off.
     public var menuTaskChars: Int
     public var systemNotifications: Bool
@@ -121,6 +124,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 switchGraceSeconds: Double = 30,
                 sleepGraceSeconds: Double = 60,
                 idleBackfillWindowSeconds: Double = 18 * 3600,
+                offerIdleBackfill: Bool = false,
                 menuTaskChars: Int = 5,
                 systemNotifications: Bool = true,
                 popoverDefaultsToChangeMode: Bool = true,
@@ -150,6 +154,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.switchGraceSeconds = switchGraceSeconds
         self.sleepGraceSeconds = sleepGraceSeconds
         self.idleBackfillWindowSeconds = idleBackfillWindowSeconds
+        self.offerIdleBackfill = offerIdleBackfill
         self.menuTaskChars = menuTaskChars
         self.systemNotifications = systemNotifications
         self.popoverDefaultsToChangeMode = popoverDefaultsToChangeMode
@@ -189,6 +194,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         switchGraceSeconds = c.lenient(.switchGraceSeconds, or: defaults.switchGraceSeconds)
         sleepGraceSeconds = c.lenient(.sleepGraceSeconds, or: defaults.sleepGraceSeconds)
         idleBackfillWindowSeconds = c.lenient(.idleBackfillWindowSeconds, or: defaults.idleBackfillWindowSeconds)
+        offerIdleBackfill = c.lenient(.offerIdleBackfill, or: defaults.offerIdleBackfill)
         menuTaskChars = c.lenient(.menuTaskChars, or: defaults.menuTaskChars)
         systemNotifications = c.lenient(.systemNotifications, or: defaults.systemNotifications)
         popoverDefaultsToChangeMode = c.lenient(.popoverDefaultsToChangeMode, or: defaults.popoverDefaultsToChangeMode)

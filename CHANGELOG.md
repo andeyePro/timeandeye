@@ -64,6 +64,39 @@
   change; an unselected sub-minute edge tail stays put; a selected sub-minute
   window moves).
 
+- [x] **Popover display-layer polish: Reassign wording, house icon, comment
+  bar moved down, fewer hint lines, no duplicated clock, idle-backfill button
+  opt-in.** Six display-only changes, none touching segmentation, attribution
+  or the journal. (1) User-facing "Change to" → "Reassign" throughout the
+  popover (header mode toggle + its ⌘T tooltips, the switch-list header, the
+  Settings default-mode toggle) — makes clear the action relabels the WHOLE
+  running session, not a switch; the internal `changeMode` /
+  `changeCurrentTask` / `popoverDefaultsToChangeMode` symbols and its default
+  (still `true`) are untouched, wording only. (2) `PopoverView.taskRow` now
+  shows the same `house` glyph as SpentView/TimelineView/ReviewView for a
+  local-only task — it was the one list missing it. (3) The manual-note
+  comment bar (bubble.left + TextField, gated on
+  `CommentRouting.noteInputVisible`) moved out of the header, where it
+  competed with the running-task/certainty line, down to a new `commentBar`
+  just above the footer icon row. (4) Two always-on hint lines under the
+  switch list ("type a comment…", "type to search all N tasks") are gone;
+  their info now lives in `.help()` tooltips on the filter field ("Search
+  your tasks") and the comment field ("Add a comment on this time — ↵ when
+  done") — same info, on hover only, less vertical clutter. (5) The header's
+  elapsed-time text is gone from both the pinned and unpinned tracking rows
+  (confirmed `MenuTitle.text`/`refreshTitle` always render elapsed time in
+  the menu-bar title while `.tracking`, so nothing is lost) — the unpinned
+  row keeps its "N% certain" indicator, the one thing NOT already in the menu
+  bar; the pinned row's badge is now the whole line. (6) The "worked on X
+  while away?" idle-gap button is now gated on a new `Settings.
+  offerIdleBackfill` (default `false`, alongside `idleBackfillWindowSeconds`)
+  in addition to its existing pending-gap/window check, with a Settings
+  toggle ("Offer to log time you were away") that also enables/disables the
+  duration stepper — off by default, so the prominent blue button doesn't
+  appear unless opted in. New `AndeyeSettings` "defaults" check for
+  `offerIdleBackfill == false`; the rest is layout-only and verified on the
+  Mac.
+
 ## 2026-07-06
 
 - [x] **Evidence Card keeps the story straight after a correction (honesty

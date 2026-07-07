@@ -877,6 +877,7 @@ func settingsChecks(_ c: Checks) {
         try expect(!s.trackLeisureLocally)
         try expectEq(s.colourLow, "#FF3B30")
         try expectEq(s.colourHigh, "#34C759")
+        try expect(!s.offerIdleBackfill, "the away-time backfill button is opt-in, not a surprise prompt")
     }
 
     c.check("never-auto-push is representable") {

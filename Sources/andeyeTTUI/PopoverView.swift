@@ -55,6 +55,9 @@ struct PopoverView: View {
     @State private var pinPriority = 5
 
     var body: some View {
+        // NOTE: exactly 10 children — SwiftUI's ViewBuilder.buildBlock caps at
+        // 10. Adding an 11th here won't compile; wrap a couple into a Group{}
+        // or a computed subview first.
         VStack(alignment: .leading, spacing: 10) {
             header
             if pinning { pinEditor }
@@ -75,6 +78,7 @@ struct PopoverView: View {
             switchList
             if let jp = justPicked { grainFooter(jp) }
             Divider()
+            commentBar
             footer
         }
         .padding(12)
@@ -115,7 +119,7 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 4) {
             if case .tracking = controller.trackerState {
                 // Clicking the running task name flips the list below into
-                // "Change to" mode (relabel the current session).
+                // "Reassign" mode (relabel the current session).
                 HStack(alignment: .firstTextBaseline) {
                     Button { changeMode.toggle() } label: {
                         Text(controller.currentTaskName()).font(.headline).lineLimit(2)
@@ -123,8 +127,8 @@ struct PopoverView: View {
                     .buttonStyle(.plain)
                     .keyboardShortcut("t", modifiers: .command)
                     .help(changeMode
-                          ? "In Change-to mode — click to switch to Switch-to mode, start a new session (⌘T)"
-                          : "In Switch-to mode — click to switch to Change-to mode, relabel this session (⌘T)")
+                          ? "In Reassign mode — click to switch to Switch-to mode, start a new session (⌘T)"
+                          : "In Switch-to mode — click to switch to Reassign mode, relabel this session (⌘T)")
                     Spacer()
                     // One-click "that switch was wrong": fold the current slice
                     // back onto the previous task. Deliberately light (non-bold)
@@ -146,11 +150,12 @@ struct PopoverView: View {
                 HStack {
                     if let pin = controller.currentPin {
                         // Pinned: drop the redundant "% certain" — the chip says
-                        // it's locked. Pin icon + the scope's last segment (NOT
-                        // the task name, already shown above) re-opens the
-                        // editor, where the ✕ unpins (no separate badge ✕).
-                        Text(controller.elapsedText)
-                            .font(.caption).foregroundStyle(.secondary)
+                        // it's locked. Elapsed time is also redundant with the
+                        // always-visible menu-bar clock while tracking, so the
+                        // pin badge (icon + the scope's last segment, NOT the
+                        // task name already shown above) is the whole row; it
+                        // re-opens the editor, where the ✕ unpins (no separate
+                        // badge ✕).
                         Button { reopenPinning(pin.pin) } label: {
                             HStack(spacing: 2) {
                                 Image(systemName: "pin.fill")
@@ -165,7 +170,10 @@ struct PopoverView: View {
                         .help("Pinned — click to adjust the scope or unpin (⌘P)")
                     } else {
                         HStack(spacing: 4) {
-                            Text("\(controller.elapsedText)  ·  \(Int((certainty * 100).rounded()))% certain")
+                            // Elapsed time is redundant with the always-visible
+                            // menu-bar clock while tracking — certainty is the
+                            // one thing NOT shown there, so it's all that's left.
+                            Text("\(Int((certainty * 100).rounded()))% certain")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if let sig = controller.currentFocusSignal() {
@@ -209,21 +217,6 @@ struct PopoverView: View {
                     .keyboardShortcut(".", modifiers: .command)
                     .help("Stop tracking (⌘.)")
                 }
-                if CommentRouting.noteInputVisible(
-                    toTrackedTime: controller.settings.commentToTrackedTime,
-                    toTask: controller.settings.commentToTask) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "bubble.left")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                        TextField("", text: $note)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.caption)
-                            .focused($noteFocused)
-                            .onSubmit { noteFocused = false }
-                            .help("A note for this task's time — goes to the time entry and/or the task (see Settings ▸ Comments)")
-                    }
-                }
             } else {
                 HStack {
                     Text("Not tracking")
@@ -244,6 +237,29 @@ struct PopoverView: View {
                         .help("Restart the clock on the last tracked task (⌘R)")
                     }
                 }
+            }
+        }
+    }
+
+    /// The manual-note field, gated the same as before — moved out of the
+    /// header and down to just above the footer so it doesn't compete with
+    /// the running-task/certainty line for attention.
+    @ViewBuilder
+    private var commentBar: some View {
+        if case .tracking = controller.trackerState,
+           CommentRouting.noteInputVisible(
+               toTrackedTime: controller.settings.commentToTrackedTime,
+               toTask: controller.settings.commentToTask) {
+            HStack(spacing: 4) {
+                Image(systemName: "bubble.left")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                TextField("", text: $note)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                    .focused($noteFocused)
+                    .onSubmit { noteFocused = false }
+                    .help("Add a comment on this time — ↵ when done")
             }
         }
     }
@@ -694,7 +710,8 @@ struct PopoverView: View {
         // The gap already defaults to a break (nothing recorded). One tap claims
         // it as the task you were on — no timeline needed. The little × just
         // hides the offer early.
-        if let gap = controller.pendingGap,
+        if controller.settings.offerIdleBackfill,
+           let gap = controller.pendingGap,
            Date().timeIntervalSince(gap.to) < controller.settings.idleBackfillWindowSeconds {
             HStack(spacing: 6) {
                 Button { controller.claimIdleGap() } label: {
@@ -722,7 +739,7 @@ struct PopoverView: View {
     private var switchList: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(changeMode ? "Change to" : "Switch to")
+                Text(changeMode ? "Reassign" : "Switch to")
                     .font(.caption)
                     .foregroundStyle(changeMode ? AndeyeColors.highlight : .secondary)
                 if changeMode {
@@ -736,7 +753,7 @@ struct PopoverView: View {
                     .frame(width: 120)
                     .focused($filterFocused)
                     .onSubmit { pickFirstFiltered() }
-                    .help("Search every task; ↵ picks the top result")
+                    .help("Search your tasks")
             }
             // Default view: recent + likely first, then the rest of the ranked
             // set — all of it scrollable, so a task that isn't in the top picks
@@ -754,15 +771,6 @@ struct PopoverView: View {
             // row inside the MenuBarExtra popover. Cap it so a long list
             // actually scrolls rather than growing the popover off-screen.
             .frame(height: min(CGFloat(max(shown.count, 1)) * 26, 240))
-            if noteFocused {
-                Text("type a comment on your current work, ↵ when done")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            } else if filter.isEmpty, filterFocused, !controller.taskCache.isEmpty {
-                // Only when the filter has focus — otherwise it promised typing
-                // would do something when focus was elsewhere and it didn't.
-                Text("type to search all \(controller.taskCache.count) tasks")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
             if controller.taskCache.isEmpty {
                 Text("No tasks yet – set OP URL + API key in Settings")
                     .font(.caption2)
@@ -851,7 +859,10 @@ struct PopoverView: View {
             pick(task)
         } label: {
             HStack {
-                Text(task.subject).lineLimit(1)
+                HStack(spacing: 3) {
+                    if task.isLocalOnly { Image(systemName: "house").font(.system(size: 8)) }
+                    Text(task.subject).lineLimit(1)
+                }
                 Spacer()
                 Text(task.project.map { "\($0) · " } ?? "" )
                     .font(.caption2)

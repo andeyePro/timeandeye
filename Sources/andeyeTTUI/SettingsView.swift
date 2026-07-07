@@ -180,11 +180,14 @@ struct SettingsView: View {
                         value: $controller.settings.sleepGraceSeconds, in: 0...300, step: 15)
                 Text("If the Mac sleeps and wakes within this window, tracking just continues — no stop. A longer sleep stops as of when you stepped away. (Restart to apply.)")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Offer to log time you were away",
+                       isOn: $controller.settings.offerIdleBackfill)
                 Stepper("Offer to backfill an idle gap for: \(Int(controller.settings.idleBackfillWindowSeconds / 3600))h",
                         value: $controller.settings.idleBackfillWindowSeconds, in: 3600...86_400, step: 3600)
-                Text("After an idle stop the gap defaults to a break. For this long afterwards the popover offers a one-tap \"count it as <task>\" — no need to open the timeline.")
+                    .disabled(!controller.settings.offerIdleBackfill)
+                Text("After an idle stop the gap defaults to a break. When on, for this long afterwards the popover offers a one-tap \"count it as <task>\" — no need to open the timeline.")
                     .font(.caption).foregroundStyle(.secondary)
-                Toggle("Popover defaults to \"Change to\" (relabel the running session); off = \"Switch to\" (start fresh). Clicking the task title flips it.",
+                Toggle("Popover defaults to \"Reassign\" (relabel the running session); off = \"Switch to\" (start fresh). Clicking the task title flips it.",
                        isOn: $controller.settings.popoverDefaultsToChangeMode)
                 Picker("Time button opens", selection: $controller.settings.timeViewOpenMode) {
                     Text("Timeline").tag(TimeViewOpenMode.timeline)
