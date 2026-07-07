@@ -61,6 +61,19 @@ public protocol JournalStore {
     /// how many rows were written.
     @discardableResult
     func migrateSingleSlotPostings(to backendID: String, excluding: Set<UUID>) throws -> Int
+    // MARK: Resolved view (cross-device overlap resolution — D1)
+
+    /// Sessions in [from, to] as the OVERLAP-RESOLVED derived view (see
+    /// SessionMerge.resolveOverlaps): what display/aggregation/export show
+    /// and what posting bills. Identical to `sessions(from:to:)` on stores
+    /// without sync (single-device: nothing overlaps); the SQLite replica
+    /// overrides it when the sync clock is attached.
+    func resolvedSessions(from: Date, to: Date) throws -> [Session]
+    /// One session's surviving (start, seconds) in the resolved view —
+    /// what the posting engine should bill for it. nil when the session is
+    /// fully covered by higher-priority overlapping time (post nothing).
+    func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)?
+
     /// Timeline edits: replace the stored session (matched by id).
     func update(_ session: Session) throws
     func deleteSession(_ id: UUID) throws
@@ -85,6 +98,20 @@ public protocol JournalStore {
     /// the note must never silently vanish. Timestamped, newest last.
     func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws
     func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)]
+}
+
+public extension JournalStore {
+    /// Default: no sync replica, nothing overlaps — the raw window IS the
+    /// resolved view. (The SQLite store overrides when its clock is attached.)
+    func resolvedSessions(from: Date, to: Date) throws -> [Session] {
+        try sessions(from: from, to: to)
+    }
+
+    /// Default: the stored span is the contribution, whole.
+    func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)? {
+        guard let s = try session(id: sessionID) else { return nil }
+        return (s.start, s.end.timeIntervalSince(s.start))
+    }
 }
 
 public final class InMemoryJournalStore: JournalStore {

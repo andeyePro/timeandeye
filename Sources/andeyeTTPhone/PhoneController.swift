@@ -208,7 +208,8 @@ public final class PhoneController: ObservableObject {
     /// double-count across days. Mirrors the Mac's spentNodes minus the app
     /// level (iOS senses no apps, so there are no focus spans).
     public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
-        var sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+        // RESOLVED view (D1) — same seconds the Mac shows and posting bills.
+        var sessions = ((try? journal.resolvedSessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
             .map { s -> Session in
                 var c = s

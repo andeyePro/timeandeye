@@ -100,9 +100,40 @@ public enum SessionMerge {
     /// hold different content under one HLC — the one way LWW can diverge.
     /// The UI, aggregation and the backend pusher all read this view.
     public static func resolveOverlaps(_ revisions: [SessionRevision]) -> [SessionRevision] {
+        resolve(revisions).view
+    }
+
+    /// Per-PARENT surviving time in the resolved view: session id → (earliest
+    /// surviving start, summed surviving seconds). Fragments fold back into
+    /// their parent, so the POSTING layer can bill one backend entry per
+    /// stored session at its resolved size without ever keying ledger rows by
+    /// derived fragment ids. A fully-covered session simply has no entry.
+    public static func resolvedContributions(
+        _ revisions: [SessionRevision]) -> [UUID: (start: Date, seconds: TimeInterval)] {
+        let (view, parentOf) = resolve(revisions)
+        var out: [UUID: (start: Date, seconds: TimeInterval)] = [:]
+        for rev in view where !rev.deleted {
+            let parent = parentOf[rev.id] ?? rev.id
+            let seconds = rev.session.end.timeIntervalSince(rev.session.start)
+            if let existing = out[parent] {
+                out[parent] = (min(existing.start, rev.session.start),
+                               existing.seconds + seconds)
+            } else {
+                out[parent] = (rev.session.start, seconds)
+            }
+        }
+        return out
+    }
+
+    /// The shared walk: the resolved view plus fragment→parent linkage (only
+    /// EXTRA fragments appear in `parentOf`; a parent's first surviving
+    /// fragment keeps its own id).
+    static func resolve(_ revisions: [SessionRevision])
+        -> (view: [SessionRevision], parentOf: [UUID: UUID]) {
         let live = revisions.filter { !$0.deleted }.sorted(by: priority)
         let dead = revisions.filter { $0.deleted }
         var claimed: [(start: Date, end: Date)] = []
+        var parentOf: [UUID: UUID] = [:]
         var out: [SessionRevision] = []
         for rev in live {
             // Subtract every claimed interval: the remainder is 0..N
@@ -127,16 +158,20 @@ public enum SessionMerge {
                 var piece = rev
                 piece.session.start = f.start
                 piece.session.end = f.end
-                if k > 0 { piece.session.id = Self.fragmentID(parent: rev.id, index: k) }
+                if k > 0 {
+                    piece.session.id = Self.fragmentID(parent: rev.id, index: k)
+                    parentOf[piece.session.id] = rev.id
+                }
                 claimed.append(f)
                 out.append(piece)
             }
         }
-        return (out + dead).sorted {
+        let view = (out + dead).sorted {
             $0.session.start != $1.session.start
                 ? $0.session.start < $1.session.start
                 : $0.id.uuidString < $1.id.uuidString
         }
+        return (view, parentOf)
     }
 
     /// Deterministic id for the k-th EXTRA fragment (k ≥ 1) of a split

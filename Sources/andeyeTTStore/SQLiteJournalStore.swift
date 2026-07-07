@@ -102,6 +102,11 @@ public final class SQLiteJournalStore: JournalStore {
         );
         CREATE INDEX IF NOT EXISTS posting_ledger_backend ON posting_ledger(backend_id, state)
         """)
+        // Posted-snapshot columns (D1/D4): what was actually billed, so the
+        // divergence detector can compare against the current resolved
+        // session. Additive; NULL on pre-existing rows.
+        try? exec("ALTER TABLE posting_ledger ADD COLUMN posted_start REAL")
+        try? exec("ALTER TABLE posting_ledger ADD COLUMN posted_duration REAL")
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
@@ -324,11 +329,15 @@ public final class SQLiteJournalStore: JournalStore {
             entryID: sqlite3_column_text(stmt, 3).map { String(cString: $0) },
             lastError: sqlite3_column_text(stmt, 4).map { String(cString: $0) },
             attempts: Int(sqlite3_column_int(stmt, 5)),
-            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 6)))
+            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 6)),
+            postedStart: sqlite3_column_type(stmt, 7) == SQLITE_NULL
+                ? nil : Date(timeIntervalSince1970: sqlite3_column_double(stmt, 7)),
+            postedDuration: sqlite3_column_type(stmt, 8) == SQLITE_NULL
+                ? nil : sqlite3_column_double(stmt, 8))
     }
 
     private static let postingColumns =
-        "session_id, backend_id, state, entry_id, last_error, attempts, updated"
+        "session_id, backend_id, state, entry_id, last_error, attempts, updated, posted_start, posted_duration"
 
     public func postingRecords(session: UUID) throws -> [PostingRecord] {
         var out: [PostingRecord] = []
@@ -368,8 +377,9 @@ public final class SQLiteJournalStore: JournalStore {
             var stmt: OpaquePointer?
             let sql = """
             INSERT OR REPLACE INTO posting_ledger
-                (session_id, backend_id, state, entry_id, last_error, attempts, updated)
-            VALUES (?,?,?,?,?,?,?)
+                (session_id, backend_id, state, entry_id, last_error, attempts, updated,
+                 posted_start, posted_duration)
+            VALUES (?,?,?,?,?,?,?,?,?)
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
@@ -390,6 +400,16 @@ public final class SQLiteJournalStore: JournalStore {
             }
             sqlite3_bind_int(stmt, 6, Int32(record.attempts))
             sqlite3_bind_double(stmt, 7, record.updatedAt.timeIntervalSince1970)
+            if let postedStart = record.postedStart {
+                sqlite3_bind_double(stmt, 8, postedStart.timeIntervalSince1970)
+            } else {
+                sqlite3_bind_null(stmt, 8)
+            }
+            if let postedDuration = record.postedDuration {
+                sqlite3_bind_double(stmt, 9, postedDuration)
+            } else {
+                sqlite3_bind_null(stmt, 9)
+            }
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
@@ -498,6 +518,67 @@ public final class SQLiteJournalStore: JournalStore {
             out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
         }
         return out
+    }
+
+    // MARK: - Resolved view (D1 — sync-aware overrides)
+
+    /// STAMPED revisions intersecting [from, to], tombstones included (the
+    /// resolver needs them to pass through, and resolution is time-local so
+    /// a window load is exact — a claimant that trims in-window time must
+    /// itself intersect the window).
+    private func revisions(from: Date, to: Date) throws -> [SessionRevision] {
+        var out: [SessionRevision] = []
+        try query("""
+            SELECT json, hlc_millis, hlc_counter, hlc_device, origin, deleted
+            FROM sessions WHERE hlc_device != '' AND start < ? AND end > ?
+            """,
+                  bind: {
+                      sqlite3_bind_double($0, 1, to.timeIntervalSince1970)
+                      sqlite3_bind_double($0, 2, from.timeIntervalSince1970)
+                  }) { stmt in
+            let session = try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0))
+            let device = sqlite3_column_text(stmt, 3).map { String(cString: $0) } ?? ""
+            out.append(SessionRevision(
+                session: session,
+                hlc: HLC(physicalMillis: sqlite3_column_int64(stmt, 1),
+                         counter: sqlite3_column_int(stmt, 2), deviceID: device),
+                origin: SliceOrigin(rawValue: Int(sqlite3_column_int(stmt, 4))) ?? .auto,
+                deleted: sqlite3_column_int(stmt, 5) != 0))
+        }
+        return out.filter { !syncExcludedIDs.contains($0.id) }
+    }
+
+    /// Sync ON: the overlap-resolved derived view over the window's stamped
+    /// revisions, plus any UNSTAMPED in-window rows verbatim (excluded rows
+    /// like the live checkpoint are unstamped; they must keep appearing to
+    /// the callers that filter them). Sync OFF: identical to the raw window.
+    public func resolvedSessions(from: Date, to: Date) throws -> [Session] {
+        guard clock != nil else { return try sessions(from: from, to: to) }
+        let resolved = SessionMerge.resolveOverlaps(try revisions(from: from, to: to))
+            .filter { !$0.deleted }
+            .map(\.session)
+        let stampedIDs = Set(resolved.map(\.id))
+        let unstamped = try sessions(from: from, to: to).filter { raw in
+            !stampedIDs.contains(raw.id)
+                && ((try? revisionRow(id: raw.id))?.hlc.deviceID.isEmpty ?? true)
+        }
+        return (resolved + unstamped)
+            .filter { $0.start < to && $0.end > from }
+            .sorted { $0.start != $1.start ? $0.start < $1.start
+                                           : $0.id.uuidString < $1.id.uuidString }
+    }
+
+    /// Sync ON: this session's surviving (start, seconds) after overlap
+    /// resolution — nil when fully covered. Sync OFF: the stored span.
+    public func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)? {
+        guard let s = try session(id: sessionID) else { return nil }
+        guard clock != nil,
+              let row = try revisionRow(id: sessionID), !row.hlc.deviceID.isEmpty else {
+            return (s.start, s.end.timeIntervalSince(s.start))
+        }
+        let contributions = SessionMerge.resolvedContributions(
+            try revisions(from: s.start, to: s.end))
+        return contributions[sessionID]
     }
 
     /// Populate `end` for rows written before that column existed (end == 0 is

@@ -1695,7 +1695,8 @@ public final class AppController: ObservableObject {
     /// the live session when the range covers now. Sessions crossing the
     /// range boundary are clipped so totals never double-count across days.
     public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
-        var sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+        // RESOLVED view (D1): the pie shows the seconds posting bills.
+        var sessions = ((try? journal.resolvedSessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }   // internal recovery row
             .map { s -> Session in
                 var c = s
@@ -2211,7 +2212,9 @@ public final class AppController: ObservableObject {
     public func timesheetExport(period: TimePeriod, format: TimesheetFormat) -> String {
         let now = Date()
         let range = period.range(anchor: now, now: now)
-        let sessions = ((try? journal.sessions(from: range.start, to: range.end)) ?? [])
+        // The RESOLVED view (D1): the export shows the same seconds posting
+        // bills — cross-device overlap trims apply to both or neither.
+        let sessions = ((try? journal.resolvedSessions(from: range.start, to: range.end)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
         let resolve: TimesheetExport.NameResolver = { [weak self] ref in
             if let t = self?.taskCache.first(where: { $0.ref == ref }) {

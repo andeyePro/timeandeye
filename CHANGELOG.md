@@ -2,6 +2,19 @@
 
 ## 2026-07-08
 
+- [x] **D1: posting/aggregation/export read the overlap-RESOLVED view.** With
+  journal sync on, a higher-priority cross-device slice trims what overlapping
+  sessions display AND bill – posting the raw span would double-bill the
+  claimed minutes. New JournalStore surfaces `resolvedSessions(from:to:)` and
+  `resolvedContribution(sessionID:)` (identity defaults keep single-device
+  behaviour unchanged; SQLite overrides them when the sync clock is attached);
+  SyncEngine bills the contribution (fully-covered sessions close `.skipped`,
+  billed nothing) and snapshots posted_start/posted_duration onto the ledger
+  row (the D4 drift detector's baseline); the Time-Spent pie (Mac + phone) and
+  timesheet export read the resolved view, so displayed seconds == posted
+  seconds. Timeline/edit/reconcile paths deliberately stay raw (they operate
+  on stored identity). Mac-verified: 444 passed, 0 failed.
+
 - [x] **Licence v2 + entitlement gate; posting robustness (F12/F19/F21/F22/F23);
   sync anti-entropy.** The Fable 5 review-and-build session (FableReview.md
   holds the 23-finding review this implements against; the two specs under

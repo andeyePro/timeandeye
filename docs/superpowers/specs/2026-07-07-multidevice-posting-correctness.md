@@ -68,6 +68,20 @@ current transport + syncer pair does not quite guarantee)
 
 ## D1. Wire the resolved view (fixes F8)
 
+STATUS: IMPLEMENTED for posting + aggregation + export (overnight run,
+2026-07-08). `JournalStore.resolvedSessions(from:to:)` /
+`resolvedContribution(sessionID:)` with identity defaults (sync off =
+byte-for-byte today) and sync-aware SQLite overrides; the engine bills each
+session's resolved contribution (fully-covered ⇒ `.skipped`, never billed)
+and snapshots postedStart/postedDuration onto the ledger row; pie
+(Mac+phone) and timesheet export read the resolved view.
+SessionMerge.resolvedContributions folds fragments back to their parent so
+ledger rows stay keyed by stored session ids — no fragment-id rows exist.
+DELIBERATELY still raw: timelineSessions (the timeline is the EDIT surface;
+fragment-aware editing needs its own design), duplicate-reconcile, and all
+edit paths (they operate on stored identity). ResolvedPostingChecks pins
+criterion 1 + the covered-session case + the sync-off identity.
+
 One read-side choke point in Core — `ResolvedJournal` (name flexible): load
 the raw revisions whose `[start, end)` intersects the query window (the
 existing `start < to AND end > from` query already captures boundary

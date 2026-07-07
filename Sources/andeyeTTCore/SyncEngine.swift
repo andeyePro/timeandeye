@@ -76,19 +76,24 @@ public final class SyncEngine {
                 try? journal.setPostingRecord(closed)
                 continue
             }
-            let duration = session.end.timeIntervalSince(session.start)
+            // Match what actually went on the wire: the intent row's resolved
+            // snapshot when present (D1 — the posted span can be a trimmed
+            // contribution, not the raw span); raw span for pre-snapshot rows.
+            let sentStart = row.postedStart ?? session.start
+            let sentDuration = row.postedDuration
+                ?? session.end.timeIntervalSince(session.start)
             do {
                 let candidates = try await entry.backend.listTimeEntries(
-                    from: session.start.addingTimeInterval(-3600),
-                    to: session.end.addingTimeInterval(3600))
+                    from: sentStart.addingTimeInterval(-3600),
+                    to: sentStart.addingTimeInterval(sentDuration + 3600))
                 let match = candidates.first { candidate in
                     guard candidate.taskID == taskID,
-                          abs(candidate.durationSeconds - duration) <= 90 else { return false }
+                          abs(candidate.durationSeconds - sentDuration) <= 90 else { return false }
                     // Day-granular backends (hasStart false) can only match
                     // to the day; minute-true ones match tight.
                     return candidate.hasStart
-                        ? abs(candidate.start.timeIntervalSince(session.start)) <= 90
-                        : abs(candidate.start.timeIntervalSince(session.start)) <= 86_400
+                        ? abs(candidate.start.timeIntervalSince(sentStart)) <= 90
+                        : abs(candidate.start.timeIntervalSince(sentStart)) <= 86_400
                 }
                 var resolved = row
                 if let match {
@@ -194,7 +199,16 @@ public final class SyncEngine {
                 // Personal (.local) tasks have no backend id and must never
                 // leave the Mac — for ANY backend class, whatever any flag says.
                 guard let taskID = session.task.backendTaskID else { continue }
-                let duration = session.end.timeIntervalSince(session.start)
+                // What we BILL is the session's overlap-RESOLVED contribution
+                // (D1): with sync on, higher-priority cross-device slices may
+                // have claimed part (or all) of this span — posting the raw
+                // span would double-bill the claimed minutes. Sync off, this
+                // IS the stored span. A fully-covered session contributes 0
+                // and falls into the sub-minute skip below.
+                let contribution = ((try? journal.resolvedContribution(sessionID: session.id))
+                    ?? nil) ?? (session.start, 0)
+                let postStart = contribution.0
+                let duration = contribution.1
                 if duration < 60 {
                     // Too short for a backend entry (OP would round it to
                     // PT0H0M); close THIS backend's row so it never clogs the
@@ -222,14 +236,15 @@ public final class SyncEngine {
                     try journal.setPostingRecord(PostingRecord(
                         sessionID: session.id, backendID: entry.id,
                         state: .inflight, lastError: prior?.lastError,
-                        attempts: prior?.attempts ?? 0, updatedAt: now))
+                        attempts: prior?.attempts ?? 0, updatedAt: now,
+                        postedStart: postStart, postedDuration: duration))
                 } catch {
                     report.error = "ledger write failed: \(error)"
                     break sessionLoop
                 }
                 do {
                     let entryID = try await entry.backend.createTimeEntry(
-                        taskID: taskID, start: session.start, duration: duration,
+                        taskID: taskID, start: postStart, duration: duration,
                         activityID: activity, comment: comment)
                     // The create succeeded; the backend now holds the entry.
                     // If writing the `.posted` row fails, the row STAYS
@@ -242,7 +257,8 @@ public final class SyncEngine {
                         try journal.setPostingRecord(PostingRecord(
                             sessionID: session.id, backendID: entry.id,
                             state: .posted, entryID: entryID,
-                            attempts: prior?.attempts ?? 0, updatedAt: now))
+                            attempts: prior?.attempts ?? 0, updatedAt: now,
+                            postedStart: postStart, postedDuration: duration))
                     } catch {
                         onDebug("posted-row write failed for \(session.id); left .inflight for adopt: \(error)")
                         report.error = "ledger write failed: \(error)"

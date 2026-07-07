@@ -214,10 +214,18 @@ public struct PostingRecord: Equatable, Codable, Sendable {
     /// Failed attempts so far (diagnostics; no back-off policy yet).
     public var attempts: Int
     public var updatedAt: Date
+    /// Snapshot of what was ACTUALLY sent to the backend (the session's
+    /// overlap-RESOLVED start/seconds at posting time). The divergence
+    /// detector (D4) compares these against the current resolved session to
+    /// know when the backend entry has drifted from the journal. nil on rows
+    /// written before the snapshot existed, and on non-posting states.
+    public var postedStart: Date?
+    public var postedDuration: TimeInterval?
 
     public init(sessionID: UUID, backendID: String, state: PostingState,
                 entryID: RemoteEntryID? = nil, lastError: String? = nil,
-                attempts: Int = 0, updatedAt: Date = Date()) {
+                attempts: Int = 0, updatedAt: Date = Date(),
+                postedStart: Date? = nil, postedDuration: TimeInterval? = nil) {
         self.sessionID = sessionID
         self.backendID = backendID
         self.state = state
@@ -225,5 +233,7 @@ public struct PostingRecord: Equatable, Codable, Sendable {
         self.lastError = lastError
         self.attempts = attempts
         self.updatedAt = updatedAt
+        self.postedStart = postedStart
+        self.postedDuration = postedDuration
     }
 }
