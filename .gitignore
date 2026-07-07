@@ -31,3 +31,8 @@ __pycache__/
 # Per-machine Xcode state (public-repo hygiene)
 xcuserdata/
 *.xcuserstate
+
+# The whole andeyePro repo
+andeyePro/
+
+# runtime state (sessions/ IS committed; these are per-machine)
