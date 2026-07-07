@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+- [x] **A5: posting-health surfacing in Settings.** A "Posting health" section
+  appears only when something needs a human: per backend, the count of
+  quarantined (`stuck`) entries with a one-click Retry (clears the rows and
+  kicks a sync pass – the repair gesture the checks pin), and the count of
+  posted entries that have drifted from the journal (D4 detection). Entitlement
+  denial copy waits on the cross-repo `requires:` seam wiring. Mac-verified:
+  447 passed, 0 failed; full build (incl. andeyeTTUI) clean.
+
 - [x] **F15 + F16: reconnect-backfill age gate; licence re-evaluation without
   relaunch.** (F15) Finance backends now auto-post only sessions younger than
   `financeAutoPostWindowDays` (default 14; 0 = off): after a long-idle

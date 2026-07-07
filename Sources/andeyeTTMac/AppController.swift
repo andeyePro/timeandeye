@@ -2287,6 +2287,41 @@ public final class AppController: ObservableObject {
     /// re-run hourly off the sync tick.
     private var lastLicenseRevalidation = Date.distantPast
 
+    /// Per-backend posting health for Settings (A5): rows the queue can no
+    /// longer move on its own. `stuck` = quarantined after the transient
+    /// cap; `diverged` = posted entries the journal has since moved away
+    /// from (D4 detection). Only backends with something wrong appear.
+    public struct PostingHealth: Identifiable {
+        public let id: String        // backend id (ledger identity)
+        public let name: String      // display name for the row
+        public let stuck: Int
+        public let diverged: Int
+    }
+
+    public func postingHealthReport() -> [PostingHealth] {
+        registry.entries.compactMap { entry in
+            let stuck = ((try? journal.postingRecords(state: .stuck,
+                                                      backendID: entry.id)) ?? []).count
+            let diverged = postingDivergences[entry.id] ?? 0
+            guard stuck > 0 || diverged > 0 else { return nil }
+            return PostingHealth(id: entry.id, name: entry.backend.displayName,
+                                 stuck: stuck, diverged: diverged)
+        }
+    }
+
+    /// The repair gesture for quarantined rows: clearing a `.stuck` row puts
+    /// its session back in the queue with a fresh attempt budget.
+    public func retryStuck(backendID: String) {
+        let rows = ((try? journal.postingRecords(state: .stuck, backendID: backendID)) ?? [])
+        for row in rows {
+            try? journal.clearPostingRecord(session: row.sessionID, backendID: backendID)
+        }
+        if !rows.isEmpty {
+            actionNote = "Retrying \(rows.count) stuck entr\(rows.count == 1 ? "y" : "ies")"
+            Task { await syncIfEnabled() }
+        }
+    }
+
     public func syncIfEnabled() async {
         if Date().timeIntervalSince(lastLicenseRevalidation) > 3_600 {
             lastLicenseRevalidation = Date()

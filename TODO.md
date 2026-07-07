@@ -582,9 +582,10 @@ and recorded rather than fixed blind:
   F23 (middle-split destroys the smaller side) are the pre-CloudKit-GA set;
   full designs in docs/superpowers/specs/2026-07-07-multidevice-posting-
   correctness.md (D0–D7 + 14 acceptance criteria).
-- [ ] Wire Settings surfacing for the new denial/skip states: entitlement
-  denials (EntitlementDenialReason copy), `.stuck` quarantine rows and
-  permanentlySkipped counts (journal summary shows only lastError today).
+- [x] Wire Settings surfacing — DONE 2026-07-08 (overnight): Posting health
+  section (stuck + Retry, diverged counts); permanentlySkipped surfaces via
+  lastError. REMAINING: entitlement-denial copy — lands with the cross-repo
+  `requires:` seam change (gate is dormant until then).
 - [ ] Pro repo: thread `XeroConnector.entitlement` through the seam once
   `register(..., requires:)` exists on BackendRegistrar (coordinated
   cross-repo change; main side already has the gated registry method).

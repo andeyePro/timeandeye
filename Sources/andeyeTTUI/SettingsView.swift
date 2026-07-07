@@ -242,6 +242,34 @@ struct SettingsView: View {
                 }
             }
 
+            // Posting health (A5): only appears when something needs a human —
+            // quarantined rows (retryable in one click) or posted entries the
+            // journal has since moved away from (re-sync is the coming
+            // amendment feature; for now the drift is at least VISIBLE).
+            let unhealthy = controller.postingHealthReport()
+            if !unhealthy.isEmpty {
+                Section("Posting health") {
+                    ForEach(unhealthy) { item in
+                        HStack {
+                            Text(item.name).font(.caption)
+                            Spacer()
+                            if item.diverged > 0 {
+                                Text("\(item.diverged) drifted from the journal")
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
+                            if item.stuck > 0 {
+                                Text("\(item.stuck) stuck")
+                                    .font(.caption).foregroundStyle(.red)
+                                Button("Retry") {
+                                    controller.retryStuck(backendID: item.id)
+                                }
+                                .font(.caption)
+                            }
+                        }
+                    }
+                }
+            }
+
             Section("Maintenance") {
                 HStack {
                     Button(scanning ? "Scanning…" : "Scan for duplicate OpenProject entries") {
