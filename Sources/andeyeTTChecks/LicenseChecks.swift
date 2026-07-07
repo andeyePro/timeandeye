@@ -20,7 +20,7 @@ func licenseChecks(_ c: Checks) {
         let license = License(tier: .pro, licensee: "Test User <licensee@example.com>",
                               issued: t0)
         let key = try mint(license)
-        try expect(key.hasPrefix("ANDE1."), "recognisable prefix")
+        try expect(key.hasPrefix("ANDEYE1."), "recognisable prefix")
         switch verifier.validate(key, now: t0) {
         case .success(let got):
             // Dates went through secondsSince1970 encoding — compare seconds.
@@ -70,8 +70,10 @@ func licenseChecks(_ c: Checks) {
     }
 
     c.check("garbage is malformed, not a crash") {
-        for junk in ["", "ANDE1", "ANDE1.x", "ANDE1.!!.!!", "WRONG.a.b", "AMBI1.a.b",
-                     "ANDE1.\(LicenseVerifier.base64urlEncode(Data("{}".utf8))).c"] {
+        // Both retired prefixes (AMBI1, ANDE1) must now reject — no dual-accept.
+        for junk in ["", "ANDEYE1", "ANDEYE1.x", "ANDEYE1.!!.!!", "WRONG.a.b",
+                     "AMBI1.a.b", "ANDE1.a.b",
+                     "ANDEYE1.\(LicenseVerifier.base64urlEncode(Data("{}".utf8))).c"] {
             switch verifier.validate(junk, now: t0) {
             case .failure(.malformed), .failure(.badSignature): continue
             case let other: throw CheckFailure(description: "junk '\(junk)' → \(other)")
