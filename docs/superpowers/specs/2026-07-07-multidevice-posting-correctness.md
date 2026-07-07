@@ -205,6 +205,16 @@ D4's snapshot comparison to know WHICH posted rows to verify cheaply.
 
 ## D4. Convergence loop replaces edit fan-out (fixes F11, and F8's trim case)
 
+STATUS: DETECTION HALF IMPLEMENTED (overnight run, 2026-07-08): every
+`.posted` row with a snapshot is compared each pass against the current
+resolved contribution — duration/start drift beyond 60 s, and
+deleted/fully-covered sessions, are counted per backend
+(BackendReport.diverged, AppController.postingDivergences published for the
+coming Settings surface) and named in the debug log. Detection never
+re-posts and never duplicates. The AMENDMENT half (update/delete/retract at
+the backend, entryFrozen → .diverged terminal state) remains to build —
+until then the count is the honest "your books have drifted" signal.
+
 Don't wire per-edit-path amendment calls (that is how F11 happened — each new
 edit surface must remember every backend class). Instead, `pushEligible`
 gains an AMENDMENT phase driven purely by state comparison:

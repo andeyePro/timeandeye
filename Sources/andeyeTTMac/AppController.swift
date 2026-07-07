@@ -158,6 +158,9 @@ public final class AppController: ObservableObject {
     /// survives auto-resume and stays offered for `idleBackfillWindowSeconds`.
     @Published public private(set) var pendingGap: IdleGap?
     @Published public private(set) var lastError: String?
+    /// backendID → count of posted entries whose journal side has since
+    /// moved (D4 detection; empty = books match the journal).
+    @Published public private(set) var postingDivergences: [String: Int] = [:]
     @Published public private(set) var journalSummary = ""
     @Published public private(set) var connectedAs: String?
     /// The validated licence, or nil for Community (no key / bad key / expired
@@ -2314,6 +2317,17 @@ public final class AppController: ObservableObject {
                 lastError = "\(name) refused \(report.permanentlySkipped) "
                     + (report.permanentlySkipped == 1 ? "entry" : "entries")
                     + " permanently (task deleted or frozen) — they won't retry"
+            }
+            // D4 detection: posted entries the journal has since moved away
+            // from (edit/trim/delete after posting). Published per backend so
+            // Settings can show "N entries need re-syncing"; amendment is the
+            // follow-on feature.
+            postingDivergences = Dictionary(uniqueKeysWithValues: reports
+                .filter { $0.diverged > 0 }
+                .map { ($0.backendID, $0.diverged) })
+            for (backendID, n) in postingDivergences {
+                let name = registry.entry(id: backendID)?.backend.displayName ?? backendID
+                DebugLog.write("\(name): \(n) posted entr\(n == 1 ? "y" : "ies") diverged from the journal")
             }
             if let op = backend as? OPBackend, !op.startTimesSupported {
                 lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"

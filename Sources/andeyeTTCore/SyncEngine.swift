@@ -30,15 +30,62 @@ public final class SyncEngine {
         /// Sessions closed off this pass because the backend rejected them
         /// PERMANENTLY (PermanentPostError) — surfaced, never retried.
         public var permanentlySkipped = 0
+        /// Posted entries whose journal side has since MOVED (D4 detection):
+        /// the session was edited/trimmed/deleted after posting, so the
+        /// backend entry no longer matches the journal. Detection only —
+        /// amendment is the D4 second half; until it lands this count is the
+        /// honest "your books have drifted" signal.
+        public var diverged = 0
         public var error: String?
 
         public init(backendID: String, posted: Int = 0,
-                    permanentlySkipped: Int = 0, error: String? = nil) {
+                    permanentlySkipped: Int = 0, diverged: Int = 0,
+                    error: String? = nil) {
             self.backendID = backendID
             self.posted = posted
             self.permanentlySkipped = permanentlySkipped
+            self.diverged = diverged
             self.error = error
         }
+    }
+
+    /// Journal-vs-posted drift beyond this is a divergence (a minute — the
+    /// same floor posting itself uses; sub-minute wobble never re-bills).
+    public static let divergenceTolerance: TimeInterval = 60
+
+    /// D4 detection half: every `.posted` row carrying a snapshot is compared
+    /// against the CURRENT resolved journal. A session that was edited,
+    /// re-trimmed by a later-arriving overlap, or deleted after posting makes
+    /// its backend entry stale — count it (and name it via onDebug) so the
+    /// drift is VISIBLE instead of silently wrong in the books. Amendment
+    /// (update/delete at the backend) is the second half, not yet wired.
+    private func detectDivergence(_ entry: RegisteredBackend, now: Date) -> Int {
+        let rows = ((try? journal.postingRecords(state: .posted,
+                                                 backendID: entry.id)) ?? [])
+        var count = 0
+        for row in rows {
+            guard let sentDuration = row.postedDuration else { continue }   // pre-snapshot row
+            let sentStart = row.postedStart
+            let contribution = ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil)
+            let drifted: String?
+            if let contribution {
+                if abs(contribution.seconds - sentDuration) > Self.divergenceTolerance {
+                    drifted = "duration \(Int(sentDuration))s → \(Int(contribution.seconds))s"
+                } else if let sentStart,
+                          abs(contribution.start.timeIntervalSince(sentStart)) > Self.divergenceTolerance {
+                    drifted = "start moved \(Int(contribution.start.timeIntervalSince(sentStart)))s"
+                } else {
+                    drifted = nil
+                }
+            } else {
+                drifted = "session deleted/fully-covered — entry should be retracted"
+            }
+            if let drifted {
+                count += 1
+                onDebug("diverged: \(row.sessionID) at \(entry.id): \(drifted)")
+            }
+        }
+        return count
     }
 
     /// After this many failed attempts a row is quarantined `.stuck` and the
@@ -166,6 +213,10 @@ public final class SyncEngine {
             // are verified-and-adopted (or demoted to a clean retry) before
             // the queue is read, so a demoted session re-enters THIS pass.
             await reconcileInflight(entry, now: now)
+            // Then the D4 drift scan: posted entries whose journal side has
+            // since moved. Detection only — counted and surfaced, not yet
+            // amended.
+            report.diverged = detectDivergence(entry, now: now)
             let queue = ((try? journal.sessions(needingPostTo: entry.id,
                                                 atOrAbove: threshold)) ?? [])
                 .filter { !excludedSessionIDs.contains($0.id) }

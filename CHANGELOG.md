@@ -2,6 +2,17 @@
 
 ## 2026-07-08
 
+- [x] **D4 (detection half): posted-vs-journal drift is now counted and
+  surfaced.** Each sync pass compares every posted entry's snapshot
+  (posted_start/posted_duration) against the session's CURRENT resolved
+  contribution: an edit, a later-arriving overlap trim, or a delete after
+  posting makes the backend entry stale – previously silently wrong in the
+  books forever. Drift beyond 60 s and retract-worthy (deleted/fully-covered)
+  sessions count into BackendReport.diverged and the published
+  `AppController.postingDivergences`; detection never re-posts. Amendment
+  (updating/deleting the backend entry) is the follow-on half. Mac-verified:
+  445 passed, 0 failed.
+
 - [x] **D1: posting/aggregation/export read the overlap-RESOLVED view.** With
   journal sync on, a higher-priority cross-device slice trims what overlapping
   sessions display AND bill – posting the raw span would double-bill the

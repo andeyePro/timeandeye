@@ -81,6 +81,39 @@ func resolvedPostingChecks(_ c: Checks) async {
                      "the covering slice itself billed once")
     }
 
+    await c.check("D4 detection: an edit/trim/delete after posting is counted as divergence") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        let clean = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t(4000))).first
+        try expectEq(clean?.posted, 1)
+        try expectEq(clean?.diverged, 0, "fresh post matches the journal")
+
+        // The user trims 30 min off the posted session (an edit path re-saves
+        // with a fresh stamp). The backend entry now holds 3600 s of a
+        // 1800 s session — that MUST surface, not sit silently wrong.
+        nowMillis += 10
+        var trimmed = s; trimmed.end = t(1800)
+        try store.save(trimmed)
+        let after = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t(4100))).first
+        try expectEq(after?.diverged, 1, "duration drift detected")
+        try expectEq(after?.posted, 0, "detection never re-posts")
+        try expectEq(pm.created.count, 1, "…and never creates a duplicate")
+
+        // Deleting the session entirely: the entry should be retracted —
+        // counted as divergence too (retraction is the D4 second half).
+        nowMillis += 10
+        try store.deleteSession(s.id)
+        let gone = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                              now: t(4200))).first
+        try expectEq(gone?.diverged, 1, "deleted-after-posting detected")
+    }
+
     await c.check("sync OFF: resolved surfaces are the identity — single-device unchanged") {
         let store = try makeStore()   // no clock attached
         let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
