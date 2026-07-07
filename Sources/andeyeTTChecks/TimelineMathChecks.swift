@@ -162,7 +162,7 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(pieces.map(\.task), [.op(1), .op(2), .op(1)])
         try expectEq(pieces[2].start, t(570)); try expectEq(pieces[2].end, t(600))
         // Conservation: the pieces still tile the whole session, no gap.
-        try expectEq(pieces.first?.start, t(0)); try expectEq(pieces.last?.end, t(600))
+        try expectEq(pieces[0].start, t(0)); try expectEq(pieces[2].end, t(600))
     }
 
     c.check("split MOVES a genuinely-selected sub-minute window") {

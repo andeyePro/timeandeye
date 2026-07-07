@@ -240,7 +240,7 @@ func correctionHistoryChecks(_ c: Checks) {
         let again = a.explain(sig, tasks: tasks, now: t0)
         let prior = try unwrap(again.priorToCorrection,
                                "a fresh snapshot is captured after forget")
-        try expectEq(prior.chosen, .task(apple.ref),
+        try expectEq(prior.chosen, .task(apple),
                      "…of the engine's live belief, not a stale ghost")
     }
 
@@ -257,7 +257,7 @@ func correctionHistoryChecks(_ c: Checks) {
         let today = a.explain(sig, tasks: tasks, now: tomorrow)
         let prior = try unwrap(today.priorToCorrection,
                                "day-2 correction captures a day-2 snapshot")
-        try expectEq(prior.chosen, .task(apple.ref),
+        try expectEq(prior.chosen, .task(apple),
                      "…of what the engine believed at day-2, freshly pruned")
     }
 }
