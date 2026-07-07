@@ -486,3 +486,18 @@ and recorded rather than fixed blind:
   left as-is by later edits/deletes (prospective-only by design, but a
   reconcile-style finance read-back tool would close the gap); journal
   summary counts ("awaiting push") remain pm-centric.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
