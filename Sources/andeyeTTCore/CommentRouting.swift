@@ -31,4 +31,26 @@ public enum CommentRouting {
     public static func noteInputVisible(toTrackedTime: Bool, toTask: Bool) -> Bool {
         toTrackedTime || toTask
     }
+
+    /// Separator between distinct comments accumulated onto one slice. Matches
+    /// the auto window-list joiner ("Xcode; Safari") so a mixed slice reads
+    /// uniformly.
+    public static let commentSeparator = "; "
+
+    /// Accumulate a freshly-entered comment onto the running comment for the
+    /// CURRENT slice. One slice can carry several comments: distinct ones are
+    /// joined with `commentSeparator`; a new comment IDENTICAL to the
+    /// immediately-preceding accumulated one is ignored (no duplicate). Blank
+    /// input is ignored (returns `existing` unchanged). Pure, so the enter-to-
+    /// commit accumulation is unit-checkable — the SwiftUI colour flash is not.
+    public static func accumulateComment(existing: String, adding: String) -> String {
+        let trimmed = adding.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return existing }
+        let base = existing.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return trimmed }
+        // Ignore an exact repeat of the immediately-preceding comment only —
+        // an earlier duplicate further back is still allowed to recur.
+        if base.components(separatedBy: commentSeparator).last == trimmed { return base }
+        return base + commentSeparator + trimmed
+    }
 }

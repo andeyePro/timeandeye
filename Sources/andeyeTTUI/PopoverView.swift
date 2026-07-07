@@ -6,7 +6,22 @@ struct PopoverView: View {
     @ObservedObject var controller: AppController
     @Environment(\.openWindow) private var openWindow
     @State private var filter = ""
-    @State private var note = ""
+    // The comment field now holds only the UNcommitted draft (what's being
+    // typed). Enter commits it — accumulating into `controller.manualNote`,
+    // the text the flush path banks onto the slice — then clears the field so
+    // another comment can be added to the same slice. So this is NOT mirrored
+    // to manualNote on every keystroke any more (that's what let text bleed
+    // across slices); it's a local draft only.
+    @State private var commentDraft = ""
+    // Green after a successful commit (flashes, then fades out); red when the
+    // tracked task/slice changed with an uncommitted draft still in the field
+    // (a warning that it will orphan onto the new slice if entered now, or be
+    // dropped). Both are transient view state, never persisted.
+    @State private var commentFlash = false
+    @State private var commentWarning = false
+    // Honour Reduce Motion: skip the green fade animation, show a brief static
+    // confirmation instead (spec: "no green-fade animation; static or skip").
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Today's breakdown for the footer launch button (a live mini-pie). Cached —
     /// it's a journal query, not for every popover render.
     @State private var todayNodes: [TimeAggregator.Node] = []
@@ -66,7 +81,11 @@ struct PopoverView: View {
                                  onPick: { task in
                     if changeMode {
                         controller.changeCurrentTask(to: task.ref)
-                        changeMode = false
+                        // Return to the DEFAULT mode, not a hardcoded false —
+                        // else, with Reassign as the default, the header would
+                        // flash the non-default blue+(x) override styling right
+                        // after every relabel instead of the plain resting look.
+                        changeMode = controller.settings.popoverDefaultsToChangeMode
                     } else {
                         controller.userPicked(task)
                     }
@@ -86,13 +105,21 @@ struct PopoverView: View {
         // Make every label selectable so text (build version, errors, names)
         // can be copied out to share — screenshots are painful to send.
         .textSelection(.enabled)
-        // Edit a LOCAL copy and push to the controller without republishing
-        // (a @Published binding would rebuild the popover each keystroke and
-        // steal focus). Re-sync when tracking state changes (the controller
-        // clears the note on task-switch/stop).
-        .onChange(of: note) { _, new in controller.manualNote = new }
+        // The draft is local (a @Published binding would rebuild the popover
+        // each keystroke and steal focus). Clearing the field clears the
+        // uncommitted-on-switch warning — it resolves either by entering the
+        // draft or by clearing it.
+        .onChange(of: commentDraft) { _, new in
+            if new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { commentWarning = false }
+        }
         .onChange(of: controller.trackerState) { _, new in
-            note = controller.manualNote
+            // The slice changed. The committed text (manualNote) is banked onto
+            // the OLD slice by the flush path (onSession) and cleared there, so
+            // the new slice starts empty — committed comments belong to the
+            // slice they were entered on. We do NOT mirror manualNote back into
+            // the field. If the user had typed but not entered a comment, warn
+            // (red): it would otherwise silently orphan onto the new slice.
+            commentWarning = !commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             todayNodes = controller.todaySpentNodes()
             showEvidenceCard = false
             // Keep a freshly-set grain footer: picking a task CHANGES
@@ -129,6 +156,14 @@ struct PopoverView: View {
                     .help(changeMode
                           ? "In Reassign mode — click to switch to Switch-to mode, start a new session (⌘T)"
                           : "In Switch-to mode — click to switch to Reassign mode, relabel this session (⌘T)")
+                    // Billable glyph at the end of the running-task display,
+                    // matching the pick-list rows. Same effective-billability
+                    // source; nil currentTask (leisure/uncached) → no glyph.
+                    if let t = controller.currentTask(), controller.isTaskBillable(t) {
+                        Image(systemName: "sterlingsign")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                     // One-click "that switch was wrong": fold the current slice
                     // back onto the previous task. Deliberately light (non-bold)
@@ -252,15 +287,70 @@ struct PopoverView: View {
                toTask: controller.settings.commentToTask) {
             HStack(spacing: 4) {
                 Image(systemName: "bubble.left")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(commentAccent ?? .secondary)
                     .font(.caption)
-                TextField("", text: $note)
+                TextField("", text: $commentDraft)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                     .focused($noteFocused)
-                    .onSubmit { noteFocused = false }
-                    .help("Add a comment on this time — ↵ when done")
+                    // Enter COMMITS (accumulates + clears + flashes green), so
+                    // one slice can carry several comments; it no longer merely
+                    // unfocuses.
+                    .onSubmit { submitComment() }
+                    .overlay {
+                        // Green commit flash — fades out (opacity-driven so the
+                        // fade is honest, not a pop). Steady red sits under it
+                        // for the uncommitted-on-switch warning.
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(Color.red, lineWidth: 1.5)
+                                .opacity(commentWarning ? 1 : 0)
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(Color.green, lineWidth: 1.5)
+                                .opacity(commentFlash ? 1 : 0)
+                        }
+                    }
+                    .help(commentWarning
+                          ? "Uncommitted comment — the tracked task changed. ↵ to add it, or clear the field."
+                          : "Add a comment on this time — ↵ commits it and clears for the next")
             }
+        }
+    }
+
+    /// Green while a just-committed comment flashes, red while an uncommitted
+    /// draft is orphaned by a slice change, else nil (plain). Green wins the
+    /// icon tint the instant after a commit.
+    private var commentAccent: Color? {
+        if commentFlash { return .green }
+        if commentWarning { return .red }
+        return nil
+    }
+
+    /// Enter in the comment field: commit the current draft onto the CURRENT
+    /// tracked time. "Commit" = accumulate into `controller.manualNote` (the
+    /// text the flush path banks onto the slice), so nothing is lost and one
+    /// slice can carry several comments; identical-to-previous is de-duped by
+    /// the pure helper. Then clear the field and flash green.
+    private func submitComment() {
+        let trimmed = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { noteFocused = false; return }
+        controller.manualNote = CommentRouting.accumulateComment(
+            existing: controller.manualNote, adding: commentDraft)
+        commentDraft = ""
+        commentWarning = false
+        flashCommitted()
+    }
+
+    /// The green confirmation. With Reduce Motion: a brief static show, no fade.
+    /// Otherwise: fade in fast, fade out slower. The controller banking is what
+    /// makes a comment durable — this is purely a visual receipt.
+    private func flashCommitted() {
+        if reduceMotion {
+            commentFlash = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { commentFlash = false }
+        } else {
+            withAnimation(.easeIn(duration: 0.12)) { commentFlash = true }
+            withAnimation(.easeOut(duration: 0.8).delay(0.12)) { commentFlash = false }
         }
     }
 
@@ -739,12 +829,22 @@ struct PopoverView: View {
     private var switchList: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
+                // The DEFAULT mode is the resting state, so it reads plain/grey
+                // with no revert control; the NON-default mode is the temporary
+                // override, so IT wears the blue highlight + the (x) that reverts
+                // to the default. Driven off "current mode == the default", NOT
+                // off changeMode alone, so it stays correct when the user flips
+                // popoverDefaultsToChangeMode (then Switch-to is the plain one).
+                let inDefaultMode = changeMode == controller.settings.popoverDefaultsToChangeMode
                 Text(changeMode ? "Reassign" : "Switch to")
                     .font(.caption)
-                    .foregroundStyle(changeMode ? AndeyeColors.highlight : .secondary)
-                if changeMode {
-                    Button { changeMode = false } label: { Image(systemName: "xmark.circle") }
-                        .buttonStyle(.plain).font(.caption2)
+                    .foregroundStyle(inDefaultMode ? .secondary : AndeyeColors.highlight)
+                if !inDefaultMode {
+                    Button { changeMode = controller.settings.popoverDefaultsToChangeMode } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .buttonStyle(.plain).font(.caption2)
+                    .help("Back to the default mode")
                 }
                 Spacer()
                 TextField("filter", text: $filter)
@@ -793,7 +893,9 @@ struct PopoverView: View {
         let sig = controller.currentFocusSignal()
         if changeMode {
             controller.changeCurrentTask(to: task.ref)
-            changeMode = false
+            // Reset to the DEFAULT mode (not hardcoded false) so the header
+            // returns to its plain resting look after a relabel.
+            changeMode = controller.settings.popoverDefaultsToChangeMode
             filter = ""
         } else {
             controller.userPicked(task)
@@ -861,6 +963,12 @@ struct PopoverView: View {
             HStack {
                 HStack(spacing: 3) {
                     if task.isLocalOnly { Image(systemName: "house").font(.system(size: 8)) }
+                    // Independent of the house glyph: a task can be both local
+                    // and billable. Cash glyph shows on EFFECTIVE billability
+                    // (task override else project flag else non-billable).
+                    if controller.isTaskBillable(task) {
+                        Image(systemName: "sterlingsign").font(.system(size: 8))
+                    }
                     Text(task.subject).lineLimit(1)
                 }
                 Spacer()

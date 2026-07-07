@@ -512,3 +512,42 @@ and recorded rather than fixed blind:
 - [ ] [+similar] button (later, non-critical) — pressable repeatedly to
   accumulate windows similar to the current one; a paired [-similar] steps
   the accumulation back so you can undo over-pressing. After [+all].
+
+ — from Pro coordination (2026-07-07, website side owns)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Comment-loss edge (2026-07-07, pre-existing, low priority)
+
+- [ ] A committed comment (in manualNote) on a slice that is then DROPPED as
+  a sub-grace flit and immediately followed by a stop is lost at
+  AppController onState (:598 clears the un-banked note). Rare; pre-existing
+  (predates the enter-to-commit rework). Fix would bank a pending note onto
+  the nearest kept slice, or hold it for the next slice, before the stop
+  clear. Flagged by the reassign/comment review.

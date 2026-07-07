@@ -41,4 +41,39 @@ func commentRoutingChecks(_ c: Checks) {
         try expect(CommentRouting.noteInputVisible(toTrackedTime: false, toTask: true))
         try expect(CommentRouting.noteInputVisible(toTrackedTime: true, toTask: true))
     }
+
+    c.check("accumulate: first comment onto an empty slice is the comment itself") {
+        try expectEq(CommentRouting.accumulateComment(existing: "", adding: "fixing the parser"),
+                     "fixing the parser")
+        try expectEq(CommentRouting.accumulateComment(existing: "  ", adding: "  reviewing  "),
+                     "reviewing", "both sides trimmed")
+    }
+
+    c.check("accumulate: distinct comments concatenate in order, none lost") {
+        var acc = CommentRouting.accumulateComment(existing: "", adding: "first")
+        acc = CommentRouting.accumulateComment(existing: acc, adding: "second")
+        acc = CommentRouting.accumulateComment(existing: acc, adding: "third")
+        try expectEq(acc, "first; second; third")
+    }
+
+    c.check("accumulate: an immediate exact repeat is ignored (no duplicate)") {
+        var acc = CommentRouting.accumulateComment(existing: "first", adding: "first")
+        try expectEq(acc, "first", "same-as-last is dropped")
+        // Trailing whitespace still counts as the same comment.
+        acc = CommentRouting.accumulateComment(existing: "first; second", adding: "  second ")
+        try expectEq(acc, "first; second", "immediately-preceding duplicate dropped")
+    }
+
+    c.check("accumulate: a repeat that isn't the immediate predecessor is kept") {
+        // "first" recurring after "second" is a real re-entry, not a stutter.
+        let acc = CommentRouting.accumulateComment(existing: "first; second", adding: "first")
+        try expectEq(acc, "first; second; first")
+    }
+
+    c.check("accumulate: blank input never changes the accumulated text") {
+        try expectEq(CommentRouting.accumulateComment(existing: "first; second", adding: "   "),
+                     "first; second")
+        try expectEq(CommentRouting.accumulateComment(existing: "first", adding: ""),
+                     "first")
+    }
 }

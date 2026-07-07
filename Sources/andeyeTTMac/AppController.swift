@@ -925,6 +925,17 @@ public final class AppController: ObservableObject {
         return "Not tracking"
     }
 
+    /// The cached WorkTask currently being tracked, or nil when not tracking a
+    /// backend/local task (leisure, do-not-track, or an uncached ref). Lets the
+    /// popover resolve the running task's effective billability the same way a
+    /// pick-list row does. Limitation: a ref not in `taskCache` yields nil, so
+    /// no billable glyph shows for it — the cache is the only project-context
+    /// source the popover has.
+    public func currentTask() -> WorkTask? {
+        guard case .tracking(.task(let ref), _) = trackerState else { return nil }
+        return taskCache.first { $0.ref == ref }
+    }
+
     public func name(of target: Target) -> String {
         switch target {
         case .doNotTrack: return "Do not track"

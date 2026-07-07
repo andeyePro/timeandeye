@@ -2,6 +2,42 @@
 
 ## 2026-07-07
 
+- [x] **Popover: default-mode styling inverted, billable glyph, enter-to-commit
+  comments.** Three related popover fixes. (1) The Reassign/Switch-to header
+  wore its blue highlight + (×) revert on "change mode" specifically — but
+  change mode is the DEFAULT (`popoverDefaultsToChangeMode` defaults true), so
+  the resting default looked like a temporary override and the non-default
+  looked plain. Inverted: the styling now follows whichever mode is NON-default
+  (blue + the (×) that reverts to the default), driven off `changeMode ==
+  settings.popoverDefaultsToChangeMode`, so it's correct BOTH ways — flip the
+  setting and Switch-to becomes the plain default while Reassign wears the blue.
+  The (×) toggles back to the default (not hard-coded to Switch-to). (2) A cash
+  glyph (SF Symbol `sterlingsign`, sized `.system(size: 8)` to match the house
+  glyph — the app is UK/£) now shows on tasks whose EFFECTIVE billable state
+  resolves billable (task override else project flag else non-billable, via the
+  existing `BillableRules.effectiveBillable` / `AppController.isTaskBillable`):
+  in each pick-list row (independent of the house glyph — a task can be both)
+  and at the end of the running-task display in the header (new
+  `AppController.currentTask()`; nil for leisure/uncached refs → no glyph). No
+  new billing state invented. (3) Comment field reworked: enter no longer merely
+  unfocuses — it COMMITS the draft onto the current tracked time by accumulating
+  into `manualNote` (the text the flush path already banks onto the slice),
+  flashes the field green (fades out; static brief show under Reduce Motion),
+  and clears the input so one slice can carry several comments. Accumulation is
+  a pure helper (`CommentRouting.accumulateComment`): distinct comments join
+  with "; ", an immediate exact repeat is de-duped, blank input is ignored — so
+  no committed comment is lost and none duplicated. The field now holds only the
+  UNcommitted draft (no per-keystroke mirror to `manualNote`), which also fixes
+  the old cross-slice bleed; on a tracked-task change with a non-empty
+  uncommitted draft the field warns red (it would otherwise orphan onto the new
+  slice), clearing when entered or emptied. Committed text belongs to the slice
+  it was entered on — the flush path banks + clears `manualNote` on the old
+  slice, so the next slice starts empty. No journal-schema change;
+  segmentation/attribution untouched. New pure checks in `CommentRoutingChecks`
+  cover first-comment, ordered concatenation, immediate-repeat de-dupe,
+  non-adjacent repeat kept, and blank-ignored; the SwiftUI colour flash is a
+  Mac-pass visual check.
+
 - [x] **Live timeline block now tracks in real time and hatches the undecided
   tail (display-only).** Two complaints, both about the live slice disagreeing
   with the menu bar. (1) Realtime: `TimelineView` only rebuilt its slice cache
