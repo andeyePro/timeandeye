@@ -330,7 +330,7 @@ func multiBackendSyncChecks(_ c: Checks) async {
         pushed.pushedToOP = true
         pushed.opTimeEntryID = "977"
         try journal.save(pushed)
-        try journal.migrateSingleSlotPostings(to: "pm-a", excluding: [])
+        _ = try journal.migrateSingleSlotPostings(to: "pm-a", excluding: [])
 
         let pm = FakeBackend(owns: .op)
         let finance = FakeBackend(owns: .nothing)

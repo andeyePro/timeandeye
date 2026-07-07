@@ -15,6 +15,8 @@
 >   work is yours to give.
 > - Signing is one line in your first pull request, plus your name in
 >   CONTRIBUTORS.md. No forms, no scanning, no wet signature.
+> - This agreement is governed by Scots law; any dispute goes to arbitration
+>   in Glasgow.
 >
 > This document was drafted with AI assistance and is not legal advice.
 > Read the clauses before relying on it; if you are contributing on behalf
@@ -80,3 +82,9 @@ that contribution and all future contributions you submit to the Project.
 
 7. Notice. You agree to tell the Project if you become aware that any of
    the representations above are inaccurate.
+
+8. Governing law and disputes. This Agreement is governed by the law of
+   Scotland. Any dispute arising out of or in connection with this
+   Agreement, including its existence, validity, or termination, shall be
+   referred to and finally resolved by arbitration seated in Glasgow,
+   Scotland.

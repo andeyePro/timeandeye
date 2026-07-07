@@ -260,8 +260,8 @@ public final class AppController: ObservableObject {
         // id, so the ledger-driven sync can never re-post (double-post) what
         // the old code already pushed. Idempotent per row; the live-checkpoint
         // sentinel is excluded (its pushed flag is a sentinel, not a post).
-        try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
-                                               excluding: [Self.liveCheckpointID])
+        _ = try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
+                                                   excluding: [Self.liveCheckpointID])
 
         let host = URL(string: loadedSettings.opBaseURL)?.host ?? ""
         let learning = (try? learningStore.load().flatMap { $0 }) ?? LearningStore()

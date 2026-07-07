@@ -48,8 +48,8 @@ public final class PhoneController: ObservableObject {
             ?? InMemoryJournalStore()
         // Same one-time single-slot → posting-ledger upgrade as the Mac (this
         // journal pushed with the same legacy fields); idempotent per row.
-        try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
-                                               excluding: [Self.liveCheckpointID])
+        _ = try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
+                                                   excluding: [Self.liveCheckpointID])
         restoreLiveSlice()
         mergeLocalTasks()
         rebuildBackend()
