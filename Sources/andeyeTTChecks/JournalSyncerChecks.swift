@@ -1,9 +1,11 @@
 import Foundation
 import andeyeTTCore
 
-/// In-memory stand-in for the CloudKit private zone: record-level LWW via the
-/// SAME SessionMerge the replicas use, with a monotonically increasing change
-/// sequence as the pull cursor.
+/// In-memory stand-in for the CloudKit private zone. TRUTHFUL to CloudKit's
+/// `.allKeys` save policy: a push OVERWRITES the server copy unconditionally
+/// — the server does NOT order writes by HLC (the previous version of this
+/// mock did, which is exactly why the stale-overwrite divergence F21 was
+/// invisible to the suite). Monotonic change sequence as the pull cursor.
 final class MockSyncServer: SyncTransport {
     private var records: [UUID: (rev: SessionRevision, seq: Int)] = [:]
     private var seq = 0
@@ -12,12 +14,14 @@ final class MockSyncServer: SyncTransport {
     func push(_ revisions: [SessionRevision]) async throws {
         pushCount += 1
         for rev in revisions {
-            let winner = SessionMerge.merge(local: records[rev.id]?.rev, remote: rev)
-            guard let winner, winner == rev else { continue }   // server copy newer
+            guard records[rev.id]?.rev != rev else { continue }   // identical echo: no new change
             seq += 1
             records[rev.id] = (rev, seq)
         }
     }
+
+    /// The server's current copy, for assertions.
+    func latest(_ id: UUID) -> SessionRevision? { records[id]?.rev }
 
     func pull(since token: SyncToken?) async throws -> (changes: [SessionRevision], token: SyncToken) {
         let after = token.flatMap { Int(String(data: $0.raw, encoding: .utf8) ?? "") } ?? 0
@@ -179,5 +183,76 @@ func journalSyncerChecks(_ c: Checks) async {
         try await phoneSync.sync()
         try expectEq(try phoneStore.revision(id: id)?.session.comment, "mac, newer")
         try expectEq(try macStore.allRevisions(), try phoneStore.allRevisions())
+    }
+
+    await c.check("a stale server overwrite is re-asserted — never permanent divergence (F21)") {
+        // CloudKit's .allKeys save policy overwrites unconditionally, so two
+        // devices' interleaved cycles can land a STALE push after a newer
+        // one, reverting the server. The newer device's dirty flag is
+        // already cleared by then; without the syncer's re-assertion of a
+        // local win, nothing would ever push the newer revision again and
+        // the replicas diverge forever. This check simulates the transport-
+        // level race and pins the recovery.
+        var millis: Int64 = 1_750_000_000_000
+        let server = MockSyncServer()
+        let (macStore, macClock, macSync) = device("mac", server: server) { millis }
+        let (phoneStore, phoneClock, phoneSync) = device("phone", server: server) { millis }
+
+        let id = UUID()
+        let s = Session(id: id, task: .op(1), start: t(0), end: t(600), certainty: 0.9)
+        try macStore.saveLocal(SessionRevision(session: s, hlc: macClock.tick(), origin: .auto))
+        try await macSync.sync()
+        try await phoneSync.sync()
+
+        // Phone edits FIRST (older HLC); mac edits later and completes a
+        // clean cycle (pushed, dirty cleared).
+        millis += 10
+        var phoneEdit = s; phoneEdit.comment = "stale"
+        let phoneRev = SessionRevision(session: phoneEdit, hlc: phoneClock.tick(),
+                                       origin: .edited)
+        millis += 10
+        var macEdit = s; macEdit.comment = "newer"
+        try macStore.saveLocal(SessionRevision(session: macEdit, hlc: macClock.tick(),
+                                               origin: .edited))
+        try await macSync.sync()
+        try expectEq(server.latest(id)?.session.comment, "newer")
+
+        // The phone's raced cycle: its pull saw nothing newer (it ran before
+        // mac's push landed), then its push overwrote the server. Simulate
+        // by writing the store as its cycle would and pushing out-of-band.
+        try phoneStore.saveLocal(phoneRev)
+        try await server.push([phoneRev])
+        try phoneStore.clearDirty([phoneRev])
+        try expectEq(server.latest(id)?.session.comment, "stale",
+                     "the server really was reverted (.allKeys semantics)")
+
+        // One further cycle each: mac re-asserts, phone adopts.
+        try await macSync.sync()
+        try expectEq(server.latest(id)?.session.comment, "newer",
+                     "mac re-pushed the winning revision despite a clean dirty flag")
+        try await phoneSync.sync()
+        try expectEq(try phoneStore.revision(id: id)?.session.comment, "newer")
+        try expectEq(try macStore.allRevisions(), try phoneStore.allRevisions(),
+                     "replicas converged after the race")
+    }
+
+    await c.check("a large backlog pushes in bounded batches (CloudKit ~400-record cap, F22)") {
+        // Enabling sync stamps the WHOLE journal dirty; a single modifyRecords
+        // call over a mature journal throws limitExceeded on every retry —
+        // sync would never start. The syncer must batch.
+        let millis: Int64 = 1_750_000_000_000
+        let server = MockSyncServer()
+        let (store, clock, syncer) = device("mac", server: server) { millis }
+        for i in 0..<450 {
+            try store.saveLocal(SessionRevision(
+                session: Session(task: .op(1), start: t(Double(i) * 700),
+                                 end: t(Double(i) * 700 + 600), certainty: 0.9),
+                hlc: clock.tick(), origin: .auto))
+        }
+        try await syncer.sync()
+        try expectEq(server.pushCount, 3, "450 dirty rows → ceil(450/200) batches")
+        try expectEq(try store.dirtyRevisionIDs(), [])
+        try await syncer.sync()   // echo cycle: nothing re-pushed, no duplicates
+        try expectEq(try store.allRevisions().count, 450)
     }
 }

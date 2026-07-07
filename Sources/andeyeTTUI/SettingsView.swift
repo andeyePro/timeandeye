@@ -216,8 +216,12 @@ struct SettingsView: View {
 
             Section("Licence") {
                 if let l = controller.license {
+                    // v2 keys always carry an expiry; a lifetime key's is
+                    // ~200 years out — call that what it is, not a renewal.
+                    let farFuture = l.issued.addingTimeInterval(100 * 365.25 * 86_400)
                     Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"
-                         + (l.expires.map { " · renews \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""))
+                         + (l.expires > farFuture ? " · lifetime"
+                            : " · renews \(l.expires.formatted(date: .abbreviated, time: .omitted))"))
                         .font(.caption)
                 } else {
                     Text("Community (free) — everything you see is fully functional. A licence adds paid backends (Xero…).")

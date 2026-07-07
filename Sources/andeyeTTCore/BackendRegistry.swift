@@ -44,6 +44,42 @@ public struct RegisteredBackend {
     }
 }
 
+/// What an entitlement-bearing (Pro) connector requires of the licence. A
+/// cross-repo lockstep shape — andeyePro's connectors carry it, this
+/// registry reads it (spec 2026-07-07-license-entitlement.md §2.1).
+public struct BackendEntitlementRequirement: Equatable, Sendable {
+    /// Minimum tier CLASS floor. A STANDARD connector (Xero) sets `.plus` —
+    /// "any paid tier" — so the Plus-Lifetime key's one listed connector
+    /// passes; only a genuinely premium/enterprise connector sets a higher
+    /// floor. Never `.pro` for a standard connector (that would deny the
+    /// flagship Plus SKU — the two-gate AND requires BOTH to pass).
+    public let requiredTier: LicenseTier
+    /// Stable connector id, matched against the key's signed `connectors[]`
+    /// allowlist — authoritative for identity AND count.
+    public let connectorID: String
+
+    public init(requiredTier: LicenseTier, connectorID: String) {
+        self.requiredTier = requiredTier
+        self.connectorID = connectorID
+    }
+}
+
+/// Why a registration was denied — drives the Settings copy ("QuickBooks
+/// isn't included in your licence" / "QuickBooks needs Premium").
+public enum EntitlementDenialReason: Equatable, Sendable {
+    /// No licence at all: community never registers a Pro connector.
+    case noLicense
+    /// The connector id is not on the key's signed `connectors[]` allowlist.
+    case notInConnectors
+    /// Allow-listed, but the key's tier is below the connector's class floor.
+    case tierBelowFloor(required: LicenseTier)
+}
+
+public enum EntitlementDecision: Equatable, Sendable {
+    case allowed
+    case denied(EntitlementDenialReason)
+}
+
 /// Holds the N `(TaskBackend, class)` entries the sync fan-out iterates.
 /// Connector-agnostic: nothing here names a product. The community app
 /// registers exactly one pm backend (OpenProject) and behaves exactly as the
@@ -57,11 +93,52 @@ public final class BackendRegistry {
 
     public init() {}
 
+    /// The current licence (nil = community). Set by the app layer whenever
+    /// the stored key is (re)validated; the entitlement gate reads it at
+    /// registration time.
+    public var license: License?
+
     /// Register (or replace — same id) a backend. Idempotent per id.
+    /// This unguarded form is for community/built-in backends only — it is
+    /// exactly `register(..., requires: nil)`.
     public func register(_ backend: any TaskBackend, id: String,
                          class backendClass: BackendClass) {
         entries.removeAll { $0.id == id }
         entries.append(RegisteredBackend(id: id, class: backendClass, backend: backend))
+    }
+
+    /// Entitlement-gated registration (spec §2.2). Both gates must pass —
+    /// membership in the key's signed `connectors[]` AND the tier class
+    /// floor (AND, fail-closed): neither can silently over-grant. A denial
+    /// registers NOTHING (the backend never enters `entries`, so the sync
+    /// fan-out never sees it — the same safe direction an unrecognised
+    /// BackendClass already has) and returns the reason for Settings copy.
+    @discardableResult
+    public func register(_ backend: any TaskBackend, id: String,
+                         class backendClass: BackendClass,
+                         requires: BackendEntitlementRequirement?) -> EntitlementDecision {
+        let decision = Self.entitlement(license: license, requires: requires)
+        if decision == .allowed {
+            register(backend, id: id, class: backendClass)
+        }
+        return decision
+    }
+
+    /// The pure gate, separated so checks (and Settings previews) can
+    /// evaluate it without a registry. Fail-closed by construction: the only
+    /// `.allowed` paths are the community backend (no requirement) and a
+    /// licence that passes BOTH gates.
+    public static func entitlement(license: License?,
+                                   requires: BackendEntitlementRequirement?) -> EntitlementDecision {
+        guard let requires else { return .allowed }            // community/built-in
+        guard let license else { return .denied(.noLicense) }
+        guard license.connectors.contains(requires.connectorID) else {
+            return .denied(.notInConnectors)
+        }
+        guard license.tier >= requires.requiredTier else {
+            return .denied(.tierBelowFloor(required: requires.requiredTier))
+        }
+        return .allowed
     }
 
     public func remove(id: String) {
@@ -97,8 +174,25 @@ public enum PostingState: String, Codable, Sendable {
     /// Last attempt errored; retried on the next sync pass.
     case failed
     /// Deliberately not posted (sub-minute slice; billability flip closed it
-    /// off). Terminal — the flip-history catch-up invoice is a future feature.
+    /// off; a PERMANENT backend rejection — see PermanentPostError). Terminal
+    /// — the flip-history catch-up invoice is a future feature.
     case skipped
+    /// Quarantined: transient failures exceeded the retry cap
+    /// (`SyncEngine.transientAttemptsCap`), so the row stopped damming the
+    /// queue behind it. Excluded from eligibility like a terminal state;
+    /// surfaced to the user; clearing the row retries. Old builds read this
+    /// unknown rawValue as `.posted` — the never-double-post direction.
+    case stuck
+    /// Intent written IMMEDIATELY BEFORE createTimeEntry goes on the wire.
+    /// Normally overwritten within the same iteration (`.posted` on success,
+    /// `.failed`/`.skipped` on error); a row still `.inflight` on a later
+    /// pass means the process died in the create window and the backend may
+    /// or may not hold the entry — the engine then VERIFIES (lists the
+    /// backend) and adopts or retries, never blind re-creates (F12). Not
+    /// eligible for posting while unresolved. Old builds read the unknown
+    /// rawValue as `.posted` — never-double-post; the next new build's
+    /// reconcile resolves it.
+    case inflight
 }
 
 /// One posting-ledger row. The `(sessionID, backendID)` pair IS the

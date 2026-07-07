@@ -164,6 +164,9 @@ final class FakeBackend: TaskBackend {
     var deleted: [RemoteEntryID] = []
     /// Throw on the next N createTimeEntry calls (heals afterwards).
     var failNextCreates = 0
+    /// Task ids the backend rejects PERMANENTLY (a deleted task, a frozen
+    /// entry) — throws PermanentPostError, never heals.
+    var permanentlyRejects: Set<String> = []
 
     init(owns: Owns) { self.ownsKind = owns }
 
@@ -185,18 +188,30 @@ final class FakeBackend: TaskBackend {
     func fetchActivities() async throws -> [TimeActivity] { [] }
     func taskURL(id: String) -> URL? { nil }
 
+    /// What the backend "holds" — returned by listTimeEntries so the
+    /// inflight verify-then-adopt flows can be exercised.
+    var held: [RemoteTimeEntry] = []
+
     func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
                          activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
+        if permanentlyRejects.contains(taskID) {
+            throw PermanentPostError(reason: "fake: task \(taskID) is gone")
+        }
         if failNextCreates > 0 { failNextCreates -= 1; throw Fail() }
         created.append((taskID, duration))
-        return "fake-\(created.count)"
+        let id = "fake-\(created.count)"
+        held.append(RemoteTimeEntry(id: id, taskID: taskID, start: start,
+                                    durationSeconds: duration, comment: comment))
+        return id
     }
 
     func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
                          duration: TimeInterval, activityID: Int?, comment: String?) async throws {}
     func updateEntryComment(id: RemoteEntryID, comment: String) async throws {}
     func deleteTimeEntry(id: RemoteEntryID) async throws { deleted.append(id) }
-    func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] { [] }
+    func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {
+        held.filter { $0.start >= from && $0.start <= to }
+    }
     func addTaskComment(taskID: String, text: String) async throws {}
 }
 
@@ -382,5 +397,115 @@ func multiBackendSyncChecks(_ c: Checks) async {
         try expectEq(finance.created.count, 0, "the flip stopped the posting")
         try expectEq(((try? journal.postingRecord(session: s.id, backendID: "fin-b")) ?? nil)?.state,
                      .skipped, "the pending finance row is marked skipped")
+    }
+
+    await c.check("a PERMANENT rejection skips with its reason and never dams the queue (F19)") {
+        let journal = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        pm.permanentlyRejects = ["1"]                     // op(1) was deleted at the backend
+        let entries = [RegisteredBackend(id: "pm-a", class: .pm, backend: pm)]
+        let head = session(.op(1))                        // earliest start = head of the queue
+        let behind = session(.op(2), offset: 3_600)
+        for s in [head, behind] { try journal.save(s) }
+
+        let engine = SyncEngine(journal: journal, backends: entries)
+        let report = (await engine.pushEligible(threshold: 0.8, includeComments: false)).first
+
+        // The old behaviour broke the pass at the head's failure: op(2)
+        // would NEVER post while op(1) kept failing. Now the head is closed
+        // off and the session behind it posts in the SAME pass.
+        try expectEq(report?.permanentlySkipped, 1)
+        try expectEq(report?.posted, 1, "the queue proceeded past the rejection")
+        try expectEq(pm.created.map(\.taskID), ["2"])
+        let headRow = ((try? journal.postingRecord(session: head.id, backendID: "pm-a")) ?? nil)
+        try expectEq(headRow?.state, .skipped)
+        try expect(headRow?.lastError?.contains("gone") == true,
+                   "the reason travels for Settings/report copy")
+        // Terminal: a second pass retries nothing.
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pm.created.count, 1)
+    }
+
+    await c.check("a transient failure at the attempts cap is quarantined .stuck; the queue drains past it (F19)") {
+        let journal = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        // Fails transiently exactly `cap` times — each pre-cap pass consumes
+        // one failure at the head and correctly breaks (transient ordering
+        // preserved: op(2) stays queued behind it).
+        pm.failNextCreates = SyncEngine.transientAttemptsCap
+        let entries = [RegisteredBackend(id: "pm-a", class: .pm, backend: pm)]
+        let head = session(.op(1))
+        let behind = session(.op(2), offset: 3_600)
+        for s in [head, behind] { try journal.save(s) }
+
+        let engine = SyncEngine(journal: journal, backends: entries)
+        for _ in 0..<SyncEngine.transientAttemptsCap {
+            _ = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        }
+        // On the cap-th pass the head hit the cap, was quarantined, and the
+        // queue proceeded: op(2) posted in that same pass.
+        let headRow = ((try? journal.postingRecord(session: head.id, backendID: "pm-a")) ?? nil)
+        try expectEq(headRow?.state, .stuck)
+        try expectEq(headRow?.attempts, SyncEngine.transientAttemptsCap)
+        try expectEq(pm.created.map(\.taskID), ["2"],
+                     "the session behind the quarantined head posted")
+        // Quarantine holds: another pass retries nothing…
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pm.created.count, 1)
+        // …until the row is explicitly cleared (the repair/retry gesture).
+        try journal.clearPostingRecord(session: head.id, backendID: "pm-a")
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false)
+        try expectEq(pm.created.map(\.taskID), ["2", "1"], "clearing the row retries it")
+    }
+
+    await c.check("crash window with the entry landed: reconcile ADOPTS it — never a second create (F12/D3)") {
+        let journal = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        let entries = [RegisteredBackend(id: "pm-a", class: .pm, backend: pm)]
+        let s = session(.op(1))
+        try journal.save(s)
+        // Simulate the crash: the create reached the backend…
+        let orphanID = try await pm.createTimeEntry(taskID: "1", start: s.start,
+                                                    duration: s.end.timeIntervalSince(s.start),
+                                                    activityID: nil, comment: nil)
+        // …but the process died before the .posted write; only intent remains.
+        try journal.setPostingRecord(PostingRecord(
+            sessionID: s.id, backendID: "pm-a", state: .inflight, updatedAt: t0))
+
+        let engine = SyncEngine(journal: journal, backends: entries)
+        let report = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                                now: t0.addingTimeInterval(120))).first
+        let row = ((try? journal.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .posted, "the orphan was adopted")
+        try expectEq(row?.entryID, orphanID, "…under the entry id the backend already holds")
+        try expectEq(pm.created.count, 1, "NO second create — the F12 duplicate is dead")
+        try expectEq(report?.posted, 0, "an adopt is not a new post")
+    }
+
+    await c.check("crash window with NO entry landed: demoted and posted exactly once, same pass (F12/D3)") {
+        let journal = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        let entries = [RegisteredBackend(id: "pm-a", class: .pm, backend: pm)]
+        let s = session(.op(1))
+        try journal.save(s)
+        // Intent written, process died BEFORE the create reached the wire.
+        try journal.setPostingRecord(PostingRecord(
+            sessionID: s.id, backendID: "pm-a", state: .inflight, updatedAt: t0))
+
+        let engine = SyncEngine(journal: journal, backends: entries)
+        // Within the settle floor: untouched (the backend's list may lag).
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                      now: t0.addingTimeInterval(30))
+        try expectEq(pm.created.count, 0)
+        try expectEq(((try? journal.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.state,
+                     .inflight, "younger than the floor: wait, don't guess")
+        // Past the floor: the verify confirms the miss, demotes to a clean
+        // retry, and the SAME pass posts it — exactly once.
+        let report = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                                now: t0.addingTimeInterval(120))).first
+        try expectEq(report?.posted, 1)
+        try expectEq(pm.created.count, 1, "exactly one create, ever")
+        try expectEq(((try? journal.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.state,
+                     .posted)
     }
 }

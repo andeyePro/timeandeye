@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-08
+
+- [x] **Licence v2 + entitlement gate; posting robustness (F12/F19/F21/F22/F23);
+  sync anti-entropy.** The Fable 5 review-and-build session (FableReview.md
+  holds the 23-finding review this implements against; the two specs under
+  docs/superpowers/specs/ dated 2026-07-07 hold the designs). One commit
+  because the edits interleave inside shared functions; per-feature story:
+  (1) LICENCE v2 – nine required fields (v, kid, jti, tier, licensee, issued,
+  expires, product, connectors[]), fail-closed decode, multi-kid verifier with
+  product match + jti denylist, explicit Comparable tier ladder, LicenseChecks
+  rewritten as the spec's acceptance criteria 1–14; `unlocksProBackends`
+  removed. Pro generator mirrored (andeyePro/tools/make-license.swift, guard
+  rails incl. --lifetime plus-only, no default expiry). (2) ENTITLEMENT –
+  BackendRegistry gains BackendEntitlementRequirement + a pure fail-closed
+  gate (connectors[] membership AND tier floor) with typed denial reasons;
+  gate ships tested but dormant pending the cross-repo `requires:` seam
+  change. (3) F19 – PermanentPostError at the TaskBackend seam; permanent
+  rejections close `.skipped`-with-reason and the queue PROCEEDS; transient
+  failures quarantine `.stuck` after 30 attempts; surfaced in reports +
+  lastError. (4) F21/F22 – JournalSyncer re-asserts strictly-newer local wins
+  (CloudKit `.allKeys` can revert the server; without re-assert two replicas
+  diverge permanently) and pushes in 200-record batches (first sync-enable on
+  a mature journal exceeded CloudKit's op cap); MockSyncServer made truthful
+  to `.allKeys`. (5) F23 – resolveOverlaps keeps EVERY fragment of a
+  middle-split (deterministic child ids via SessionMerge.fragmentID, RFC 9562
+  v8-stamped) instead of destroying the smaller side. (6) F12/D3 – `.inflight`
+  intent rows written before every create; verify-then-adopt reconcile with a
+  60 s settle floor replaces the rollback-delete; crash between create and
+  ledger write can no longer double-post. Timeline-edit ledger helpers now key
+  by registry.primaryPM (not hardcoded OP). Verified on the Mac:
+  `swift run andeyeTTChecks` TOTAL 441 passed, 0 failed (twice).
+
+- [x] **Deflake: ContextRules surface byte-equality check.** Asserted raw
+  JSONEncoder byte equality, but key order is nondeterministic – "expected 66
+  bytes, got 66 bytes" flake. Now compares canonical (.sortedKeys) encodings;
+  the real guarantees (decoded Surface equality + persisted prime firing)
+  unchanged.
+
+
 ## 2026-07-07
 
 - [x] **Popover: default-mode styling inverted, billable glyph, enter-to-commit

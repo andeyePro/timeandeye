@@ -89,21 +89,61 @@ func sessionSyncChecks(_ c: Checks) {
         try expectEq(ab.count, 3)
     }
 
-    c.check("overlap: manual beats auto — auto is trimmed to the free time") {
+    c.check("overlap: manual beats auto — a middle claim SPLITS auto, both sides survive") {
         // Mac auto-tracked 0..3600; the phone manually tracked 1800..2400.
         let auto = rev(from: 0, to: 3600, hlc: hlc(5), origin: .auto)
         let manual = rev(task: .op(2), from: 1800, to: 2400, hlc: hlc(1, "phone"),
                          origin: .manual)
         let view = SessionMerge.resolveOverlaps([auto, manual])
         let live = view.filter { !$0.deleted }
-        try expectEq(live.count, 2)
+        try expectEq(live.count, 3, "manual + BOTH auto fragments (nothing destroyed)")
         let m = live.first { $0.origin == .manual }!
         try expectEq(m.session.start, t(1800))
         try expectEq(m.session.end, t(2400))
-        let a2 = live.first { $0.origin == .auto }!
-        // Middle overlap: auto keeps its larger side (front 1800 > back 1200).
-        try expectEq(a2.session.start, t(0))
-        try expectEq(a2.session.end, t(1800))
+        // The front fragment keeps the parent's id; the tail gets the
+        // DETERMINISTIC child id.
+        let front = live.first { $0.id == auto.id }!
+        try expectEq(front.session.start, t(0))
+        try expectEq(front.session.end, t(1800))
+        let tail = live.first { $0.id == SessionMerge.fragmentID(parent: auto.id, index: 1) }!
+        try expectEq(tail.session.start, t(2400))
+        try expectEq(tail.session.end, t(3600))
+        try expectEq(tail.origin, .auto, "a fragment inherits its parent's meta")
+        // Conservation: the claim's 600 s moved; none of auto's time vanished.
+        let autoSeconds = live.filter { $0.origin == .auto }
+            .reduce(0.0) { $0 + $1.session.end.timeIntervalSince($1.session.start) }
+        try expectEq(autoSeconds, 3000)
+    }
+
+    c.check("overlap: multi-hole split is deterministic and order-independent (F23)") {
+        // Two 5-minute manual claims punched into a 3-hour auto session:
+        // the old keep-larger-side rule would have DESTROYED ~89 minutes.
+        let auto = rev(from: 0, to: 10_800, hlc: hlc(5), origin: .auto)
+        let m1 = rev(task: .op(2), from: 3_600, to: 3_900, hlc: hlc(1, "phone"), origin: .manual)
+        let m2 = rev(task: .op(3), from: 7_200, to: 7_500, hlc: hlc(2, "phone"), origin: .manual)
+        let view = SessionMerge.resolveOverlaps([auto, m1, m2]).filter { !$0.deleted }
+        let autoPieces = view.filter { $0.origin == .auto }.sorted { $0.session.start < $1.session.start }
+        try expectEq(autoPieces.count, 3)
+        try expectEq(autoPieces.map(\.session.start), [t(0), t(3_900), t(7_500)])
+        try expectEq(autoPieces.map(\.session.end), [t(3_600), t(7_200), t(10_800)])
+        try expectEq(autoPieces[0].id, auto.id, "first fragment keeps the parent id")
+        try expectEq(autoPieces[1].id, SessionMerge.fragmentID(parent: auto.id, index: 1))
+        try expectEq(autoPieces[2].id, SessionMerge.fragmentID(parent: auto.id, index: 2))
+        // Replica-identical: any arrival order of the SAME raw set derives
+        // the SAME view, child ids included — the property that lets the
+        // fragments exist without being persisted or synced.
+        try expectEq(SessionMerge.resolveOverlaps([m2, auto, m1]).filter { !$0.deleted },
+                     view)
+        // Conservation: 3 h minus the two 5-minute claims.
+        let seconds = autoPieces.reduce(0.0) { $0 + $1.session.end.timeIntervalSince($1.session.start) }
+        try expectEq(seconds, 10_200)
+        // Child ids are stable pure functions, and stamped as non-v4 so they
+        // can never collide with a random session id.
+        try expectEq(SessionMerge.fragmentID(parent: auto.id, index: 1),
+                     SessionMerge.fragmentID(parent: auto.id, index: 1))
+        try expect(SessionMerge.fragmentID(parent: auto.id, index: 1)
+                    != SessionMerge.fragmentID(parent: auto.id, index: 2),
+                   "distinct fragments, distinct ids")
     }
 
     c.check("overlap: fully-covered lower-authority session surfaces as deleted") {

@@ -8,11 +8,16 @@ import FoundationNetworking
 //
 // A successful createTimeEntry followed by a THROWING journal write used to
 // leave the session unmarked while OP already held the entry, so the next
-// sync re-POSTed it = duplicate. The journal write that gates eligibility is
-// now the LEDGER row (setPostingRecord); the fix generalises per row: on a
-// ledger-write failure after a successful create, best-effort delete the
-// just-created entry before recording the failure, so journal and backend
-// stay consistent and the retry re-creates cleanly instead of duplicating.
+// sync re-POSTed it = duplicate. Two generations of fix:
+// (1) the LEDGER row (setPostingRecord) gates eligibility per (session,
+//     backend); (2) INTENT-FIRST (F12/D3): the engine writes an `.inflight`
+//     row BEFORE the create goes on the wire, so any failure after the
+//     create — a throwing posted-row write, or the process dying — leaves
+//     evidence instead of amnesia. An `.inflight` row is excluded from
+//     eligibility and resolved by verify-then-adopt on a later pass (the
+//     adopt/demote flows are pinned with FakeBackend in BillingChecks; here
+//     we pin the transport-level guarantees: no create without intent, and
+//     no duplicate POST/no rollback DELETE around a failed posted-write).
 
 /// Decorates a real store but throws on the setPostingRecord call(s) we
 /// choose, so we can drive the "POST succeeded, journal write failed" window
@@ -61,6 +66,9 @@ final class FailingLedgerJournalStore: JournalStore {
     func clearPostingRecord(session: UUID, backendID: String) throws {
         try inner.clearPostingRecord(session: session, backendID: backendID)
     }
+    func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
+        try inner.postingRecords(state: state, backendID: backendID)
+    }
     func sessions(needingPostTo backendID: String, atOrAbove threshold: Double) throws -> [Session] {
         try inner.sessions(needingPostTo: backendID, atOrAbove: threshold)
     }
@@ -99,46 +107,58 @@ func syncIdempotencyChecks(_ c: Checks) async {
                 journal, transport)
     }
 
-    await c.check("ledger-write failure after a good POST deletes the OP entry, no duplicate on retry") {
-        // 1st setPostingRecord (the posted row) throws; the failure record
-        // (2nd call) and the retry's posted row (3rd call) succeed.
+    await c.check("no intent, no create: a failing inflight write blocks the POST entirely") {
+        // 1st setPostingRecord is now the INTENT (.inflight) row. If even
+        // that can't be written, nothing may go on the wire — a create
+        // without recorded intent is exactly the amnesia window F12 closes.
         let (engine, journal, transport) = makeWorld(failOnLedgerCalls: [1])
-        // create -> id 977, the failure path DELETEs 977, then the retry
-        // creates id 978 and records it.
-        transport.responses = [(201, #"{"id":977}"#), (204, ""), (201, #"{"id":978}"#)]
+        transport.responses = [(201, #"{"id":977}"#)]
         try journal.save(Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
                                  certainty: 1))
-
-        // 1st sync: POST 977 succeeds, the ledger write throws -> engine
-        // deletes 977 and reports the failure (failure isolation: no throw).
         let first = await engine.pushEligible(threshold: 0.8, includeComments: false)
         try expectEq(first.first?.posted, 0)
-        try expect(first.first?.error != nil, "the ledger-write failure must be reported")
-
-        // Exactly one POST and exactly one DELETE so far.
-        let posts1 = transport.requests.filter { $0.httpMethod == "POST" }
-        let deletes1 = transport.requests.filter { $0.httpMethod == "DELETE" }
-        try expectEq(posts1.count, 1, "exactly one create")
-        try expectEq(deletes1.count, 1, "the orphan must be deleted")
-        try expect(transport.requests.last!.url!.path.hasSuffix("/time_entries/977"),
-                   "the DELETE must target the just-created entry id")
-        // Session is still queued (its row is .failed, which retries).
+        try expect(first.first?.error != nil, "the ledger failure must be reported")
+        try expectEq(transport.requests.filter { $0.httpMethod == "POST" }.count, 0,
+                     "NOTHING went on the wire without intent")
         try expectEq(try journal.sessions(needingPostTo: "op", atOrAbove: 0.8).count, 1,
-                     "unmarked session stays queued for a clean retry")
+                     "the session stays cleanly queued")
+    }
 
-        // 2nd sync: must NOT re-POST the orphan; it creates afresh (978) and marks.
-        let second = await engine.pushEligible(threshold: 0.8, includeComments: false)
-        try expectEq(second.first?.posted, 1)
-        let postsAll = transport.requests.filter { $0.httpMethod == "POST" }
-        try expectEq(postsAll.count, 2,
-                     "one create per sync; the failed-then-deleted entry is not double-counted")
+    await c.check("posted-row failure after a good POST leaves .inflight: no rollback DELETE, no duplicate POST") {
+        // Call 1 (the intent row) succeeds; call 2 (the posted row) throws.
+        // Old behaviour best-effort DELETEd the fresh entry — which itself
+        // could fail and orphan. New behaviour: the row STAYS .inflight,
+        // the session is excluded from eligibility, and a later pass's
+        // verify-then-adopt resolves it (adopt/demote pinned in
+        // BillingChecks with a listable fake).
+        let (engine, journal, transport) = makeWorld(failOnLedgerCalls: [2])
+        transport.responses = [(201, #"{"id":977}"#)]
+        let s = Session(task: .op(42), start: t0, end: t0.addingTimeInterval(600),
+                        certainty: 1)
+        try journal.save(s)
+
+        let first = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                              now: t0.addingTimeInterval(700))
+        try expectEq(first.first?.posted, 0)
+        try expect(first.first?.error != nil)
+        try expectEq(transport.requests.filter { $0.httpMethod == "POST" }.count, 1,
+                     "exactly one create")
+        try expectEq(transport.requests.filter { $0.httpMethod == "DELETE" }.count, 0,
+                     "the fresh entry is NOT deleted — intent survives for adopt")
+        try expectEq(((try? journal.postingRecord(session: s.id, backendID: "op")) ?? nil)?.state,
+                     .inflight, "the intent row is the evidence")
         try expectEq(try journal.sessions(needingPostTo: "op", atOrAbove: 0.8).count, 0,
-                     "retry records the posted row")
-        try expectEq(try journal.allSessions().first?.opTimeEntryID, "978",
-                     "journal records the surviving OP entry id")
-        try expectEq(((try? journal.postingRecord(
-            session: try unwrap(try journal.allSessions().first?.id),
-            backendID: "op")) ?? nil)?.entryID, "978")
+                     "an unresolved inflight session is NOT eligible")
+
+        // A pass INSIDE the settle floor must not touch it: no blind create,
+        // no premature verify (the backend's list index may lag).
+        let second = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t0.addingTimeInterval(730))
+        try expectEq(second.first?.posted, 0)
+        try expectEq(transport.requests.filter { $0.httpMethod == "POST" }.count, 1,
+                     "still exactly one create — never a duplicate")
+        try expectEq(((try? journal.postingRecord(session: s.id, backendID: "op")) ?? nil)?.state,
+                     .inflight)
     }
 
     await c.check("createTimeEntry surfaces a malformed 2xx body; empty object still returns nil") {

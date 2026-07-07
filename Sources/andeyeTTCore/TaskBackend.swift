@@ -113,6 +113,19 @@ public protocol TaskBackend: AnyObject {
     func addTaskComment(taskID: String, text: String) async throws
 }
 
+/// Thrown by a connector when a posting can NEVER succeed — the task was
+/// deleted at the backend, the entry is frozen by invoicing, the connector
+/// has no mapping for this task — as opposed to transient failures (network,
+/// 5xx, rate limits), which stay retryable. The SyncEngine closes the row
+/// `.skipped` with the reason and MOVES ON, so one permanently-rejected
+/// session never dams the queue behind it. Classification is the
+/// connector's job: only it can tell a 404-task from a 503.
+public struct PermanentPostError: Error, Equatable, CustomStringConvertible {
+    public let reason: String
+    public init(reason: String) { self.reason = reason }
+    public var description: String { reason }
+}
+
 /// A recognizer that never matches — standalone, and any backend whose pages
 /// carry no task identity.
 public struct NoPageRecognizer: BackendPageRecognizer {

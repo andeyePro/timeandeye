@@ -27,12 +27,85 @@ public final class SyncEngine {
     public struct BackendReport: Sendable {
         public let backendID: String
         public var posted = 0
+        /// Sessions closed off this pass because the backend rejected them
+        /// PERMANENTLY (PermanentPostError) — surfaced, never retried.
+        public var permanentlySkipped = 0
         public var error: String?
 
-        public init(backendID: String, posted: Int = 0, error: String? = nil) {
+        public init(backendID: String, posted: Int = 0,
+                    permanentlySkipped: Int = 0, error: String? = nil) {
             self.backendID = backendID
             self.posted = posted
+            self.permanentlySkipped = permanentlySkipped
             self.error = error
+        }
+    }
+
+    /// After this many failed attempts a row is quarantined `.stuck` and the
+    /// queue proceeds past it — one persistently-failing session must not
+    /// block a backend forever. Generous on purpose: at one pass a minute a
+    /// genuinely transient outage heals long before the cap.
+    public static let transientAttemptsCap = 30
+
+    /// How old an unresolved `.inflight` row must be before the reconcile
+    /// sweep trusts the backend's list to answer "did the create land?".
+    /// Xero's list index lags writes by seconds (live-verified 2026-07-06);
+    /// a row younger than this waits for the next pass rather than adopting
+    /// a false "no match".
+    public static let inflightSettleFloor: TimeInterval = 60
+
+    /// Resolve `.inflight` rows a dead process left behind (crashed between
+    /// createTimeEntry returning and the ledger write): VERIFY against the
+    /// backend instead of blind re-creating. A match (same task, start,
+    /// duration) adopts the entry's id → `.posted`; a confirmed miss demotes
+    /// to `.failed` so the session retries cleanly THIS pass; a list failure
+    /// leaves the row `.inflight` for the next pass — never a second create
+    /// while intent is unresolved. (F12/D3.)
+    private func reconcileInflight(_ entry: RegisteredBackend, now: Date) async {
+        let rows = ((try? journal.postingRecords(state: .inflight,
+                                                 backendID: entry.id)) ?? [])
+        for row in rows where now.timeIntervalSince(row.updatedAt) >= Self.inflightSettleFloor {
+            guard let session = ((try? journal.session(id: row.sessionID)) ?? nil),
+                  let taskID = session.task.backendTaskID else {
+                // The session vanished while its create was in flight: close
+                // the row off; there is nothing to adopt it for.
+                var closed = row
+                closed.state = .skipped
+                closed.lastError = "session deleted while a create was in flight"
+                closed.updatedAt = now
+                try? journal.setPostingRecord(closed)
+                continue
+            }
+            let duration = session.end.timeIntervalSince(session.start)
+            do {
+                let candidates = try await entry.backend.listTimeEntries(
+                    from: session.start.addingTimeInterval(-3600),
+                    to: session.end.addingTimeInterval(3600))
+                let match = candidates.first { candidate in
+                    guard candidate.taskID == taskID,
+                          abs(candidate.durationSeconds - duration) <= 90 else { return false }
+                    // Day-granular backends (hasStart false) can only match
+                    // to the day; minute-true ones match tight.
+                    return candidate.hasStart
+                        ? abs(candidate.start.timeIntervalSince(session.start)) <= 90
+                        : abs(candidate.start.timeIntervalSince(session.start)) <= 86_400
+                }
+                var resolved = row
+                if let match {
+                    resolved.state = .posted
+                    resolved.entryID = match.id
+                    resolved.lastError = nil
+                    onDebug("inflight adopt: \(entry.id) already held \(match.id)")
+                } else {
+                    resolved.state = .failed   // confirmed miss: clean retry
+                    resolved.lastError = "in-flight create not found at the backend — retrying"
+                }
+                resolved.updatedAt = now
+                try? journal.setPostingRecord(resolved)
+            } catch {
+                onDebug("inflight verify failed for \(row.sessionID): \(error)")
+                // Leave .inflight: unresolved intent must block re-creates.
+            }
         }
     }
 
@@ -84,6 +157,10 @@ public final class SyncEngine {
         var reports: [BackendReport] = []
         for entry in backends {
             var report = BackendReport(backendID: entry.id)
+            // Crash recovery FIRST: rows left `.inflight` by a dead process
+            // are verified-and-adopted (or demoted to a clean retry) before
+            // the queue is read, so a demoted session re-enters THIS pass.
+            await reconcileInflight(entry, now: now)
             let queue = ((try? journal.sessions(needingPostTo: entry.id,
                                                 atOrAbove: threshold)) ?? [])
                 .filter { !excludedSessionIDs.contains($0.id) }
@@ -133,28 +210,43 @@ public final class SyncEngine {
                 }
                 let activity = activityOverrides[session.task] ?? defaultActivityID
                 let comment = includeComments ? session.comment : nil
+                // INTENT before the wire (F12/D3): if the process dies inside
+                // the create window, this row is the evidence — the next
+                // pass's reconcile verifies the backend instead of blindly
+                // re-creating. If even the intent can't be written, do NOT
+                // create (no truth, no posting — same stance as the
+                // migration guard above).
+                let prior = ((try? journal.postingRecord(
+                    session: session.id, backendID: entry.id)) ?? nil)
+                do {
+                    try journal.setPostingRecord(PostingRecord(
+                        sessionID: session.id, backendID: entry.id,
+                        state: .inflight, lastError: prior?.lastError,
+                        attempts: prior?.attempts ?? 0, updatedAt: now))
+                } catch {
+                    report.error = "ledger write failed: \(error)"
+                    break sessionLoop
+                }
                 do {
                     let entryID = try await entry.backend.createTimeEntry(
                         taskID: taskID, start: session.start, duration: duration,
                         activityID: activity, comment: comment)
                     // The create succeeded; the backend now holds the entry.
-                    // If writing the ledger row fails, the next pass would
-                    // re-POST it = duplicate. Roll the backend back to match
-                    // the journal: best-effort delete the just-created entry,
-                    // then record the failure so the session retries clean.
-                    let prior = ((try? journal.postingRecord(
-                        session: session.id, backendID: entry.id)) ?? nil)
+                    // If writing the `.posted` row fails, the row STAYS
+                    // `.inflight` — excluded from eligibility, resolved by
+                    // the next pass's verify-then-adopt. (The old code
+                    // best-effort DELETED the fresh entry here; leaving the
+                    // intent row and adopting later is strictly safer — no
+                    // orphan risk when the delete itself failed.)
                     do {
                         try journal.setPostingRecord(PostingRecord(
                             sessionID: session.id, backendID: entry.id,
                             state: .posted, entryID: entryID,
                             attempts: prior?.attempts ?? 0, updatedAt: now))
                     } catch {
-                        if let entryID {
-                            do { try await entry.backend.deleteTimeEntry(id: entryID) }
-                            catch { onDebug("orphan cleanup failed for entry \(entryID): \(error)") }
-                        }
-                        throw error
+                        onDebug("posted-row write failed for \(session.id); left .inflight for adopt: \(error)")
+                        report.error = "ledger write failed: \(error)"
+                        break sessionLoop
                     }
                     if entry.backendClass == .pm {
                         // Legacy single-slot mirror: keeps timeline PATCH /
@@ -166,18 +258,44 @@ public final class SyncEngine {
                         catch { onDebug("legacy pushed-mirror failed for \(session.id): \(error)") }
                     }
                     report.posted += 1
-                } catch {
-                    // Failure isolation: record it on this row, end THIS
-                    // backend's pass (later sessions stay queued, as the
-                    // single-backend engine always behaved), and carry on to
-                    // the next backend.
+                } catch let permanent as PermanentPostError {
+                    // The backend says this can NEVER succeed (task gone,
+                    // entry frozen, no mapping): close the row with the
+                    // reason and let the queue PROCEED — a permanent
+                    // rejection at the head must not dam every session
+                    // behind it forever.
                     let prior = ((try? journal.postingRecord(
                         session: session.id, backendID: entry.id)) ?? nil)
                     try? journal.setPostingRecord(PostingRecord(
                         sessionID: session.id, backendID: entry.id,
-                        state: .failed, lastError: "\(error)",
+                        state: .skipped, lastError: permanent.reason,
                         attempts: (prior?.attempts ?? 0) + 1, updatedAt: now))
-                    report.error = "\(error)"
+                    report.permanentlySkipped += 1
+                    continue
+                } catch {
+                    // Transient (or unclassified) failure: record it on this
+                    // row, end THIS backend's pass (later sessions stay
+                    // queued for a clean retry, as the single-backend engine
+                    // always behaved), and carry on to the next backend —
+                    // UNLESS this row has hit the attempts cap, in which
+                    // case it is quarantined `.stuck` (excluded from
+                    // eligibility, surfaced; clearing the row retries) and
+                    // the queue proceeds past it.
+                    let prior = ((try? journal.postingRecord(
+                        session: session.id, backendID: entry.id)) ?? nil)
+                    let attempts = (prior?.attempts ?? 0) + 1
+                    let quarantined = attempts >= Self.transientAttemptsCap
+                    try? journal.setPostingRecord(PostingRecord(
+                        sessionID: session.id, backendID: entry.id,
+                        state: quarantined ? .stuck : .failed, lastError: "\(error)",
+                        attempts: attempts, updatedAt: now))
+                    // A quarantine names itself in the surfaced error, so a
+                    // pass that also made progress doesn't read as a plain
+                    // "push failed".
+                    report.error = quarantined
+                        ? "one entry quarantined after \(attempts) attempts: \(error)"
+                        : "\(error)"
+                    if quarantined { continue }
                     break sessionLoop
                 }
             }

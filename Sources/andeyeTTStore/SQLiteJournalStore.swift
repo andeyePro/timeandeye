@@ -339,6 +339,18 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
+    public func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
+        var out: [PostingRecord] = []
+        try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE state = ? AND backend_id = ? ORDER BY session_id",
+                  bind: {
+                      sqlite3_bind_text($0, 1, state.rawValue, -1, Self.transient)
+                      sqlite3_bind_text($0, 2, backendID, -1, Self.transient)
+                  }) { stmt in
+            if let record = self.postingRow(stmt) { out.append(record) }
+        }
+        return out
+    }
+
     public func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
         var out: [PostingRecord] = []
         try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE session_id = ? AND backend_id = ?",
@@ -415,7 +427,7 @@ public final class SQLiteJournalStore: JournalStore {
             WHERE s.is_op = 1 AND s.deleted = 0 AND s.certainty >= ?
               AND NOT EXISTS (SELECT 1 FROM posting_ledger l
                               WHERE l.session_id = s.id AND l.backend_id = ?
-                                AND l.state IN ('posted','skipped'))
+                                AND l.state IN ('posted','skipped','stuck','inflight'))
             ORDER BY s.start
             """,
                   bind: {

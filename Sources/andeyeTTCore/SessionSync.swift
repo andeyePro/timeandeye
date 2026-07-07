@@ -82,10 +82,16 @@ public enum SessionMerge {
 
     /// Resolve time-overlaps among the LIVE (non-deleted) revisions: walk in
     /// priority order; each session keeps only time not already claimed by a
-    /// higher-priority one. Trims never invent time; a fully-covered session
-    /// comes back marked deleted. A middle overlap keeps the LOSER's larger
-    /// remaining side (no nondeterministic splits in v1; ties prefer the
-    /// earlier side). Deleted revisions pass through untouched.
+    /// higher-priority one. Trims never invent time AND never destroy it: a
+    /// claim punched through the middle of a longer session splits it, and
+    /// EVERY remaining fragment survives — the first under the parent's id,
+    /// the rest under DETERMINISTIC child ids (`fragmentID`), so all replicas
+    /// still derive the identical view. (The old rule kept only the larger
+    /// side: a 5-minute manual slice claimed inside a 3-hour auto session
+    /// silently discarded the shorter remainder — tracked time destroyed
+    /// from display, aggregation and posting. Fable F23.) A fully-covered
+    /// session comes back marked deleted. Deleted revisions pass through
+    /// untouched.
     ///
     /// This is a DERIVED VIEW, not a mutation of the synced truth: the raw
     /// revisions are what replicas exchange (their HLCs unchanged here), and
@@ -98,42 +104,71 @@ public enum SessionMerge {
         let dead = revisions.filter { $0.deleted }
         var claimed: [(start: Date, end: Date)] = []
         var out: [SessionRevision] = []
-        for var rev in live {
-            var start = rev.session.start
-            var end = rev.session.end
-            // Subtract each claimed interval; on a middle-split keep the
-            // larger side (earlier side on a tie).
-            var covered = false
+        for rev in live {
+            // Subtract every claimed interval: the remainder is 0..N
+            // fragments, in ascending time order.
+            var fragments: [(start: Date, end: Date)] = [(rev.session.start, rev.session.end)]
             for c in claimed {
-                guard c.start < end, c.end > start else { continue }   // no overlap
-                if c.start <= start, c.end >= end { covered = true; break }
-                if c.start <= start {
-                    start = max(start, c.end)          // trim front
-                } else if c.end >= end {
-                    end = min(end, c.start)            // trim back
-                } else {
-                    // Winner strictly inside: keep the larger remaining side.
-                    let front = c.start.timeIntervalSince(start)
-                    let back = end.timeIntervalSince(c.end)
-                    if front >= back { end = c.start } else { start = c.end }
+                var next: [(start: Date, end: Date)] = []
+                for f in fragments {
+                    guard c.start < f.end, c.end > f.start else { next.append(f); continue }
+                    if f.start < c.start { next.append((f.start, c.start)) }
+                    if c.end < f.end { next.append((c.end, f.end)) }
                 }
-                if start >= end { covered = true; break }
+                fragments = next
             }
-            if covered {
-                rev.deleted = true
-                out.append(rev)
+            guard !fragments.isEmpty else {
+                var covered = rev
+                covered.deleted = true
+                out.append(covered)
                 continue
             }
-            rev.session.start = start
-            rev.session.end = end
-            claimed.append((start, end))
-            out.append(rev)
+            for (k, f) in fragments.enumerated() {
+                var piece = rev
+                piece.session.start = f.start
+                piece.session.end = f.end
+                if k > 0 { piece.session.id = Self.fragmentID(parent: rev.id, index: k) }
+                claimed.append(f)
+                out.append(piece)
+            }
         }
         return (out + dead).sorted {
             $0.session.start != $1.session.start
                 ? $0.session.start < $1.session.start
                 : $0.id.uuidString < $1.id.uuidString
         }
+    }
+
+    /// Deterministic id for the k-th EXTRA fragment (k ≥ 1) of a split
+    /// parent: a pure function of (parent id, k), so every replica walking
+    /// the same raw set mints the IDENTICAL child ids — the property that
+    /// keeps the derived view replica-identical without persisting or
+    /// syncing the fragments. Two independent 64-bit FNV-1a streams fill the
+    /// UUID; the RFC 4122 version nibble is pinned to 8 (a "custom" UUID)
+    /// so derived ids live in a different namespace from random v4 session
+    /// ids and can never collide with one.
+    public static func fragmentID(parent: UUID, index: Int) -> UUID {
+        var input = [UInt8]()
+        withUnsafeBytes(of: parent.uuid) { input.append(contentsOf: $0) }
+        input.append(contentsOf: Array("tail-\(index)".utf8))
+        func fnv1a(_ seed: UInt64) -> UInt64 {
+            var h = seed
+            for b in input {
+                h ^= UInt64(b)
+                h = h &* 0x0000_0100_0000_01B3   // FNV-1a 64-bit prime
+            }
+            return h
+        }
+        let hi = fnv1a(0xcbf2_9ce4_8422_2325)    // FNV offset basis
+        let lo = fnv1a(0x9e37_79b9_7f4a_7c15)    // independent second stream
+        var u = uuid_t(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        withUnsafeMutableBytes(of: &u) { raw in
+            raw.storeBytes(of: hi.bigEndian, toByteOffset: 0, as: UInt64.self)
+            raw.storeBytes(of: lo.bigEndian, toByteOffset: 8, as: UInt64.self)
+        }
+        u.6 = (u.6 & 0x0F) | 0x80   // version 8 (custom, per RFC 9562)
+        u.8 = (u.8 & 0x3F) | 0x80   // RFC 4122 variant
+        return UUID(uuid: u)
     }
 
     /// The full pipeline: record-merge two replicas, then normalise overlaps.

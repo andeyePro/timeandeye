@@ -551,3 +551,40 @@ and recorded rather than fixed blind:
   (predates the enter-to-commit rework). Fix would bank a pending note onto
   the nearest kept slice, or hold it for the next slice, before the stop
   clear. Flagged by the reassign/comment review.
+
+## Timeline/menu-bar issues from hardware test (2026-07-07, Opus, post-Fable)
+
+- [ ] Elapsed desync: menu bar and timeline agree on the TASK now but not
+  the ELAPSED — Martin saw menu bar "2s and counting" vs timeline "8 min"
+  for the same task (a client project). Likely cause: a per-window
+  reassign (commitLiveSlice) banks the live run and resets targetSince to
+  now, so the menu clock restarts while the timeline live slice still spans
+  liveSliceStart (whole block). Decide the intended semantics (menu shows
+  whole-block total? or the timeline reflects the bank?) and make them
+  consistent. Opus job.
+- [ ] Time window over a full-screen app: today a regular Window opens in
+  its own Space so it can't overlay a full-screen app. NOT impossible —
+  mark the Time window as a floating auxiliary panel (NSWindow
+  collectionBehavior .fullScreenAuxiliary + .canJoinAllSpaces, or an
+  NSPanel .nonactivatingPanel) so it can float over full-screen. Opus job.
+
+## Fable session outputs (2026-07-07 night — review + code, NOT yet Mac-verified)
+- [x] RUN `swift run andeyeTTChecks` on the Mac — DONE 2026-07-08 00:2x BST
+  via the the local build bridge bridge: TOTAL 441 passed, 0 failed (twice).
+  Needed `rm -rf .build` on the Mac tree (stale module cache) and one
+  pre-existing flaky check deflaked (ContextRules surface bytes).
+- [ ] Martin: LOCK the licence spec §1 (open Qs 1–5 now carry Fable
+  recommendations; F1 floor correction applied — standard connectors `.plus`).
+  Then commit the v2 build; do NOT sell any plus SKU before the entitlement
+  gate ships end-to-end (spec's own launch-blocker rule).
+- [ ] FableReview.md: triage the 23 findings — F8 (resolveOverlaps unwired),
+  F9/F10 (multi-device posting ledger), F11 (edits never amend finance),
+  F23 (middle-split destroys the smaller side) are the pre-CloudKit-GA set;
+  full designs in docs/superpowers/specs/2026-07-07-multidevice-posting-
+  correctness.md (D0–D7 + 14 acceptance criteria).
+- [ ] Wire Settings surfacing for the new denial/skip states: entitlement
+  denials (EntitlementDenialReason copy), `.stuck` quarantine rows and
+  permanentlySkipped counts (journal summary shows only lastError today).
+- [ ] Pro repo: thread `XeroConnector.entitlement` through the seam once
+  `register(..., requires:)` exists on BackendRegistrar (coordinated
+  cross-repo change; main side already has the gated registry method).

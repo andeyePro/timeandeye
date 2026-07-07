@@ -12,8 +12,12 @@ public struct SyncToken: Equatable, Codable, Sendable {
 /// ALL merge intelligence stays in Core (SessionMerge/JournalSyncer), so the
 /// checks exercise the real logic.
 public protocol SyncTransport {
-    /// Upload local revisions. The server applies record-level LWW, so a
-    /// concurrent newer remote simply wins there and comes back on pull.
+    /// Upload local revisions. IMPORTANT contract note: the server is NOT
+    /// assumed to order writes by HLC — CloudKit with `.allKeys` overwrites
+    /// unconditionally, so a stale concurrent push CAN revert a newer server
+    /// record. Convergence is owed entirely to the syncer's pull-merge plus
+    /// its re-assertion of local wins (see sync()); a transport must only
+    /// deliver what it was given and echo changes back on pull.
     func push(_ revisions: [SessionRevision]) async throws
     /// Revisions changed since `token` (nil = everything), plus the cursor to
     /// save for the next pull. Echoes of our own pushes may be included —
@@ -93,12 +97,18 @@ public final class JournalSyncer {
         self.clock = clock
     }
 
+    /// CloudKit caps a modify operation at ~400 records; pushing in bounded
+    /// batches (with per-batch clearDirty) also means a mid-backlog failure
+    /// leaves only the unpushed tail dirty. 200 leaves headroom.
+    public static let pushBatchSize = 200
+
     /// One full cycle. Pull first (so we never push something the server
     /// already obsoleted), then push what's still dirty after the merge.
     public func sync() async throws {
         // 1. Pull remote changes and fold them in by record-level LWW.
         let (changes, token) = try await transport.pull(since: store.syncToken)
         var applied = 0
+        var reasserted = 0
         for remote in changes {
             clock.receive(remote.hlc)   // causality: our next edits order after
             let local = try store.revision(id: remote.id)
@@ -107,19 +117,37 @@ public final class JournalSyncer {
             if winner == remote, local != remote {
                 try store.applyRemote(remote)
                 applied += 1
+            } else if let local, local.hlc > remote.hlc {
+                // Local won STRICTLY (newer HLC) against a different server
+                // copy: re-mark it dirty so the push phase RE-ASSERTS it. The
+                // real server (CloudKit, .allKeys save policy) overwrites
+                // unconditionally — a stale concurrent push can revert a
+                // newer record after our dirty flag was cleared, and without
+                // this re-assertion the newer revision would never be pushed
+                // again: permanent divergence (A holds the edit, server + B
+                // hold the stale copy). Echoes skip (equal revisions), and
+                // the guard is STRICT on purpose: an equal-HLC content
+                // mismatch (a violated immutability invariant) must stay
+                // quiet — re-asserting ties would make two such replicas
+                // re-push forever.
+                try store.saveLocal(local)
+                reasserted += 1
             }
-            // Local won: leave it (and its dirty flag) alone — push sends it.
         }
         store.syncToken = token
-        // 2. Push everything still dirty.
+        // 2. Push everything still dirty, in bounded batches.
         let dirtyIDs = try store.dirtyRevisionIDs()
         let outgoing = try dirtyIDs.compactMap { try store.revision(id: $0) }
-        if !outgoing.isEmpty {
-            try await transport.push(outgoing)
-            try store.clearDirty(outgoing)
+        var batchStart = 0
+        while batchStart < outgoing.count {
+            let batch = Array(outgoing[batchStart..<min(batchStart + Self.pushBatchSize,
+                                                        outgoing.count)])
+            try await transport.push(batch)
+            try store.clearDirty(batch)
+            batchStart += batch.count
         }
-        if applied > 0 || !outgoing.isEmpty {
-            onDebug("sync: applied \(applied) remote, pushed \(outgoing.count)")
+        if applied > 0 || reasserted > 0 || !outgoing.isEmpty {
+            onDebug("sync: applied \(applied) remote, re-asserted \(reasserted), pushed \(outgoing.count)")
         }
     }
 }

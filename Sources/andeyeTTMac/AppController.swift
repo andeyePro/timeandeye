@@ -388,6 +388,7 @@ public final class AppController: ObservableObject {
     /// an expired subscription key reports itself rather than silently
     /// downgrading with no explanation.
     private func revalidateLicense() {
+        defer { registry.license = license }   // the entitlement gate reads it
         guard let key = settings.licenseKey?.trimmingCharacters(in: .whitespacesAndNewlines),
               !key.isEmpty else {
             license = nil
@@ -407,6 +408,16 @@ public final class AppController: ObservableObject {
                 licenseProblem = "That doesn't look like an andeye licence key"
             case .badSignature:
                 licenseProblem = "Licence key failed verification"
+            case .unknownKeyID:
+                licenseProblem = "Licence key was issued by a retired signing key — contact support for a replacement"
+            case .unsupportedVersion:
+                licenseProblem = "Licence key needs a newer version of andeye"
+            case .wrongProduct:
+                licenseProblem = "That key is for a different andeye app"
+            case .revoked:
+                licenseProblem = "Licence key has been revoked"
+            case .clockRollback:
+                licenseProblem = "This Mac's clock appears to have gone backwards"
             case .unsupported:
                 licenseProblem = "Licensing unavailable on this platform"
             }
@@ -1346,16 +1357,25 @@ public final class AppController: ObservableObject {
     // entry is never deleted by a timeline edit (prospective-only), so
     // clearing its row would re-post a duplicate.
 
+    /// The ledger identity of the primary pm backend. Falls back to the OP
+    /// stable id when nothing is registered (standalone edits still mirror
+    /// consistently) — but never hardcode the OP id at a call site: the
+    /// primary pm may one day not be OP, and a mismatched id here would
+    /// strand the real row and re-post history.
+    private var primaryPMLedgerID: String {
+        registry.primaryPM?.id ?? OPBackend.stableID
+    }
+
     /// The primary pm row is gone: the session re-enters the pm queue.
     private func clearPrimaryPosting(_ id: UUID) {
-        try? journal.clearPostingRecord(session: id, backendID: OPBackend.stableID)
+        try? journal.clearPostingRecord(session: id, backendID: primaryPMLedgerID)
     }
 
     /// The primary pm backend holds `entryID` for this session (a PATCH-in-
     /// place or reconcile re-point): record it so sync never re-creates it.
     private func setPrimaryPosted(_ id: UUID, entryID: RemoteEntryID?) {
         try? journal.setPostingRecord(PostingRecord(
-            sessionID: id, backendID: OPBackend.stableID,
+            sessionID: id, backendID: primaryPMLedgerID,
             state: .posted, entryID: entryID))
     }
 
@@ -2283,6 +2303,14 @@ public final class AppController: ObservableObject {
                 let name = registry.entry(id: report.backendID)?.backend.displayName
                     ?? report.backendID
                 DebugLog.write("pushed \(report.posted) entries to \(name)")
+            }
+            for report in reports where report.permanentlySkipped > 0 {
+                let name = registry.entry(id: report.backendID)?.backend.displayName
+                    ?? report.backendID
+                DebugLog.write("\(name): \(report.permanentlySkipped) permanently rejected, closed off")
+                lastError = "\(name) refused \(report.permanentlySkipped) "
+                    + (report.permanentlySkipped == 1 ? "entry" : "entries")
+                    + " permanently (task deleted or frozen) — they won't retry"
             }
             if let op = backend as? OPBackend, !op.startTimesSupported {
                 lastError = "OP rejected start times – entries pushed date-only (check Administration → Time and costs → start/end times)"

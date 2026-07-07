@@ -43,6 +43,9 @@ public protocol JournalStore {
     /// backend's queue — the ledger analogue of resetting `pushedToOP` after
     /// a timeline delete/reassign.
     func clearPostingRecord(session: UUID, backendID: String) throws
+    /// Every row for `backendID` in `state` — the crash-recovery sweep
+    /// (`.inflight` rows a dead process left behind) reads this.
+    func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord]
     /// Sessions eligible to post to ONE backend: certainty >= threshold, on a
     /// remote task (personal `.local` tasks never appear for ANY backend),
     /// and without a terminal (`posted`/`skipped`) row for `backendID`.
@@ -162,13 +165,19 @@ public final class InMemoryJournalStore: JournalStore {
         ledger[ledgerKey(session, backendID)] = nil
     }
 
+    public func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
+        ledger.values.filter { $0.state == state && $0.backendID == backendID }
+            .sorted { $0.sessionID.uuidString < $1.sessionID.uuidString }
+    }
+
     public func sessions(needingPostTo backendID: String,
                          atOrAbove threshold: Double) throws -> [Session] {
         sessions.filter { session in
             guard session.task.isRemote, session.certainty >= threshold else { return false }
             switch ledger[ledgerKey(session.id, backendID)]?.state {
-            case .posted, .skipped: return false      // terminal for this backend
-            case .failed, .pending, nil: return true  // retryable / untried
+            case .posted, .skipped, .stuck: return false   // terminal/quarantined
+            case .inflight: return false                    // unresolved crash window
+            case .failed, .pending, nil: return true       // retryable / untried
             }
         }
         .sorted { $0.start < $1.start }
