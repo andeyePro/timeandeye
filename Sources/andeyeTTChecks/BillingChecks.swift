@@ -208,7 +208,10 @@ final class FakeBackend: TaskBackend {
     func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
                          duration: TimeInterval, activityID: Int?, comment: String?) async throws {}
     func updateEntryComment(id: RemoteEntryID, comment: String) async throws {}
-    func deleteTimeEntry(id: RemoteEntryID) async throws { deleted.append(id) }
+    func deleteTimeEntry(id: RemoteEntryID) async throws {
+        deleted.append(id)
+        held.removeAll { $0.id == id }
+    }
     func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {
         held.filter { $0.start >= from && $0.start <= to }
     }

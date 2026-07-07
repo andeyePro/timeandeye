@@ -180,9 +180,10 @@ confirmed miss, leave `.inflight` when the list itself fails. Settle floor
 60 s (`inflightSettleFloor`). Checks: intent-gate + no-rollback-DELETE
 (SyncIdempotencyChecks, rewritten from the old delete-pinning check) and
 adopt/demote/floor flows (BillingChecks, FakeBackend now records what it
-"holds" and lists it back). The F13 resurrection half (verify `.posted` rows
-whose session was tombstoned/resurrected) remains unimplemented — it needs
-D4's snapshot comparison to know WHICH posted rows to verify cheaply.
+"holds" and lists it back). The F13 resurrection half is ALSO IMPLEMENTED (2026-07-08): `.posted` rows
+whose session record was touched after the row's write are verified at the
+backend (id-first match); missing entries re-queue and re-post in the same
+pass, present ones re-date the row so verification stays touch-bounded.
 
 - Before `createTimeEntry`: write the row as `.inflight` (with
   postedStart/postedDuration filled from the resolved slice). After success:

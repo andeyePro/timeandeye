@@ -53,6 +53,45 @@ public final class SyncEngine {
     /// same floor posting itself uses; sub-minute wobble never re-bills).
     public static let divergenceTolerance: TimeInterval = 60
 
+    /// F13: a `.posted` row whose session record was TOUCHED after the row
+    /// was written may be a resurrection — device A tombstoned the session
+    /// and deleted the backend entry; a newer edit resurrected it via sync;
+    /// this replica's row still claims `.posted` for an entry that no longer
+    /// exists (journal says billed, backend holds nothing — the invisible
+    /// inverse of a double-post). Verify ONLY touched rows at the backend:
+    /// present ⇒ re-date the row (nothing re-verifies until touched again);
+    /// missing ⇒ clear the row so THIS pass re-posts it exactly once. A list
+    /// failure leaves the row untouched (claim survives until verifiable).
+    private func verifyTouchedPosted(_ entry: RegisteredBackend, now: Date) async {
+        let rows = ((try? journal.postingRecords(state: .posted,
+                                                 backendID: entry.id)) ?? [])
+        for row in rows {
+            guard ((try? journal.sessionTouched(row.sessionID, after: row.updatedAt)) ?? false),
+                  let contribution = ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil)
+            else { continue }   // untouched, or retract-case (D4 counts it)
+            let sentStart = row.postedStart ?? contribution.start
+            let sentDuration = row.postedDuration ?? contribution.seconds
+            do {
+                let candidates = try await entry.backend.listTimeEntries(
+                    from: sentStart.addingTimeInterval(-3600),
+                    to: sentStart.addingTimeInterval(sentDuration + 3600))
+                let present = row.entryID.map { id in candidates.contains { $0.id == id } }
+                    ?? !candidates.filter { abs($0.durationSeconds - sentDuration) <= 90 }.isEmpty
+                var updated = row
+                if present {
+                    updated.updatedAt = now   // verified; quiet until touched again
+                    try? journal.setPostingRecord(updated)
+                } else {
+                    onDebug("posted entry missing at \(entry.id) for \(row.sessionID) — re-queueing (resurrection)")
+                    try? journal.clearPostingRecord(session: row.sessionID,
+                                                    backendID: entry.id)
+                }
+            } catch {
+                onDebug("posted-verify list failed at \(entry.id): \(error)")
+            }
+        }
+    }
+
     /// D4 detection half: every `.posted` row carrying a snapshot is compared
     /// against the CURRENT resolved journal. A session that was edited,
     /// re-trimmed by a later-arriving overlap, or deleted after posting makes
@@ -213,6 +252,10 @@ public final class SyncEngine {
             // are verified-and-adopted (or demoted to a clean retry) before
             // the queue is read, so a demoted session re-enters THIS pass.
             await reconcileInflight(entry, now: now)
+            // Then F13: touched posted rows are verified at the backend —
+            // a resurrection whose entry device A already deleted re-queues
+            // HERE so this same pass re-posts it.
+            await verifyTouchedPosted(entry, now: now)
             // Then the D4 drift scan: posted entries whose journal side has
             // since moved. Detection only — counted and surfaced, not yet
             // amended.

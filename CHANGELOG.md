@@ -2,6 +2,18 @@
 
 ## 2026-07-08
 
+- [x] **F13: resurrection reconcile – a posted entry deleted at the backend
+  re-posts exactly once.** Cross-device sequence: device A tombstones a posted
+  session and deletes its backend entry; a newer edit resurrects the session
+  via sync; this replica's ledger still says `.posted` for an entry that no
+  longer exists – the journal claims billed, the backend holds nothing (the
+  invisible inverse of a double-post). The engine now verifies `.posted` rows
+  whose session record was TOUCHED after the row was written (new
+  `sessionTouched(_:after:)`, HLC-based, never fires single-device): entry
+  present ⇒ row re-dated (quiet until touched again); missing ⇒ row cleared so
+  the SAME pass re-posts, exactly once; list failure ⇒ claim survives until
+  verifiable. Mac-verified: 446 passed, 0 failed.
+
 - [x] **D4 (detection half): posted-vs-journal drift is now counted and
   surfaced.** Each sync pass compares every posted entry's snapshot
   (posted_start/posted_duration) against the session's CURRENT resolved

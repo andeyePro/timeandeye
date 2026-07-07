@@ -568,6 +568,14 @@ public final class SQLiteJournalStore: JournalStore {
                                            : $0.id.uuidString < $1.id.uuidString }
     }
 
+    /// A stamped record whose HLC physical time is after `after` — an edit,
+    /// tombstone, or resurrection landed since then (locally or via sync).
+    /// Unstamped rows (sync off / excluded) are never "touched".
+    public func sessionTouched(_ id: UUID, after: Date) throws -> Bool {
+        guard let row = try revisionRow(id: id), !row.hlc.deviceID.isEmpty else { return false }
+        return Double(row.hlc.physicalMillis) / 1000 > after.timeIntervalSince1970
+    }
+
     /// Sync ON: this session's surviving (start, seconds) after overlap
     /// resolution — nil when fully covered. Sync OFF: the stored span.
     public func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)? {

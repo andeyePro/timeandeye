@@ -73,6 +73,11 @@ public protocol JournalStore {
     /// what the posting engine should bill for it. nil when the session is
     /// fully covered by higher-priority overlapping time (post nothing).
     func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)?
+    /// Whether the session's RECORD changed after `after` (any re-stamp:
+    /// edit, delete-tombstone, resurrection). The engine uses it to verify
+    /// posted rows only when something actually moved — false on stores
+    /// without revision stamps (single-device: edits clear rows directly).
+    func sessionTouched(_ id: UUID, after: Date) throws -> Bool
 
     /// Timeline edits: replace the stored session (matched by id).
     func update(_ session: Session) throws
@@ -112,6 +117,9 @@ public extension JournalStore {
         guard let s = try session(id: sessionID) else { return nil }
         return (s.start, s.end.timeIntervalSince(s.start))
     }
+
+    /// Default: no revision stamps, nothing to compare — never "touched".
+    func sessionTouched(_ id: UUID, after: Date) throws -> Bool { false }
 }
 
 public final class InMemoryJournalStore: JournalStore {

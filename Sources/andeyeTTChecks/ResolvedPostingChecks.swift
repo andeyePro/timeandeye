@@ -114,6 +114,52 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(gone?.diverged, 1, "deleted-after-posting detected")
     }
 
+    await c.check("F13: a resurrected session whose entry was deleted at the backend re-posts exactly once") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let id = UUID()
+        let s = Session(id: id, task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let firstEntry = ((try? store.postingRecord(session: id, backendID: "pm-a")) ?? nil)?.entryID
+        try expectEq(pm.created.count, 1)
+
+        // Device A's story arrives via sync: A tombstoned the session AND
+        // deleted the backend entry; then a newer edit on B resurrected it.
+        // The stamp must be AFTER the posting row's updatedAt (t+4000) for
+        // the touched-since heuristic to see it — wall-clock ordering, as in
+        // production where sync always lands after the original post.
+        try await pm.deleteTimeEntry(id: try unwrap(firstEntry))
+        nowMillis = Int64(t(4100).timeIntervalSince1970 * 1000)
+        try store.applyRemote(SessionRevision(
+            session: s, hlc: HLC(physicalMillis: nowMillis, counter: 0, deviceID: "phone"),
+            origin: .edited))
+
+        // Journal says posted; backend holds nothing. The verify sweep must
+        // catch it and the SAME pass re-posts — exactly once.
+        let report = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                                now: t(4200))).first
+        try expectEq(report?.posted, 1, "re-posted in the same pass")
+        try expectEq(pm.created.count, 2, "exactly one re-create")
+        let row = ((try? store.postingRecord(session: id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .posted)
+        try expect(row?.entryID != firstEntry, "a fresh entry id was recorded")
+
+        // Control: a touch whose entry IS still present verifies quietly —
+        // no re-post, no duplicate, and the row is re-dated so later passes
+        // don't re-verify.
+        nowMillis = Int64(t(4300).timeIntervalSince1970 * 1000)
+        var touched = s; touched.comment = "note added later"
+        try store.save(touched)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4400))
+        try expectEq(pm.created.count, 2, "present entry: verified, not re-posted")
+        let after = ((try? store.postingRecord(session: id, backendID: "pm-a")) ?? nil)
+        try expectEq(after?.state, .posted)
+        try expectEq(after?.updatedAt, t(4400), "row re-dated at verification")
+    }
+
     await c.check("sync OFF: resolved surfaces are the identity — single-device unchanged") {
         let store = try makeStore()   // no clock attached
         let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
