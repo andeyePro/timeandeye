@@ -49,6 +49,35 @@ struct SliceShape: Shape {
     }
 }
 
+/// Diagonal 45° hatch lines across the whole rect. Clipped by the caller to
+/// the provisional sub-range (a `BandRect`) AND the live `SliceShape`, so the
+/// lines read as "provisional, not yet committed" only over the undecided
+/// tail, and stop at the torn live edge. Static (no marching-ants animation)
+/// so it costs nothing under prefers-reduced-motion.
+struct Hatch: Shape {
+    var spacing: CGFloat = 5
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        var x = rect.minX - rect.height
+        while x <= rect.maxX {
+            p.move(to: CGPoint(x: x, y: rect.maxY))
+            p.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+            x += spacing
+        }
+        return p
+    }
+}
+
+/// A vertical band [xStart, xEnd] in the shape's own coordinate space, used to
+/// clip the full-slice hatch down to just the undecided sub-range.
+struct BandRect: Shape {
+    var xStart: CGFloat
+    var xEnd: CGFloat
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: xStart, y: rect.minY, width: max(xEnd - xStart, 0), height: rect.height))
+    }
+}
+
 struct TimelineView: View {
     @ObservedObject var controller: AppController
     /// In-window navigation to the pie view (and the second-window escape hatch).
@@ -98,6 +127,17 @@ struct TimelineView: View {
     @State private var scrollGate = ScrollGate()
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    /// A 1 Hz tick that advances ONLY the live slice's trailing edge (and its
+    /// provisional hatch), so the ongoing block tracks the clock like the menu
+    /// bar instead of jumping every 30 s. It never re-queries the journal — the
+    /// handler just moves `liveNow`, and `sessions` remaps the cached slices in
+    /// memory. When nothing is tracking the handler early-returns without
+    /// touching state, so a stopped timeline does no per-second redraw.
+    private let liveTick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    /// "Now" for the live slice's trailing edge, moved by `liveTick`. Held as
+    /// state (not a fresh `Date()` per body eval) so a redraw only happens when
+    /// the tick actually advances it.
+    @State private var liveNow = Date()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -128,6 +168,26 @@ struct TimelineView: View {
         // h:mm field you just clicked — the intermittent "it didn't go blue, so
         // I couldn't tell I could type" bug. Pause the tick during an edit.
         .onReceive(timer) { _ in if editing == nil { reloadSessions(); reloadTodayPreview() } }
+        // Live-edge tick: advance the ongoing slice's edge ~1 Hz (never reloads
+        // the journal — only `liveNow` moves). Paused while ANY editor is open:
+        // the per-second body re-eval is almost certainly harmless (a stable
+        // slice identity is preserved and mouse-move already re-renders during
+        // edits), but focus-steal from a periodic re-render is a bug this view
+        // has had before, so we don't gamble on it — the live edge simply
+        // catches up the instant the editor closes. No-op while stopped.
+        .onReceive(liveTick) { now in
+            guard editing == nil, case .tracking = controller.trackerState else { return }
+            liveNow = now
+        }
+        // Task flips (e.g. "Change to X") land off the SAME @Published tracker
+        // state the menu bar reads, so the two agree instantly instead of
+        // lagging up to 30 s. A full reload — only when no editor is open —
+        // re-folds the live slice into any now-contiguous same-task neighbour;
+        // `sessions` mirrors the task meanwhile so an in-edit flip still shows.
+        .onChange(of: controller.trackerState) { _, _ in
+            liveNow = Date()
+            if editing == nil { reloadSessions() }
+        }
         // Cache invalidation: viewport moved out of the loaded range, or the
         // journal mutated (revision bumps on every edit, even same-duration).
         .onChange(of: viewStart) { _, _ in reloadIfNeeded() }
@@ -136,6 +196,7 @@ struct TimelineView: View {
         .onChange(of: controller.pendingTimelineFocus) { _, _ in focusOnPendingSlice() }
         .onAppear {
             controller.noteTimeViewOpened(.timeline)
+            liveNow = Date()
             zoomToLatestBlock()
             reloadSessions()
             reloadTodayPreview()
@@ -165,6 +226,18 @@ struct TimelineView: View {
 
     private var sessions: [Session] {
         var list = cachedSessions
+        // The live slice grows in real time: advance its trailing edge to the
+        // current tick and mirror the just-changed task straight off the
+        // @Published tracker state, so a "Change to X" flips here the instant it
+        // flips in the menu bar — with no wait for the next journal reload. Both
+        // are pure display remaps of the cache; the journal is never touched.
+        if let i = list.firstIndex(where: { $0.id == AppController.liveSessionID }) {
+            list[i].end = max(liveNow, list[i].start.addingTimeInterval(1))
+            if case .tracking(.task(let ref), let cert) = controller.trackerState {
+                list[i].task = ref
+                list[i].certainty = cert
+            }
+        }
         // While editing an existing slice, the bar reflects the editor's live
         // values — applied to the CACHE in memory (cheap), so a handle drag
         // moves the slice and the numbers below in lock-step with no re-query.
@@ -412,6 +485,7 @@ struct TimelineView: View {
             ForEach(sessions) { session in
                 slice(session, width: width)
             }
+            liveHatch(width: width)
         }
         .frame(height: 96)
         .clipped()
@@ -579,6 +653,42 @@ struct TimelineView: View {
             .position(x: x0 + w / 2, y: 56)
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
             .onTapGesture { selectSlice(session, isLive: isLive) }
+    }
+
+    /// Hatch the "undecided" tail of the live slice: after a confident switch
+    /// the display follows the new task instantly, but that run only commits
+    /// once it has held past the grace floor — until then it can revert to the
+    /// prior task. The cross-hatch marks exactly that provisional sub-range,
+    /// [start-of-provisional-run, min(now, graceEnds)], and solidifies (the
+    /// hatch clears) the moment the switch commits. A settled task, a reverted
+    /// excursion, or a fresh start (manual pick / idle-resume) has no pending
+    /// switch, so nothing is hatched — the smallest honest mapping onto the
+    /// tracker's real provisional state, inventing no new segmentation.
+    @ViewBuilder
+    private func liveHatch(width: CGFloat) -> some View {
+        if case .tracking(.task(let ref), _) = controller.trackerState,
+           let g = controller.liveGraceRange,
+           let live = sessions.first(where: { $0.id == AppController.liveSessionID }) {
+            let x0 = xFor(live.start, width: width)
+            let x1 = xFor(live.end, width: width)
+            let w = max(x1 - x0, 3)
+            // Band in the slice's own coords: from the provisional-run start to
+            // the commit deadline, never past the drawn live edge (`live.end`
+            // is already `liveNow`, so an un-elapsed grace hatches the whole
+            // tail-so-far and grows with the clock).
+            let a = xFor(max(live.start, g.since), width: width) - x0
+            let b = Swift.min(x1, xFor(g.graceEnds, width: width)) - x0
+            if b > a + 0.5 {
+                Hatch(spacing: 5)
+                    .stroke(labelColour(for: ref).opacity(0.5), lineWidth: 1)
+                    .frame(width: w, height: 44)
+                    .clipShape(BandRect(xStart: a, xEnd: b))
+                    .clipShape(SliceShape(zigzag: true))
+                    .position(x: x0 + w / 2, y: 56)
+                    // Decorative: clicks pass through to the live slice beneath.
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     /// Finder-style slice selection, matching the window strip: ⌘-click toggles

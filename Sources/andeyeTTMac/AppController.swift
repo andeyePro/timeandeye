@@ -1313,6 +1313,19 @@ public final class AppController: ObservableObject {
 
     public static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
 
+    /// Read-only projection of the tracker's provisional-switch window for the
+    /// timeline hatch: the sub-range of the live slice whose commit is still
+    /// undecided (a confident WORK switch that hasn't yet held past the grace
+    /// floor — a return to the prior task before `graceEnds` reverts it).
+    /// `since` is where the provisional run began, `graceEnds` when it commits.
+    /// nil unless such a switch is in flight. Pure display state — reading it
+    /// never writes to the journal or changes segmentation.
+    public var liveGraceRange: (since: Date, graceEnds: Date)? {
+        guard let since = tracker.pendingSwitchSince,
+              let ends = tracker.graceEndsAt else { return nil }
+        return (since, ends)
+    }
+
     // MARK: - Posting-ledger mirrors of the legacy pushed flags
     //
     // The edit paths below reset `pushedToOP`/`opTimeEntryID` so a slice

@@ -2,6 +2,39 @@
 
 ## 2026-07-07
 
+- [x] **Live timeline block now tracks in real time and hatches the undecided
+  tail (display-only).** Two complaints, both about the live slice disagreeing
+  with the menu bar. (1) Realtime: `TimelineView` only rebuilt its slice cache
+  on a 30 s timer / journal write / viewport move, so after a "Change to X" the
+  menu bar flipped instantly (off `@Published trackerState`) while the live
+  block showed the old task for up to 30 s. Fixed with two light, journal-free
+  hooks: an `.onChange(of: controller.trackerState)` that flips the live task
+  the same instant the menu bar does (and re-folds via `reloadSessions()` only
+  when no editor is open), plus a 1 Hz `liveTick` that advances only a `liveNow`
+  Date — the `sessions` getter remaps the cached live slice's trailing edge and
+  task in memory, no SQLite per second. The tick no-ops while stopped (no
+  per-second redraw on an idle timeline) and is PAUSED while any editor is open,
+  resuming (the edge catches up) the instant it closes — a periodic re-render
+  has stolen editor focus in this view before, so the live edge does not tick
+  under an open field rather than gamble that a stable slice identity prevents
+  it. (2) Undecided hatch: after a confident switch the display follows the
+  new task instantly, but the journal slice stays provisional — revertible to
+  the prior task — until the run holds past `sliceFloor = max(switchGrace, 60)`.
+  That existing `pendingSwitch` state is now surfaced read-only as
+  `SessionTracker.pendingSwitchSince` / `graceEndsAt` (and
+  `AppController.liveGraceRange`), and the timeline cross-hatches the sub-range
+  `[since, min(now, graceEnds)]` of the live slice — growing with the clock,
+  solidifying (hatch clears) the moment the switch commits, vanishing on a
+  revert. A settled task, a reverted excursion, a fresh start (manual pick /
+  idle-resume) and a pending non-work *stop* are deliberately NOT hatched — the
+  smallest honest mapping onto real provisional state, inventing no new
+  segmentation. Nothing here writes to the journal or changes attribution /
+  segmentation: purely how the timeline draws and when it refreshes. New
+  `SessionTracker` checks (projection non-nil across a provisional switch,
+  clears on commit and on revert, follows a non-default Switch Buffer via
+  `sliceFloor`, and stays nil for a pending non-work stop); the SwiftUI drawing
+  itself is verified on the Mac.
+
 - [x] **"Move N windows to →" now works on the live block's earlier windows
   (2026-07-05 hardware test).** On a long single-task morning, selecting a
   window in the timeline strip and clicking a task under "Move N windows to

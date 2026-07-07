@@ -126,6 +126,32 @@ public final class SessionTracker {
         return nil
     }
 
+    /// Read-only projection of the provisional-switch window, for the timeline
+    /// to hatch the still-uncommitted tail of the live slice. After a confident
+    /// WORK switch the DISPLAY (trackerState) follows the new task instantly,
+    /// but that run is "undecided" — held provisional — until it survives past
+    /// `sliceFloor`: a return to the prior task before then reverts it (the
+    /// excursion folds back as windows in the old slice). `pendingSwitchSince`
+    /// is the instant that provisional run began; nil the moment nothing is
+    /// undecided — a settled task owns its slice outright, and a *reverted* or
+    /// *committed* switch clears it. A pending non-work STOP is deliberately
+    /// excluded: it isn't a task the timeline draws, so there is nothing to
+    /// hatch. Pure state read; nothing here mutates the tracker.
+    public var pendingSwitchSince: Date? {
+        guard let p = pendingSwitch, p.target != .doNotTrack else { return nil }
+        return p.since
+    }
+
+    /// When the current provisional switch commits if the new task keeps focus:
+    /// `pendingSwitchSince + sliceFloor` (the same threshold
+    /// `evaluatePendingSwitch` commits a work switch at). nil when nothing is
+    /// undecided. Past
+    /// this instant the run journals to the new task on the next input tick, so
+    /// the hatch caps here and solidifies.
+    public var graceEndsAt: Date? {
+        pendingSwitchSince.map { $0.addingTimeInterval(sliceFloor) }
+    }
+
     public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
         self.attributor = attributor

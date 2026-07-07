@@ -446,6 +446,76 @@ func sessionTrackerChecks(_ c: Checks) {
                      "committed switch: the new task owns the slice")
     }
 
+    c.check("pendingSwitchSince/graceEndsAt expose the provisional window, then clear on commit") {
+        // The timeline hatches [pendingSwitchSince, graceEndsAt] as the still-
+        // undecided tail of the live slice. It must be non-nil exactly while a
+        // work switch is provisional, and clear the moment it commits.
+        let (tracker, attributor) = makeTracker()   // default grace 30 → sliceFloor 60
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        try expect(tracker.pendingSwitchSince == nil, "a settled task has no provisional window")
+        try expect(tracker.graceEndsAt == nil)
+
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional switch
+        try expectEq(tracker.pendingSwitchSince, t(100),
+                     "the provisional run begins at the switch moment")
+        try expectEq(tracker.graceEndsAt, t(160),
+                     "commit deadline is since + sliceFloor (max(grace 30, 60) = 60)")
+
+        tracker.handle(.input(t(165)))   // held past the floor → commits
+        try expect(tracker.pendingSwitchSince == nil,
+                   "once the switch commits, nothing is undecided — the hatch clears")
+        try expect(tracker.graceEndsAt == nil)
+    }
+
+    c.check("a reverted sub-grace excursion clears the provisional window") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional
+        try expectEq(tracker.pendingSwitchSince, t(100))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 110)))     // back within grace → revert
+        try expect(tracker.pendingSwitchSince == nil,
+                   "reverting the excursion un-hatches: it was never a real switch")
+    }
+
+    c.check("graceEndsAt tracks a non-default Switch Buffer via sliceFloor") {
+        var config = TrackerConfig()
+        config.switchGraceSeconds = 90   // sliceFloor = max(90, 60) = 90
+        let (tracker, attributor) = makeTracker(config: config)
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+        attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 100)))   // provisional
+        try expectEq(tracker.graceEndsAt, t(190),
+                     "the hatch's commit deadline follows the user's Switch Buffer")
+    }
+
+    c.check("a pending non-work stop is not a hatched task switch") {
+        // A doNotTrack pend is a provisional STOP, not a task the timeline
+        // draws — there is nothing to hatch, so the projection stays nil.
+        let (tracker, attributor) = makeTracker()
+        var learning = LearningStore()
+        learning.learn(sig("Steam", "Library", at: 0), target: .doNotTrack, weight: 5)
+        attributor.replaceLearning(learning)
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.focus(sig("Steam", "Library", at: 30)))   // pending non-work stop
+        try expect(tracker.pendingSwitchSince == nil,
+                   "a pending non-work STOP is not an undecided task switch")
+        try expect(tracker.graceEndsAt == nil)
+    }
+
     c.check("sustained switch commits and grace-period time goes to the new task") {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []
