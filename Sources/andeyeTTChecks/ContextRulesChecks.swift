@@ -347,9 +347,17 @@ func surfaceFragmentChecks(_ c: Checks) {
         // The exact Surface the pre-fix code produced for this signal:
         let legacy = Surface(app: "Google Chrome", detail: "github.com/andeyePro/andeyeTT")
         try expectEq(Surface(signal: sig), legacy)
-        try expectEq(try JSONEncoder().encode(Surface(signal: sig)),
-                     try JSONEncoder().encode(legacy),
-                     "encoded bytes must match what primed.json already holds")
+        // Canonical (.sortedKeys) bytes — plain JSONEncoder key order is
+        // nondeterministic run-to-run, which made the raw byte comparison
+        // flaky ("expected 66 bytes, got 66 bytes"). What persisted-key
+        // matching actually needs is field/value identity: primed.json keys
+        // are matched by DECODED Surface equality (asserted above and by the
+        // prime firing below), not by byte equality on disk.
+        let canonical = JSONEncoder()
+        canonical.outputFormatting = [.sortedKeys]
+        try expectEq(try canonical.encode(Surface(signal: sig)),
+                     try canonical.encode(legacy),
+                     "canonical encodings must match field-for-field")
         // And a persisted prime under the legacy key still fires.
         let a = Attributor(instanceHost: "op.example.com")
         a.primedSurfaces[legacy] = .op(3)
