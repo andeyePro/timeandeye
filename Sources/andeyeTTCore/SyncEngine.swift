@@ -50,12 +50,16 @@ public final class SyncEngine {
         /// Rows under an invoice lock this pass — billed time the amendment
         /// loop deliberately leaves alone (surfaced, not a problem per se).
         public var locked = 0
+        /// D2(a): another device owns posting for this backend — this pass
+        /// deliberately did NOTHING (no post, no amend, no reconcile, no
+        /// poll). Not an error: non-owners track, edit and read state.
+        public var notOwner = false
         public var error: String?
 
         public init(backendID: String, posted: Int = 0,
                     permanentlySkipped: Int = 0, amended: Int = 0,
                     retracted: Int = 0, diverged: Int = 0,
-                    locked: Int = 0, error: String? = nil) {
+                    locked: Int = 0, notOwner: Bool = false, error: String? = nil) {
             self.backendID = backendID
             self.posted = posted
             self.permanentlySkipped = permanentlySkipped
@@ -63,6 +67,7 @@ public final class SyncEngine {
             self.retracted = retracted
             self.diverged = diverged
             self.locked = locked
+            self.notOwner = notOwner
             self.error = error
         }
     }
@@ -503,6 +508,18 @@ public final class SyncEngine {
     /// sentinel rows, which are internal state, not tracked time).
     public var excludedSessionIDs: Set<UUID> = []
     public var onDebug: (String) -> Void = { _ in }
+    /// D2(a) — one posting OWNER per backend connection: only the owner
+    /// device runs the posting/amendment machinery for that backend;
+    /// non-owners track, edit and read state but NEVER write to the
+    /// backend. Credentials already make posting single-homed de facto —
+    /// this makes it explicit and closes the copied-credentials case (two
+    /// devices under the same derived backend id, F9). Gate semantics:
+    /// missing owner entry OR nil `localDeviceID` = ownership off for that
+    /// backend (single-device behaviour, unchanged). The owner map becomes
+    /// a synced setting with D2(b); until then the wiring is in place and
+    /// checked.
+    public var localDeviceID: String?
+    public var postingOwners: [String: String] = [:]
     /// The invoice-poll throttle OUTLIVES the engine (the controller builds
     /// a fresh engine every pass): the owner holds one clock and hands it to
     /// each engine, else every pass would re-poll and burn the API budget.
@@ -554,6 +571,16 @@ public final class SyncEngine {
         var reports: [BackendReport] = []
         for entry in backends {
             var report = BackendReport(backendID: entry.id)
+            // D2(a): not the posting owner ⇒ this backend's ENTIRE pass is
+            // skipped — reconcile, verify, amendment, invoice poll and the
+            // queue all belong to the owner device. Sessions stay visibly
+            // pending here; the owner posts them.
+            if let device = localDeviceID, let owner = postingOwners[entry.id],
+               owner != device {
+                report.notOwner = true
+                reports.append(report)
+                continue
+            }
             // Crash recovery FIRST: rows left `.inflight` by a dead process
             // are verified-and-adopted (or demoted to a clean retry) before
             // the queue is read, so a demoted session re-enters THIS pass.

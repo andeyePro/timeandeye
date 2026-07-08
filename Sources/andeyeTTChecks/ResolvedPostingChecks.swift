@@ -472,6 +472,59 @@ func resolvedPostingChecks(_ c: Checks) async {
                      .skipped, "the task-gone skip never re-opened")
     }
 
+    await c.check("D2(a) posting owner: a non-owner device does NOTHING for that backend — sessions stay pending for the owner") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        var s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        engine.localDeviceID = "mac-b"
+        engine.postingOwners = ["pm-a": "mac-a"]   // another device owns posting
+
+        // Post nothing, poll nothing…
+        pm.invoiced["would-lock"] = "INV-1"
+        var reports = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                                now: t(4000))
+        try expectEq(pm.created.count, 0, "non-owner never posts")
+        try expectEq(pm.invoicePolls, 0, "non-owner never polls")
+        try expectEq(reports.first?.notOwner, true, "the pass says WHY it did nothing")
+        try expectNil((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil,
+                      "session stays visibly pending — the owner posts it")
+
+        // …and never amends/retracts, even a row the (previous) owner left.
+        // The backend really holds the entry (else the resurrection sweep
+        // would demote the row for a re-post and mask the amendment path).
+        pm.held.append(RemoteTimeEntry(id: "e1", taskID: "1", start: t(0),
+                                       durationSeconds: 3600))
+        try store.setPostingRecord(PostingRecord(
+            sessionID: s.id, backendID: "pm-a", state: .posted, entryID: "e1",
+            updatedAt: t(100), postedStart: t(0), postedDuration: 3600,
+            sessionStamp: try store.sessionStamp(s.id)))
+        s.end = t(1800)
+        try store.save(s)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4100))
+        try expectEq(pm.updated.count, 0, "non-owner never amends")
+        try expectEq(pm.deleted.count, 0, "non-owner never retracts")
+
+        // Ownership handed to THIS device: everything resumes.
+        engine.postingOwners = ["pm-a": "mac-b"]
+        reports = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                            now: t(4200))
+        try expectEq(reports.first?.notOwner, false)
+        try expect(pm.updated.count > 0, "the new owner's first pass amends the drift")
+
+        // Gate off (no owner recorded / no device id): unchanged behaviour.
+        let store2 = try makeStore()
+        store2.clock = makeClock()
+        try store2.save(Session(task: .op(2), start: t(0), end: t(600), certainty: 0.95))
+        let pm2 = FakeBackend(owns: .op)
+        let engine2 = SyncEngine(journal: store2, backend: pm2, id: "pm-a", class: .pm)
+        engine2.localDeviceID = "mac-b"   // device known, but no owner entry
+        _ = await engine2.pushEligible(threshold: 0.8, includeComments: false, now: t(4300))
+        try expectEq(pm2.created.count, 1, "no owner entry ⇒ ownership off ⇒ posts as today")
+    }
+
     await c.check("a locked row whose entry vanished is NOT demoted for re-post (no duplicate of billed time)") {
         let store = try makeStore()
         store.clock = makeClock()

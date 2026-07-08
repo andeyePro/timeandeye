@@ -428,6 +428,10 @@ public final class AppController: ObservableObject {
     /// signing identity; enabling then = flip the setting, which stamps the
     /// backlog (one-shot) and starts the sync cycle on the 60 s timer.
     private(set) var syncClock: HLCClock?
+    /// D2(a): backendID → owner deviceID. Empty (today) = ownership off.
+    /// Becomes a synced setting with D2(b); the engine gate and its checks
+    /// are already in place.
+    private(set) var postingOwners: [String: String] = [:]
     private func configureSyncReplica() {
         guard settings.journalSyncEnabled, let sqlite = journal as? SQLiteJournalStore else { return }
         // Device id: persisted beside the journal so a settings-file restore
@@ -2496,6 +2500,11 @@ public final class AppController: ObservableObject {
                                 invoicePollClock: invoicePollClock)
         engine.excludedSessionIDs = [Self.liveCheckpointID]
         engine.onDebug = { DebugLog.write("sync: \($0)") }
+        // D2(a): the posting-owner gate. The owner map is empty until it
+        // becomes a synced setting (D2(b)) — empty = ownership off, so
+        // single-device behaviour is byte-for-byte unchanged today.
+        engine.localDeviceID = syncClock?.deviceID
+        engine.postingOwners = postingOwners
         repeat {
             syncRequested = false
             // Snapshot billability into VALUES before the off-main awaits: the

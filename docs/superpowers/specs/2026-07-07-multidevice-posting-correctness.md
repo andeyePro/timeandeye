@@ -125,6 +125,16 @@ PostingRecord + postedStart: Date?  postedDuration: TimeInterval?  (additive)
 
 ## D2. Posting ownership + a synced ledger (fixes F9, F10)
 
+Status 2026-07-08: slice (a)'s ENGINE GATE is BUILT and checked (474/0) —
+`SyncEngine.localDeviceID` + `postingOwners`; a non-owner device skips a
+backend's entire pass (no post/amend/reconcile/poll; report says
+`notOwner`) and sessions stay visibly pending for the owner; missing owner
+entry = ownership off (single-device unchanged, pinned). The controller
+wires the device id from the sync clock; the owner MAP stays empty until
+it becomes a synced setting with (b). Slices (b) synced ledger and (c)
+markPushed suppression remain open — they want a fresh design session
+around the CloudKit record type.
+
 Two mechanisms, deliberately layered:
 
 **(a) One posting owner per backend connection.** Each registered backend id
