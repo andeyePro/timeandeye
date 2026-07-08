@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>andeye logo lab v3 — frame-by-frame</title>
+<title>andeye logo lab v4 — closed-pose tuning</title>
 <style>
   body { margin: 0; background: #0c0f16; color: #eef1f6;
          font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
@@ -28,8 +28,8 @@
 </head>
 <body>
 <main>
-  <h1>andeye logo lab v3</h1>
-  <p>Filled iris throughout (your verdict). Every mark below is driven by ONE set of controls, so you can compare frame-for-frame: scrub the wink or the draw-on, or step a frame at a time. The right-corner artifact is fixed — each curve now strokes as its own segment (like the app's renderer), so the degenerate corner can't grow a spur.</p>
+  <h1>andeye logo lab v4</h1>
+  <p>Filled iris throughout (your verdict). Every mark below is driven by ONE set of controls. NEW: two tuning sliders for your 14:54 notes — <b>lid raise</b> lifts the closed lower eyelid a fraction more, <b>smoothing</b> softens the bump where the closed lids meet the flourish. Both start at my suggested values; 0/0 is the original pose. Scrub wink to 1.000, dial them in, and tell me the two numbers.</p>
 
   <div class="controls">
     <div class="line">
@@ -45,6 +45,21 @@
       <output id="drawV">1.000</output>
       <button id="dm">−frame</button><button id="dp">+frame</button>
       <button id="playDraw">play draw-on</button>
+    </div>
+    <div class="line">
+      <label>lid raise</label>
+      <input type="range" id="lift" min="0" max="1000" value="400">
+      <output id="liftV">0.400</output>
+      <span style="font-size:12px;color:#6a7382">closed LOWER lid rises this much more (0 = original)</span>
+    </div>
+    <div class="line">
+      <label>smoothing</label>
+      <input type="range" id="smooth" min="0" max="1000" value="500">
+      <output id="smoothV">0.500</output>
+      <span style="font-size:12px;color:#6a7382">flattens the closed top lid at the left — softens the bump against the flourish</span>
+    </div>
+    <div class="line" style="font-size:12px;color:#6a7382">
+      Scrub wink to 1.000 to judge these two, then quote me the two numbers you land on and I bake them in.
     </div>
   </div>
 
@@ -82,15 +97,26 @@
     [P(122, 137), P(205.86, 14.91), P(311, 137), P(311, 137)],
     [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
   ];
-  var TOP_CLOSED = { c1: P(171.03, 187.18), c2: P(258.9, 178.05) };
-  var BOT_CLOSED = { c1: P(311, 141), c2: P(232, 196) };
   var W = 17;   // the brand stroke width
+  // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
+  // fraction (a real wink lifts the bottom lid, not just drops the top), and
+  // `smooth` flattens the closed TOP lid near the left corner, softening the
+  // bump where the closed lids meet the flourish. 0/0 reproduces the app's
+  // original fullStroke pose.
+  var TUNE = { lift: 0, smooth: 0 };
+  function closedPose() {
+    return {
+      top: { c1: P(171.03, 187.18 - 22 * TUNE.smooth), c2: P(258.9, 178.05 - 6 * TUNE.smooth) },
+      bot: { c1: P(311, 141 - 6 * TUNE.lift), c2: P(232, 196 - 26 * TUNE.lift) },
+    };
+  }
 
   function lerp(a, b, w) { return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w }; }
   function cubics(wink) {
+    var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
-    c[2] = [c[2][0], lerp(c[2][1], TOP_CLOSED.c1, wink), lerp(c[2][2], TOP_CLOSED.c2, wink), c[2][3]];
-    c[3] = [c[3][0], lerp(c[3][1], BOT_CLOSED.c1, wink), lerp(c[3][2], BOT_CLOSED.c2, wink), c[3][3]];
+    c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
+    c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink), c[3][3]];
     return c;
   }
   function seg(c) {
@@ -251,6 +277,11 @@
     }
     return { setWink: setWink, setPose: setPose, iris: g };
   }
+  // Global closed-pose tuning — affects every mounted eye's NEXT pose update.
+  andeyeEye.tune = function (t) {
+    if (t && typeof t.lift === 'number') TUNE.lift = t.lift;
+    if (t && typeof t.smooth === 'number') TUNE.smooth = t.smooth;
+  };
   global.andeyeEye = andeyeEye;
 })(window);
 
@@ -262,14 +293,21 @@
     andeyeEye(document.getElementById('vibe'), { colour: '#eef1f6', iris: 'fill', glyph: 'code', background: '#131826', blink: false }),
   ];
   var winkEl = document.getElementById('wink'), drawEl = document.getElementById('draw');
+  var liftEl = document.getElementById('lift'), smoothEl = document.getElementById('smooth');
   function apply() {
     var w = winkEl.value / 1000, d = drawEl.value / 1000;
+    var lift = liftEl.value / 1000, smooth = smoothEl.value / 1000;
     document.getElementById('winkV').textContent = w.toFixed(3);
     document.getElementById('drawV').textContent = d.toFixed(3);
+    document.getElementById('liftV').textContent = lift.toFixed(3);
+    document.getElementById('smoothV').textContent = smooth.toFixed(3);
+    andeyeEye.tune({ lift: lift, smooth: smooth });
     eyes.forEach(function (e) { e.setPose(w, d); });
   }
   winkEl.addEventListener('input', apply);
   drawEl.addEventListener('input', apply);
+  liftEl.addEventListener('input', apply);
+  smoothEl.addEventListener('input', apply);
   function step(el, delta) { el.value = Math.min(1000, Math.max(0, +el.value + delta)); apply(); }
   document.getElementById('wm').onclick = function () { step(winkEl, -20); };
   document.getElementById('wp').onclick = function () { step(winkEl, 20); };

@@ -25,15 +25,27 @@
     [P(122, 137), P(205.86, 14.91), P(311, 137), P(311, 137)],
     [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
   ];
-  var TOP_CLOSED = { c1: P(171.03, 187.18), c2: P(258.9, 178.05) };
-  var BOT_CLOSED = { c1: P(311, 141), c2: P(232, 196) };
   var W = 17;   // the brand stroke width
+  // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
+  // fraction (a real wink lifts the bottom lid, not just drops the top), and
+  // `smooth` flattens the closed TOP lid near the left corner, softening the
+  // bump where the closed lids meet the flourish. 0/0 reproduces the app's
+  // original fullStroke pose; the lab exposes sliders and the picked values
+  // get baked here once confirmed.
+  var TUNE = { lift: 0, smooth: 0 };
+  function closedPose() {
+    return {
+      top: { c1: P(171.03, 187.18 - 22 * TUNE.smooth), c2: P(258.9, 178.05 - 6 * TUNE.smooth) },
+      bot: { c1: P(311, 141 - 6 * TUNE.lift), c2: P(232, 196 - 26 * TUNE.lift) },
+    };
+  }
 
   function lerp(a, b, w) { return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w }; }
   function cubics(wink) {
+    var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
-    c[2] = [c[2][0], lerp(c[2][1], TOP_CLOSED.c1, wink), lerp(c[2][2], TOP_CLOSED.c2, wink), c[2][3]];
-    c[3] = [c[3][0], lerp(c[3][1], BOT_CLOSED.c1, wink), lerp(c[3][2], BOT_CLOSED.c2, wink), c[3][3]];
+    c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
+    c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink), c[3][3]];
     return c;
   }
   function seg(c) {
@@ -194,5 +206,12 @@
     }
     return { setWink: setWink, setPose: setPose, iris: g };
   }
+  // Global closed-pose tuning — affects every mounted eye's NEXT pose update
+  // (the lab re-poses on slider input; blinking eyes pick it up on the next
+  // blink). Values 0..1; see closedPose() for what they move.
+  andeyeEye.tune = function (t) {
+    if (t && typeof t.lift === 'number') TUNE.lift = t.lift;
+    if (t && typeof t.smooth === 'number') TUNE.smooth = t.smooth;
+  };
   global.andeyeEye = andeyeEye;
 })(window);
