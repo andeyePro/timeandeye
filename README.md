@@ -39,12 +39,15 @@ swift run andeyeTTChecks   # expect: TOTAL: N passed, 0 failed
 3. **Automation → browser** (tab URLs): the first time Chrome/Opera/Brave is
    frontmost, macOS asks "andeye wants to control Google Chrome" → Allow.
 4. **Connect OpenProject**: menu-bar dot → Settings → enter your instance URL
-   and an API key (OP: Account settings → Access tokens → API). The key goes
-   to the macOS Keychain, the task list loads, and the instance's activity
-   list populates the default-activity picker.
+   and an API key (OP: Account settings → Access tokens → API). The key is
+   stored in an owner-only file in the app's support folder (not the
+   Keychain), the task list loads, and the instance's activity list
+   populates the default-activity picker.
 5. **Tune** (optional): auto-push certainty threshold (slider past 100% =
    never auto-push, review everything), menu-bar colours (identical colours
    disable the signalling), certainty %, leisure tracking.
+6. **Licence** (optional): the app is fully functional without one — paste a
+   key in Settings → Licence to unlock paid connectors (Xero…).
 
 ## Nomenclature
 
@@ -117,9 +120,10 @@ non-work time land there instead of stopping the clock.
   `OPBackend`; Xero next; standalone = no backend), sync, timesheet export,
   AI-assist, settings. No AppKit; the iOS companion (planned in this repo, as
   an `ios/` Xcode project) reuses it unchanged.
-- `andeyeTTMac` – SQLite journal (raw sqlite3, no deps), Keychain, sensors
-  (NSWorkspace, Accessibility window titles, browser tabs via Apple Events,
-  idle, sleep/wake, mic-in-use), app controller.
+- `andeyeTTMac` – sensors (NSWorkspace, Accessibility window titles, browser
+  tabs via Apple Events, idle, sleep/wake, mic-in-use) and the app
+  controller. Persistence (raw-sqlite3 journal, API-key file store) lives in
+  `andeyeTTStore`.
 - `andeyeApp` – SwiftUI `MenuBarExtra` popover, review window, settings.
 - `andeyeTTChecks` – the test suite as a plain executable (no XCTest
   anywhere); CI runs it on macOS (the Mac layer imports AppKit/SQLite3, so

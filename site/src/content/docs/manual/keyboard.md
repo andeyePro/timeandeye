@@ -20,12 +20,21 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 
 - **⌘T** - flip the list between Switch-to and Change-to.
 - **⌘P** - pin the current window/site (or, when pinned, open the pin editor).
+- **⌘E** - open the Evidence Card (why this was tracked here, un-learn, fix).
 - **⌘.** - stop tracking. **⌘R** - resume the last task.
 - **⌘Z** - back to the previous task (same as the quiet ← button).
 - **↵** in the filter - pick the top task in the list.
 - **⌘↵** - claim the "you were away" idle gap as work.
 - **⌘Y** - open the Time window. **⌘U** - open the Review queue.
 - **⌘,** - Settings. **⌘Q** - quit andeye.
+
+## Evidence Card
+
+- Click a grain row (or **↑ / ↓**) to choose how durably to remember the fix.
+- **↵** - Remember (a revisable rule at the chosen grain).
+- **⇧↵** - Always (a pinned rule, 100%).
+- **esc** - Once (today's soft correction only, same as picking a task
+  normally).
 
 ## Pin editor
 

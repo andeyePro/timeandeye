@@ -14,7 +14,9 @@ At the top:
   below). A quiet "← <previous task>" button appears beside it when the last
   switch looks wrong - one click folds the current slice back onto that task.
 - **Elapsed + certainty** - the time on the current contiguous session and, when
-  not pinned, how certain andeye is.
+  not pinned, how certain andeye is. A **£ glyph** after a task name (here and
+  in the pick list) means its time is billable - from the task's own setting,
+  or its project's.
 - **Pin chip** - when the surface is pinned you see a pin icon and the pinned
   scope. Click it to adjust or remove the pin.
 - **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step

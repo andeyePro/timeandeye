@@ -179,6 +179,11 @@ midnight. Day boundaries are marked with the date.
   "OpenProject only" filter (⌘⇧O) and a show/hide calendar (⌘⇧C).
 - A donut: projects in the inner ring, tasks in the outer. Hover to highlight,
   click to pin a selection; reassign time to another task from the bar.
+- **Billable flags**: right-click a project or task to mark it billable or
+  non-billable (tasks can also inherit from their project); billable rows
+  carry a "billable" label in the legend. Marking a project billable warns
+  you about already-tracked hours that will NOT be invoiced (flips apply to
+  new time only) and leaves manually-set tasks as they were.
 
 ## Settings
 
@@ -187,8 +192,22 @@ midnight. Day boundaries are marked with the date.
 - **Time button opens** - Timeline / Last viewed / Pie chart.
 - **Switch Buffer** and grace windows, idle and sleep handling.
 - **System notifications**, **lock on leave**, **track leisure to local tasks**.
+- **Idle backfill** - opt-in: when you return from an idle gap, offer to
+  claim the gap for the task you were on (off by default; hours stepper caps
+  how far back it offers).
 - **Local tasks** - personal non-OP tasks (e.g. "Chess") you can track against.
 - **OpenProject** - base URL and API key.
+- **Licence** - the app is complete without one; a licence only adds paid
+  connectors. Paste a key (`ANDEYE1.` followed by two dot-separated blocks)
+  and Apply: the tier (Plus / Pro / Premium / Enterprise), who it is licensed
+  to, and the renewal date appear - lifetime keys show "lifetime". If the key
+  can't be used, the reason appears in red below the field.
+- **Posting health** - appears only when something needs you: per backend, a
+  count of entries stuck after repeated failures (with a one-click Retry) and
+  a count of posted entries that have drifted from your journal because you
+  edited or deleted time after it was posted.
+- **Currency symbol** - shown wherever billable totals render; leave blank
+  for your locale's own symbol.
 
 ## Data, sync and safety
 
@@ -216,6 +235,10 @@ control). Each shortcut works while that window (or the popover) is frontmost.
   task).
 
 ### Popover
+
+A £ glyph after a task name (in the pick list, and after the running task in
+the header) means its time is billable - resolved from the task's own
+setting, or its project's.
 
 - **⌘T** - flip the list between Switch-to and Change-to.
 - **⌘P** - pin the current window/site (or, when pinned, open the pin editor).

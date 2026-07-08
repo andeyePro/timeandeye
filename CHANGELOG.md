@@ -2,6 +2,18 @@
 
 ## 2026-07-08
 
+- [x] **Docs-drift pass (reviewer C22–C33).** README: the API key goes to an
+  owner-only file in app support, NOT the Keychain (the old claim was
+  factually wrong); the architecture bullet stops crediting andeyeTTMac with
+  persistence; a Licence line joins first-run. MANUAL.md + site manual:
+  Settings now documents the Licence section (key format, tiers, lifetime
+  display, error copy), Posting health (stuck + Retry, drifted counts), the
+  idle-backfill opt-in, and the currency symbol; the popover pages document
+  the billable £ glyph; the time-window pages document the right-click
+  billable flags and the flip warning; the keyboard page gains ⌘E and the
+  Evidence Card subsection it had drifted behind. Site builds clean (13
+  pages). Fresh-reader style throughout – no failure-mode history.
+
 - [x] ** review fixes, batch 4 (reviewer B mediums + lows).** (B4)
   Non-work grace time never bills to the work task: the doNotTrack commit now
   closes the work story at the PEND moment and drops/clips the grace-window

@@ -18,6 +18,12 @@ There is no separate switcher button: the cross-previews are the navigation.
   **click a gap or the "from" label** to open the timeline with nothing selected.
 
 **⌘\\** flips between the two views from the keyboard. To see both at once,
+**Billable flags** (pie view): right-click a project or task to mark it
+billable or non-billable (tasks can also inherit from their project);
+billable rows carry a "billable" label in the legend. Marking a project
+billable warns you about already-tracked hours that will NOT be invoiced
+(flips apply to new time only) and leaves manually-set tasks as they were.
+
 **⌃-click (or right-click)** a preview - that opens the other view in a *second*
 Time window instead of flipping the current one.
 
