@@ -13,42 +13,18 @@ public enum AndeyeScenes {
         MenuBarExtra {
             PopoverView(controller: controller)
         } label: {
-            HStack(spacing: 4) {
-                Image(nsImage: controller.logoImage)
-                // Tabular digits alone weren't enough: the figure-space pad on
-                // single-digit seconds (MenuTitle.text) assumes U+2007 is
-                // exactly one tabular-digit wide, which isn't guaranteed by
-                // every font — so the real text could still render a hair
-                // narrower or wider than its padded neighbour and drag the
-                // right-anchored status item's logo with it. Overlaying
-                // MenuTitle.sizingTemplates hidden behind the real text makes
-                // the ZStack size itself to whichever candidate actually lays
-                // out widest, measured, not assumed — the logo stops moving
-                // regardless of glyph metrics.
-                ZStack(alignment: .leading) {
-                    ForEach(controller.menuSizingTemplates, id: \.self) { template in
-                        Text(template)
-                            .monospacedDigit()
-                            .hidden()
-                    }
-                    Text(controller.menuText)
-                        .monospacedDigit()
+            // The ENTIRE label is one controller-rendered image (mark +
+            // elapsed text in a reserved-width column). Three generations of
+            // SwiftUI-side width defences (figure-space pad, monospacedDigit,
+            // hidden sizing templates, measured minWidth) each still let the
+            // mark shift on seconds ticks — MenuBarExtra label rendering does
+            // not reliably honour the layout SwiftUI computes. An image's
+            // width is not negotiable. See AndeyeLogoImage.label.
+            Image(nsImage: controller.logoImage)
+                .onAppear {
+                    NSApp.setActivationPolicy(.accessory)
+                    controller.startUp()
                 }
-                // The hidden templates alone did NOT hold the MenuBarExtra
-                // label's width (Martin, 2026-07-08: the icon shifts exactly
-                // when the time text changes width), so the controller
-                // measures the widest candidate with AppKit and the label
-                // reserves it explicitly. minWidth, not a fixed frame: if the
-                // measurement ever runs a hair low the content still wins and
-                // nothing clips — the reservation only stops shrinking.
-                .frame(minWidth: controller.menuReservedWidth > 0
-                                 ? controller.menuReservedWidth : nil,
-                       alignment: .leading)
-            }
-            .onAppear {
-                NSApp.setActivationPolicy(.accessory)
-                controller.startUp()
-            }
         }
         .menuBarExtraStyle(.window)
 

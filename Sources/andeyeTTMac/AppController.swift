@@ -336,7 +336,13 @@ public final class AppController: ObservableObject {
     private var lastDisplayedTarget: Target?
 
     private func renderLogo() {
-        logoImage = AndeyeLogoImage.image(t: logoT, wink: logoWink, colour: menuColour)
+        // The WHOLE menu-bar label is one image — mark + elapsed text in a
+        // reserved-width column — so the item's width is ours, not a text
+        // layout's, and the mark cannot be nudged by a digit tick (the
+        // third and final jiggle fix; see AndeyeLogoImage.label).
+        logoImage = AndeyeLogoImage.label(t: logoT, wink: logoWink,
+                                          colour: menuColour, text: menuText,
+                                          reservedTextWidth: menuReservedWidth)
     }
 
     /// Hand-draws the ampersand over ~1.2 s, the tail closing into the eye at
@@ -900,26 +906,29 @@ public final class AppController: ObservableObject {
             newColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
         }
-        if force || newText != menuText { menuText = newText }
+        // Measure the text column from the sizing candidates plus the live
+        // text (belt-and-braces: the live text should never exceed its
+        // bracket's templates, but if it ever does the reservation grows
+        // instead of clipping). Same font the label image draws with.
+        let newWidth = (newSizingTemplates + [newText])
+            .map { AndeyeLogoImage.textWidth($0) }
+            .max().map { ($0 + 1).rounded(.up) } ?? 0
+        var labelChanged = force
+        if force || newText != menuText { menuText = newText; labelChanged = true }
         if force || newSizingTemplates != menuSizingTemplates {
             menuSizingTemplates = newSizingTemplates
         }
-        // Measure the reservation from the SAME candidate set the ZStack
-        // overlays, plus the live text (belt-and-braces: the live text should
-        // never exceed its bracket's templates, but if it ever does the
-        // reservation grows instead of clipping). NSFont.systemFontSize is the
-        // 13pt body size MenuBarExtra labels render at; monospacedDigit maps
-        // to monospacedDigitSystemFont.
-        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize,
-                                                    weight: .regular)
-        let newWidth = (newSizingTemplates + [newText])
-            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
-            .max().map { ($0 + 1).rounded(.up) } ?? 0
-        if force || newWidth != menuReservedWidth { menuReservedWidth = newWidth }
+        if force || newWidth != menuReservedWidth {
+            menuReservedWidth = newWidth
+            labelChanged = true
+        }
         if force || !newColour.isEqual(menuColour) {
             menuColour = newColour
-            renderLogo()   // the mark carries the certainty tint
+            labelChanged = true   // the mark carries the certainty tint
         }
+        // The text lives INSIDE the label image now, so the image re-renders
+        // on ANY visible change — text, reservation, or tint.
+        if labelChanged { renderLogo() }
     }
 
     // MARK: - Crash-safe recording

@@ -1,76 +1,5 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>andeye logo lab v6 — single loop, no tail</title>
-<style>
-  body { margin: 0; background: #0c0f16; color: #eef1f6;
-         font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
-  main { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
-  h1 { font-size: 22px; }
-  p { color: #98a0b3; font-size: 14px; max-width: 72ch; }
-  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; margin-top: 18px; }
-  .cell { background: #131826; border: 1px solid #232b40; border-radius: 14px;
-          padding: 18px; text-align: center; }
-  .cell svg { width: 260px; height: 168px; display: block; }
-  .cap { font-size: 12px; color: #6a7382; margin-top: 8px; }
-  .controls { position: sticky; top: 0; background: #0c0f16ee; padding: 14px 0;
-              border-bottom: 1px solid #232b40; z-index: 5; }
-  .controls .line { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
-  .controls label { font-size: 13px; color: #98a0b3; width: 64px; }
-  .controls input[type=range] { flex: 1; max-width: 420px; }
-  .controls output { font-size: 12px; color: #6a7382; width: 54px; }
-  button { background: #131826; color: #eef1f6; border: 1px solid #232b40;
-           border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
-  button:hover { border-color: #f0a13a; }
-</style>
-</head>
-<body>
-<main>
-  <h1>andeye logo lab v6</h1>
-  <p>Single loop (your 17:31 note): as the eye closes, the bottom lid's end AND the flourish's start both travel from the tail into the corner (the computed crossing of the two &amp; strokes, 121.1/138.1) — so a winking eye is one loop with NO tail left behind, and the tail exists only where the draw-on starts. Scrub wink to 1.000 to check the corner; the lid raise / smoothing sliders still apply; quote me the two numbers when they look right.</p>
-
-  <div class="controls">
-    <div class="line">
-      <label>wink</label>
-      <input type="range" id="wink" min="0" max="1000" value="0">
-      <output id="winkV">0.000</output>
-      <button id="wm">−frame</button><button id="wp">+frame</button>
-      <button id="playWink">play wink</button>
-    </div>
-    <div class="line">
-      <label>draw-on</label>
-      <input type="range" id="draw" min="0" max="1000" value="1000">
-      <output id="drawV">1.000</output>
-      <button id="dm">−frame</button><button id="dp">+frame</button>
-      <button id="playDraw">play draw-on</button>
-    </div>
-    <div class="line">
-      <label>lid raise</label>
-      <input type="range" id="lift" min="0" max="1000" value="400">
-      <output id="liftV">0.400</output>
-      <span style="font-size:12px;color:#6a7382">closed LOWER lid rises this much more (0 = original)</span>
-    </div>
-    <div class="line">
-      <label>smoothing</label>
-      <input type="range" id="smooth" min="0" max="1000" value="500">
-      <output id="smoothV">0.500</output>
-      <span style="font-size:12px;color:#6a7382">flattens the closed top lid at the left — softens the bump against the flourish</span>
-    </div>
-    <div class="line" style="font-size:12px;color:#6a7382">
-      Scrub wink to 1.000 to judge these two, then quote me the two numbers you land on and I bake them in.
-    </div>
-  </div>
-
-  <div class="row">
-    <div class="cell"><svg id="main"></svg><div class="cap">andeye — brand blue, empty</div></div>
-    <div class="cell"><svg id="time"></svg><div class="cap">Time andeye — filled iris, clock</div></div>
-    <div class="cell"><svg id="vibe"></svg><div class="cap">Vibe andeye — filled iris, &gt;</div></div>
-  </div>
-</main>
-<script>
-// The andeye mark, drawn live from the ORIGINAL brand geometry
+<!DOCTYPE html><html lang="en" data-astro-cid-j7pv25f6> <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Vibe andeye – vibe coding without the slop</title><meta name="description" content="Adversarial agentic models plan, build, test and review each other's work in a secure sandbox, so you ship code you can trust."><style>:root{--bg:#0c0f16;--panel:#131826;--line:#232b40;--text:#eef1f6;--muted:#98a0b3;--faint:#6a7382;--accent:#f0a13a;--radius:14px}[data-astro-cid-j7pv25f6]{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);line-height:1.6;font-family:-apple-system,SF Pro Display,Segoe UI,sans-serif;-webkit-font-smoothing:antialiased}a[data-astro-cid-j7pv25f6]{color:var(--accent)}main[data-astro-cid-j7pv25f6]{max-width:720px;margin:0 auto;padding:64px 24px 96px}header[data-astro-cid-j7pv25f6]{display:flex;align-items:center;gap:16px;margin-bottom:48px}header[data-astro-cid-j7pv25f6] svg{width:104px;height:68px}h1[data-astro-cid-j7pv25f6]{font-size:26px;margin:0}.tagline[data-astro-cid-j7pv25f6]{color:var(--muted);font-size:15px}h2[data-astro-cid-j7pv25f6]{font-size:19px;margin:36px 0 10px}.prose[data-astro-cid-j7pv25f6]{color:var(--muted);font-size:16px}.prose[data-astro-cid-j7pv25f6] strong{color:var(--text)}.how[data-astro-cid-j7pv25f6]{display:grid;gap:6px;padding:0;margin:18px 0;list-style:none}.how[data-astro-cid-j7pv25f6] li[data-astro-cid-j7pv25f6]{padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);color:var(--muted);font-size:15px}.how[data-astro-cid-j7pv25f6] li[data-astro-cid-j7pv25f6] strong[data-astro-cid-j7pv25f6]{color:var(--text)}.soon[data-astro-cid-j7pv25f6]{display:inline-block;margin-top:28px;padding:8px 14px;border:1px solid var(--line);border-radius:999px;color:var(--faint);font-size:13.5px}footer[data-astro-cid-j7pv25f6]{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font-size:13.5px}footer[data-astro-cid-j7pv25f6] a[data-astro-cid-j7pv25f6]{color:var(--faint)}
+</style></head> <body data-astro-cid-j7pv25f6> <main data-astro-cid-j7pv25f6> <header data-astro-cid-j7pv25f6> <svg class="andeye-eye " data-variant="vibe" data-weight="fill"></svg> <script>// The andeye mark, drawn live from the ORIGINAL brand geometry
 // (assets/brand/andeye.svg: viewBox 0 0 365 235, stroke 17, translate
 // 18.0915,17.9436) with the wink the app itself uses (AndeyeLogo.fullStroke:
 // an eyelid CLOSE — only the two lid cubics' control points move; the
@@ -99,14 +28,19 @@
   ];
   var W = 17;   // the brand stroke width
   // The eye's true LEFT CORNER: where the two strokes of the & cross
-  // (computed numerically from the brand cubics). Both lids hinge HERE
-  // (Martin, 8 Jul 17:31): as the eye closes, the bottom lid's end AND the
-  // flourish's start travel tail→corner together — the winking mark is a
-  // single loop, no tail left behind.
+  // (computed numerically from the brand cubics — curve 0 at u≈0.036 meets
+  // curve 1 at u≈0.996, within 0.3px). Both lids hinge HERE (Martin, 8 Jul
+  // 17:31): as the eye closes, the bottom lid's end AND the flourish's
+  // start travel tail→corner together, so the winking mark is a single
+  // loop — no tail left behind. The tail exists only as the draw-on's
+  // starting point (the pen starts there to show it's an ampersand).
   var CROSS = P(121.11, 138.06);
-  // Closed-pose tuning: `lift` raises the closed LOWER lid a fraction,
-  // `smooth` flattens the closed TOP lid near the left corner. 0/0 is the
-  // app's original pose (with the new corner hinge).
+  // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
+  // fraction (a real wink lifts the bottom lid, not just drops the top), and
+  // `smooth` flattens the closed TOP lid near the left corner, softening the
+  // bump where the closed lids meet the flourish. 0/0 reproduces the app's
+  // original fullStroke pose; the lab exposes sliders and the picked values
+  // get baked here once confirmed.
   var TUNE = { lift: 0, smooth: 0 };
   function closedPose() {
     return {
@@ -283,65 +217,24 @@
     }
     return { setWink: setWink, setPose: setPose, iris: g };
   }
-  // Global closed-pose tuning — affects every mounted eye's NEXT pose update.
+  // Global closed-pose tuning — affects every mounted eye's NEXT pose update
+  // (the lab re-poses on slider input; blinking eyes pick it up on the next
+  // blink). Values 0..1; see closedPose() for what they move.
   andeyeEye.tune = function (t) {
     if (t && typeof t.lift === 'number') TUNE.lift = t.lift;
     if (t && typeof t.smooth === 'number') TUNE.smooth = t.smooth;
   };
   global.andeyeEye = andeyeEye;
 })(window);
-
-</script>
-<script>
-  var eyes = [
-    andeyeEye(document.getElementById('main'), { iris: 'none', blink: false }),
-    andeyeEye(document.getElementById('time'), { colour: '#f0a13a', iris: 'fill', glyph: 'clock', background: '#131826', blink: false }),
-    andeyeEye(document.getElementById('vibe'), { colour: '#eef1f6', iris: 'fill', glyph: 'code', background: '#131826', blink: false }),
-  ];
-  var winkEl = document.getElementById('wink'), drawEl = document.getElementById('draw');
-  var liftEl = document.getElementById('lift'), smoothEl = document.getElementById('smooth');
-  function apply() {
-    var w = winkEl.value / 1000, d = drawEl.value / 1000;
-    var lift = liftEl.value / 1000, smooth = smoothEl.value / 1000;
-    document.getElementById('winkV').textContent = w.toFixed(3);
-    document.getElementById('drawV').textContent = d.toFixed(3);
-    document.getElementById('liftV').textContent = lift.toFixed(3);
-    document.getElementById('smoothV').textContent = smooth.toFixed(3);
-    andeyeEye.tune({ lift: lift, smooth: smooth });
-    eyes.forEach(function (e) { e.setPose(w, d); });
-  }
-  winkEl.addEventListener('input', apply);
-  drawEl.addEventListener('input', apply);
-  liftEl.addEventListener('input', apply);
-  smoothEl.addEventListener('input', apply);
-  function step(el, delta) { el.value = Math.min(1000, Math.max(0, +el.value + delta)); apply(); }
-  document.getElementById('wm').onclick = function () { step(winkEl, -20); };
-  document.getElementById('wp').onclick = function () { step(winkEl, 20); };
-  document.getElementById('dm').onclick = function () { step(drawEl, -20); };
-  document.getElementById('dp').onclick = function () { step(drawEl, 20); };
-  var anim = null;
-  function play(el, from, to, ms) {
-    cancelAnimationFrame(anim);
-    var start = null;
-    function f(ts) {
-      if (!start) start = ts;
-      var t = Math.min((ts - start) / ms, 1);
-      el.value = from + (to - from) * t;
-      apply();
-      if (t < 1) anim = requestAnimationFrame(f);
-    }
-    anim = requestAnimationFrame(f);
-  }
-  document.getElementById('playWink').onclick = function () {
-    winkEl.value = 0; apply();
-    play(winkEl, 0, 1000, 180);
-    setTimeout(function () { play(winkEl, 1000, 0, 220); }, 280);
-  };
-  document.getElementById('playDraw').onclick = function () {
-    drawEl.value = 0; apply();
-    play(drawEl, 0, 1000, 1400);
-  };
-  apply();
-</script>
-</body>
-</html>
+</script> <script>
+  (function () {
+    document.querySelectorAll('svg.andeye-eye:not([data-mounted])').forEach(function (svg) {
+      svg.setAttribute('data-mounted', '1');
+      var v = svg.getAttribute('data-variant'), w = svg.getAttribute('data-weight');
+      var opts = v === 'time' ? { colour: '#f0a13a', iris: w, glyph: 'clock', background: '#131826' }
+               : v === 'vibe' ? { colour: '#eef1f6', iris: w, glyph: 'code', background: '#131826' }
+               : { iris: 'none' };
+      window.andeyeEye(svg, opts);
+    });
+  })();
+</script> <div data-astro-cid-j7pv25f6> <h1 data-astro-cid-j7pv25f6>Vibe andeye</h1> <div class="tagline" data-astro-cid-j7pv25f6>vibe coding without the slop</div> </div> </header> <div class="prose" data-astro-cid-j7pv25f6><p><strong>Letting an AI write your code shouldn’t mean accepting whatever it produces.</strong> Vibe andeye puts adversarial agentic models between your idea and your codebase: one plans, one builds, and independent critics, testers and reviewers attack the result until it actually holds up.</p></div> <h2 data-astro-cid-j7pv25f6>How it keeps the quality up</h2> <ul class="how" data-astro-cid-j7pv25f6> <li data-astro-cid-j7pv25f6><strong data-astro-cid-j7pv25f6>A secure sandbox.</strong> Agents work in an isolated container with a firewalled network and per-action permission gates - they can build your project, not wander your machine.</li><li data-astro-cid-j7pv25f6><strong data-astro-cid-j7pv25f6>Adversarial by design.</strong> The model that writes the code never marks its own homework. Spec critics, testers and reviewers are separate agents with an incentive to find fault.</li><li data-astro-cid-j7pv25f6><strong data-astro-cid-j7pv25f6>Tests before trust.</strong> Work is gated on real, runnable acceptance criteria wherever they exist - and on independent expert review where they don&#39;t.</li><li data-astro-cid-j7pv25f6><strong data-astro-cid-j7pv25f6>For developers first.</strong> And increasingly for non-coding experts who know exactly what they need - the harness supplies the engineering discipline.</li> </ul> <p class="soon" data-astro-cid-j7pv25f6>In development - built on the same open-core values as everything andeye makes.</p> <footer data-astro-cid-j7pv25f6><p data-astro-cid-j7pv25f6><a href="https://andeye.com" data-astro-cid-j7pv25f6>andeye</a> · andeye Ltd, Scotland</p></footer> </main> </body></html>

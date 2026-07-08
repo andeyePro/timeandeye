@@ -28,10 +28,11 @@
   var W = 17;   // the brand stroke width
   // The eye's true LEFT CORNER: where the two strokes of the & cross
   // (computed numerically from the brand cubics — curve 0 at u≈0.036 meets
-  // curve 1 at u≈0.996, within 0.3px). The winking bottom lid hinges from
-  // HERE, not from the tail of the & (Martin, 8 Jul 15:20): its left
-  // endpoint travels tail→corner as the eye closes, so both lids shut
-  // corner-to-corner like a real eye while the tail below stays put.
+  // curve 1 at u≈0.996, within 0.3px). Both lids hinge HERE (Martin, 8 Jul
+  // 17:31): as the eye closes, the bottom lid's end AND the flourish's
+  // start travel tail→corner together, so the winking mark is a single
+  // loop — no tail left behind. The tail exists only as the draw-on's
+  // starting point (the pen starts there to show it's an ampersand).
   var CROSS = P(121.11, 138.06);
   // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
   // fraction (a real wink lifts the bottom lid, not just drops the top), and
@@ -51,6 +52,7 @@
   function cubics(wink) {
     var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
+    c[0] = [lerp(c[0][0], CROSS, wink), c[0][1], c[0][2], c[0][3]];   // tail retracts
     c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
     c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink),
             lerp(c[3][3], CROSS, wink)];

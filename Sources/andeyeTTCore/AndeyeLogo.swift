@@ -57,31 +57,38 @@ public enum AndeyeLogo {
               (235.0 - (p.y + translate.y)) / 365.0)
     }
 
-    /// Closed-eye pose (SVG space). Only the two lid segments' CONTROL points
-    /// move — every endpoint (the eye's corners at (311,137) and (145,157),
-    /// and the top lid's junction with the left side at (122,137)) is fixed,
-    /// and segments 0-1 (the left side) never change at all. The bottom lid
-    /// rises a little; the top-lid values are a least-squares fit of its
-    /// cubic (endpoints pinned) onto the reversed closed bottom lid, so at
-    /// wink 1 the lids lie along the same gentle ‿ arc — max separation
-    /// ~1.6 SVG units against a 17-unit stroke, i.e. they render as one line.
-    static let topLidClosed = (c1: Point(171.03, 187.18), c2: Point(258.9, 178.05))
+    /// Closed-eye pose (SVG space). The two lid segments' control points
+    /// move, and — Martin, 2026-07-08 — the mark's TAIL retracts: the eye's
+    /// true left corner is where the two & strokes CROSS (computed
+    /// numerically: curve 0 at u≈0.036 meets curve 1 at u≈0.996, within
+    /// 0.3px), and BOTH the bottom lid's end and the flourish's start
+    /// travel from the tail point (145,157) to that corner as the eye
+    /// closes. Apart from the draw-on (which starts at the tail to show
+    /// it's an ampersand), a winking eye is a single loop — both lids hinge
+    /// at the corners, no tail left behind. The top-lid values are a
+    /// least-squares fit of its cubic (endpoints pinned) onto the reversed
+    /// closed bottom lid, so at wink 1 the lids lie along one gentle ‿ arc.
+    static let topLidClosed = (c1: Point(230.81, 197.41), c2: Point(311.59, 140.29))
     static let bottomLidClosed = (c1: Point(311, 141), c2: Point(232, 196))
+    /// Where the two strokes of the & cross — the eye's left corner.
+    static let leftCorner = Point(121.11, 138.06)
 
     /// The complete mark at blink amount `wink` (0 open … 1 shut): an eyelid
     /// close, not a squash. The lid control points lerp toward the closed
-    /// pose above; everything else is untouched, so the mark's footprint and
-    /// the left half of the ampersand hold perfectly still through a blink.
+    /// pose above and the tail retracts into the left corner; the flourish's
+    /// sweep and the mark's footprint hold still through a blink.
     public static func fullStroke(wink: Double) -> [Cubic] {
         let w = min(max(wink, 0), 1)
         func lerp(_ a: Point, _ b: Point) -> Point {
             Point(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w)
         }
         var svg = svgCubics
+        svg[0].0 = lerp(svg[0].0, leftCorner)          // tail start retracts
         svg[2].1 = lerp(svg[2].1, topLidClosed.c1)
         svg[2].2 = lerp(svg[2].2, topLidClosed.c2)
         svg[3].1 = lerp(svg[3].1, bottomLidClosed.c1)
         svg[3].2 = lerp(svg[3].2, bottomLidClosed.c2)
+        svg[3].3 = lerp(svg[3].3, leftCorner)          // bottom lid hinges at the corner
         return svg.map { Cubic(normalised($0.0), normalised($0.1),
                                normalised($0.2), normalised($0.3)) }
     }
