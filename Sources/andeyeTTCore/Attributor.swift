@@ -491,6 +491,33 @@ public final class Attributor {
         }?.element
     }
 
+    /// Does this task belong to the URL-hinted project? Matches the stable
+    /// project id exactly, or the slugified project title (OP slugs are
+    /// usually the kebab-cased title).
+    public static func projectMatches(task: WorkTask, hint: String) -> Bool {
+        if let id = task.projectID, id == hint { return true }
+        guard let title = task.project else { return false }
+        return Self.slugified(title) == hint.lowercased()
+    }
+
+    /// Lowercase, non-alphanumerics → "-", collapsed and trimmed — OP's
+    /// default identifier shape for a title.
+    public static func slugified(_ title: String) -> String {
+        var out = ""
+        var lastDash = true
+        for ch in title.lowercased() {
+            if ch.isLetter || ch.isNumber {
+                out.append(ch)
+                lastDash = false
+            } else if !lastDash {
+                out.append("-")
+                lastDash = true
+            }
+        }
+        while out.hasSuffix("-") { out.removeLast() }
+        return out
+    }
+
     private func scored(_ signal: ActivitySignal, tasks: [WorkTask], now: Date) -> [Candidate] {
         scoredComponents(signal, tasks: tasks, now: now)
             .map { Candidate(target: $0.target, score: $0.score) }
@@ -515,11 +542,22 @@ public final class Attributor {
         // outright (spec: "most appropriate task in that project"); other
         // backend pages (My time tracking, admin, ...) must not hijack
         // attribution.
-        let onProjectPage = signal.tabURL.flatMap(URL.init(string:))
-            .map(recognizer.isProjectPage) == true
-        let priorWeight = onProjectPage ? 0.65 : 0.2
+        let pageURL = signal.tabURL.flatMap(URL.init(string:))
+        let onProjectPage = pageURL.map(recognizer.isProjectPage) == true
+        // Scope the project-page boost to THAT project's tasks when the URL
+        // names one (OP slug): "most appropriate task in that project", not
+        // "any task anywhere". A slug matching no cached project keeps the
+        // old everyone-boosted behaviour (we may simply not know it yet).
+        let hint = onProjectPage ? pageURL.flatMap { recognizer.projectHint(in: $0) } : nil
+        let hintMatchesSomeTask = hint.map { h in
+            tasks.contains { Self.projectMatches(task: $0, hint: h) }
+        } ?? false
         var out: [AttributionExplanation.Line] = []
         for (task, prior) in zip(tasks, priors) {
+            let inHintedProject = hint.map { Self.projectMatches(task: task, hint: $0) } ?? false
+            let priorWeight: Double = onProjectPage
+                ? ((hintMatchesSomeTask && !inHintedProject) ? 0.2 : 0.65)
+                : 0.2
             let learnedPart = 0.7 * (learned[.task(task.ref)] ?? 0)
             let priorPart = priorWeight * prior / maxPrior
             out.append(.init(target: .task(task.ref), score: min(0.9, learnedPart + priorPart),

@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+- [x] **Attribution: OP project pages boost only THAT project's tasks.** The
+  in-OP-without-task-id rule trusted the ranking harder on any project page –
+  for every task, anywhere. The recognizer now extracts the project slug from
+  the URL (`projectHint`), and the boost applies only to tasks whose stable
+  project id or slugified title matches; a slug we don't recognise keeps the
+  old everyone-boosted fallback (the project may simply not be cached yet).
+  Mac-verified: 461 passed, 0 failed.
+
 - [x] **Popover: right-click task menu – Open in backend, Comments.** Each
   pick-list row gains a context menu: "Open in <backend>" opens the task's web
   page via the connector (hidden in standalone mode), and "Comments…" shows

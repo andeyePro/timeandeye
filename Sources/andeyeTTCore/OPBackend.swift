@@ -148,4 +148,15 @@ public struct OPPageRecognizer: BackendPageRecognizer {
     public func isProjectPage(_ url: URL) -> Bool {
         url.host == instanceHost && url.path.contains("/projects/")
     }
+
+    /// The slug straight after /projects/ ("/projects/alpha-beta/work_packages"
+    /// → "alpha-beta") — OP's project identifier, usually the kebab-cased
+    /// title.
+    public func projectHint(in url: URL) -> String? {
+        guard url.host == instanceHost else { return nil }
+        let parts = url.pathComponents
+        guard let i = parts.firstIndex(of: "projects"), i + 1 < parts.count else { return nil }
+        let slug = parts[i + 1]
+        return slug.isEmpty ? nil : slug
+    }
 }

@@ -45,6 +45,35 @@ func attributorChecks(_ c: Checks) {
         try expectEq(pending.best?.target, .task(.remote("g-1")))
     }
 
+    c.check("project-page boost is SCOPED to the URL's project (slug match); unknown slugs keep the old boost") {
+        let a = Attributor(instanceHost: host)
+        let scoped = [WorkTask(ref: .op(1), subject: "Fix the pie", project: "Alpha Beta",
+                               projectID: "7", status: "Now"),
+                      WorkTask(ref: .op(2), subject: "Website copy", project: "Zeta",
+                               projectID: "9", status: "Now")]
+        let alphaPage = ActivitySignal(app: "Chrome", windowTitle: "Alpha Beta overview",
+                                       tabURL: "https://op.example.com/projects/alpha-beta/work_packages",
+                                       timestamp: now)
+        let onAlpha = a.attribute(alphaPage, tasks: scoped, now: now)
+        try expectEq(onAlpha.best?.target, .task(.op(1)),
+                     "the hinted project's task wins, not just any high-prior task")
+        // The stable project ID matches too (a hand-edited slug that equals it).
+        let idPage = ActivitySignal(app: "Chrome", windowTitle: "Alpha",
+                                    tabURL: "https://op.example.com/projects/7/settings",
+                                    timestamp: now)
+        try expectEq(a.attribute(idPage, tasks: scoped, now: now).best?.target, .task(.op(1)))
+        // A slug we know nothing about: fall back to the old everyone-boosted
+        // behaviour rather than suppressing the ranking.
+        let strange = ActivitySignal(app: "Chrome", windowTitle: "Mystery",
+                                     tabURL: "https://op.example.com/projects/not-a-known-project/",
+                                     timestamp: now)
+        let fallback = a.attribute(strange, tasks: scoped, now: now)
+        try expect(fallback.best != nil)
+        // Slugifier shape: OP's kebab-case of the title.
+        try expectEq(Attributor.slugified("Alpha Beta"), "alpha-beta")
+        try expectEq(Attributor.slugified("R&D — phase 2!"), "r-d-phase-2")
+    }
+
     c.check("empty task list never auto-stops: dnt gets no walkover softmax (B6)") {
         let a = Attributor(instanceHost: host)
         var learning = LearningStore()

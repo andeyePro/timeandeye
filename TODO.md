@@ -391,7 +391,10 @@ and recorded rather than fixed blind:
 
 - [ ] Safari, then Opera tab URLs; Chrome-PWA AppleScript support
 - [ ] In-app onboarding flow (user 2)
-- [ ] OP project-slug matching for the in-OP-without-task-id rule
+- [x] OP project-slug matching — DONE 2026-07-08 overnight: the project-page
+  ranking boost is now SCOPED to the URL's project (slug after /projects/,
+  matched against the stable project id or the slugified title); unknown
+  slugs keep the old everyone-boosted fallback. Checked.
 - [ ] iPhone-side call detection
 - [ ] Auto-comment as debugging aid is OFF by default now; revisit whether
   window summaries have any user value (Martin: prefers manual note only)

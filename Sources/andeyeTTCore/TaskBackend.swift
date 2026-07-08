@@ -56,6 +56,14 @@ public protocol BackendPageRecognizer: Sendable {
     /// id — the ranker then trusts its priors harder ("the most appropriate
     /// task in that project").
     func isProjectPage(_ url: URL) -> Bool
+    /// A project identifier hinted by the page URL (OP: the slug after
+    /// /projects/), for scoping the project-page ranking boost to THAT
+    /// project's tasks. nil = page identifies no particular project.
+    func projectHint(in url: URL) -> String?
+}
+
+public extension BackendPageRecognizer {
+    func projectHint(in url: URL) -> String? { nil }
 }
 
 /// The seam between andeye and whatever holds the canonical task list +
