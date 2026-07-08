@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- [x] **Sensors: Safari tab URLs.** Safari joins the scriptable-browser set
+  with its own AppleScript verb ("URL of front document"; Chrome-likes keep
+  theirs) – Safari surfaces now carry the tab URL, so URL-based attribution,
+  pins and mail detection work there. First use triggers the standard
+  Automation prompt. On-device verification pending (compile + suite green).
+
 - [x] **Attribution: OP project pages boost only THAT project's tasks.** The
   in-OP-without-task-id rule trusted the ranking harder on any project page –
   for every task, anywhere. The recognizer now extracts the project slug from

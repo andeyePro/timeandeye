@@ -111,8 +111,7 @@ public final class SensorHub {
         if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { return }
         let appName = app.localizedName ?? "Unknown"
         let title = focusedWindowTitle(pid: app.processIdentifier)
-        let url = chromeLikeBundleIDs.contains(app.bundleIdentifier ?? "")
-            ? activeChromeTabURL(bundleID: app.bundleIdentifier!) : nil
+        let url = activeTabURL(bundleID: app.bundleIdentifier)
 
         let key = "\(appName)|\(title ?? "")|\(url ?? "")"
         if key != lastSurfaceKey {
@@ -177,10 +176,24 @@ public final class SensorHub {
     /// EVERY read, and per-poll logging would flood the debug log.
     private var loggedTabURLError = false
 
-    private func activeChromeTabURL(bundleID: String) -> String? {
-        let appName = bundleID == "com.google.Chrome" ? "Google Chrome"
-            : bundleID == "com.operasoftware.Opera" ? "Opera" : "Brave Browser"
-        let source = "tell application \"\(appName)\" to get URL of active tab of front window"
+    /// The frontmost tab's URL for any browser we can script: Chrome-likes
+    /// share one AppleScript verb; Safari has its own ("URL of front
+    /// document"). nil for everything else — and for browsers whose
+    /// Automation grant is missing (logged once).
+    private func activeTabURL(bundleID: String?) -> String? {
+        guard let bundleID else { return nil }
+        let source: String
+        let appName: String
+        if chromeLikeBundleIDs.contains(bundleID) {
+            appName = bundleID == "com.google.Chrome" ? "Google Chrome"
+                : bundleID == "com.operasoftware.Opera" ? "Opera" : "Brave Browser"
+            source = "tell application \"\(appName)\" to get URL of active tab of front window"
+        } else if bundleID == "com.apple.Safari" {
+            appName = "Safari"
+            source = "tell application \"Safari\" to get URL of front document"
+        } else {
+            return nil
+        }
         var error: NSDictionary?
         let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
         if let error, !loggedTabURLError {

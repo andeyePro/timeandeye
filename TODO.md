@@ -389,7 +389,11 @@ and recorded rather than fixed blind:
 
 
 
-- [ ] Safari, then Opera tab URLs; Chrome-PWA AppleScript support
+- [ ] Safari tab URLs — CODE LANDED 2026-07-08 overnight ("URL of front
+  document" branch beside the Chrome-like verb; Opera was already in the
+  chrome-like set). HARDWARE-VERIFY pending: first Safari focus should fire
+  the Automation prompt; confirm URLs flow. Chrome-PWA AppleScript support
+  still open.
 - [ ] In-app onboarding flow (user 2)
 - [x] OP project-slug matching — DONE 2026-07-08 overnight: the project-page
   ranking boost is now SCOPED to the URL's project (slug after /projects/,
