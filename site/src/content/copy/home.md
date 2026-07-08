@@ -91,7 +91,7 @@ light:
   eyebrow: "Light by design"
   h2: "Tracking that doesn’t cost the earth"
   lede: "Some trackers send your screen to a cloud AI every few minutes to guess what you’re doing. andeye doesn’t. Attribution is a handful of rules that run on your Mac in less time than a blink – no server anywhere, nothing kept warm in a datacenter, no AI inference ticking away in the background."
-  line2: "The only thing it spends is a whisper of your Mac’s attention – it keeps working whatever else is running, and it pays you back with the timesheet you never have to write."
+  line2: "The only thing it spends is a whisper of your Mac’s attention – and it pays that back with the timesheet you never have to write."
 
 tiers:
   eyebrow: "Community & Pro"

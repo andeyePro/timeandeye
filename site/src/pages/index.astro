@@ -186,9 +186,12 @@ const copy = (await getEntry('copy', 'home')).data;
   }
   .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* hover-reactive CTA subtext: one line that answers whichever button you're on */
+  /* hover-reactive CTA subtext: answers whichever button you're on. FIXED
+     height (the longest string is three lines at this width) — min-height
+     let a longer hover string grow the box and shove the whole page down
+     (Martin, 2026-07-08: hovering "Star on GitHub" moved everything). */
   .cta-sub {
-    min-height: 2.9em;
+    height: 4.6em;
     margin: 0 auto 0.7rem;
     max-width: 560px;
     font-size: 0.92rem;
@@ -721,7 +724,7 @@ const copy = (await getEntry('copy', 'home')).data;
 <header class="hero" id="top">
   <div class="wrap">
     <div class="eyewrap">
-      <canvas id="heroEye" role="img" aria-label="The andeye mark: a single-stroke ampersand that closes into an eye"></canvas>
+      <canvas id="heroEye" role="img" aria-label="The Time andeye mark: a single-stroke ampersand that closes into an eye, with a clock face as its iris"></canvas>
     </div>
     <p class="eyebrow reveal" style="--d:0s">{copy.hero.eyebrow}</p>
     <h1 class="reveal" style="--d:0.08s">{copy.hero.h1[0]}<br>{copy.hero.h1[1]}</h1>
@@ -915,16 +918,31 @@ const copy = (await getEntry('copy', 'home')).data;
       <p class="lede">{copy.light.line2}</p>
     </div>
     <!-- Code-drawn earth for "doesn't cost the earth" (Martin, 2026-07-08):
-         a line-drawn globe in the mark's language — one stroke weight,
-         graticule meridians/parallels, the accent as its only colour. -->
-    <svg class="light-earth" viewBox="0 0 120 120" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" aria-hidden="true">
-      <circle cx="60" cy="60" r="46"/>
-      <ellipse cx="60" cy="60" rx="20" ry="46"/>
-      <ellipse cx="60" cy="60" rx="38" ry="46"/>
-      <line x1="14" y1="60" x2="106" y2="60"/>
-      <path d="M22 36 C40 44 80 44 98 36"/>
-      <path d="M22 84 C40 76 80 76 98 84"/>
+         the Atlantic view — recognisable continents, not graticule lines
+         (his note: rings read as a basketball). Landmasses filled soft,
+         one accent colour, clipped to the disc. -->
+    <svg class="light-earth" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+      <defs><clipPath id="earthClip"><circle cx="60" cy="60" r="45"/></clipPath></defs>
+      <circle cx="60" cy="60" r="46" stroke="currentColor" stroke-width="2.5"/>
+      <g clip-path="url(#earthClip)" fill="currentColor" opacity="0.7">
+        <!-- North America with a Central-America tail -->
+        <path d="M8 26 L32 22 C38 23 42 27 40 32 C44 33 45 37 42 40 C38 44 32 44 28 42 C24 46 18 44 15 40 L8 38 Z"/>
+        <path d="M28 44 C31 46 33 49 32 52 C30 51 27 48 26 45 Z"/>
+        <!-- South America: slim tapering cone -->
+        <path d="M30 56 C34 53 39 55 40 60 C40 66 38 72 35 78 C33 82 31 85 29 84 C27 80 26 72 27 65 C27 61 28 58 30 56 Z"/>
+        <!-- Greenland -->
+        <path d="M44 14 C48 12 52 14 51 18 C50 21 45 22 43 19 C42 17 42 15 44 14 Z"/>
+        <!-- Europe, a clear Mediterranean gap above Africa -->
+        <path d="M58 30 C62 26 70 25 76 28 C74 32 70 33 66 34 C62 35 59 34 58 32 Z"/>
+        <path d="M55 34 L59 33 C60 35 58 37 56 37 Z"/>
+        <!-- Africa: west bulge, Horn, southern taper -->
+        <path d="M57 40 C62 37 70 37 74 41 C77 44 81 47 80 51 C76 53 74 52 72 55 C74 60 73 66 70 71 C68 76 66 80 63 80 C60 80 58 75 58 70 C56 66 52 63 52 57 C52 50 54 43 57 40 Z"/>
+        <!-- Madagascar -->
+        <path d="M75 70 C77 68 79 70 78 73 C77 76 74 76 74 73 Z"/>
+        <!-- Asia off the right edge, India taper -->
+        <path d="M84 26 L112 24 L112 46 C105 48 98 46 94 42 C90 38 86 32 84 28 Z"/>
+        <path d="M90 46 C93 44 96 46 95 50 C94 53 91 55 90 52 Z"/>
+      </g>
     </svg>
   </div>
 </section>
@@ -1161,7 +1179,7 @@ function revealed(segs, fraction) {
 // Draws `segs` (unit-width box coords, y up) into ctx sized cssW x cssH,
 // exactly as the Mac drawing handler does: inset the rect by half the
 // stroke, uniform-fit the 1 x aspect box, round caps/joins.
-function drawMark(ctx, cssW, cssH, segs, colour) {
+function drawMark(ctx, cssW, cssH, segs, colour, clockIris) {
   ctx.clearRect(0, 0, cssW, cssH);
   if (segs.length === 0) return;
   const lineWidthForInset = cssW * strokeWidth;
@@ -1173,6 +1191,49 @@ function drawMark(ctx, cssW, cssH, segs, colour) {
   // y-up -> canvas y-down: yCanvas = cssH - (originY + scale * p.y)
   function atX(p) { return originX + scale * p.x; }
   function atY(p) { return cssH - (originY + scale * p.y); }
+  function bez(seg, u) {
+    const v = 1 - u, a = v * v * v, b = 3 * v * v * u, c = 3 * v * u * u, d = u * u * u;
+    return { x: a * atX(seg.p0) + b * atX(seg.c1) + c * atX(seg.c2) + d * atX(seg.p1),
+             y: a * atY(seg.p0) + b * atY(seg.c1) + c * atY(seg.c2) + d * atY(seg.p1) };
+  }
+  // The Time product mark: a FILLED iris carrying a clock, sized from the
+  // OPEN aperture (top of circle on the lid's high point, bottom on the
+  // low), clipped by the CURRENT aperture so a wink crops it like a real
+  // eyelid. Only drawn on the complete mark — during the draw-on the iris
+  // appears when the stroke finishes (the brand rule).
+  if (clockIris && segs.length === 4) {
+    const open = fullStroke(0);
+    let top = Infinity, bottom = -Infinity;
+    for (let i = 0; i <= 32; i++) {
+      top = Math.min(top, bez(open[2], i / 32).y);
+      bottom = Math.max(bottom, bez(open[3], i / 32).y);
+    }
+    const cx = (atX(open[2].p0) + atX(open[2].p1)) / 2;
+    const cy = (top + bottom) / 2, r = (bottom - top) / 2;
+    const ap = new Path2D();
+    ap.moveTo(atX(segs[2].p0), atY(segs[2].p0));
+    ap.bezierCurveTo(atX(segs[2].c1), atY(segs[2].c1),
+                     atX(segs[2].c2), atY(segs[2].c2),
+                     atX(segs[2].p1), atY(segs[2].p1));
+    ap.bezierCurveTo(atX(segs[3].c1), atY(segs[3].c1),
+                     atX(segs[3].c2), atY(segs[3].c2),
+                     atX(segs[3].p1), atY(segs[3].p1));
+    ap.closePath();
+    ctx.save();
+    ctx.clip(ap);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = colour;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - r * 0.62);
+    ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.45, cy + r * 0.28);
+    ctx.lineWidth = scale * strokeWidth * 0.7;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0c0f16';
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.beginPath();
   ctx.moveTo(atX(segs[0].p0), atY(segs[0].p0));
   for (const seg of segs) {
@@ -1255,7 +1316,7 @@ function sizeCanvas(cv, ctx, w, h) {
 
 // hero state: geometry only, colour is always ACCENT
 let heroT = reduced ? 1 : 0, heroWink = 0, heroTimer = null, heroBlinkTimer = null;
-function renderHero() { drawMark(heroCtx, HERO_W, HERO_H, stroke(heroT, heroWink), ACCENT); }
+function renderHero() { drawMark(heroCtx, HERO_W, HERO_H, stroke(heroT, heroWink), ACCENT, true); }
 
 // menu-bar state: always fully drawn (t=1), winks on task change, tint = certainty
 let mbWink = 0, mbTimer = null, mbRaf = null, mbRGB = NEUTRAL.slice();
