@@ -206,7 +206,10 @@ pass, present ones re-date the row so verification stays touch-bounded.
 
 ## D4. Convergence loop replaces edit fan-out (fixes F11, and F8's trim case)
 
-STATUS: DETECTION HALF IMPLEMENTED (overnight run, 2026-07-08): every
+STATUS: FULLY IMPLEMENTED (overnight run, 2026-07-08) — the amendment
+half landed after the detection half: update-in-place / delete+recreate
+(mustRecreate) / retract-with-reopen / frozen→`.diverged` parked, capped
+per pass, unknown-error-safe; 464/0 on the Mac. Original detection notes: every
 `.posted` row with a snapshot is compared each pass against the current
 resolved contribution — duration/start drift beyond 60 s, and
 deleted/fully-covered sessions, are counted per backend

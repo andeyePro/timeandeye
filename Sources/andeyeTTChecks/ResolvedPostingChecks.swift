@@ -98,7 +98,7 @@ func resolvedPostingChecks(_ c: Checks) async {
 
     await c.check("FAIL-CLOSED eligibility: a row in an UNKNOWN future state blocks re-posting (A2)") {
         // A newer build (or a synced ledger from one) writes a state this
-        // build doesn't know — say D4's 'diverged'. The row DECODER already
+        // build doesn't know. The row DECODER already
         // reads unknown states as .posted; the eligibility SQL must fail
         // closed the same way, or this build re-posts into possibly-locked
         // books. Write the unknown state with raw SQL (no typed API can).
@@ -112,7 +112,7 @@ func resolvedPostingChecks(_ c: Checks) async {
         var db: OpaquePointer?
         defer { sqlite3_close(db) }
         guard sqlite3_open(path, &db) == SQLITE_OK,
-              sqlite3_exec(db, "UPDATE posting_ledger SET state = 'diverged'",
+              sqlite3_exec(db, "UPDATE posting_ledger SET state = 'some-future-state'",
                            nil, nil, nil) == SQLITE_OK else {
             throw CheckFailure(description: "raw state rewrite failed")
         }
@@ -140,7 +140,7 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(pm.created.count, 0, "no create while the question is open")
     }
 
-    await c.check("D4 detection: an edit/trim/delete after posting is counted as divergence") {
+    await c.check("D4 amendment: a trim after posting UPDATES the backend entry in place") {
         let store = try makeStore()
         store.clock = makeClock()
         let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
@@ -152,25 +152,112 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(clean?.posted, 1)
         try expectEq(clean?.diverged, 0, "fresh post matches the journal")
 
-        // The user trims 30 min off the posted session (an edit path re-saves
-        // with a fresh stamp). The backend entry now holds 3600 s of a
-        // 1800 s session — that MUST surface, not sit silently wrong.
-        nowMillis += 10
+        // The user trims 30 min off the posted session: the backend must
+        // FOLLOW the journal, not sit silently wrong in the books.
+        nowMillis = Int64(t(4100).timeIntervalSince1970 * 1000)
         var trimmed = s; trimmed.end = t(1800)
         try store.save(trimmed)
         let after = (await engine.pushEligible(threshold: 0.8, includeComments: false,
-                                               now: t(4100))).first
-        try expectEq(after?.diverged, 1, "duration drift detected")
-        try expectEq(after?.posted, 0, "detection never re-posts")
-        try expectEq(pm.created.count, 1, "…and never creates a duplicate")
+                                               now: t(4200))).first
+        try expectEq(after?.amended, 1, "the drift was propagated")
+        try expectEq(after?.diverged, 0, "nothing left disagreeing")
+        try expectEq(pm.updated.count, 1)
+        try expectEq(pm.updated.first?.duration, 1800, "the trimmed seconds went out")
+        try expectEq(pm.created.count, 1, "amendment never creates a duplicate")
+        let row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .posted)
+        try expectEq(row?.postedDuration, 1800, "snapshot refreshed to what the backend holds")
+        // Quiet afterwards: the next pass amends nothing.
+        let again = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t(4300))).first
+        try expectEq(again?.amended, 0)
+        try expectEq(pm.updated.count, 1)
+    }
 
-        // Deleting the session entirely: the entry should be retracted —
-        // counted as divergence too (retraction is the D4 second half).
-        nowMillis += 10
-        try store.deleteSession(s.id)
-        let gone = (await engine.pushEligible(threshold: 0.8, includeComments: false,
-                                              now: t(4200))).first
-        try expectEq(gone?.diverged, 1, "deleted-after-posting detected")
+    await c.check("D4 amendment: deleting a posted session RETRACTS the backend entry; a restored journal side re-posts") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let id = UUID()
+        let s = Session(id: id, task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let firstEntry = ((try? store.postingRecord(session: id, backendID: "pm-a")) ?? nil)?.entryID
+
+        nowMillis = Int64(t(4100).timeIntervalSince1970 * 1000)
+        try store.deleteSession(id)
+        let after = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t(4200))).first
+        try expectEq(after?.retracted, 1)
+        try expectEq(pm.deleted, [try unwrap(firstEntry)], "the backend entry was deleted")
+        try expectEq(((try? store.postingRecord(session: id, backendID: "pm-a")) ?? nil)?.state,
+                     .retracted)
+
+        // The delete is undone on another device (a newer edit resurrects):
+        // the retraction re-opens and the session re-posts exactly once.
+        nowMillis = Int64(t(4300).timeIntervalSince1970 * 1000)
+        try store.applyRemote(SessionRevision(
+            session: s, hlc: HLC(physicalMillis: nowMillis, counter: 0, deviceID: "phone"),
+            origin: .edited))
+        let back = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                              now: t(4400))).first
+        try expectEq(back?.posted, 1, "restored journal side re-posts")
+        try expectEq(pm.created.count, 2, "exactly one re-create")
+        try expectEq(((try? store.postingRecord(session: id, backendID: "pm-a")) ?? nil)?.state,
+                     .posted)
+    }
+
+    await c.check("D4 amendment: a FROZEN (invoiced) entry parks .diverged — terminal, surfaced, never retried") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let entryID = try unwrap(((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.entryID)
+        pm.frozenIDs = [entryID]
+
+        nowMillis = Int64(t(4100).timeIntervalSince1970 * 1000)
+        var trimmed = s; trimmed.end = t(1800)
+        try store.save(trimmed)
+        let after = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t(4200))).first
+        try expectEq(after?.diverged, 1, "the disagreement is SURFACED, not hidden")
+        try expectEq(after?.amended, 0)
+        let row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .diverged, "parked for a human")
+        // Terminal: the next pass does not retry the frozen entry.
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4300))
+        try expectEq(pm.updated.count, 0)
+        try expect((try store.sessions(needingPostTo: "pm-a", atOrAbove: 0.8)).isEmpty,
+                   "a parked divergence never re-enters the posting queue")
+    }
+
+    await c.check("D4 amendment: a backend that can't move an entry in place gets delete+recreate (mustRecreate)") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let firstEntry = try unwrap(((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.entryID)
+        pm.recreateOnUpdate = [firstEntry]
+
+        nowMillis = Int64(t(4100).timeIntervalSince1970 * 1000)
+        var trimmed = s; trimmed.end = t(1800)
+        try store.save(trimmed)
+        let after = (await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               now: t(4200))).first
+        try expectEq(after?.amended, 1)
+        try expectEq(pm.deleted, [firstEntry], "old entry deleted")
+        try expectEq(pm.created.count, 2, "…and recreated at the new shape")
+        let row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .posted)
+        try expect(row?.entryID != firstEntry, "the fresh id was recorded")
+        try expectEq(row?.postedDuration, 1800)
     }
 
     await c.check("F13: a resurrected session whose entry was deleted at the backend re-posts exactly once") {

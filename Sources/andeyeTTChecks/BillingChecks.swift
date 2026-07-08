@@ -170,6 +170,13 @@ final class FakeBackend: TaskBackend {
     /// Throw on the next N listTimeEntries calls (heals afterwards) — the
     /// reconcile/verify hold-the-claim paths.
     var failNextLists = 0
+    /// updateTimeEntry calls, in order (the amendment loop's trace).
+    var updated: [(id: RemoteEntryID, taskID: String, start: Date, duration: TimeInterval)] = []
+    /// Entry ids the backend refuses to touch (invoiced/locked) — update and
+    /// delete throw AmendmentError.frozen.
+    var frozenIDs: Set<RemoteEntryID> = []
+    /// Entry ids whose update must go the delete+recreate route.
+    var recreateOnUpdate: Set<RemoteEntryID> = []
 
     init(owns: Owns) { self.ownsKind = owns }
 
@@ -209,9 +216,19 @@ final class FakeBackend: TaskBackend {
     }
 
     func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
-                         duration: TimeInterval, activityID: Int?, comment: String?) async throws {}
+                         duration: TimeInterval, activityID: Int?, comment: String?) async throws {
+        if frozenIDs.contains(id) { throw AmendmentError.frozen("invoiced") }
+        if recreateOnUpdate.contains(id) { throw AmendmentError.mustRecreate }
+        updated.append((id, taskID, start, duration))
+        if let i = held.firstIndex(where: { $0.id == id }) {
+            held[i].taskID = taskID
+            held[i].start = start
+            held[i].durationSeconds = duration
+        }
+    }
     func updateEntryComment(id: RemoteEntryID, comment: String) async throws {}
     func deleteTimeEntry(id: RemoteEntryID) async throws {
+        if frozenIDs.contains(id) { throw AmendmentError.frozen("invoiced") }
         deleted.append(id)
         held.removeAll { $0.id == id }
     }

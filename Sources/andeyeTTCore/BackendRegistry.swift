@@ -183,6 +183,17 @@ public enum PostingState: String, Codable, Sendable {
     /// surfaced to the user; clearing the row retries. Old builds read this
     /// unknown rawValue as `.posted` — the never-double-post direction.
     case stuck
+    /// The backend entry was DELETED by the amendment loop because its
+    /// journal side went away (session deleted, or fully covered by
+    /// higher-priority time). Terminal — but a stamp change that RESTORES
+    /// the contribution re-opens it for a clean re-post. Old builds read
+    /// the unknown rawValue as `.posted` (never-double-post).
+    case retracted
+    /// The journal moved but the backend REFUSES the amendment (entry frozen
+    /// by invoicing). Terminal and surfaced in Posting health — the books
+    /// and the journal genuinely disagree and only a human (credit note /
+    /// invoice-unlock) can reconcile them.
+    case diverged
     /// Intent written IMMEDIATELY BEFORE createTimeEntry goes on the wire.
     /// Normally overwritten within the same iteration (`.posted` on success,
     /// `.failed`/`.skipped` on error); a row still `.inflight` on a later

@@ -2328,7 +2328,11 @@ public final class AppController: ObservableObject {
         registry.entries.compactMap { entry in
             let stuck = ((try? journal.postingRecords(state: .stuck,
                                                       backendID: entry.id)) ?? []).count
-            let diverged = postingDivergences[entry.id] ?? 0
+            // Live drift (this pass, retrying) + PARKED frozen divergences
+            // (terminal until a human reconciles).
+            let diverged = (postingDivergences[entry.id] ?? 0)
+                + ((try? journal.postingRecords(state: .diverged,
+                                                backendID: entry.id)) ?? []).count
             guard stuck > 0 || diverged > 0 else { return nil }
             return PostingHealth(id: entry.id, name: entry.backend.displayName,
                                  stuck: stuck, diverged: diverged)

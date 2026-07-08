@@ -2,6 +2,22 @@
 
 ## 2026-07-08
 
+- [x] **D4 amendment half: the backend now FOLLOWS the journal.** The
+  convergence loop replaces detection-only counting: a posted entry whose
+  session was trimmed/moved gets updateTimeEntry in place; a backend that
+  can't move an entry in place (Xero across projects, AmendmentError
+  .mustRecreate) gets delete+recreate with the fresh id recorded; a session
+  deleted or fully covered gets its entry deleted and the row parked
+  `.retracted` – which re-opens for a clean re-post if the journal side
+  later returns; an entry frozen by invoicing (AmendmentError.frozen) parks
+  `.diverged`, terminal and counted in Posting health – journal and books
+  genuinely disagree and a human reconciles. Unknown errors never guess:
+  row untouched, retried next pass. Amendments are capped per pass (20) so
+  a mass edit drains gently against rate-limited backends. Xero maps
+  movedAcrossProjects → mustRecreate and entryFrozen → frozen. Four new
+  transition checks + the trim/delete checks rewritten to amendment
+  semantics. Mac-verified: 464 passed, 0 failed.
+
 - [x] **Sensors: Safari tab URLs.** Safari joins the scriptable-browser set
   with its own AppleScript verb ("URL of front document"; Chrome-likes keep
   theirs) – Safari surfaces now carry the tab URL, so URL-based attribution,

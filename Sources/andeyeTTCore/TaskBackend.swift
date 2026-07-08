@@ -134,6 +134,17 @@ public struct PermanentPostError: Error, Equatable, CustomStringConvertible {
     public var description: String { reason }
 }
 
+/// Thrown by a connector's update/delete when an AMENDMENT can't proceed as
+/// asked — the engine reacts per case rather than retrying blindly.
+public enum AmendmentError: Error, Equatable {
+    /// The entry is locked/invoiced at the backend: the journal-side change
+    /// cannot propagate. The engine parks the row `.diverged` (surfaced).
+    case frozen(String)
+    /// The backend cannot move this entry in place (Xero: across projects):
+    /// the engine deletes and recreates instead.
+    case mustRecreate
+}
+
 /// A recognizer that never matches — standalone, and any backend whose pages
 /// carry no task identity.
 public struct NoPageRecognizer: BackendPageRecognizer {

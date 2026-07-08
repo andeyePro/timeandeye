@@ -30,24 +30,36 @@ public final class SyncEngine {
         /// Sessions closed off this pass because the backend rejected them
         /// PERMANENTLY (PermanentPostError) — surfaced, never retried.
         public var permanentlySkipped = 0
-        /// Posted entries whose journal side has since MOVED (D4 detection):
-        /// the session was edited/trimmed/deleted after posting, so the
-        /// backend entry no longer matches the journal. Detection only —
-        /// amendment is the D4 second half; until it lands this count is the
-        /// honest "your books have drifted" signal.
+        /// Posted entries whose journal-side change was PROPAGATED this pass
+        /// (updated in place, or deleted+recreated for a cross-project move).
+        public var amended = 0
+        /// Backend entries DELETED because their journal side went away
+        /// (session deleted / fully covered).
+        public var retracted = 0
+        /// Posted entries that STILL disagree with the journal after this
+        /// pass: frozen at the backend (terminal, needs a human) or not yet
+        /// reachable (amendment errored / capped this pass).
         public var diverged = 0
         public var error: String?
 
         public init(backendID: String, posted: Int = 0,
-                    permanentlySkipped: Int = 0, diverged: Int = 0,
+                    permanentlySkipped: Int = 0, amended: Int = 0,
+                    retracted: Int = 0, diverged: Int = 0,
                     error: String? = nil) {
             self.backendID = backendID
             self.posted = posted
             self.permanentlySkipped = permanentlySkipped
+            self.amended = amended
+            self.retracted = retracted
             self.diverged = diverged
             self.error = error
         }
     }
+
+    /// Amendments per pass are capped so a mass edit (a prune, a big
+    /// multi-select reassign) drains over a few passes instead of firing an
+    /// unbounded burst at a rate-limited backend.
+    public static let amendmentsPerPass = 20
 
     /// Journal-vs-posted drift beyond this is a divergence (a minute — the
     /// same floor posting itself uses; sub-minute wobble never re-bills).
@@ -127,12 +139,6 @@ public final class SyncEngine {
         }
     }
 
-    /// D4 detection half: every `.posted` row carrying a snapshot is compared
-    /// against the CURRENT resolved journal. A session that was edited,
-    /// re-trimmed by a later-arriving overlap, or deleted after posting makes
-    /// its backend entry stale — count it (and name it via onDebug) so the
-    /// drift is VISIBLE instead of silently wrong in the books. Amendment
-    /// (update/delete at the backend) is the second half, not yet wired.
     /// Rows whose postedStart is older than this only diverge via their own
     /// record changing (claims are time-local; nobody edits last quarter's
     /// overlaps) — so old rows are scanned only when their stamp changes,
@@ -140,35 +146,149 @@ public final class SyncEngine {
     /// posted history forever (reviewer A7).
     public static let divergenceScanHorizon: TimeInterval = 45 * 86_400
 
-    private func detectDivergence(_ entry: RegisteredBackend, now: Date) -> Int {
+    /// D4 — the CONVERGENCE loop. Every `.posted` row with a snapshot is
+    /// compared against the CURRENT resolved journal; where the journal has
+    /// moved, the backend FOLLOWS:
+    /// - drift (duration/start) → updateTimeEntry in place; a backend that
+    ///   can't move the entry (AmendmentError.mustRecreate — Xero across
+    ///   projects) gets delete + recreate with a fresh id;
+    /// - session deleted / fully covered / moved to a personal task →
+    ///   deleteTimeEntry, row `.retracted` (re-opens for a clean re-post if
+    ///   the journal side later returns);
+    /// - frozen at the backend (AmendmentError.frozen: invoiced/locked) →
+    ///   row `.diverged`, terminal and surfaced — a human must reconcile;
+    /// - any OTHER error → row untouched, counted diverged, retried next
+    ///   pass (no data-destroying guesses on unknown failures).
+    /// Returns (amended, retracted, still-diverged) for the pass report.
+    private func amendDiverged(_ entry: RegisteredBackend, now: Date,
+                               defaultActivityID: Int?,
+                               activityOverrides: [TaskRef: Int],
+                               includeComments: Bool) async
+        -> (amended: Int, retracted: Int, diverged: Int) {
+        var amended = 0, retracted = 0, diverged = 0
+        var budget = Self.amendmentsPerPass
+
+        // Re-open retractions whose journal side came back.
+        for row in ((try? journal.postingRecords(state: .retracted,
+                                                 backendID: entry.id)) ?? []) {
+            guard stampChanged(row),
+                  ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil) != nil
+            else { continue }
+            var reopened = row
+            reopened.state = .failed
+            reopened.entryID = nil
+            reopened.lastError = "journal side restored — re-posting"
+            reopened.updatedAt = now
+            try? journal.setPostingRecord(reopened)
+        }
+
         let rows = ((try? journal.postingRecords(state: .posted,
                                                  backendID: entry.id)) ?? [])
-        var count = 0
         for row in rows {
             guard let sentDuration = row.postedDuration else { continue }   // pre-snapshot row
             let recent = (row.postedStart ?? .distantPast) > now.addingTimeInterval(-Self.divergenceScanHorizon)
             guard recent || stampChanged(row) else { continue }
-            let sentStart = row.postedStart
+            let session = ((try? journal.session(id: row.sessionID)) ?? nil)
             let contribution = ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil)
-            let drifted: String?
-            if let contribution {
-                if abs(contribution.seconds - sentDuration) > Self.divergenceTolerance {
-                    drifted = "duration \(Int(sentDuration))s → \(Int(contribution.seconds))s"
-                } else if let sentStart,
-                          abs(contribution.start.timeIntervalSince(sentStart)) > Self.divergenceTolerance {
-                    drifted = "start moved \(Int(contribution.start.timeIntervalSince(sentStart)))s"
-                } else {
-                    drifted = nil
+            let taskID = session?.task.backendTaskID
+
+            // RETRACT: nothing in the journal supports this entry any more.
+            guard let contribution, let taskID else {
+                guard budget > 0 else { diverged += 1; continue }
+                budget -= 1
+                do {
+                    if let entryID = row.entryID {
+                        try await entry.backend.deleteTimeEntry(id: entryID)
+                    }
+                    var updated = row
+                    updated.state = .retracted
+                    updated.lastError = "journal side removed — entry deleted at the backend"
+                    updated.sessionStamp = ((try? journal.sessionStamp(row.sessionID)) ?? nil)
+                    updated.updatedAt = now
+                    try? journal.setPostingRecord(updated)
+                    retracted += 1
+                } catch let amendment as AmendmentError where amendment != .mustRecreate {
+                    parkFrozen(row, entry: entry, now: now)
+                    diverged += 1
+                } catch {
+                    onDebug("retract failed at \(entry.id) for \(row.sessionID): \(error)")
+                    diverged += 1   // untouched; retried next pass
                 }
-            } else {
-                drifted = "session deleted/fully-covered — entry should be retracted"
+                continue
             }
-            if let drifted {
-                count += 1
-                onDebug("diverged: \(row.sessionID) at \(entry.id): \(drifted)")
+
+            // DRIFT: does the entry still match what the journal says?
+            let durationDrift = abs(contribution.seconds - sentDuration) > Self.divergenceTolerance
+            let startDrift = row.postedStart.map {
+                abs(contribution.start.timeIntervalSince($0)) > Self.divergenceTolerance
+            } ?? false
+            guard durationDrift || startDrift else { continue }
+            guard budget > 0, let entryID = row.entryID else {
+                diverged += 1
+                continue
+            }
+            budget -= 1
+            let activity = session.map { activityOverrides[$0.task] ?? defaultActivityID }
+                ?? defaultActivityID
+            let comment = includeComments ? session?.comment : nil
+            do {
+                do {
+                    try await entry.backend.updateTimeEntry(
+                        id: entryID, taskID: taskID, start: contribution.start,
+                        duration: contribution.seconds, activityID: activity,
+                        comment: comment)
+                    finishAmend(row, entry: entry, entryID: entryID,
+                                contribution: contribution, now: now)
+                    amended += 1
+                } catch AmendmentError.mustRecreate {
+                    // The backend can't move it in place: replace the entry.
+                    try await entry.backend.deleteTimeEntry(id: entryID)
+                    let newID = try await entry.backend.createTimeEntry(
+                        taskID: taskID, start: contribution.start,
+                        duration: contribution.seconds, activityID: activity,
+                        comment: comment)
+                    finishAmend(row, entry: entry, entryID: newID,
+                                contribution: contribution, now: now)
+                    amended += 1
+                }
+            } catch let amendment as AmendmentError where amendment != .mustRecreate {
+                parkFrozen(row, entry: entry, now: now)
+                diverged += 1
+            } catch {
+                onDebug("amend failed at \(entry.id) for \(row.sessionID): \(error)")
+                diverged += 1   // untouched; retried next pass
             }
         }
-        return count
+        return (amended, retracted, diverged)
+    }
+
+    /// Amendment landed: refresh the snapshot to what the backend NOW holds,
+    /// re-stamp, and keep the pm mirror honest.
+    private func finishAmend(_ row: PostingRecord, entry: RegisteredBackend,
+                             entryID: RemoteEntryID?,
+                             contribution: (start: Date, seconds: TimeInterval),
+                             now: Date) {
+        var updated = row
+        updated.entryID = entryID
+        updated.postedStart = contribution.start
+        updated.postedDuration = contribution.seconds
+        updated.lastError = nil
+        updated.sessionStamp = ((try? journal.sessionStamp(row.sessionID)) ?? nil)
+        updated.updatedAt = now
+        try? journal.setPostingRecord(updated)
+        if entry.backendClass == .pm {
+            try? journal.markPushed(row.sessionID, opTimeEntryID: entryID)
+        }
+    }
+
+    /// Frozen at the backend: park terminally, surfaced in Posting health.
+    private func parkFrozen(_ row: PostingRecord, entry: RegisteredBackend, now: Date) {
+        var updated = row
+        updated.state = .diverged
+        updated.lastError = "entry is invoiced/locked at the backend — journal and books disagree; unlock or credit-note to reconcile"
+        updated.updatedAt = now
+        try? journal.setPostingRecord(updated)
+        onDebug("frozen divergence parked at \(entry.id) for \(row.sessionID)")
     }
 
     /// After this many failed attempts a row is quarantined `.stuck` and the
@@ -310,10 +430,16 @@ public final class SyncEngine {
             // a resurrection whose entry device A already deleted re-queues
             // HERE so this same pass re-posts it.
             await verifyTouchedPosted(entry, now: now)
-            // Then the D4 drift scan: posted entries whose journal side has
-            // since moved. Detection only — counted and surfaced, not yet
-            // amended.
-            report.diverged = detectDivergence(entry, now: now)
+            // Then the D4 CONVERGENCE loop: the backend follows the journal
+            // (update / delete+recreate / retract); frozen entries park
+            // `.diverged` for a human; unknown failures retry next pass.
+            let amendment = await amendDiverged(entry, now: now,
+                                                defaultActivityID: defaultActivityID,
+                                                activityOverrides: activityOverrides,
+                                                includeComments: includeComments)
+            report.amended = amendment.amended
+            report.retracted = amendment.retracted
+            report.diverged = amendment.diverged
             let queue = ((try? journal.sessions(needingPostTo: entry.id,
                                                 atOrAbove: threshold)) ?? [])
                 .filter { !excludedSessionIDs.contains($0.id) }
