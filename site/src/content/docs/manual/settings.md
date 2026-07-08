@@ -20,7 +20,9 @@ description: Comments, popover defaults, the Switch Buffer, local tasks, your Op
   can't be used, the reason appears in red below the field.
 - **Posting health** - appears only when something needs you: per backend, a
   count of entries stuck after repeated failures (with a one-click Retry) and
-  a count of posted entries that have drifted from your journal because you
-  edited or deleted time after it was posted.
+  a count of entries that disagree with your journal and can't be fixed
+  automatically (usually because they're locked into an invoice). Ordinary
+  edits and deletions of already-posted time propagate to the backend on
+  their own within a minute or two.
 - **Currency symbol** - shown wherever billable totals render; leave blank
   for your locale's own symbol.
