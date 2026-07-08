@@ -176,13 +176,15 @@ const copy = (await getEntry('copy', 'home')).data;
     background: var(--accent);
     color: #171006;
   }
-  .btn-primary:hover { background: #ffb44f; color: #171006; transform: translateY(-1px); }
+  /* Hover states change colour ONLY — no movement. Martin (2026-07-08):
+     the translateY/scale hovers read as jiggle, not affordance. */
+  .btn-primary:hover { background: #ffb44f; color: #171006; }
   .btn-ghost {
     background: transparent;
     color: var(--text);
     border-color: var(--line);
   }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
   /* hover-reactive CTA subtext: one line that answers whichever button you're on */
   .cta-sub {
@@ -490,7 +492,7 @@ const copy = (await getEntry('copy', 'home')).data;
     cursor: pointer;
     transition: flex-grow 0.4s linear, filter 0.2s, transform 0.2s;
   }
-  .tl-block.hi { filter: brightness(1.28); transform: scaleY(1.12); }
+  .tl-block.hi { filter: brightness(1.28); }
   .tl-axis {
     display: flex;
     justify-content: space-between;
@@ -656,6 +658,19 @@ const copy = (await getEntry('copy', 'home')).data;
   .cpanel p { color: var(--muted); font-size: 0.97rem; max-width: 600px; margin: 0 0 1rem; }
   .cpanel a { font-weight: 700; text-decoration: none; color: var(--accent); }
   .cpanel a:hover { text-decoration: underline; }
+
+  /* ---------- light-by-design earth ---------- */
+
+  .light-wrap { display: flex; align-items: center; gap: 48px; }
+  .light-text { flex: 1; min-width: 0; }
+  .light-earth {
+    flex: none;
+    width: clamp(96px, 14vw, 150px);
+    height: auto;
+    color: var(--accent);
+    opacity: 0.85;
+  }
+  @media (max-width: 640px) { .light-earth { display: none; } }
 
   /* ---------- footer ---------- */
 
@@ -892,11 +907,25 @@ const copy = (await getEntry('copy', 'home')).data;
 </section>
 
 <section id="light">
-  <div class="wrap">
-    <div class="eyebrow-row"><canvas id="eyebrowLight" aria-hidden="true"></canvas><p class="eyebrow">{copy.light.eyebrow}</p></div>
-    <h2>{copy.light.h2}</h2>
-    <p class="lede">{copy.light.lede}</p>
-    <p class="lede">{copy.light.line2}</p>
+  <div class="wrap light-wrap">
+    <div class="light-text">
+      <div class="eyebrow-row"><canvas id="eyebrowLight" aria-hidden="true"></canvas><p class="eyebrow">{copy.light.eyebrow}</p></div>
+      <h2>{copy.light.h2}</h2>
+      <p class="lede">{copy.light.lede}</p>
+      <p class="lede">{copy.light.line2}</p>
+    </div>
+    <!-- Code-drawn earth for "doesn't cost the earth" (Martin, 2026-07-08):
+         a line-drawn globe in the mark's language — one stroke weight,
+         graticule meridians/parallels, the accent as its only colour. -->
+    <svg class="light-earth" viewBox="0 0 120 120" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <circle cx="60" cy="60" r="46"/>
+      <ellipse cx="60" cy="60" rx="20" ry="46"/>
+      <ellipse cx="60" cy="60" rx="38" ry="46"/>
+      <line x1="14" y1="60" x2="106" y2="60"/>
+      <path d="M22 36 C40 44 80 44 98 36"/>
+      <path d="M22 84 C40 76 80 76 98 84"/>
+    </svg>
   </div>
 </section>
 
@@ -1006,14 +1035,26 @@ function normalised(p) {
            (235.0 - (p.y + translate.y)) / 365.0);
 }
 
-// Closed-eye pose (SVG space): only the lid segments' control points move.
-// Endpoints (the eye's corners) and the whole left side stay fixed; the top
-// lid comes down a lot, the bottom lid rises a little, and at wink 1 both
-// lie along the same gentle smile arc (they render as one line).
-const topLidClosed = { c1: P(171.03, 187.18), c2: P(258.9, 178.05) };
-const bottomLidClosed = { c1: P(311, 141), c2: P(232, 196) };
+// Closed-eye pose (SVG space) — MARTIN'S BAKED POSE (2026-07-08, lab-dialled:
+// lid raise 0, smoothing 1), verbatim from AndeyeLogo.fullStroke. The wink
+// is a single loop: the TAIL retracts ALONG its own curve (a de Casteljau
+// trim of curve 0's leading arc — never an endpoint drag, which swelled the
+// &'s top loop) while the bottom lid's end travels to the eye's true left
+// corner, the crossing of the two & strokes (on curve 0 at u=0.03565).
+const topLidClosed = { c1: P(171.03, 165.18), c2: P(258.9, 172.05) };
+const bottomLidClosed = { c1: P(311, 141), c2: P(220, 190) };
+const leftCorner = P(121.243, 138.111);
+const tailCrossU = 0.03565;
 
 function clamp01(v) { return Math.min(Math.max(v, 0), 1); }
+
+// The trailing [u, 1] part of a cubic — the same curve minus its lead-in.
+function trailingCubic(c, u) {
+  const m = (a, b) => P(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u);
+  const q0 = m(c[0], c[1]), q1 = m(c[1], c[2]), q2 = m(c[2], c[3]);
+  const r0 = m(q0, q1), r1 = m(q1, q2);
+  return [m(r0, r1), r1, q2, c[3]];
+}
 
 // The complete mark at blink amount `wink` (0 open ... 1 shut): an eyelid
 // close, not a squash — mirrors AndeyeLogo.fullStroke(wink:).
@@ -1021,10 +1062,12 @@ function fullStroke(wink) {
   const w = clamp01(wink);
   const lerp = (a, b) => P(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w);
   const svg = svgCubics.map(c => c.slice());
+  svg[0] = trailingCubic(svg[0], tailCrossU * w);   // tail retracts along itself
   svg[2][1] = lerp(svg[2][1], topLidClosed.c1);
   svg[2][2] = lerp(svg[2][2], topLidClosed.c2);
   svg[3][1] = lerp(svg[3][1], bottomLidClosed.c1);
   svg[3][2] = lerp(svg[3][2], bottomLidClosed.c2);
+  svg[3][3] = lerp(svg[3][3], leftCorner);          // bottom lid hinges at the corner
   return svg.map(c => ({
     p0: normalised(c[0]), c1: normalised(c[1]), c2: normalised(c[2]), p1: normalised(c[3]),
   }));

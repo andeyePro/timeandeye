@@ -127,6 +127,12 @@ and recorded rather than fixed blind:
   only (connector resolves its own project) so the editor works through the
   seam's fetchTasks alone; store made lock-protected with a snapshot key
   table (the connector reads from the sync context).
+- [ ] andeyeTTTheme extraction (a sibling project request, 2026-07-08):
+  a small SwiftUI-only target (colours, type scale, eye-mark renderer) pulled
+  out of andeyeTTUI so sibling apps (a sibling andeye app) consume theme without the
+  macOS app deps. Needed by Mon v0.3 (Plus gating + CloudKit); Mon ships a
+  local shim until then. HLC/sync/licence need nothing — andeyeTTCore
+  already exports them.
 - [ ] Invoice NUMBER for the invoice-lock ref needs the Xero Accounting API
   (Projects API doesn't expose it — verified 2026-07-08); until then locks
   group under the single ref "Xero".
