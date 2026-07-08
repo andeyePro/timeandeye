@@ -241,6 +241,35 @@ from late-arriving revisions, and reassignments — one mechanism, run by the
 posting owner, eventually consistent. Snapshot equality is cheap (a hash
 column if profiling ever says so).
 
+## D4b. Invoice-lock layer (Martin, 2026-07-08 — adopted)
+
+Martin's proposal, adopted as the POST-INVOICE half of convergence: when a
+posted entry is included in a SENT Xero invoice, that fact feeds back and the
+underlying session(s) LOCK in Time andeye — shown with the invoice reference,
+uneditable through normal gestures. A per-invoice UNLOCK exists for client
+queries: unlocking re-opens local editing and re-arms D4 amendment for those
+entries (the Xero-side credit-note/void remains the accountant's act; unlock
+only lifts the app-side guard).
+
+How it composes with D4:
+- PRE-invoice window (post → invoice sent): D4 amendment auto-converges the
+  backend to the journal — edits/trims/deletes propagate freely. This is the
+  window the lock does NOT cover and amendment MUST.
+- POST-invoice: the lock removes the divergence source at the origin (the
+  user can't silently edit invoiced time), which is strictly better than
+  detecting the divergence after the fact. `entryFrozen` handling remains the
+  belt-and-braces for entries invoiced before the lock state arrived.
+- Mechanics (Pro side): Xero Projects reports per-entry status
+  (INVOICED/LOCKED — already read by getTime for entryFrozen detection);
+  poll opportunistically on the sync tick. Whether the INVOICE NUMBER is
+  retrievable through the Projects API needs verifying — if not, the
+  Accounting API invoice lookup (or "locked by Xero" without a number) is
+  the fallback. Lock state lives journal-side (a per-session lock marker +
+  invoice ref), synced like other session state.
+- Out of scope for the lock (still needs D2/D4): pre-invoice edits,
+  multi-device double-posting, entries deleted at the backend, exports sent
+  outside Xero, and OP (no invoicing concept — OP entries stay amendable).
+
 ## D5. Permanent/transient error classification + no head-of-line stalls (fixes F19)
 
 Connectors classify at the seam: throw `BackendPostError.permanent(reason)`
