@@ -253,10 +253,11 @@ public enum TimelineMath {
     public static func latestBlock(in sessions: [Session],
                                    maxGap: TimeInterval = 3600) -> (start: Date, end: Date)? {
         let ordered = sessions.sorted { $0.start < $1.start }
-        guard var start = ordered.last?.start, let end = ordered.last?.end else { return nil }
+        guard var start = ordered.last?.start, var end = ordered.last?.end else { return nil }
         for session in ordered.reversed().dropFirst() {
             if start.timeIntervalSince(session.end) < maxGap {
                 start = min(start, session.start)
+                end = max(end, session.end)   // a long slice can outlast later-started ones (C19)
             } else {
                 break
             }

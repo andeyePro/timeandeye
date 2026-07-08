@@ -2,6 +2,21 @@
 
 ## 2026-07-08
 
+- [x] ** review fixes, batch 1 (reviewer C – periphery).** Phone:
+  todaysTotal now clips at midnight and reads the resolved view; export and
+  banked list read the resolved view (C6/C7). TimePeriod: today/thisWeek/last7
+  use calendar arithmetic – on DST Sundays an hour of sessions landed in the
+  wrong period; London-TZ check added (C15). JournalPrune: rollup ids are now
+  DETERMINISTIC (XOR of member ids through the fragment-id namespace) so two
+  devices pruning the same day merge to one rollup instead of double-counting
+  forever (C16). CheckpointRecovery: a partially-flushed checkpoint now
+  promotes only the un-journalled remainder instead of the whole span (C18).
+  Sensors: Accessibility trust re-read both ways each poll (C11); idle-poll
+  event type no longer force-unwrapped (C12). TimelineMath.latestBlock end is
+  the max end, not the last-started's end (C19). EmailSystem fastmail suffix
+  anchored (C20). AIAssist: task-id collision no longer fatal (C17); JSON
+  taxonomy honest (C21). Mac-verified: 450 passed, 0 failed.
+
 - [x] **A5: posting-health surfacing in Settings.** A "Posting health" section
   appears only when something needs a human: per backend, the count of
   quarantined (`stuck`) entries with a one-click Retry (clears the rows and

@@ -42,6 +42,20 @@ func timePeriodChecks(_ c: Checks) {
         try expectEq(mp.start, cal.dateInterval(of: .month, for: prior)!.start)
     }
 
+    c.check("DST day lengths: 'today' spans 25h on clocks-back Sunday (London), not a raw 86400 (C15)") {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Europe/London")!
+        // 2026-10-25: BST -> GMT, the 25-hour day.
+        let comps = DateComponents(year: 2026, month: 10, day: 25, hour: 12)
+        let anchor = cal.date(from: comps)!
+        let (start, end) = TimePeriod.today.range(anchor: anchor, now: anchor, calendar: cal)
+        try expectEq(end.timeIntervalSince(start), 25 * 3600,
+                     "calendar day, not +86400 — an hour of sessions was landing in the wrong period")
+        let (wStart, wEnd) = TimePeriod.thisWeek.range(anchor: anchor, now: anchor, calendar: cal)
+        try expectEq(wEnd.timeIntervalSince(wStart), 7 * 86_400 + 3_600,
+                     "the week containing the change is 169h long")
+    }
+
     c.check("matching identifies a preset-equal selection, nil for custom") {
         // A selection equal to this-week's range re-lights the Week preset.
         let w = TimePeriod.thisWeek.range(anchor: now, now: now, calendar: cal)

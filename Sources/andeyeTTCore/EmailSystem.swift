@@ -22,7 +22,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
             || h.hasSuffix("outlook.office365.com") { return .outlookWeb }
         if h.hasSuffix("mail.proton.me") || h.hasSuffix("mail.protonmail.com") { return .proton }
         if h.hasSuffix("mail.yahoo.com") { return .yahoo }
-        if h.hasSuffix("fastmail.com") { return .fastmail }
+        if h == "fastmail.com" || h.hasSuffix(".fastmail.com") { return .fastmail }   // anchored: not myfastmail.com (C20)
         return .unknown
     }
 

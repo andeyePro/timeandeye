@@ -30,6 +30,27 @@ func checkpointRecoveryChecks(_ c: Checks) {
             stale: stale, floor: 60, alreadyJournalled: [flushed]))
     }
 
+    c.check("PARTIAL same-task overlap -> only the un-journalled remainder is promoted (C18)") {
+        // A flush covered the first 400s; the crash lost only 400..600. The
+        // old rule promoted the WHOLE span (double-counting 0..400).
+        let stale = slice(.op(1), 0, 600)
+        let flushed = slice(.op(1), 0, 400)
+        let recovered = CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: [flushed])
+        try expectEq(recovered?.start, t0.addingTimeInterval(400))
+        try expectEq(recovered?.end, t0.addingTimeInterval(600))
+        // Sub-floor remainder: nothing worth promoting.
+        let mostlyFlushed = slice(.op(1), 0, 570)
+        try expectNil(CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: [mostlyFlushed]))
+        // A middle overlap keeps the LARGEST remainder.
+        let middle = slice(.op(1), 200, 260)
+        let split = CheckpointRecovery.recover(
+            stale: stale, floor: 60, alreadyJournalled: [middle])
+        try expectEq(split?.start, t0.addingTimeInterval(260))
+        try expectEq(split?.end, t0.addingTimeInterval(600))
+    }
+
     c.check("genuine orphan >= floor, no overlap -> recovered") {
         let stale = slice(.op(1), 0, 600)
         let elsewhere = slice(.op(2), 1000, 1600)   // different task + time

@@ -51,7 +51,23 @@ public enum JournalPrune {
             }
             let note = "consolidated \(sorted.count) slices"
             let comment = comments.isEmpty ? note : comments.joined(separator: "; ") + " (\(note))"
+            // DETERMINISTIC rollup id (C16): derived from the group's member
+            // ids, so two devices pruning the same (day, task) group mint the
+            // IDENTICAL rollup — after sync they merge as one record instead
+            // of two pushed rollups double-counting the day forever. XOR of
+            // member ids is order-independent; fragmentID stamps it into the
+            // derived-id namespace (never collides with a random v4 id).
+            var acc = uuid_t(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+            for member in sorted {
+                withUnsafeBytes(of: member.id.uuid) { bytes in
+                    withUnsafeMutableBytes(of: &acc) { a in
+                        for i in 0..<16 { a[i] ^= bytes[i] }
+                    }
+                }
+            }
+            let rollupID = SessionMerge.fragmentID(parent: UUID(uuid: acc), index: 0)
             create.append(Session(
+                id: rollupID,
                 task: sorted[0].task,
                 start: sorted[0].start,
                 end: sorted[0].start.addingTimeInterval(total),

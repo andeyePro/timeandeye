@@ -34,6 +34,28 @@ func journalPruneChecks(_ c: Checks) {
         try expectEq(Set(plan.deleteIDs), Set([a.id, b.id]))
     }
 
+    c.check("rollup id is DETERMINISTIC: two devices pruning the same group mint the identical rollup (C16)") {
+        // Same member sessions, different array order (arrival order differs
+        // across devices) — the created rollup must carry the SAME id, so the
+        // two rollups LWW-merge as one record instead of double-counting the
+        // day forever.
+        let a = s(.op(1), start: daysAgo(800, 9 * 3600), minutes: 30)
+        let b = s(.op(1), start: daysAgo(800, 14 * 3600), minutes: 45)
+        let planA = JournalPrune.plan(sessions: [a, b], olderThanDays: 730,
+                                      now: now, calendar: cal)
+        let planB = JournalPrune.plan(sessions: [b, a], olderThanDays: 730,
+                                      now: now, calendar: cal)
+        try expectEq(planA.create.count, 1)
+        try expectEq(planA.create.map(\.id), planB.create.map(\.id),
+                     "order-independent deterministic rollup ids")
+        // And a DIFFERENT group yields a different id.
+        let c2 = s(.op(2), start: daysAgo(800, 9 * 3600), minutes: 30)
+        let d2 = s(.op(2), start: daysAgo(800, 14 * 3600), minutes: 45)
+        let planC = JournalPrune.plan(sessions: [c2, d2], olderThanDays: 730,
+                                      now: now, calendar: cal)
+        try expect(planC.create[0].id != planA.create[0].id, "distinct groups, distinct ids")
+    }
+
     c.check("groups split by day AND task; singles left untouched") {
         let d1t1a = s(.op(1), start: daysAgo(800, 3600), minutes: 10)
         let d1t1b = s(.op(1), start: daysAgo(800, 7200), minutes: 10)

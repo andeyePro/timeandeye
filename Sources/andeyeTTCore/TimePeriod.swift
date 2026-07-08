@@ -19,10 +19,16 @@ public enum TimePeriod: String, CaseIterable, Identifiable, Sendable {
         let day = cal.startOfDay(for: anchor)
         switch self {
         case .today:
-            return (day, day.addingTimeInterval(86_400))
+            // Calendar arithmetic, NOT +86_400: on a DST-change day the day
+            // is 23 or 25 hours long and the raw constant puts an hour of
+            // sessions in the wrong period (invisible under the checks' UTC
+            // calendar; pinned by the London-TZ check).
+            return (day, cal.date(byAdding: .day, value: 1, to: day)
+                ?? day.addingTimeInterval(86_400))
         case .thisWeek:
             let start = cal.dateInterval(of: .weekOfYear, for: anchor)?.start ?? day
-            return (start, start.addingTimeInterval(7 * 86_400))
+            return (start, cal.date(byAdding: .day, value: 7, to: start)
+                ?? start.addingTimeInterval(7 * 86_400))
         case .last7:
             // 7 days ending on the day-of-week of `now`, on/before the anchor.
             let todayWeekday = cal.component(.weekday, from: now)
@@ -32,8 +38,10 @@ public enum TimePeriod: String, CaseIterable, Identifiable, Sendable {
                 endDay = cal.date(byAdding: .day, value: -1, to: endDay) ?? endDay
                 guardCount += 1
             }
-            let endExclusive = endDay.addingTimeInterval(86_400)
-            return (endExclusive.addingTimeInterval(-7 * 86_400), endExclusive)
+            let endExclusive = cal.date(byAdding: .day, value: 1, to: endDay)
+                ?? endDay.addingTimeInterval(86_400)
+            return (cal.date(byAdding: .day, value: -7, to: endExclusive)
+                ?? endExclusive.addingTimeInterval(-7 * 86_400), endExclusive)
         case .thisMonth:
             let start = cal.dateInterval(of: .month, for: anchor)?.start ?? day
             let end = cal.date(byAdding: .month, value: 1, to: start)

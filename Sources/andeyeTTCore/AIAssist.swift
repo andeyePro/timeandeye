@@ -148,8 +148,13 @@ public enum AIAssist {
         do {
             response = try JSONDecoder().decode(Response.self, from: Data(text.utf8))
         } catch let error as DecodingError {
-            if case .dataCorrupted(let ctx) = error, ctx.codingPath.last?.stringValue == "task" {
-                throw ParseError.badTask(ctx.debugDescription)
+            if case .dataCorrupted(let ctx) = error {
+                if ctx.codingPath.last?.stringValue == "task" {
+                    throw ParseError.badTask(ctx.debugDescription)
+                }
+                // dataCorrupted with an EMPTY path is undecodable text, not a
+                // wrong shape — keep the taxonomy honest (C21).
+                if ctx.codingPath.isEmpty { throw ParseError.notJSON }
             }
             throw ParseError.badShape(String(describing: error))
         } catch {
@@ -173,8 +178,11 @@ public enum AIAssist {
 
     /// The lookup `parseResponse` needs, from the live task cache.
     public static func taskRefLookup(_ tasks: [WorkTask]) -> [String: TaskRef] {
-        Dictionary(uniqueKeysWithValues: tasks.compactMap { t in
+        // uniquingKeysWith, not uniqueKeysWithValues: .op(5) and .remote("5")
+        // both key "5", and a fatalError over a task-id collision would take
+        // the whole app down (C17). First wins deterministically (cache order).
+        Dictionary(tasks.compactMap { t in
             t.ref.backendTaskID.map { ($0, t.ref) }
-        })
+        }, uniquingKeysWith: { first, _ in first })
     }
 }

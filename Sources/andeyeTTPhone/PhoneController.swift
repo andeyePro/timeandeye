@@ -225,25 +225,33 @@ public final class PhoneController: ObservableObject {
     }
 
     /// Banked slices in start order (checkpoint row excluded) — the timeline
-    /// page's data; the live slice comes from `tracking`.
+    /// page's data; the live slice comes from `tracking`. RESOLVED view, so
+    /// the list agrees with the pie and with what posting bills.
     public func bankedSessions(from: Date, to: Date) -> [Session] {
-        ((try? journal.sessions(from: from, to: to)) ?? [])
+        ((try? journal.resolvedSessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
             .sorted { $0.start < $1.start }
     }
 
     public func todaysTotal() -> TimeInterval {
         let start = Calendar.current.startOfDay(for: now())
-        let sessions = ((try? journal.sessions(from: start, to: now())) ?? [])
+        // CLIP at both bounds (a 23:00→01:00 slice contributes only its
+        // post-midnight hour — same rule as spentNodes) and read the
+        // RESOLVED view so the number agrees with the pie.
+        let sessions = ((try? journal.resolvedSessions(from: start, to: now())) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
-        let banked = sessions.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
-        let live = tracking.map { now().timeIntervalSince($0.since) } ?? 0
+        let banked = sessions.reduce(0.0) {
+            $0 + min($1.end, now()).timeIntervalSince(max($1.start, start))
+        }
+        let live = tracking.map { now().timeIntervalSince(max($0.since, start)) } ?? 0
         return banked + live
     }
 
     public func timesheetCSV(days: Int = 7) -> String {
         let from = now().addingTimeInterval(-Double(days) * 86_400)
-        let sessions = ((try? journal.sessions(from: from, to: now())) ?? [])
+        // RESOLVED view: the exported CSV must agree with billed/displayed
+        // hours, not the raw rows.
+        let sessions = ((try? journal.resolvedSessions(from: from, to: now())) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
         return TimesheetExport.csv(sessions: sessions) { [weak self] ref in
             (self?.name(of: ref) ?? ref.fallbackLabel,

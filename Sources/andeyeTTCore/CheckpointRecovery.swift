@@ -9,20 +9,37 @@ public enum CheckpointRecovery {
     /// Returns nil (drop the checkpoint, recover nothing) when:
     ///  - there is no stale row, or
     ///  - the stretch is shorter than `floor` (sub-floor time is noise), or
-    ///  - the stretch is already covered by an already-journalled slice for the
-    ///    SAME task — i.e. a task switch flushed the slice but the checkpoint
-    ///    was not re-anchored, so promoting it would duplicate the time (and the
-    ///    OP entry).
-    /// Otherwise returns `stale` unchanged — genuine crash-lost time to recover.
+    ///  - after subtracting every same-task journalled overlap, less than
+    ///    `floor` remains — a task switch flushed (part of) the slice, so
+    ///    promoting the overlapped span would duplicate time + the OP entry.
+    /// Otherwise returns the stale span TRIMMED to its largest un-journalled
+    /// remainder (C18: a partial overlap used to promote the WHOLE span,
+    /// double-counting the overlapped part; full containment is now just the
+    /// remainder hitting zero).
     public static func recover(stale: Session?, floor: TimeInterval,
                                alreadyJournalled: [Session]) -> Session? {
         guard let stale else { return nil }
         guard stale.end.timeIntervalSince(stale.start) >= floor else { return nil }
-        let covered = alreadyJournalled.contains { other in
-            other.task == stale.task
-                && other.start <= stale.start
-                && other.end >= stale.end
+        // Subtract same-task overlaps, keeping every remaining fragment.
+        var fragments: [(start: Date, end: Date)] = [(stale.start, stale.end)]
+        for other in alreadyJournalled where other.task == stale.task {
+            var next: [(start: Date, end: Date)] = []
+            for f in fragments {
+                guard other.start < f.end, other.end > f.start else { next.append(f); continue }
+                if f.start < other.start { next.append((f.start, other.start)) }
+                if other.end < f.end { next.append((other.end, f.end)) }
+            }
+            fragments = next
         }
-        return covered ? nil : stale
+        // Recover the LARGEST remainder (one checkpoint row promotes one
+        // slice; multiple disjoint remainders would need ids we don't have —
+        // the big one is the real lost time, the slivers are switch noise).
+        guard let best = fragments.max(by: {
+            $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
+        }), best.end.timeIntervalSince(best.start) >= floor else { return nil }
+        var recovered = stale
+        recovered.start = best.start
+        recovered.end = best.end
+        return recovered
     }
 }

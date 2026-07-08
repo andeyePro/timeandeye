@@ -77,13 +77,18 @@ public final class SensorHub {
     // MARK: - Polling
 
     private func poll() {
-        // Re-check live: the user may grant Accessibility while we run, and a
-        // launch-time cache held window titles at nil for a whole session.
-        if !accessibilityTrusted { accessibilityTrusted = AXIsProcessTrusted() }
+        // Re-check live BOTH ways: a grant mid-run starts window titles
+        // flowing, and a REVOKE mid-run must stop us believing we still have
+        // them (C11 — the old check latched true forever).
+        accessibilityTrusted = AXIsProcessTrusted()
         let now = Date()
         // Input recency: CGEventSource needs no permission.
+        // kCGAnyInputEventType is ~0 but has no Swift constant; the failable
+        // init returns nil only for out-of-range values, yet a force-unwrap
+        // here would crash the sensor loop if that ever changed (C12).
+        let anyInput = CGEventType(rawValue: ~0) ?? .null
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
-            .combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+            .combinedSessionState, eventType: anyInput)
         onEvent(.input(now.addingTimeInterval(-idleSeconds)))
         // Locked: don't sample the frontmost window at all (no window detail
         // should accrue while the Mac is locked).
