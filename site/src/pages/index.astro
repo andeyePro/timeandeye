@@ -942,8 +942,9 @@ const copy = (await getEntry('copy', 'home')).data;
         <!-- Europe, a clear Mediterranean gap above Africa -->
         <path d="M58 30 C62 26 70 25 76 28 C74 32 70 33 66 34 C62 35 59 34 58 32 Z"/>
         <path d="M55 34 L59 33 C60 35 58 37 56 37 Z"/>
-        <!-- Africa: west bulge, Horn, southern taper -->
-        <path d="M57 40 C62 37 70 37 74 41 C77 44 81 47 80 51 C76 53 74 52 72 55 C74 60 73 66 70 71 C68 76 66 80 63 80 C60 80 58 75 58 70 C56 66 52 63 52 57 C52 50 54 43 57 40 Z"/>
+        <!-- Africa, the anchor continent (judge panel 2026-07-08: flat Med
+             coast, Horn point, Gulf of Guinea notch, Cape taper) -->
+        <path d="M56 42 C62 39 70 38 75 41 C78 43 79 46 79 49 C82 50 85 52 85 55 C82 57 80 56 78 58 C77 64 74 71 71 76 C69 80 66 83 63 81 C61 78 60 73 60 68 C59 64 56 62 52 61 C48 59 47 54 49 49 C51 45 53 43 56 42 Z"/>
         <!-- Madagascar -->
         <path d="M75 70 C77 68 79 70 78 73 C77 76 74 76 74 73 Z"/>
         <!-- Asia off the right edge, India taper -->
@@ -1208,7 +1209,10 @@ function drawMark(ctx, cssW, cssH, segs, colour, clockIris) {
   // low), clipped by the CURRENT aperture so a wink crops it like a real
   // eyelid. Only drawn on the complete mark — during the draw-on the iris
   // appears when the stroke finishes (the brand rule).
-  if (clockIris && segs.length === 4) {
+  // segs.length alone lied here: revealed() returns 4 segments while the
+  // FOURTH is still part-drawn, so the iris appeared before the pen
+  // finished (Martin, 2026-07-08 22:42). The caller states completion.
+  if (clockIris === true && segs.length === 4) {
     const open = fullStroke(0);
     let top = Infinity, bottom = -Infinity;
     for (let i = 0; i <= 32; i++) {
@@ -1323,7 +1327,11 @@ function sizeCanvas(cv, ctx, w, h) {
 
 // hero state: geometry only, colour is always ACCENT
 let heroT = reduced ? 1 : 0, heroWink = 0, heroTimer = null, heroBlinkTimer = null;
-function renderHero() { drawMark(heroCtx, HERO_W, HERO_H, stroke(heroT, heroWink), ACCENT, true); }
+function renderHero() {
+  // The iris appears only when the draw-on COMPLETES (heroT reaches 1) —
+  // the brand rule, and Martin's approved sequence.
+  drawMark(heroCtx, HERO_W, HERO_H, stroke(heroT, heroWink), ACCENT, heroT >= 1);
+}
 
 // menu-bar state: always fully drawn (t=1), winks on task change, tint = certainty
 let mbWink = 0, mbTimer = null, mbRaf = null, mbRGB = NEUTRAL.slice();
