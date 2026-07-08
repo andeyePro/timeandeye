@@ -580,7 +580,14 @@ struct PopoverView: View {
         let cleaned = AIAssist.cleanRuleReply(pinAIResponse)
         guard !cleaned.isEmpty else { pinExprError = "Paste the AI's reply first."; return }
         switch PredicateParser.parse(cleaned) {
-        case .success:
+        case .success(let predicate):
+            // Same B13 gate as commit: catch a broken `matches` pattern in
+            // the AI's reply before it reaches the editor as "valid".
+            let broken = predicate.invalidRegexPatterns
+            guard broken.isEmpty else {
+                pinExprError = "matches pattern isn't a valid regex: \(broken.joined(separator: ", "))"
+                return
+            }
             pinExpression = cleaned
             pinExprError = nil
             pinMode = .expression
@@ -746,6 +753,14 @@ struct PopoverView: View {
         if pinMode == .expression {
             switch PredicateParser.parse(pinExpression) {
             case .success(let predicate):
+                // B13: a syntactically-fine `matches` with a broken PATTERN
+                // would persist a rule that silently never fires — refuse it
+                // here, where the user can fix it.
+                let broken = predicate.invalidRegexPatterns
+                guard broken.isEmpty else {
+                    pinExprError = "matches pattern isn't a valid regex: \(broken.joined(separator: ", "))"
+                    return
+                }
                 controller.commitPin(rule: .expression(predicate), to: ref,
                                      replacingID: pinEditingID, priority: priority)
             case .failure(let error):

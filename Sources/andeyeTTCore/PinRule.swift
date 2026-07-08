@@ -84,6 +84,20 @@ public indirect enum Predicate: Codable, Equatable, Sendable {
         case .not(let p): return p.leafCount
         }
     }
+
+    /// `matches` patterns that don't compile (B13). PinOp.regex evaluates
+    /// with `try?` — an invalid pattern silently never matches, which reads
+    /// as "my pin doesn't work" — so the EDITORS validate at save time and
+    /// surface these instead of persisting a dead rule.
+    public var invalidRegexPatterns: [String] {
+        switch self {
+        case .leaf(_, .regex, let value):
+            return (try? NSRegularExpression(pattern: value)) == nil ? [value] : []
+        case .leaf: return []
+        case .and(let ps), .or(let ps): return ps.flatMap(\.invalidRegexPatterns)
+        case .not(let p): return p.invalidRegexPatterns
+        }
+    }
 }
 
 /// One pin: a rule, the task it forces, and (optional, Advanced) a manual

@@ -167,4 +167,17 @@ func predicateParserChecks(_ c: Checks) {
                      .leaf(field: .subject, op: .contains, value: "plain"))
     }
 
+    c.check("a broken `matches` PATTERN parses but is flagged for the editor to refuse (B13)") {
+        // Syntactically fine, regex-invalid: without the flag this persisted
+        // a pin that silently never matched (PinOp.regex evaluates try?).
+        let broken = try parsed("url matches \"[\"")
+        try expectEq(broken.invalidRegexPatterns, ["["],
+                     "the editor's save gate needs the exact offending pattern")
+        try expectEq(try parsed("url matches \"amb.*\"").invalidRegexPatterns, [],
+                     "valid patterns pass")
+        // Nested: only the broken leaf is reported.
+        let mixed = try parsed("url matches \"(\" and title contains \"x\" or not url matches \"ok.*\"")
+        try expectEq(mixed.invalidRegexPatterns, ["("])
+    }
+
 }

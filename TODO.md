@@ -597,16 +597,20 @@ and recorded rather than fixed blind:
 - [x] B12 — DONE 2026-07-08 (window 2): render escapes quotes/backslashes,
   the tokenizer unescapes; unknown escapes pass through so old rules parse
   unchanged; round-trip check added.
-- [ ] B13: invalid regex in a `matches` pin silently never matches — validate
-  at editor save time and surface the error.
+- [x] B13 — DONE 2026-07-08: Predicate.invalidRegexPatterns walks the tree;
+  both editor save paths (typed expression + AI reply) refuse a broken
+  pattern naming it; check pins the flag incl. nested trees.
 - [x] B16 — DONE 2026-07-08 (window 2, a4d02c9): recent-first block capped at
   two recency half-lives; ancient one-offs rank normally below live Now tasks.
 - [ ] B10 check: comment-source filtering is fixed but unpinned — needs a
   harness path that closes an other-target span inside a work run.
 - [ ] C10: SensorHub.onEvent should be @MainActor-guarded before the
   AXObserver (event-driven) refinement lands; today all emitters are main.
-- [ ] C13: undo key-monitor token never removed (app-lifetime today).
-- [ ] C14: pmset subprocess on the launch path — cache/defer off main.
+- [x] C13 — DONE 2026-07-08: ⌘Z monitor token stored and removed at
+  willTerminate alongside the Carbon hotkey.
+- [x] C14 — DONE 2026-07-08: init uses last launch's cached display-sleep
+  (default 600 s); startUp refreshes via pmset off-main, applies live
+  (SessionTracker.setIdleThreshold) and re-caches.
 
 ## Fable session outputs (2026-07-07 night — review + code, NOT yet Mac-verified)
 - [x] RUN `swift run andeyeTTChecks` on the Mac — DONE 2026-07-08 00:2x BST

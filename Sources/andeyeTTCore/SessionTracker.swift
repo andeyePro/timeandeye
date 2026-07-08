@@ -64,8 +64,16 @@ public final class SessionTracker {
     public var onSpanClosed: (FocusSpan) -> Void = { _ in }
 
     private let attributor: Attributor
-    private let config: TrackerConfig
+    private var config: TrackerConfig
     private let tasks: () -> [WorkTask]
+
+    /// C14: the idle threshold derives from pmset, which is a subprocess —
+    /// too slow for the launch path. The controller starts with a cached
+    /// value and applies the fresh reading here when it arrives; the
+    /// threshold is a pure comparison bound, safe to move mid-tracking.
+    public func setIdleThreshold(_ seconds: TimeInterval) {
+        config.idleThresholdSeconds = seconds
+    }
 
     /// The shortest run that may become its own journalled slice. Never below
     /// one displayed minute: a sub-minute slice shows as "0:00", which reads as

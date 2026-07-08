@@ -334,7 +334,11 @@ public final class AppController: ObservableObject {
         let config = TrackerConfig(
             minSegmentSeconds: loadedSettings.minSegmentSeconds,
             primeDwellSeconds: loadedSettings.primeDwellSeconds,
-            idleThresholdSeconds: PowerSettings.displaySleepSeconds() ?? 600,
+            // C14: pmset is a subprocess — off the launch path. Last
+            // launch's cached reading (or the 600 s default) serves until
+            // startUp's async refresh applies the live value.
+            idleThresholdSeconds: UserDefaults.standard
+                .object(forKey: "cachedDisplaySleepSeconds") as? TimeInterval ?? 600,
             nonWorkTracksLocally: loadedSettings.trackLeisureLocally && leisure != nil,
             leisureTask: leisure,
             switchGraceSeconds: loadedSettings.switchGraceSeconds,
@@ -821,6 +825,15 @@ public final class AppController: ObservableObject {
         installCrashTraps()
         installUndoKey()
         installAwayHotKey()
+        // C14: read pmset OFF the launch path, then apply + cache for the
+        // next launch's synchronous init.
+        Task.detached(priority: .utility) { [weak self] in
+            guard let fresh = PowerSettings.displaySleepSeconds() else { return }
+            await MainActor.run {
+                UserDefaults.standard.set(fresh, forKey: "cachedDisplaySleepSeconds")
+                self?.tracker.setIdleThreshold(fresh)
+            }
+        }
         promoteStaleCheckpoint()   // recover any session a crash/quit left mid-flight
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
@@ -829,6 +842,7 @@ public final class AppController: ObservableObject {
             MainActor.assumeIsolated {
                 self?.checkpointLive()
                 self?.awayHotKey = nil   // unregister the Carbon hotkey before quit
+                self?.removeUndoKey()    // C13: release the ⌘Z local monitor
             }
         }
         Notifier.enabled = settings.systemNotifications
@@ -1360,8 +1374,13 @@ public final class AppController: ObservableObject {
         Task { await last.inverse() }
     }
 
+    /// The ⌘Z local monitor's token (C13): removed at terminate/deinit —
+    /// app-lifetime in practice, but a leaked monitor outliving a torn-down
+    /// controller (tests, previews) would fire into a dead weak self.
+    private var undoKeyMonitor: Any?
+
     private func installUndoKey() {
-        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        undoKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.modifierFlags.contains(.command),
                event.charactersIgnoringModifiers == "z" {
                 self?.undo()
@@ -1369,6 +1388,11 @@ public final class AppController: ObservableObject {
             }
             return event
         }
+    }
+
+    private func removeUndoKey() {
+        if let undoKeyMonitor { NSEvent.removeMonitor(undoKeyMonitor) }
+        undoKeyMonitor = nil
     }
 
     /// True system-wide ⌘⇧L: toggles Away from any app (kVK_ANSI_L = 37). The
