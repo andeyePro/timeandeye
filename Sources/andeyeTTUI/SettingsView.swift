@@ -286,6 +286,43 @@ struct SettingsView: View {
                 }
             }
 
+            // Billing mappings (D6): only with a finance backend registered.
+            // Each BILLABLE project picks the finance-backend task its time
+            // bills to; unmapped billable time is held (skipped with a "map
+            // me" reason in Posting health) and posts on the next pass the
+            // moment its mapping lands (criterion 10).
+            if controller.hasFinanceBackend {
+                Section("Billing mappings") {
+                    let sources = controller.billableSourceProjects()
+                    if sources.isEmpty {
+                        Text("Flag a project billable and its mapping row appears here.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(controller.financeTaskOptions, id: \.backendID) { option in
+                        ForEach(sources, id: \.key) { source in
+                            HStack {
+                                Text(source.name).font(.caption)
+                                Spacer()
+                                Picker("", selection: Binding<String?>(
+                                    get: { controller.financeMapping(forProjectKey: source.key)?.backendTaskID },
+                                    set: { controller.setFinanceMapping(projectKey: source.key,
+                                                                        backendTaskID: $0) }
+                                )) {
+                                    Text("Not mapped").tag(String?.none)
+                                    ForEach(option.tasks, id: \.ref) { task in
+                                        Text("\(task.project ?? option.name) — \(task.subject)")
+                                            .tag(task.ref.backendTaskID)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(maxWidth: 320)
+                            }
+                        }
+                    }
+                }
+                .onAppear { Task { await controller.refreshFinanceTaskOptions() } }
+            }
+
             Section("Maintenance") {
                 HStack {
                     Button(scanning ? "Scanning…" : "Scan for duplicate OpenProject entries") {

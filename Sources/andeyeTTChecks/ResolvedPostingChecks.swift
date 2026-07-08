@@ -413,19 +413,19 @@ func resolvedPostingChecks(_ c: Checks) async {
 
     // MARK: D6 finance mapping + criterion 10 reopen.
 
-    await c.check("D6 store: source-task lookup goes resolver→mappings; set fires the change signal") {
-        let store = FinanceMappingStore(projectKey: { taskID in
-            taskID == "42" ? "op/id:7" : nil
-        })
+    await c.check("D6 store: source-task lookup goes key-table→mappings; set fires the change signal") {
+        let store = FinanceMappingStore(projectKeys: ["42": "op/id:7"])
         try expectNil(store.mapping(forSourceTask: "42"), "known project, no mapping yet")
         try expectNil(store.mapping(forSourceTask: "999"), "unknown task resolves nothing")
+        try expectEq(store.projectKey(forSourceTask: "42"), "op/id:7")
         var changed: [String] = []
         store.onChange = { changed.append($0) }
-        store.set(FinanceMapping(backendProjectID: "xp-1", backendTaskID: "xt-1"),
-                  forProjectKey: "op/id:7")
+        store.set(FinanceMapping(backendTaskID: "xt-1"), forProjectKey: "op/id:7")
         try expectEq(changed, ["op/id:7"], "set announced the changed key")
-        try expectEq(store.mapping(forSourceTask: "42")?.backendProjectID, "xp-1")
         try expectEq(store.mapping(forSourceTask: "42")?.backendTaskID, "xt-1")
+        // The snapshot refresh path the controller uses on task-cache change.
+        store.setProjectKeys(["42": "op/id:7", "43": "op/id:8"])
+        try expectEq(store.projectKey(forSourceTask: "43"), "op/id:8")
     }
 
     await c.check("criterion 10: the no-mapping skip re-opens when ITS project maps — other skips stay closed") {
@@ -456,12 +456,11 @@ func resolvedPostingChecks(_ c: Checks) async {
         // THE project maps (the store's change handler is the trigger, as
         // the controller wires it): exactly this skip clears; the session
         // posts on the very next pass; the unrelated skip stays closed.
-        let mappings = FinanceMappingStore(projectKey: { $0 == "1" ? "op/id:7" : nil })
+        let mappings = FinanceMappingStore(projectKeys: ["1": "op/id:7"])
         mappings.onChange = { key in
             SyncEngine.reopenMappingSkips(journal: store, backendID: "fin-x", projectKey: key)
         }
-        mappings.set(FinanceMapping(backendProjectID: "xp-1", backendTaskID: "xt-1"),
-                     forProjectKey: "op/id:7")
+        mappings.set(FinanceMapping(backendTaskID: "xt-1"), forProjectKey: "op/id:7")
         try expectNil((try? store.postingRecord(session: unmapped.id, backendID: "fin-x")) ?? nil,
                       "the no-mapping skip cleared — session re-enters the queue")
         finance.permanentReasonOverride = [:]   // the connector now maps it

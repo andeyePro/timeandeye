@@ -302,14 +302,21 @@ entryFrozen, rateLimitedDaily is transient-until-tomorrow; OP: 404 task,
 
 ## D6. Finance task mapping: the connector owns translation (fixes F18; IMPLEMENTED 2026-07-08)
 
-Status: BUILT and checked (main 472/0, Pro 38/0). `FinanceMappingStore` in
-Core (mappings + injected task→projectKey resolver + `onChange`); XeroBackend
-takes it optionally and resolves create/update targets mapping-first (nil
-store = pre-D6 native-only behaviour, pinned). The criterion-10 reopen is
-`SyncEngine.reopenMappingSkips`, wired from the store's change handler; the
-no-mapping reason string is the stable reopen key. Settings UI for editing
-mappings is NOT yet built (community app has no finance backend; the editor
-ships with the Pro Xero settings surface) — TODO'd.
+Status: BUILT and checked (main 472/0, Pro 38/0), INCLUDING the Settings
+editor. `FinanceMappingStore` in Core — lock-protected, with a source-task→
+project-key snapshot TABLE the controller refreshes on task-cache changes
+(the connector reads from the sync context; a live closure into main-actor
+state would race). Design deviation from the sketch below, deliberate:
+`FinanceMapping` carries only the finance backend's TASK id — the connector
+resolves that task's project from its own cache — so the mapping (and the
+Settings editor that writes it) is buildable from the seam's `fetchTasks()`
+alone, and backend project ids never leak through the frozen seam.
+XeroBackend takes the store optionally and resolves create/update targets
+mapping-first (nil store = native-only, pinned). Criterion-10 reopen:
+`SyncEngine.reopenMappingSkips` off the store's change handler, which also
+persists (finance-mappings.json) and nudges a pass. Settings: "Billing
+mappings" section, visible only with a finance backend registered; each
+BILLABLE project picks a finance-backend task.
 
 `SyncEngine`/`TaskBackend` contracts stay id-agnostic (no seam change — the
 seam is the cross-repo lockstep surface, keep it frozen). A finance connector

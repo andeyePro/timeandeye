@@ -159,7 +159,21 @@ public final class AppController: ObservableObject {
     /// The menu-bar mark: the andeye ampersand-eye tinted with menuColour.
     /// Starts blank; startUp plays the draw-on which ends at the full mark.
     @Published public private(set) var logoImage = NSImage()
-    @Published public private(set) var taskCache: [WorkTask] = []
+    @Published public private(set) var taskCache: [WorkTask] = [] {
+        didSet {
+            // Keep the finance-mapping store's source-task→project-key
+            // snapshot in step with the cache (the connector reads it from
+            // the sync context; a live closure into main-actor state would
+            // race — see FinanceMappingStore's thread-shape note).
+            financeMappings.setProjectKeys(Dictionary(
+                taskCache.compactMap { task -> (String, String)? in
+                    guard task.ref.isRemote, let id = task.ref.backendTaskID,
+                          let key = projectKey(for: task) else { return nil }
+                    return (id, key)
+                },
+                uniquingKeysWith: { first, _ in first }))
+        }
+    }
     @Published public private(set) var pendingReview: [ReviewSegment] = []
     @Published public private(set) var activities: [TimeActivity] = []
     @Published public private(set) var lastPrompt: TrackerPrompt?
@@ -207,6 +221,12 @@ public final class AppController: ObservableObject {
     private let pinsStore: JSONFileStore<[Pin]>
     private let emailRulesStore: JSONFileStore<[EmailRule]>
     private let billingStore: JSONFileStore<BillableRules>
+    private let financeMappingsStore: JSONFileStore<[String: FinanceMapping]>
+    /// D6: sourceProjectKey → the finance backend's task. Core-owned;
+    /// Settings edits it; the Pro flavour hands it to its finance connector
+    /// at registration (the connector translates internally). The
+    /// source-task→project-key snapshot refreshes with the task cache.
+    public let financeMappings = FinanceMappingStore()
     /// All registered backends (the community build registers at most the
     /// one pm OpenProject entry; andeyePro adds its connectors through
     /// `register(backend:id:class:)`). Empty = standalone — nothing syncs,
@@ -263,6 +283,12 @@ public final class AppController: ObservableObject {
         emailRulesStore = JSONFileStore<[EmailRule]>(url: dir.appendingPathComponent("emailrules.json"))
         billingStore = JSONFileStore<BillableRules>(url: dir.appendingPathComponent("billing.json"))
         billing = (try? billingStore.load().flatMap { $0 }) ?? BillableRules()
+        financeMappingsStore = JSONFileStore<[String: FinanceMapping]>(
+            url: dir.appendingPathComponent("finance-mappings.json"))
+        let loadedMappings = ((try? financeMappingsStore.load().flatMap { $0 }) ?? [:])
+        for key in loadedMappings.keys {
+            financeMappings.set(loadedMappings[key], forProjectKey: key)   // onChange unwired: pure load
+        }
         let loadedSettings = (try? settingsStore.load().flatMap { $0 })
             ?? AndeyeSettings(opBaseURL: "")
         settings = loadedSettings
@@ -323,6 +349,21 @@ public final class AppController: ObservableObject {
         taskCache = localWorkTasks()   // locals exist before OP ever connects
         applyJournalRecency()          // recency survives the relaunch
         renderLogo()
+        // Wired AFTER the persisted-mappings load above, so loading doesn't
+        // re-save or re-open anything. From here, every Settings edit
+        // persists AND re-opens the no-mapping skips for exactly the changed
+        // project (criterion 10), then nudges a pass so it posts now.
+        financeMappings.onChange = { [weak self] key in
+            Task { @MainActor in
+                guard let self else { return }
+                try? self.financeMappingsStore.save(self.financeMappings.mappings)
+                for entry in self.registry.entries where entry.backendClass == .finance {
+                    SyncEngine.reopenMappingSkips(journal: self.journal,
+                                                  backendID: entry.id, projectKey: key)
+                }
+                await self.syncIfEnabled()
+            }
+        }
     }
 
     // MARK: - Menu-bar logo animation
@@ -2519,6 +2560,57 @@ public final class AppController: ObservableObject {
         Dictionary(uniqueKeysWithValues: taskCache.compactMap { task in
             projectKey(for: task).map { (task.ref, $0) }
         })
+    }
+
+    // MARK: - Finance mappings (D6 Settings editor)
+
+    /// Whether the Billing-mappings Settings section shows at all.
+    public var hasFinanceBackend: Bool {
+        registry.entries.contains { $0.backendClass == .finance }
+    }
+
+    /// The finance backend's own tasks, fetched for the mapping pickers —
+    /// (backendID, displayName, tasks). Refreshed on section appearance;
+    /// a fetch failure leaves the previous options standing.
+    @Published public private(set) var financeTaskOptions:
+        [(backendID: String, name: String, tasks: [WorkTask])] = []
+
+    public func refreshFinanceTaskOptions() async {
+        var out: [(backendID: String, name: String, tasks: [WorkTask])] = []
+        for entry in registry.entries where entry.backendClass == .finance {
+            guard let tasks = try? await entry.backend.fetchTasks() else { continue }
+            out.append((entry.id, entry.backend.displayName,
+                        tasks.sorted { ($0.project ?? "", $0.subject) < ($1.project ?? "", $1.subject) }))
+        }
+        if !out.isEmpty || financeTaskOptions.isEmpty { financeTaskOptions = out }
+    }
+
+    /// The BILLABLE remote projects — the rows of the mapping editor (only
+    /// billable time ever reaches a finance backend, so unmapped
+    /// non-billable projects are noise).
+    public func billableSourceProjects() -> [(name: String, key: String)] {
+        var seen = Set<String>()
+        var out: [(name: String, key: String)] = []
+        for task in taskCache {
+            guard task.ref.isRemote, let name = task.project,
+                  !seen.contains(name), isProjectBillable(named: name),
+                  let key = projectKey(for: task) else { continue }
+            seen.insert(name)
+            out.append((name, key))
+        }
+        return out.sorted { $0.name < $1.name }
+    }
+
+    public func financeMapping(forProjectKey key: String) -> FinanceMapping? {
+        financeMappings.mappings[key]
+    }
+
+    /// The Settings gesture: map (or nil = unmap) a source project to a
+    /// finance-backend task. Persistence + the criterion-10 reopen ride the
+    /// store's change handler.
+    public func setFinanceMapping(projectKey: String, backendTaskID: String?) {
+        financeMappings.set(backendTaskID.map(FinanceMapping.init),
+                            forProjectKey: projectKey)
     }
 
     /// The cached tasks belonging to a project as DISPLAYED (the pie/legend

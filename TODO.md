@@ -119,13 +119,17 @@ and recorded rather than fixed blind:
 
 ## Open
 
-- [ ] Finance-mapping Settings editor (D6 follow-up, 2026-07-08): the Core
-  `FinanceMappingStore` + engine reopen + Xero translation are built and
-  checked; what's missing is the UI to CREATE mappings (list source
-  projects, pick a Xero project + default task) — it belongs on the Pro
-  Xero settings surface since the community app has no finance backend.
-  Also future: invoice NUMBER for the invoice-lock ref needs the Xero
-  Accounting API (Projects API doesn't expose it — verified 2026-07-08).
+- [x] Finance-mapping Settings editor (D6 follow-up, 2026-07-08): DONE same
+  day — registry-driven "Billing mappings" Settings section (visible only
+  with a finance backend), billable projects each pick a finance-backend
+  task; store persisted at finance-mappings.json; change handler persists +
+  criterion-10 reopen + sync nudge. FinanceMapping simplified to task-id-
+  only (connector resolves its own project) so the editor works through the
+  seam's fetchTasks alone; store made lock-protected with a snapshot key
+  table (the connector reads from the sync context).
+- [ ] Invoice NUMBER for the invoice-lock ref needs the Xero Accounting API
+  (Projects API doesn't expose it — verified 2026-07-08); until then locks
+  group under the single ref "Xero".
 
 - [ ] NAIL Chrome/Gmail correspondent categorisation (Martin, 2026-07-03
   02:04 BST, priority — "spin out agents and absolutely nail it, take your
