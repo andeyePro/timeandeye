@@ -187,6 +187,9 @@
       clip = el('clipPath', { id: uid }, el('defs', {}, svg));
       var clipShape = el('path', { d: aperturePath(cubics(0)) }, clip);
       irisGroup = el('g', { 'clip-path': 'url(#' + uid + ')' }, svg);
+      // The iris appears AFTER the mark has drawn on (17:48): hidden while
+      // a draw-on is in flight, fading in when the stroke completes.
+      irisGroup.style.transition = 'opacity 0.35s ease';
       if (iris === 'fill') {
         el('circle', { cx: g.cx, cy: g.cy, r: g.r, fill: colour }, irisGroup);
       } else {
@@ -223,7 +226,9 @@
 
     // wink 0..1 (eyelid close), draw 0..1 (draw-on reveal by arc length —
     // segments appear in order, the active one partially, via dash tricks).
+    // The iris rides the draw: invisible until the stroke completes.
     function setPose(wink, draw) {
+      if (irisGroup) irisGroup.style.opacity = (draw != null && draw < 1) ? '0' : '1';
       var cs = cubics(wink);
       var ds = segmentPaths(cs);
       for (var i = 0; i < outlineSegs.length; i++) {

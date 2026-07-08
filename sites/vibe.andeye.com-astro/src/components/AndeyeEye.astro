@@ -15,6 +15,7 @@ const { variant = 'main', weight = 'fill', class: cls = '' } = Astro.props;
       var opts = v === 'time' ? { colour: '#f0a13a', iris: w, glyph: 'clock', background: '#131826' }
                : v === 'vibe' ? { colour: '#eef1f6', iris: w, glyph: 'code', background: '#131826' }
                : { iris: 'none' };
+      opts.drawOn = true;   // hand-draw the mark on load; iris fades in at the end
       window.andeyeEye(svg, opts);
     });
   })();

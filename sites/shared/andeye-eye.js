@@ -120,6 +120,11 @@
       clip = el('clipPath', { id: uid }, el('defs', {}, svg));
       var clipShape = el('path', { d: aperturePath(cubics(0)) }, clip);
       irisGroup = el('g', { 'clip-path': 'url(#' + uid + ')' }, svg);
+      // The iris appears AFTER the mark has drawn on (Martin, 8 Jul 17:48):
+      // hidden while a draw-on is in flight, fading in the moment the
+      // stroke completes. Pages that never draw on (blink only) keep it
+      // visible from the start.
+      irisGroup.style.transition = 'opacity 0.35s ease';
       if (iris === 'fill') {
         el('circle', { cx: g.cx, cy: g.cy, r: g.r, fill: colour }, irisGroup);
       } else {
@@ -156,7 +161,9 @@
 
     // wink 0..1 (eyelid close), draw 0..1 (draw-on reveal by arc length —
     // segments appear in order, the active one partially, via dash tricks).
+    // The iris rides the draw: invisible until the stroke completes.
     function setPose(wink, draw) {
+      if (irisGroup) irisGroup.style.opacity = (draw != null && draw < 1) ? '0' : '1';
       var cs = cubics(wink);
       var ds = segmentPaths(cs);
       for (var i = 0; i < outlineSegs.length; i++) {
@@ -192,6 +199,19 @@
 
     var reduced = global.matchMedia
       && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Page-load draw-on: the pen draws the mark from the tail (~1.2s), and
+    // the iris fades in as the stroke completes (Martin, 8 Jul 17:48).
+    if (opts.drawOn && !reduced) {
+      var drawStart = null;
+      function drawFrame(ts) {
+        if (!drawStart) drawStart = ts;
+        var t = Math.min((ts - drawStart) / 1200, 1);
+        setPose(0, t * t * (3 - 2 * t));
+        if (t < 1) global.requestAnimationFrame(drawFrame);
+      }
+      setPose(0, 0);
+      global.requestAnimationFrame(drawFrame);
+    }
     if (opts.blink !== false && !reduced) {
       // A natural blink: quick close, brief hold, slightly slower open —
       // then quiet for a few seconds. Ease with smoothstep.
