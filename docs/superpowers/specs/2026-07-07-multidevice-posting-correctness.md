@@ -300,7 +300,16 @@ entryFrozen, rateLimitedDaily is transient-until-tomorrow; OP: 404 task,
 - The journal summary/report shows counts: posted / skipped-with-reason /
   stuck — so "nothing has posted for 3 weeks" is impossible to miss.
 
-## D6. Finance task mapping: the connector owns translation (fixes F18)
+## D6. Finance task mapping: the connector owns translation (fixes F18; IMPLEMENTED 2026-07-08)
+
+Status: BUILT and checked (main 472/0, Pro 38/0). `FinanceMappingStore` in
+Core (mappings + injected task→projectKey resolver + `onChange`); XeroBackend
+takes it optionally and resolves create/update targets mapping-first (nil
+store = pre-D6 native-only behaviour, pinned). The criterion-10 reopen is
+`SyncEngine.reopenMappingSkips`, wired from the store's change handler; the
+no-mapping reason string is the stable reopen key. Settings UI for editing
+mappings is NOT yet built (community app has no finance backend; the editor
+ships with the Pro Xero settings surface) — TODO'd.
 
 `SyncEngine`/`TaskBackend` contracts stay id-agnostic (no seam change — the
 seam is the cross-repo lockstep surface, keep it frozen). A finance connector
@@ -363,6 +372,9 @@ until then, document that billable flags should be set on the posting owner.
     ships WITH the D6 mapping store — its change-handler is the only sane
     trigger; a generic reason-code re-test has no change signal to key on.
     The skip half is live (PermanentPostError path, checked).
+    DONE 2026-07-08: D6 landed — `reopenMappingSkips` off the store's
+    change handler, clear-on-mapping-change, exact-reason match; checked
+    both directions (its project reopens+posts, other skips stay closed).
 11. Downgrade safety: rows in the new states read as `.posted` by a decoder
     limited to the old enum (never-double-post direction preserved).
 12. Anti-entropy (D0.1): replicas A and B concurrently edit S; B's stale

@@ -2,6 +2,18 @@
 
 ## 2026-07-08
 
+- [x] **D6 finance task mapping + criterion-10 reopen — billable OP time can
+  route to Xero without stalling on unmapped projects.** New Core
+  `FinanceMappingStore` (sourceProjectKey → backend project + default task,
+  injected task→project resolver, change signal); XeroBackend resolves
+  create/update targets mapping-first (no store = native-only, pinned).
+  Unmapped-but-recognised projects skip permanently with a stable reason
+  string that doubles as the reopen key: `SyncEngine.reopenMappingSkips`,
+  fired from the store's change handler, clears exactly those rows so the
+  session posts on the next pass — other skips stay closed. Settings editor
+  for mappings ships with the Pro Xero surface (TODO). Mac-verified 472/0;
+  Pro 38/0.
+
 - [x] **Invoice-lock layer (Martin's proposal, spec D4b) — billed time can't
   be silently rewritten.** New `TaskBackend.invoiceLocks(for:)` seam
   (default: nothing locks); the sync engine polls it half-hourly (shared

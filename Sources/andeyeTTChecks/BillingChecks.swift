@@ -202,8 +202,15 @@ final class FakeBackend: TaskBackend {
     /// inflight verify-then-adopt flows can be exercised.
     var held: [RemoteTimeEntry] = []
 
+    /// Task ids rejected permanently with an EXACT reason string (the D6
+    /// no-mapping skip, whose reason is the criterion-10 reopen key).
+    var permanentReasonOverride: [String: String] = [:]
+
     func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
                          activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
+        if let reason = permanentReasonOverride[taskID] {
+            throw PermanentPostError(reason: reason)
+        }
         if permanentlyRejects.contains(taskID) {
             throw PermanentPostError(reason: "fake: task \(taskID) is gone")
         }

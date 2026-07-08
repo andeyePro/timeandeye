@@ -411,6 +411,68 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(pm.invoicePolls, firstPolls + 1, "past the interval it polls again")
     }
 
+    // MARK: D6 finance mapping + criterion 10 reopen.
+
+    await c.check("D6 store: source-task lookup goes resolver→mappings; set fires the change signal") {
+        let store = FinanceMappingStore(projectKey: { taskID in
+            taskID == "42" ? "op/id:7" : nil
+        })
+        try expectNil(store.mapping(forSourceTask: "42"), "known project, no mapping yet")
+        try expectNil(store.mapping(forSourceTask: "999"), "unknown task resolves nothing")
+        var changed: [String] = []
+        store.onChange = { changed.append($0) }
+        store.set(FinanceMapping(backendProjectID: "xp-1", backendTaskID: "xt-1"),
+                  forProjectKey: "op/id:7")
+        try expectEq(changed, ["op/id:7"], "set announced the changed key")
+        try expectEq(store.mapping(forSourceTask: "42")?.backendProjectID, "xp-1")
+        try expectEq(store.mapping(forSourceTask: "42")?.backendTaskID, "xt-1")
+    }
+
+    await c.check("criterion 10: the no-mapping skip re-opens when ITS project maps — other skips stay closed") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let unmapped = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        let gone = Session(task: .op(2), start: t(4000), end: t(5000), certainty: 0.95)
+        try store.save(unmapped)
+        try store.save(gone)
+        let finance = FakeBackend(owns: .op)
+        let reason = FinanceMappingStore.noMappingReason(projectKey: "op/id:7")
+        finance.permanentReasonOverride["1"] = reason        // D6 unmapped skip
+        finance.permanentlyRejects = ["2"]                   // unrelated permanent skip
+        let engine = SyncEngine(journal: store, backend: finance, id: "fin-x", class: .finance)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                      financeEligible: { _ in true }, now: t(6000))
+        try expectEq(((try? store.postingRecord(session: unmapped.id, backendID: "fin-x")) ?? nil)?.state,
+                     .skipped, "unmapped task closed .skipped, queue proceeded")
+        try expectEq(((try? store.postingRecord(session: unmapped.id, backendID: "fin-x")) ?? nil)?.lastError,
+                     reason, "the skip reason IS the reopen key, verbatim")
+
+        // A mapping lands for a DIFFERENT project: nothing re-opens.
+        SyncEngine.reopenMappingSkips(journal: store, backendID: "fin-x",
+                                      projectKey: "op/id:99")
+        try expectEq(((try? store.postingRecord(session: unmapped.id, backendID: "fin-x")) ?? nil)?.state,
+                     .skipped, "someone else's mapping changes nothing")
+
+        // THE project maps (the store's change handler is the trigger, as
+        // the controller wires it): exactly this skip clears; the session
+        // posts on the very next pass; the unrelated skip stays closed.
+        let mappings = FinanceMappingStore(projectKey: { $0 == "1" ? "op/id:7" : nil })
+        mappings.onChange = { key in
+            SyncEngine.reopenMappingSkips(journal: store, backendID: "fin-x", projectKey: key)
+        }
+        mappings.set(FinanceMapping(backendProjectID: "xp-1", backendTaskID: "xt-1"),
+                     forProjectKey: "op/id:7")
+        try expectNil((try? store.postingRecord(session: unmapped.id, backendID: "fin-x")) ?? nil,
+                      "the no-mapping skip cleared — session re-enters the queue")
+        finance.permanentReasonOverride = [:]   // the connector now maps it
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                      financeEligible: { _ in true }, now: t(6100))
+        try expectEq(finance.created.filter { $0.taskID == "1" }.count, 1,
+                     "mapped ⇒ posted on the next pass")
+        try expectEq(((try? store.postingRecord(session: gone.id, backendID: "fin-x")) ?? nil)?.state,
+                     .skipped, "the task-gone skip never re-opened")
+    }
+
     await c.check("a locked row whose entry vanished is NOT demoted for re-post (no duplicate of billed time)") {
         let store = try makeStore()
         store.clock = makeClock()

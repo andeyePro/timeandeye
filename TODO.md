@@ -119,6 +119,14 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Finance-mapping Settings editor (D6 follow-up, 2026-07-08): the Core
+  `FinanceMappingStore` + engine reopen + Xero translation are built and
+  checked; what's missing is the UI to CREATE mappings (list source
+  projects, pick a Xero project + default task) — it belongs on the Pro
+  Xero settings surface since the community app has no finance backend.
+  Also future: invoice NUMBER for the invoice-lock ref needs the Xero
+  Accounting API (Projects API doesn't expose it — verified 2026-07-08).
+
 - [ ] NAIL Chrome/Gmail correspondent categorisation (Martin, 2026-07-03
   02:04 BST, priority — "spin out agents and absolutely nail it, take your
   time, run focus groups"). Symptoms: Gmail slices keep going to "University Teaching" and the why-panel can't explain why; the components/

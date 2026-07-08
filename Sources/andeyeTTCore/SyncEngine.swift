@@ -205,6 +205,21 @@ public final class SyncEngine {
         }
     }
 
+    /// Criterion-10 reopen: a mapping just appeared (or changed) for
+    /// `projectKey` — every row that was skipped for exactly its
+    /// no-mapping reason is CLEARED, so the session re-enters the queue as
+    /// pending and posts on the next pass. Other `.skipped` rows (task
+    /// gone, foreign task) stay closed: their reasons don't match, and
+    /// nothing about them changed.
+    public static func reopenMappingSkips(journal: any JournalStore,
+                                          backendID: String, projectKey: String) {
+        let reason = FinanceMappingStore.noMappingReason(projectKey: projectKey)
+        for row in ((try? journal.postingRecords(state: .skipped, backendID: backendID)) ?? [])
+        where row.lastError == reason {
+            try? journal.clearPostingRecord(session: row.sessionID, backendID: backendID)
+        }
+    }
+
     /// The per-invoice UNLOCK: lifts the app-side guard on every row locked
     /// under `ref`, un-parks any that diverged WHILE locked (back to
     /// `.posted`; the stamp mismatch re-arms amendment on the next pass),
