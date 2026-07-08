@@ -29,6 +29,27 @@ func opURLParserChecks(_ c: Checks) {
 // MARK: - LearningStore (plan task 4)
 
 func learningStoreChecks(_ c: Checks) {
+    c.check("partial match on a WELL-TAUGHT task beats a never-taught task (B5: no worse-with-use)") {
+        var store = LearningStore()
+        // Teach task A hard on a rich signal (many features), many times.
+        let taught = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT build",
+                                    tabURL: "https://github.com/andeyePro/andeyeTT",
+                                    timestamp: Date(timeIntervalSince1970: 1_750_000_000))
+        for _ in 0..<25 { store.learn(taught, target: .task(.op(1)), weight: 2) }
+        // A PARTIALLY matching signal: same app, different title/url — the
+        // app feature matches the training, the rest don't. The old scoring
+        // punished every unmatched feature by log(0.1/(total+1)), which GREW
+        // with training, so the never-taught op(2) won and attribution got
+        // worse the more you taught it.
+        let partial = ActivitySignal(app: "Ghostty", windowTitle: "release notes",
+                                     tabURL: nil,
+                                     timestamp: Date(timeIntervalSince1970: 1_750_000_600))
+        let scores = store.scores(for: partial,
+                                  among: [.task(.op(1)), .task(.op(2))])
+        try expect((scores[.task(.op(1))] ?? 0) > (scores[.task(.op(2))] ?? 0),
+                   "real positive evidence must outrank no evidence")
+    }
+
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
     let ghostty = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: t0)
     let steam = ActivitySignal(app: "Steam", windowTitle: "Library", timestamp: t0)

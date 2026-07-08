@@ -164,6 +164,14 @@ public final class SessionTracker {
     public func start(task: TaskRef, at date: Date) {
         flushSessions(asOf: date)
         lastInput = date
+        // Accrual begins NOW (reviewer B1): while stopped, focus changes kept
+        // updating currentStart, so starting at 10:30 after a 10:10 window
+        // change billed 20 minutes of explicitly-stopped time to the new
+        // task. Keep the signal's identity; restart its span here. (The
+        // opposite hole — a nil signal accruing nothing while the clock
+        // runs — is closed app-side: the sensor re-emits the current surface
+        // on manual start.)
+        if currentSignal != nil { currentStart = date }
         state = .tracking(.task(task), certainty: 1.0)
     }
 
@@ -327,9 +335,15 @@ public final class SessionTracker {
     private func handleWake(at date: Date) {
         guard let slept = sleepingSince else { promptResumeIfIdleStopped(); return }
         sleepingSince = nil
-        if case .tracking = state, date.timeIntervalSince(slept) <= config.sleepGraceSeconds {
+        // A NEGATIVE interval means the wall clock stepped back across the
+        // sleep (DST fall-back, NTP correction): without this bound it
+        // passes the <= grace test and a multi-hour sleep is attributed to
+        // the last task and posted (reviewer C8, fires at least twice a
+        // year). Treat it as beyond grace: stop as-of last real activity.
+        let sleptFor = date.timeIntervalSince(slept)
+        if case .tracking = state, sleptFor >= 0, sleptFor <= config.sleepGraceSeconds {
             lastInput = date
-            onDebug("woke \(Int(date.timeIntervalSince(slept)))s after sleep — within grace, continuing")
+            onDebug("woke \(Int(sleptFor))s after sleep — within grace, continuing")
         } else {
             idleStop(asOf: min(lastInput ?? slept, slept), promptNow: true)
         }
@@ -526,6 +540,12 @@ public final class SessionTracker {
         } else if micActiveSince != nil {
             // Flush BEFORE clearing the flag so in-flight call segments are
             // collected; only segments that started during the call count.
+            // Capture the signal first: endCurrentSpan clears it, and the
+            // sensor never re-emits an unchanged surface — without reopening
+            // here, a user who keeps working in the same window after a call
+            // accrues NOTHING until the next window change while the clock
+            // runs (reviewer B2, unbounded loss for single-window work).
+            let liveSignal = currentSignal
             endCurrentSpan(at: date)
             flushPendingReview()
             micActiveSince = nil
@@ -533,6 +553,10 @@ public final class SessionTracker {
                 onPrompt(.callEnded(segments: callSegments))
             }
             callSegments = []
+            if case .tracking = state, let liveSignal {
+                currentSignal = liveSignal
+                currentStart = date
+            }
         }
     }
 

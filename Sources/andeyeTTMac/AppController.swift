@@ -594,13 +594,14 @@ public final class AppController: ObservableObject {
                     self.targetSince = now
                     self.visitSolid = false
                     self.taskChangedAt = now
-                    // The old task's slice has already been flushed by the
-                    // tracker on this switch, so the 60 s checkpoint still
-                    // pointing at the OLD [start,end] would, on a crash in this
-                    // window, be promoted to a slice overlapping the flushed one
-                    // (duplicate time + duplicate OP entry). Clear it and
-                    // re-anchor to the new task's start (targetSince is `now`,
-                    // already set above, which checkpointLive reads).
+                    // Re-anchor the crash checkpoint. checkpointLive now
+                    // follows the tracker's OWNED slice (liveSliceOwner /
+                    // liveSliceStart), so during a grace-pending switch it
+                    // keeps covering the task being left until the commit
+                    // flush — a crash mid-grace loses nothing, and an
+                    // excursion+revert keeps the original anchor (B3). After
+                    // a COMMITTED switch the owner is the new task and the
+                    // rewrite is the correct fresh anchor.
                     self.clearCheckpoint()
                     self.checkpointLive()
                     // NB: the note is NOT cleared here. A display switch (incl.
@@ -908,10 +909,19 @@ public final class AppController: ObservableObject {
     static let liveCheckpointID = UUID(uuidString: "00000000-0000-0000-0000-0000C0FFEE00")!
 
     public func checkpointLive() {
-        guard case .tracking(.task(let ref), let certainty) = trackerState,
-              let since = targetSince else { return }
+        // Anchor at the tracker's OWNED live slice, not the display target
+        // (reviewer B3): the display flips at PEND time, before any flush, so
+        // a checkpoint keyed to targetSince was destroyed by every
+        // provisional switch — and a sub-grace excursion + revert re-anchored
+        // it at the REVERT moment, so a crash lost everything before the
+        // excursion. liveSliceOwner/liveSliceStart cover exactly what a
+        // flush would journal.
+        guard case .tracking(_, let certainty) = trackerState,
+              case .task(let ref)? = tracker.liveSliceOwner else { return }
+        let since = tracker.liveSliceStart ?? targetSince ?? Date()
         try? journal.update(Session(id: Self.liveCheckpointID, task: ref, start: since,
-                                    end: Date(), certainty: certainty, pushedToOP: true))
+                                    end: max(Date(), since),   // clock stepped back: never end<start (C9)
+                                    certainty: certainty, pushedToOP: true))
     }
 
     private func clearCheckpoint() {
@@ -995,6 +1005,11 @@ public final class AppController: ObservableObject {
 
     public func userPicked(_ task: WorkTask) {
         tracker.confirm(task: task.ref, at: Date())
+        // Re-emit the unchanged surface so span accrual restarts immediately
+        // (B1's other half): after a manual stop the sensor's dedup key
+        // still holds the current window, and without this the new task
+        // accrues nothing until the next window change or input pause.
+        sensors.reemitCurrentSurface()
         if let i = taskCache.firstIndex(where: { $0.ref == task.ref }) {
             taskCache[i].lastConfirmedAt = Date()
         }

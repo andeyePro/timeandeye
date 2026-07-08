@@ -102,11 +102,36 @@ public struct LearningStore: Codable, Equatable, Sendable {
         var raw: [Target: Double] = [:]
         for t in candidates {
             let total = max(totals[t] ?? 0, 0)
-            var logp = log(total + 1)
+            var logp = 0.0
+            var strongMatches = 0
             for f in feats {
                 let c = max(counts[f]?[t] ?? 0, 0)
-                logp += log((c + 0.1) / (total + 1))
+                // GENERIC features (hourOfDay) are heavily down-weighted: an
+                // hour coincidence must never flip attribution on its own —
+                // one evening of Steam at 22:00 would otherwise make EVERY
+                // 22:xx window score doNotTrack and stop the clock.
+                let kindWeight = f.kind == .hourOfDay ? 0.15 : 1.0
+                // Matched features use the learned likelihood; an UNMATCHED
+                // feature costs a CONSTANT (its untaught-task value), not
+                // log(0.1/(total+1)) — the old per-feature penalty GREW with
+                // total, so a heavily-taught task lost to a never-taught one
+                // on any partial match and attribution got worse with use
+                // (reviewer B5). A weak match (tiny c on a huge total) can
+                // still score below the constant: 1-in-1000 is genuine
+                // negative evidence.
+                if c > 0 {
+                    if f.kind != .hourOfDay { strongMatches += 1 }
+                    logp += kindWeight * log((c + 0.1) / (total + 1))
+                } else {
+                    logp += kindWeight * log(0.1)
+                }
             }
+            // The experience prior applies ONLY on a STRONG match: with
+            // constant unmatched penalties, an unconditional log(total+1)
+            // made any well-taught target beat untaught ones on signals it
+            // knows NOTHING about. Zero strong matches = an untaught
+            // target's score (± the tiny generic terms).
+            if strongMatches > 0 { logp += log(total + 1) }
             raw[t] = logp
         }
         let maxV = raw.values.max()!

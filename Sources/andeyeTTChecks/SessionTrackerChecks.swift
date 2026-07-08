@@ -709,6 +709,67 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.liveSliceStart, t(0))
     }
 
+
+    c.check("manual start after a stop bills from the START tap, never from stopped-time focus changes (B1)") {
+        let (tracker, _) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.stop(at: t(600))
+        // While STOPPED the user changes windows at t+700…
+        tracker.handle(.focus(sig("Ghostty", "somewhere else", at: 700)))
+        // …and starts a new task at t+1900 (20 min later).
+        tracker.start(task: .op(2), at: t(1900))
+        tracker.handle(.input(t(2500)))
+        tracker.stop(at: t(2500))
+        let op2 = sessions.filter { $0.task == .op(2) }
+        try expectEq(op2.count, 1)
+        try expectEq(op2[0].start, t(1900),
+                     "accrual begins at the tap — 20 min of stopped time must NOT bill")
+        try expectEq(op2[0].end, t(2500))
+    }
+
+    c.check("mic-off reopens the span: same-window work after a call keeps accruing (B2)") {
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.microphone(active: true, at: t(60)))
+        tracker.handle(.microphone(active: false, at: t(300)))
+        // NO focus change after the call — the user keeps working in the
+        // same window for 10 more minutes, then stops.
+        tracker.handle(.input(t(600)))
+        tracker.stop(at: t(900))
+        let total = sessions.filter { $0.task == .op(1) }
+            .reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        try expectEq(total, 900,
+                     "the post-call stretch accrues without waiting for a window change")
+    }
+
+    c.check("wake with the clock stepped BACK across sleep never passes the grace window (C8)") {
+        let (tracker, attributor) = makeTracker(config: {
+            var cfg = TrackerConfig(); cfg.sleepGraceSeconds = 300; return cfg
+        }())
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.input(t(500)))
+        tracker.handle(.willSleep(t(600)))
+        // DST fall-back / NTP: the wall clock at wake reads EARLIER than at
+        // sleep. A negative interval passed `<= grace` and attributed the
+        // whole multi-hour sleep to the task.
+        tracker.handle(.didWake(t(-3000)))
+        tracker.stop(at: t(700))
+        let total = sessions.filter { $0.task == .op(1) }
+            .reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        try expect(total <= 600, "no sleep-spanning attribution on a backward clock (got \(total))")
+    }
+
     c.check("reevaluate re-tags the open spans and live target when a pin moves the target") {
         // A pin added mid-session must take effect immediately, not only on the
         // next focus change — reevaluate re-attributes the open spans and lifts

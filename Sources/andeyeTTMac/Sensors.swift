@@ -68,6 +68,13 @@ public final class SensorHub {
         poll()
     }
 
+    /// Drop the surface dedup key so the NEXT poll re-emits the current
+    /// window even though it hasn't changed — manual start/confirm needs the
+    /// span to reopen without waiting for a real focus change.
+    public func reemitCurrentSurface() {
+        lastSurfaceKey = nil
+    }
+
     public func stop() {
         pollTimer?.invalidate()
         pollTimer = nil

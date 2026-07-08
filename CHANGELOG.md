@@ -2,6 +2,27 @@
 
 ## 2026-07-08
 
+- [x] ** review fixes, batch 3 (Fable reviewer B – attribution/tracker
+  HIGHs + sleep-clock guards).** (B1) A manual start now begins span accrual
+  at the tap – focus changes made while STOPPED no longer bill their pre-start
+  stretch to the new task, and the sensor re-emits the unchanged surface on a
+  manual pick so accrual restarts immediately instead of waiting for a window
+  change. (B2) Ending a call reopens the live span: same-window work after
+  mic-off accrues again (was: silently unspanned until the next window
+  change – unbounded loss for single-window workers). (B3) The crash
+  checkpoint anchors at the tracker's OWNED live slice (liveSliceOwner/
+  liveSliceStart), so provisional switches and sub-grace excursion reverts no
+  longer destroy or re-anchor it – a crash mid-grace loses nothing. (C8/C9) A
+  wake with the wall clock stepped BACK across sleep (DST fall-back, NTP) no
+  longer passes the sleep-grace test and can't attribute the whole sleep; the
+  checkpoint clamps end ≥ start. (B5) LearningStore scoring reworked: an
+  unmatched feature now costs a CONSTANT instead of a penalty that grew with
+  training (heavily-taught tasks lost to never-taught ones on partial matches
+  – "got worse with use"); the experience prior applies only on a strong
+  match, and hourOfDay is down-weighted 0.15× so an hour coincidence can
+  never flip attribution or auto-stop the clock by itself. Four new checks
+  pin B1/B2/C8/B5. Mac-verified: 456 passed, 0 failed.
+
 - [x] ** review fixes, batch 2 (Fable reviewer A – tonight's sync
   code).** (A1) The F13 verify sweep now DEMOTES a vanished entry's row to
   `.failed` instead of clearing it – a cleared row plus the synced `pushed=1`
