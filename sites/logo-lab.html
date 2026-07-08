@@ -3,51 +3,55 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>andeye logo lab — pick your variants</title>
+<title>andeye logo lab v3 — frame-by-frame</title>
 <style>
   body { margin: 0; background: #0c0f16; color: #eef1f6;
          font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
   main { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
-  h1 { font-size: 22px; } h2 { font-size: 16px; margin: 36px 0 6px; color: #98a0b3; }
-  p { color: #98a0b3; font-size: 14px; max-width: 70ch; }
-  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+  h1 { font-size: 22px; }
+  p { color: #98a0b3; font-size: 14px; max-width: 72ch; }
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; margin-top: 18px; }
   .cell { background: #131826; border: 1px solid #232b40; border-radius: 14px;
           padding: 18px; text-align: center; }
-  .cell svg { width: 240px; height: 155px; display: block; }
-  .cell.small svg { width: 120px; height: 78px; }
+  .cell svg { width: 260px; height: 168px; display: block; }
   .cap { font-size: 12px; color: #6a7382; margin-top: 8px; }
-  .light { background: #f4f5f7; }
+  .controls { position: sticky; top: 0; background: #0c0f16ee; padding: 14px 0;
+              border-bottom: 1px solid #232b40; z-index: 5; }
+  .controls .line { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .controls label { font-size: 13px; color: #98a0b3; width: 64px; }
+  .controls input[type=range] { flex: 1; max-width: 420px; }
+  .controls output { font-size: 12px; color: #6a7382; width: 54px; }
+  button { background: #131826; color: #eef1f6; border: 1px solid #232b40;
+           border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: #f0a13a; }
 </style>
 </head>
 <body>
 <main>
-  <h1>andeye logo lab</h1>
-  <p>Every mark below is the ORIGINAL brand geometry (assets/brand/andeye.svg — the blue, the 17px stroke, the exact path) with the app's own eyelid wink: only the lid curves morph, and the iris is clipped by the aperture so a closing lid crops it exactly like an eyelid. All of them blink on their own schedule; reduced-motion users get the open pose.</p>
+  <h1>andeye logo lab v3</h1>
+  <p>Filled iris throughout (your verdict). Every mark below is driven by ONE set of controls, so you can compare frame-for-frame: scrub the wink or the draw-on, or step a frame at a time. The right-corner artifact is fixed — each curve now strokes as its own segment (like the app's renderer), so the degenerate corner can't grow a spur.</p>
 
-  <h2>1 · Main andeye mark — blue, empty (andeye.com header)</h2>
-  <div class="row">
-    <div class="cell"><svg id="main"></svg><div class="cap">brand blue #56C1FF, no iris</div></div>
-    <div class="cell small"><svg id="mainS"></svg><div class="cap">small</div></div>
-  </div>
-
-  <h2>2 · Time andeye — clock iris, both weights</h2>
-  <div class="row">
-    <div class="cell"><svg id="timeFill"></svg><div class="cap">FILLED iris (my pick: reads as a solid pupil, hands punch through)</div></div>
-    <div class="cell"><svg id="timeStroke"></svg><div class="cap">STROKE iris — same 17px line as the mark</div></div>
-  </div>
-
-  <h2>3 · Vibe andeye — &gt; filling the circle, both weights</h2>
-  <div class="row">
-    <div class="cell"><svg id="vibeFill"></svg><div class="cap">FILLED iris, &gt; knocked out</div></div>
-    <div class="cell"><svg id="vibeStroke"></svg><div class="cap">STROKE iris + &gt; at the same 17px (my pick: one continuous line language)</div></div>
-  </div>
-
-  <h2>4 · Wink sanity — drag to scrub</h2>
-  <div class="row">
-    <div class="cell"><svg id="scrub"></svg>
-      <input type="range" id="scrubW" min="0" max="1000" value="0" style="width:220px">
-      <div class="cap">the lid closing over the iris</div>
+  <div class="controls">
+    <div class="line">
+      <label>wink</label>
+      <input type="range" id="wink" min="0" max="1000" value="0">
+      <output id="winkV">0.000</output>
+      <button id="wm">−frame</button><button id="wp">+frame</button>
+      <button id="playWink">play wink</button>
     </div>
+    <div class="line">
+      <label>draw-on</label>
+      <input type="range" id="draw" min="0" max="1000" value="1000">
+      <output id="drawV">1.000</output>
+      <button id="dm">−frame</button><button id="dp">+frame</button>
+      <button id="playDraw">play draw-on</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="cell"><svg id="main"></svg><div class="cap">andeye — brand blue, empty</div></div>
+    <div class="cell"><svg id="time"></svg><div class="cap">Time andeye — filled iris, clock</div></div>
+    <div class="cell"><svg id="vibe"></svg><div class="cap">Vibe andeye — filled iris, &gt;</div></div>
   </div>
 </main>
 <script>
@@ -94,9 +98,15 @@
       + ' ' + c[2].x.toFixed(2) + ',' + c[2].y.toFixed(2)
       + ' ' + c[3].x.toFixed(2) + ',' + c[3].y.toFixed(2);
   }
-  function outlinePath(cs) {
-    return 'M' + cs[0][0].x.toFixed(2) + ',' + cs[0][0].y.toFixed(2)
-      + cs.map(seg).join('');
+  // Each cubic renders as its OWN path (like the app's segment renderer):
+  // the eye's right corner is a degenerate cusp (two control points sit on
+  // the endpoint), and a single compound path with round joins grows a spur
+  // there on the first wink frames — per-segment strokes with round caps
+  // meet cleanly instead.
+  function segmentPaths(cs) {
+    return cs.map(function (c) {
+      return 'M' + c[0].x.toFixed(2) + ',' + c[0].y.toFixed(2) + seg(c);
+    });
   }
   // The APERTURE (between the two lids): top lid forward, bottom lid onward —
   // cubics 2 and 3 already run corner→corner→back, forming the closed lens.
@@ -173,14 +183,47 @@
                      'stroke-linejoin': 'round', fill: 'none' }, irisGroup);
       }
     }
-    var outline = el('path', { d: outlinePath(cubics(0)), stroke: colour,
-                               'stroke-width': W, 'stroke-linecap': 'round' }, svg);
+    var outlineGroup = el('g', { stroke: colour, 'stroke-width': W,
+                                 'stroke-linecap': 'round', fill: 'none' }, svg);
+    var outlineSegs = segmentPaths(cubics(0)).map(function (d) {
+      return el('path', { d: d }, outlineGroup);
+    });
 
-    function setWink(w) {
-      var cs = cubics(w);
-      outline.setAttribute('d', outlinePath(cs));
+    // wink 0..1 (eyelid close), draw 0..1 (draw-on reveal by arc length —
+    // segments appear in order, the active one partially, via dash tricks).
+    function setPose(wink, draw) {
+      var cs = cubics(wink);
+      var ds = segmentPaths(cs);
+      for (var i = 0; i < outlineSegs.length; i++) {
+        outlineSegs[i].setAttribute('d', ds[i]);
+        if (draw == null || draw >= 1) {
+          outlineSegs[i].removeAttribute('stroke-dasharray');
+          outlineSegs[i].removeAttribute('stroke-dashoffset');
+          outlineSegs[i].style.visibility = '';
+        }
+      }
+      if (draw != null && draw < 1) {
+        var lens = outlineSegs.map(function (p) { return p.getTotalLength(); });
+        var total = lens.reduce(function (a, b) { return a + b; }, 0);
+        var target = total * Math.max(draw, 0);
+        for (var j = 0; j < outlineSegs.length; j++) {
+          if (target >= lens[j]) {
+            outlineSegs[j].removeAttribute('stroke-dasharray');
+            outlineSegs[j].style.visibility = '';
+            target -= lens[j];
+          } else if (target > 0) {
+            outlineSegs[j].style.visibility = '';
+            outlineSegs[j].setAttribute('stroke-dasharray',
+              target + ' ' + (lens[j] - target + 1));
+            target = 0;
+          } else {
+            outlineSegs[j].style.visibility = 'hidden';
+          }
+        }
+      }
       if (clip) clip.firstChild.setAttribute('d', aperturePath(cs));
     }
+    function setWink(w) { setPose(w, null); }
 
     var reduced = global.matchMedia
       && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -206,25 +249,55 @@
       }
       global.requestAnimationFrame(frame);
     }
-    return { setWink: setWink, iris: g };
+    return { setWink: setWink, setPose: setPose, iris: g };
   }
   global.andeyeEye = andeyeEye;
 })(window);
 
 </script>
 <script>
-  andeyeEye(document.getElementById('main'),   { iris: 'none' });
-  andeyeEye(document.getElementById('mainS'),  { iris: 'none' });
-  andeyeEye(document.getElementById('timeFill'),   { colour: '#f0a13a', iris: 'fill',   glyph: 'clock', background: '#131826' });
-  andeyeEye(document.getElementById('timeStroke'), { colour: '#f0a13a', iris: 'stroke', glyph: 'clock' });
-  andeyeEye(document.getElementById('vibeFill'),   { colour: '#eef1f6', iris: 'fill',   glyph: 'code', background: '#131826' });
-  andeyeEye(document.getElementById('vibeStroke'), { colour: '#eef1f6', iris: 'stroke', glyph: 'code' });
-  var scrub = andeyeEye(document.getElementById('scrub'),
-                        { colour: '#f0a13a', iris: 'fill', glyph: 'clock',
-                          background: '#131826', blink: false });
-  document.getElementById('scrubW').addEventListener('input', function (e) {
-    scrub.setWink(e.target.value / 1000);
-  });
+  var eyes = [
+    andeyeEye(document.getElementById('main'), { iris: 'none', blink: false }),
+    andeyeEye(document.getElementById('time'), { colour: '#f0a13a', iris: 'fill', glyph: 'clock', background: '#131826', blink: false }),
+    andeyeEye(document.getElementById('vibe'), { colour: '#eef1f6', iris: 'fill', glyph: 'code', background: '#131826', blink: false }),
+  ];
+  var winkEl = document.getElementById('wink'), drawEl = document.getElementById('draw');
+  function apply() {
+    var w = winkEl.value / 1000, d = drawEl.value / 1000;
+    document.getElementById('winkV').textContent = w.toFixed(3);
+    document.getElementById('drawV').textContent = d.toFixed(3);
+    eyes.forEach(function (e) { e.setPose(w, d); });
+  }
+  winkEl.addEventListener('input', apply);
+  drawEl.addEventListener('input', apply);
+  function step(el, delta) { el.value = Math.min(1000, Math.max(0, +el.value + delta)); apply(); }
+  document.getElementById('wm').onclick = function () { step(winkEl, -20); };
+  document.getElementById('wp').onclick = function () { step(winkEl, 20); };
+  document.getElementById('dm').onclick = function () { step(drawEl, -20); };
+  document.getElementById('dp').onclick = function () { step(drawEl, 20); };
+  var anim = null;
+  function play(el, from, to, ms) {
+    cancelAnimationFrame(anim);
+    var start = null;
+    function f(ts) {
+      if (!start) start = ts;
+      var t = Math.min((ts - start) / ms, 1);
+      el.value = from + (to - from) * t;
+      apply();
+      if (t < 1) anim = requestAnimationFrame(f);
+    }
+    anim = requestAnimationFrame(f);
+  }
+  document.getElementById('playWink').onclick = function () {
+    winkEl.value = 0; apply();
+    play(winkEl, 0, 1000, 180);
+    setTimeout(function () { play(winkEl, 1000, 0, 220); }, 280);
+  };
+  document.getElementById('playDraw').onclick = function () {
+    drawEl.value = 0; apply();
+    play(drawEl, 0, 1000, 1400);
+  };
+  apply();
 </script>
 </body>
 </html>

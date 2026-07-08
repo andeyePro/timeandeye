@@ -41,9 +41,15 @@
       + ' ' + c[2].x.toFixed(2) + ',' + c[2].y.toFixed(2)
       + ' ' + c[3].x.toFixed(2) + ',' + c[3].y.toFixed(2);
   }
-  function outlinePath(cs) {
-    return 'M' + cs[0][0].x.toFixed(2) + ',' + cs[0][0].y.toFixed(2)
-      + cs.map(seg).join('');
+  // Each cubic renders as its OWN path (like the app's segment renderer):
+  // the eye's right corner is a degenerate cusp (two control points sit on
+  // the endpoint), and a single compound path with round joins grows a spur
+  // there on the first wink frames — per-segment strokes with round caps
+  // meet cleanly instead.
+  function segmentPaths(cs) {
+    return cs.map(function (c) {
+      return 'M' + c[0].x.toFixed(2) + ',' + c[0].y.toFixed(2) + seg(c);
+    });
   }
   // The APERTURE (between the two lids): top lid forward, bottom lid onward —
   // cubics 2 and 3 already run corner→corner→back, forming the closed lens.
@@ -120,14 +126,47 @@
                      'stroke-linejoin': 'round', fill: 'none' }, irisGroup);
       }
     }
-    var outline = el('path', { d: outlinePath(cubics(0)), stroke: colour,
-                               'stroke-width': W, 'stroke-linecap': 'round' }, svg);
+    var outlineGroup = el('g', { stroke: colour, 'stroke-width': W,
+                                 'stroke-linecap': 'round', fill: 'none' }, svg);
+    var outlineSegs = segmentPaths(cubics(0)).map(function (d) {
+      return el('path', { d: d }, outlineGroup);
+    });
 
-    function setWink(w) {
-      var cs = cubics(w);
-      outline.setAttribute('d', outlinePath(cs));
+    // wink 0..1 (eyelid close), draw 0..1 (draw-on reveal by arc length —
+    // segments appear in order, the active one partially, via dash tricks).
+    function setPose(wink, draw) {
+      var cs = cubics(wink);
+      var ds = segmentPaths(cs);
+      for (var i = 0; i < outlineSegs.length; i++) {
+        outlineSegs[i].setAttribute('d', ds[i]);
+        if (draw == null || draw >= 1) {
+          outlineSegs[i].removeAttribute('stroke-dasharray');
+          outlineSegs[i].removeAttribute('stroke-dashoffset');
+          outlineSegs[i].style.visibility = '';
+        }
+      }
+      if (draw != null && draw < 1) {
+        var lens = outlineSegs.map(function (p) { return p.getTotalLength(); });
+        var total = lens.reduce(function (a, b) { return a + b; }, 0);
+        var target = total * Math.max(draw, 0);
+        for (var j = 0; j < outlineSegs.length; j++) {
+          if (target >= lens[j]) {
+            outlineSegs[j].removeAttribute('stroke-dasharray');
+            outlineSegs[j].style.visibility = '';
+            target -= lens[j];
+          } else if (target > 0) {
+            outlineSegs[j].style.visibility = '';
+            outlineSegs[j].setAttribute('stroke-dasharray',
+              target + ' ' + (lens[j] - target + 1));
+            target = 0;
+          } else {
+            outlineSegs[j].style.visibility = 'hidden';
+          }
+        }
+      }
       if (clip) clip.firstChild.setAttribute('d', aperturePath(cs));
     }
+    function setWink(w) { setPose(w, null); }
 
     var reduced = global.matchMedia
       && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -153,7 +192,7 @@
       }
       global.requestAnimationFrame(frame);
     }
-    return { setWink: setWink, iris: g };
+    return { setWink: setWink, setPose: setPose, iris: g };
   }
   global.andeyeEye = andeyeEye;
 })(window);
