@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import andeyeTTCore
 import andeyeTTMac
 
@@ -56,15 +57,16 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(pm.created.first { $0.taskID == "2" }?.duration, 600)
     }
 
-    await c.check("sync ON: a fully-covered session posts NOTHING (skipped, not billed)") {
+    await c.check("sync ON: a fully-covered session stays PENDING — and posts when the coverage lifts (A3)") {
         let store = try makeStore()
         store.clock = makeClock()
         let auto = Session(task: .op(1), start: t(600), end: t(1200), certainty: 0.95)
         try store.save(auto)
         nowMillis += 10
         // A synced-in EDITED slice (highest authority) covers it entirely.
+        let cover = Session(id: UUID(), task: .op(2), start: t(0), end: t(1800), certainty: 1)
         try store.applyRemote(SessionRevision(
-            session: Session(task: .op(2), start: t(0), end: t(1800), certainty: 1),
+            session: cover,
             hlc: HLC(physicalMillis: nowMillis, counter: 0, deviceID: "phone"),
             origin: .edited))
         try expectNil(try store.resolvedContribution(sessionID: auto.id),
@@ -75,10 +77,67 @@ func resolvedPostingChecks(_ c: Checks) async {
         _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
         try expectEq(pm.created.filter { $0.taskID == "1" }.count, 0,
                      "covered session billed nothing")
-        try expectEq(((try? store.postingRecord(session: auto.id, backendID: "pm-a")) ?? nil)?.state,
-                     .skipped, "closed off, never re-attempted")
+        // NOT terminally skipped: a terminal row would strand the hours
+        // forever if the covering slice is later deleted.
+        try expectNil((try? store.postingRecord(session: auto.id, backendID: "pm-a")) ?? nil,
+                      "covered ⇒ pending (no row), releasable")
         try expectEq(pm.created.filter { $0.taskID == "2" }.count, 1,
                      "the covering slice itself billed once")
+
+        // The covering slice is deleted on the other device (tombstone
+        // syncs in): the auto session's contribution returns and it POSTS.
+        nowMillis += 10
+        try store.applyRemote(SessionRevision(
+            session: cover,
+            hlc: HLC(physicalMillis: nowMillis, counter: 0, deviceID: "phone"),
+            origin: .edited, deleted: true))
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4200))
+        try expectEq(pm.created.filter { $0.taskID == "1" }.count, 1,
+                     "coverage lifted ⇒ the stranded time finally bills")
+    }
+
+    await c.check("FAIL-CLOSED eligibility: a row in an UNKNOWN future state blocks re-posting (A2)") {
+        // A newer build (or a synced ledger from one) writes a state this
+        // build doesn't know — say D4's 'diverged'. The row DECODER already
+        // reads unknown states as .posted; the eligibility SQL must fail
+        // closed the same way, or this build re-posts into possibly-locked
+        // books. Write the unknown state with raw SQL (no typed API can).
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("andeyett-unknown-\(UUID().uuidString).sqlite").path
+        let store = try SQLiteJournalStore(path: path)
+        let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        try store.setPostingRecord(PostingRecord(
+            sessionID: s.id, backendID: "pm-a", state: .posted, updatedAt: t(100)))
+        var db: OpaquePointer?
+        defer { sqlite3_close(db) }
+        guard sqlite3_open(path, &db) == SQLITE_OK,
+              sqlite3_exec(db, "UPDATE posting_ledger SET state = 'diverged'",
+                           nil, nil, nil) == SQLITE_OK else {
+            throw CheckFailure(description: "raw state rewrite failed")
+        }
+        try expectEq(try store.sessions(needingPostTo: "pm-a", atOrAbove: 0.8).count, 0,
+                     "unknown state must BLOCK, exactly like the decoder's unknown→posted")
+        try expectEq(((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.state,
+                     .posted, "decoder direction pinned too")
+    }
+
+    await c.check("a list failure HOLDS the claim: inflight stays inflight, posted stays posted (blind spot)") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        // Unresolved intent + unlistable backend: never a blind re-create.
+        try store.setPostingRecord(PostingRecord(
+            sessionID: s.id, backendID: "pm-a", state: .inflight, updatedAt: t(0),
+            sessionStamp: try store.sessionStamp(s.id)))
+        pm.failNextLists = 1
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        try expectEq(((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.state,
+                     .inflight, "unverifiable intent holds")
+        try expectEq(pm.created.count, 0, "no create while the question is open")
     }
 
     await c.check("D4 detection: an edit/trim/delete after posting is counted as divergence") {

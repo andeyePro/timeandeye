@@ -73,11 +73,11 @@ public protocol JournalStore {
     /// what the posting engine should bill for it. nil when the session is
     /// fully covered by higher-priority overlapping time (post nothing).
     func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)?
-    /// Whether the session's RECORD changed after `after` (any re-stamp:
-    /// edit, delete-tombstone, resurrection). The engine uses it to verify
-    /// posted rows only when something actually moved — false on stores
-    /// without revision stamps (single-device: edits clear rows directly).
-    func sessionTouched(_ id: UUID, after: Date) throws -> Bool
+    /// The session REVISION's current HLC stamp ("millis.counter@device"),
+    /// nil when unstamped (sync off / no such row). The engine stores it on
+    /// ledger rows and re-verifies a row only when the stamp CHANGES — a
+    /// pure content comparison immune to cross-device clock skew.
+    func sessionStamp(_ id: UUID) throws -> String?
 
     /// Timeline edits: replace the stored session (matched by id).
     func update(_ session: Session) throws
@@ -118,8 +118,8 @@ public extension JournalStore {
         return (s.start, s.end.timeIntervalSince(s.start))
     }
 
-    /// Default: no revision stamps, nothing to compare — never "touched".
-    func sessionTouched(_ id: UUID, after: Date) throws -> Bool { false }
+    /// Default: no revision stamps — the verify sweep stays inert.
+    func sessionStamp(_ id: UUID) throws -> String? { nil }
 }
 
 public final class InMemoryJournalStore: JournalStore {
@@ -209,10 +209,11 @@ public final class InMemoryJournalStore: JournalStore {
                          atOrAbove threshold: Double) throws -> [Session] {
         sessions.filter { session in
             guard session.task.isRemote, session.certainty >= threshold else { return false }
+            // FAIL-CLOSED: only .failed (and no row at all) is retryable;
+            // every other state — including any future one — blocks.
             switch ledger[ledgerKey(session.id, backendID)]?.state {
-            case .posted, .skipped, .stuck: return false   // terminal/quarantined
-            case .inflight: return false                    // unresolved crash window
-            case .failed, .pending, nil: return true       // retryable / untried
+            case .failed, .pending, nil: return true
+            default: return false
             }
         }
         .sorted { $0.start < $1.start }

@@ -221,11 +221,19 @@ public struct PostingRecord: Equatable, Codable, Sendable {
     /// written before the snapshot existed, and on non-posting states.
     public var postedStart: Date?
     public var postedDuration: TimeInterval?
+    /// The session REVISION's HLC stamp when this row was written/verified —
+    /// "touched since" is `currentStamp != sessionStamp`, a pure content
+    /// comparison. (Comparing a remote HLC's physical time against this
+    /// device's wall clock broke both ways under skew: a behind-clock editor
+    /// made resurrections invisible, an ahead-clock one re-verified every
+    /// pass forever.) nil on pre-stamp rows and sync-off stores.
+    public var sessionStamp: String?
 
     public init(sessionID: UUID, backendID: String, state: PostingState,
                 entryID: RemoteEntryID? = nil, lastError: String? = nil,
                 attempts: Int = 0, updatedAt: Date = Date(),
-                postedStart: Date? = nil, postedDuration: TimeInterval? = nil) {
+                postedStart: Date? = nil, postedDuration: TimeInterval? = nil,
+                sessionStamp: String? = nil) {
         self.sessionID = sessionID
         self.backendID = backendID
         self.state = state
@@ -235,5 +243,6 @@ public struct PostingRecord: Equatable, Codable, Sendable {
         self.updatedAt = updatedAt
         self.postedStart = postedStart
         self.postedDuration = postedDuration
+        self.sessionStamp = sessionStamp
     }
 }

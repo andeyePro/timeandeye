@@ -167,6 +167,9 @@ final class FakeBackend: TaskBackend {
     /// Task ids the backend rejects PERMANENTLY (a deleted task, a frozen
     /// entry) — throws PermanentPostError, never heals.
     var permanentlyRejects: Set<String> = []
+    /// Throw on the next N listTimeEntries calls (heals afterwards) — the
+    /// reconcile/verify hold-the-claim paths.
+    var failNextLists = 0
 
     init(owns: Owns) { self.ownsKind = owns }
 
@@ -213,7 +216,8 @@ final class FakeBackend: TaskBackend {
         held.removeAll { $0.id == id }
     }
     func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {
-        held.filter { $0.start >= from && $0.start <= to }
+        if failNextLists > 0 { failNextLists -= 1; throw Fail() }
+        return held.filter { $0.start >= from && $0.start <= to }
     }
     func addTaskComment(taskID: String, text: String) async throws {}
 }

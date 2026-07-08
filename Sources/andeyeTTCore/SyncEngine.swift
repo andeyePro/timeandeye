@@ -53,38 +53,73 @@ public final class SyncEngine {
     /// same floor posting itself uses; sub-minute wobble never re-bills).
     public static let divergenceTolerance: TimeInterval = 60
 
-    /// F13: a `.posted` row whose session record was TOUCHED after the row
-    /// was written may be a resurrection — device A tombstoned the session
-    /// and deleted the backend entry; a newer edit resurrected it via sync;
-    /// this replica's row still claims `.posted` for an entry that no longer
+    /// Whether the session's record changed since this row last saw it — a
+    /// pure REVISION-STAMP comparison (reviewer A4: comparing a remote HLC's
+    /// physical time against this device's wall clock broke under skew in
+    /// both directions). nil stamps (sync off) never read as touched.
+    private func stampChanged(_ row: PostingRecord) -> Bool {
+        guard let current = ((try? journal.sessionStamp(row.sessionID)) ?? nil) else {
+            return false
+        }
+        return current != row.sessionStamp
+    }
+
+    /// The reconcile/verify matcher: does `candidates` hold the entry this
+    /// row claims? Id match is authoritative when we have one; otherwise the
+    /// FULL signature — task + start (day-granular when hasStart is false) +
+    /// duration (reviewer A6: a duration-only fallback adopted neighbours).
+    private static func holds(_ candidates: [RemoteTimeEntry], entryID: RemoteEntryID?,
+                              taskID: String, start: Date, duration: TimeInterval) -> Bool {
+        if let entryID { return candidates.contains { $0.id == entryID } }
+        return candidates.contains { candidate in
+            guard candidate.taskID == taskID,
+                  abs(candidate.durationSeconds - duration) <= 90 else { return false }
+            return candidate.hasStart
+                ? abs(candidate.start.timeIntervalSince(start)) <= 90
+                : abs(candidate.start.timeIntervalSince(start)) <= 86_400
+        }
+    }
+
+    /// F13: a `.posted` row whose session REVISION changed since the row was
+    /// written may be a resurrection — device A tombstoned the session and
+    /// deleted the backend entry; a newer edit resurrected it via sync; this
+    /// replica's row still claims `.posted` for an entry that no longer
     /// exists (journal says billed, backend holds nothing — the invisible
-    /// inverse of a double-post). Verify ONLY touched rows at the backend:
-    /// present ⇒ re-date the row (nothing re-verifies until touched again);
-    /// missing ⇒ clear the row so THIS pass re-posts it exactly once. A list
-    /// failure leaves the row untouched (claim survives until verifiable).
+    /// inverse of a double-post). Verify ONLY changed rows at the backend:
+    /// present ⇒ re-stamp the row (quiet until it changes again); missing ⇒
+    /// DEMOTE to `.failed` so THIS pass re-posts exactly once. Demote, never
+    /// clear (reviewer A1): a cleared row plus the session's synced
+    /// `pushed=1` mirror lets the every-pass single-slot migration resurrect
+    /// a stale `.posted` row with the DEAD entry id — permanently cancelling
+    /// the re-post; a `.failed` row survives the migration's NOT-EXISTS
+    /// guard. A list failure leaves the row untouched.
     private func verifyTouchedPosted(_ entry: RegisteredBackend, now: Date) async {
         let rows = ((try? journal.postingRecords(state: .posted,
                                                  backendID: entry.id)) ?? [])
         for row in rows {
-            guard ((try? journal.sessionTouched(row.sessionID, after: row.updatedAt)) ?? false),
+            guard stampChanged(row),
+                  let taskID = ((try? journal.session(id: row.sessionID)) ?? nil)?
+                      .task.backendTaskID,
                   let contribution = ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil)
-            else { continue }   // untouched, or retract-case (D4 counts it)
+            else { continue }   // unchanged, or retract-case (D4 counts it)
             let sentStart = row.postedStart ?? contribution.start
             let sentDuration = row.postedDuration ?? contribution.seconds
             do {
                 let candidates = try await entry.backend.listTimeEntries(
                     from: sentStart.addingTimeInterval(-3600),
                     to: sentStart.addingTimeInterval(sentDuration + 3600))
-                let present = row.entryID.map { id in candidates.contains { $0.id == id } }
-                    ?? !candidates.filter { abs($0.durationSeconds - sentDuration) <= 90 }.isEmpty
                 var updated = row
-                if present {
-                    updated.updatedAt = now   // verified; quiet until touched again
+                if Self.holds(candidates, entryID: row.entryID, taskID: taskID,
+                              start: sentStart, duration: sentDuration) {
+                    updated.updatedAt = now
+                    updated.sessionStamp = ((try? journal.sessionStamp(row.sessionID)) ?? nil)
                     try? journal.setPostingRecord(updated)
                 } else {
-                    onDebug("posted entry missing at \(entry.id) for \(row.sessionID) — re-queueing (resurrection)")
-                    try? journal.clearPostingRecord(session: row.sessionID,
-                                                    backendID: entry.id)
+                    onDebug("posted entry missing at \(entry.id) for \(row.sessionID) — demoting for re-post (resurrection)")
+                    updated.state = .failed
+                    updated.lastError = "backend entry vanished (deleted on another device) — re-posting"
+                    updated.updatedAt = now
+                    try? journal.setPostingRecord(updated)
                 }
             } catch {
                 onDebug("posted-verify list failed at \(entry.id): \(error)")
@@ -98,12 +133,21 @@ public final class SyncEngine {
     /// its backend entry stale — count it (and name it via onDebug) so the
     /// drift is VISIBLE instead of silently wrong in the books. Amendment
     /// (update/delete at the backend) is the second half, not yet wired.
+    /// Rows whose postedStart is older than this only diverge via their own
+    /// record changing (claims are time-local; nobody edits last quarter's
+    /// overlaps) — so old rows are scanned only when their stamp changes,
+    /// keeping the every-pass scan bounded instead of growing with all
+    /// posted history forever (reviewer A7).
+    public static let divergenceScanHorizon: TimeInterval = 45 * 86_400
+
     private func detectDivergence(_ entry: RegisteredBackend, now: Date) -> Int {
         let rows = ((try? journal.postingRecords(state: .posted,
                                                  backendID: entry.id)) ?? [])
         var count = 0
         for row in rows {
             guard let sentDuration = row.postedDuration else { continue }   // pre-snapshot row
+            let recent = (row.postedStart ?? .distantPast) > now.addingTimeInterval(-Self.divergenceScanHorizon)
+            guard recent || stampChanged(row) else { continue }
             let sentStart = row.postedStart
             let contribution = ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil)
             let drifted: String?
@@ -186,7 +230,16 @@ public final class SyncEngine {
                     resolved.state = .posted
                     resolved.entryID = match.id
                     resolved.lastError = nil
+                    resolved.sessionStamp = ((try? journal.sessionStamp(row.sessionID)) ?? nil)
                     onDebug("inflight adopt: \(entry.id) already held \(match.id)")
+                    // Legacy pm mirror, same as the normal posted path
+                    // (reviewer A5): without it the adopted session keeps
+                    // pushedToOP=false/opTimeEntryID=nil, so timeline
+                    // edit/delete never PATCHes/DELETEs the entry — a
+                    // permanent orphan nothing detects.
+                    if entry.backendClass == .pm {
+                        try? journal.markPushed(row.sessionID, opTimeEntryID: match.id)
+                    }
                 } else {
                     resolved.state = .failed   // confirmed miss: clean retry
                     resolved.lastError = "in-flight create not found at the backend — retrying"
@@ -274,15 +327,13 @@ public final class SyncEngine {
                     // THEIR backend — skipped silently, never marked.
                     guard entry.backend.owns(session.task) else { continue }
                 case .finance:
-                    // Backfill age gate (F15): after a long-idle reconnect
-                    // (lapsed licence → dead Xero grant → months later), the
-                    // accumulated billable backlog must not flood the books
-                    // in one pass. Older-than-floor sessions stay VISIBLY
-                    // PENDING (no row — deliberate release posts them later),
-                    // never silently skipped-terminal.
-                    if let financePostFloor, session.start < financePostFloor {
-                        continue
-                    }
+                    // Billability FIRST (its else-branch closes off failed
+                    // rows on a flip — reviewer A8: the floor's `continue`
+                    // used to starve that close-out for old rows), THEN the
+                    // backfill age gate (F15): after a long-idle reconnect
+                    // the accumulated backlog stays VISIBLY PENDING (no row —
+                    // deliberate release posts it later), never flooding the
+                    // books in one pass.
                     guard financeEligible(session) else {
                         // A retryable failure whose session is no longer
                         // billable is closed off: the flip stops future
@@ -297,6 +348,9 @@ public final class SyncEngine {
                         }
                         continue
                     }
+                    if let financePostFloor, session.start < financePostFloor {
+                        continue
+                    }
                 default:
                     continue
                 }
@@ -307,22 +361,28 @@ public final class SyncEngine {
                 // (D1): with sync on, higher-priority cross-device slices may
                 // have claimed part (or all) of this span — posting the raw
                 // span would double-bill the claimed minutes. Sync off, this
-                // IS the stored span. A fully-covered session contributes 0
-                // and falls into the sub-minute skip below.
+                // IS the stored span.
                 let contribution = ((try? journal.resolvedContribution(sessionID: session.id))
                     ?? nil) ?? (session.start, 0)
                 let postStart = contribution.0
                 let duration = contribution.1
+                let rawDuration = session.end.timeIntervalSince(session.start)
                 if duration < 60 {
-                    // Too short for a backend entry (OP would round it to
-                    // PT0H0M); close THIS backend's row so it never clogs the
-                    // queue. Mirrored to the legacy flag for pm so the
-                    // journal summary arithmetic is unchanged.
-                    try? journal.setPostingRecord(PostingRecord(
-                        sessionID: session.id, backendID: entry.id,
-                        state: .skipped, updatedAt: now))
-                    if entry.backendClass == .pm {
-                        try? journal.markPushed(session.id, opTimeEntryID: nil)
+                    // Two very different sub-minute cases (reviewer A3):
+                    // - the RAW session is short: genuinely too small for a
+                    //   backend entry, close it off terminally as ever;
+                    // - the raw session is fine but OVERLAP TRIMS shrank it:
+                    //   leave it PENDING (no row) — deleting/trimming the
+                    //   covering slice later restores its contribution and
+                    //   it posts then; a terminal skip would silently strand
+                    //   hours of billable time forever.
+                    if rawDuration < 60 {
+                        try? journal.setPostingRecord(PostingRecord(
+                            sessionID: session.id, backendID: entry.id,
+                            state: .skipped, updatedAt: now))
+                        if entry.backendClass == .pm {
+                            try? journal.markPushed(session.id, opTimeEntryID: nil)
+                        }
                     }
                     continue
                 }
@@ -336,12 +396,14 @@ public final class SyncEngine {
                 // migration guard above).
                 let prior = ((try? journal.postingRecord(
                     session: session.id, backendID: entry.id)) ?? nil)
+                let stamp = ((try? journal.sessionStamp(session.id)) ?? nil)
                 do {
                     try journal.setPostingRecord(PostingRecord(
                         sessionID: session.id, backendID: entry.id,
                         state: .inflight, lastError: prior?.lastError,
                         attempts: prior?.attempts ?? 0, updatedAt: now,
-                        postedStart: postStart, postedDuration: duration))
+                        postedStart: postStart, postedDuration: duration,
+                        sessionStamp: stamp))
                 } catch {
                     report.error = "ledger write failed: \(error)"
                     break sessionLoop
@@ -362,7 +424,8 @@ public final class SyncEngine {
                             sessionID: session.id, backendID: entry.id,
                             state: .posted, entryID: entryID,
                             attempts: prior?.attempts ?? 0, updatedAt: now,
-                            postedStart: postStart, postedDuration: duration))
+                            postedStart: postStart, postedDuration: duration,
+                            sessionStamp: stamp))
                     } catch {
                         onDebug("posted-row write failed for \(session.id); left .inflight for adopt: \(error)")
                         report.error = "ledger write failed: \(error)"

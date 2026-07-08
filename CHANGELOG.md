@@ -2,6 +2,29 @@
 
 ## 2026-07-08
 
+- [x] ** review fixes, batch 2 (Fable reviewer A – tonight's sync
+  code).** (A1) The F13 verify sweep now DEMOTES a vanished entry's row to
+  `.failed` instead of clearing it – a cleared row plus the synced `pushed=1`
+  mirror let the every-pass migration resurrect a stale `.posted` row with the
+  dead entry id, permanently cancelling the re-post. (A2) Ledger eligibility
+  is FAIL-CLOSED in both stores: only `.failed` (or no row) is retryable, so
+  a state written by a newer build blocks re-posting instead of falling
+  through a whitelist to a duplicate; pinned by a raw-SQL unknown-state check.
+  (A3) A session whose contribution is trimmed to zero (or sub-minute) by
+  overlaps now stays PENDING instead of terminally skipped – deleting the
+  covering slice later restores its hours to the queue (pinned). Raw
+  sub-minute sessions still close terminally. (A4) "Touched since" is now a
+  pure REVISION-STAMP comparison (session_stamp on the ledger row) – the
+  wall-clock heuristic broke both ways under cross-device clock skew. (A5)
+  The inflight ADOPT path mirrors markPushed for pm, so adopted entries can
+  be PATCHed/DELETEd by timeline edits. (A6) The verify matcher requires the
+  full task+start+duration signature when no entry id exists (duration-only
+  matched neighbours). (A7) The divergence scan is bounded: recent rows every
+  pass, old rows only when their stamp changes. (A8) Billability flip-close
+  now runs BEFORE the backfill floor so old failed finance rows close on a
+  flip. FakeBackend gained list-failure + held-entry simulation; new checks
+  for hold-the-claim and coverage-lift. Mac-verified: 452 passed, 0 failed.
+
 - [x] ** review fixes, batch 1 (reviewer C – periphery).** Phone:
   todaysTotal now clips at midnight and reads the resolved view; export and
   banked list read the resolved view (C6/C7). TimePeriod: today/thisWeek/last7

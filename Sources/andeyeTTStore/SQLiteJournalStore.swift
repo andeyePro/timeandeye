@@ -107,6 +107,7 @@ public final class SQLiteJournalStore: JournalStore {
         // session. Additive; NULL on pre-existing rows.
         try? exec("ALTER TABLE posting_ledger ADD COLUMN posted_start REAL")
         try? exec("ALTER TABLE posting_ledger ADD COLUMN posted_duration REAL")
+        try? exec("ALTER TABLE posting_ledger ADD COLUMN session_stamp TEXT")
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
@@ -333,11 +334,12 @@ public final class SQLiteJournalStore: JournalStore {
             postedStart: sqlite3_column_type(stmt, 7) == SQLITE_NULL
                 ? nil : Date(timeIntervalSince1970: sqlite3_column_double(stmt, 7)),
             postedDuration: sqlite3_column_type(stmt, 8) == SQLITE_NULL
-                ? nil : sqlite3_column_double(stmt, 8))
+                ? nil : sqlite3_column_double(stmt, 8),
+            sessionStamp: sqlite3_column_text(stmt, 9).map { String(cString: $0) })
     }
 
     private static let postingColumns =
-        "session_id, backend_id, state, entry_id, last_error, attempts, updated, posted_start, posted_duration"
+        "session_id, backend_id, state, entry_id, last_error, attempts, updated, posted_start, posted_duration, session_stamp"
 
     public func postingRecords(session: UUID) throws -> [PostingRecord] {
         var out: [PostingRecord] = []
@@ -378,8 +380,8 @@ public final class SQLiteJournalStore: JournalStore {
             let sql = """
             INSERT OR REPLACE INTO posting_ledger
                 (session_id, backend_id, state, entry_id, last_error, attempts, updated,
-                 posted_start, posted_duration)
-            VALUES (?,?,?,?,?,?,?,?,?)
+                 posted_start, posted_duration, session_stamp)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
@@ -410,6 +412,11 @@ public final class SQLiteJournalStore: JournalStore {
             } else {
                 sqlite3_bind_null(stmt, 9)
             }
+            if let sessionStamp = record.sessionStamp {
+                sqlite3_bind_text(stmt, 10, sessionStamp, -1, Self.transient)
+            } else {
+                sqlite3_bind_null(stmt, 10)
+            }
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
@@ -435,8 +442,12 @@ public final class SQLiteJournalStore: JournalStore {
 
     public func sessions(needingPostTo backendID: String,
                          atOrAbove threshold: Double) throws -> [Session] {
-        // NOT EXISTS on the terminal states only: failed rows retry, and a
-        // row for ANOTHER backend never hides the session from this one —
+        // FAIL-CLOSED eligibility: the ONLY retryable stored state is
+        // 'failed' — any other row (posted/skipped/stuck/inflight AND any
+        // state a NEWER build writes) blocks re-posting, matching the row
+        // decoder's unknown→posted direction. A whitelist here once let a
+        // future state fall through to a duplicate post (Fable reviewer A2).
+        // A row for ANOTHER backend never hides the session from this one —
         // the per-backend key is what lets one session be posted to OP and
         // pending to a finance backend at the same time. The legacy `pushed`
         // column is deliberately ignored here (migrated rows carry ledger
@@ -447,7 +458,7 @@ public final class SQLiteJournalStore: JournalStore {
             WHERE s.is_op = 1 AND s.deleted = 0 AND s.certainty >= ?
               AND NOT EXISTS (SELECT 1 FROM posting_ledger l
                               WHERE l.session_id = s.id AND l.backend_id = ?
-                                AND l.state IN ('posted','skipped','stuck','inflight'))
+                                AND l.state != 'failed')
             ORDER BY s.start
             """,
                   bind: {
@@ -552,6 +563,10 @@ public final class SQLiteJournalStore: JournalStore {
     /// revisions, plus any UNSTAMPED in-window rows verbatim (excluded rows
     /// like the live checkpoint are unstamped; they must keep appearing to
     /// the callers that filter them). Sync OFF: identical to the raw window.
+    /// NOTE: fragment IDS are window-dependent (a claimant outside [from,to)
+    /// isn't loaded, so a boundary-crossing parent may split differently in
+    /// a different window) — in-window SECONDS are exact; never key anything
+    /// on fragment ids from a windowed query (the ledger folds to parents).
     public func resolvedSessions(from: Date, to: Date) throws -> [Session] {
         guard clock != nil else { return try sessions(from: from, to: to) }
         let resolved = SessionMerge.resolveOverlaps(try revisions(from: from, to: to))
@@ -568,12 +583,11 @@ public final class SQLiteJournalStore: JournalStore {
                                            : $0.id.uuidString < $1.id.uuidString }
     }
 
-    /// A stamped record whose HLC physical time is after `after` — an edit,
-    /// tombstone, or resurrection landed since then (locally or via sync).
-    /// Unstamped rows (sync off / excluded) are never "touched".
-    public func sessionTouched(_ id: UUID, after: Date) throws -> Bool {
-        guard let row = try revisionRow(id: id), !row.hlc.deviceID.isEmpty else { return false }
-        return Double(row.hlc.physicalMillis) / 1000 > after.timeIntervalSince1970
+    /// The record's current revision stamp; nil while unstamped (sync off /
+    /// excluded rows) so the verify sweep stays inert exactly as before sync.
+    public func sessionStamp(_ id: UUID) throws -> String? {
+        guard let row = try revisionRow(id: id), !row.hlc.deviceID.isEmpty else { return nil }
+        return row.hlc.description
     }
 
     /// Sync ON: this session's surviving (start, seconds) after overlap
