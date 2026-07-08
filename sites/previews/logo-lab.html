@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>andeye logo lab v6 — single loop, no tail</title>
+<title>andeye logo lab v7 — the &amp; never moves</title>
 <style>
   body { margin: 0; background: #0c0f16; color: #eef1f6;
          font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
@@ -28,8 +28,8 @@
 </head>
 <body>
 <main>
-  <h1>andeye logo lab v6</h1>
-  <p>Single loop (your 17:31 note): as the eye closes, the bottom lid's end AND the flourish's start both travel from the tail into the corner (the computed crossing of the two &amp; strokes, 121.1/138.1) — so a winking eye is one loop with NO tail left behind, and the tail exists only where the draw-on starts. Scrub wink to 1.000 to check the corner; the lid raise / smoothing sliders still apply; quote me the two numbers when they look right.</p>
+  <h1>andeye logo lab v7</h1>
+  <p>The &amp; never moves (your 19:53 note): the tail now retracts ALONG its own curve — a trim of the stroke's leading arc, not an endpoint drag — so the &amp;'s top loop keeps its exact shape through the whole wink, while the tail still disappears into the corner and the wink stays a single loop. Scrub wink slowly and watch the top loop hold still; sliders as before; quote me the two numbers when they look right.</p>
 
   <div class="controls">
     <div class="line">
@@ -98,12 +98,18 @@
     [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
   ];
   var W = 17;   // the brand stroke width
-  // The eye's true LEFT CORNER: where the two strokes of the & cross
-  // (computed numerically from the brand cubics). Both lids hinge HERE
-  // (Martin, 8 Jul 17:31): as the eye closes, the bottom lid's end AND the
-  // flourish's start travel tail→corner together — the winking mark is a
-  // single loop, no tail left behind.
-  var CROSS = P(121.11, 138.06);
+  // The eye's true LEFT CORNER: where the two strokes of the & cross — the
+  // point ON curve 0 at u=0.03565. The tail retracts ALONG ITS OWN CURVE (a
+  // trim, never an endpoint drag — 19:53: the drag swelled the &'s top
+  // loop); the winking mark is a single loop, no tail left behind.
+  var CROSS = P(121.243, 138.111);
+  var TAIL_CROSS_U = 0.03565;
+  function trailing(c, u) {
+    function m(a, b) { return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }; }
+    var q0 = m(c[0], c[1]), q1 = m(c[1], c[2]), q2 = m(c[2], c[3]);
+    var r0 = m(q0, q1), r1 = m(q1, q2);
+    return [m(r0, r1), r1, q2, c[3]];
+  }
   // Closed-pose tuning: `lift` raises the closed LOWER lid a fraction,
   // `smooth` flattens the closed TOP lid near the left corner. 0/0 is the
   // app's original pose (with the new corner hinge).
@@ -119,7 +125,7 @@
   function cubics(wink) {
     var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
-    c[0] = [lerp(c[0][0], CROSS, wink), c[0][1], c[0][2], c[0][3]];   // tail retracts
+    c[0] = trailing(c[0], TAIL_CROSS_U * wink);   // tail retracts along itself
     c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
     c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink),
             lerp(c[3][3], CROSS, wink)];
@@ -187,6 +193,9 @@
       clip = el('clipPath', { id: uid }, el('defs', {}, svg));
       var clipShape = el('path', { d: aperturePath(cubics(0)) }, clip);
       irisGroup = el('g', { 'clip-path': 'url(#' + uid + ')' }, svg);
+      // The iris appears AFTER the mark has drawn on (17:48): hidden while
+      // a draw-on is in flight, fading in when the stroke completes.
+      irisGroup.style.transition = 'opacity 0.35s ease';
       if (iris === 'fill') {
         el('circle', { cx: g.cx, cy: g.cy, r: g.r, fill: colour }, irisGroup);
       } else {
@@ -223,7 +232,9 @@
 
     // wink 0..1 (eyelid close), draw 0..1 (draw-on reveal by arc length —
     // segments appear in order, the active one partially, via dash tricks).
+    // The iris rides the draw: invisible until the stroke completes.
     function setPose(wink, draw) {
+      if (irisGroup) irisGroup.style.opacity = (draw != null && draw < 1) ? '0' : '1';
       var cs = cubics(wink);
       var ds = segmentPaths(cs);
       for (var i = 0; i < outlineSegs.length; i++) {

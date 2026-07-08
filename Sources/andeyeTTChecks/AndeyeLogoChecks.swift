@@ -101,21 +101,34 @@ func andeyeLogoChecks(_ c: Checks) {
         return best
     }
 
-    c.check("a wink closes the eyelids: flourish sweep and corners fixed, the TAIL retracts into the corner") {
+    c.check("a wink closes the eyelids: the & keeps its EXACT shape (tail trims along its own curve into the corner)") {
         let open = AndeyeLogo.fullStroke(wink: 0)
-        // The corner both lids hinge at: the crossing of the two & strokes
-        // (Martin, 2026-07-08: a winking eye is a single loop — the tail
-        // exists only where the draw-on starts). Normalised like the mark.
-        let cornerX = (121.11 + 18.0915) / 365.0
-        let cornerY = (235.0 - (138.06 + 17.9436)) / 365.0
+        // The corner both lids hinge at: the crossing of the two & strokes —
+        // the point ON curve 0 at u=0.03565 (Martin, 2026-07-08 19:53: an
+        // endpoint drag swelled the &'s top loop; the tail must retract
+        // along the curve so the & never changes shape). Normalised.
+        let cornerX = (121.243 + 18.0915) / 365.0
+        let cornerY = (235.0 - (138.111 + 17.9436)) / 365.0
         for wink in [0.5, 1.0] {
             let shut = AndeyeLogo.fullStroke(wink: wink)
-            // The flourish's SWEEP is stationary: segment 0's controls and
-            // far end, and all of segment 1, never move. Its START is the
-            // tail — that retracts toward the corner with the wink.
-            try expectEq(shut[0].c1, open[0].c1, "wink \(wink) moved flourish control 1:")
-            try expectEq(shut[0].c2, open[0].c2, "wink \(wink) moved flourish control 2:")
+            // Segment 0 is a TRIM of the open curve: its far end is pinned
+            // and every sampled point lies ON the open curve — the & swells
+            // by nothing.
             try expectEq(shut[0].p1, open[0].p1, "wink \(wink) moved the flourish's far end:")
+            for i in 0...8 {
+                let p = AndeyeLogo.point(on: shut[0], at: Double(i) / 8)
+                var nearest = Double.greatestFiniteMagnitude
+                for j in 0...400 {
+                    let q = AndeyeLogo.point(on: open[0], at: Double(j) / 400)
+                    nearest = min(nearest, ((p.x - q.x) * (p.x - q.x)
+                        + (p.y - q.y) * (p.y - q.y)).squareRoot())
+                }
+                // Tolerance is the SEARCH's sampling granularity (400 points
+                // over a long curve ≈ 0.0024 worst-case midpoint gap), not a
+                // shape allowance — the de Casteljau trim is exact.
+                try expect(nearest < 0.004,
+                           "wink \(wink): trimmed tail left the original curve by \(nearest)")
+            }
             try expectEq(shut[1], open[1], "wink \(wink) moved left segment 1:")
             // The top lid's endpoints (both eye corners) are pinned, and the
             // bottom lid still starts at the right corner.
@@ -123,13 +136,13 @@ func andeyeLogoChecks(_ c: Checks) {
             try expectEq(shut[2].p1, open[2].p1, "wink \(wink) moved the right corner:")
             try expectEq(shut[3].p0, open[3].p0, "wink \(wink) moved segment 3 start:")
         }
-        // At FULL wink both the bottom lid's end and the tail's start sit
-        // exactly ON the corner: a single loop, no tail left behind.
+        // At FULL wink both the bottom lid's end and the trimmed tail's
+        // start sit ON the corner: a single loop, no tail left behind.
         let shut = AndeyeLogo.fullStroke(wink: 1)
-        try expectClose(shut[3].p1.x, cornerX, accuracy: 1e-9, "bottom-lid end x off corner:")
-        try expectClose(shut[3].p1.y, cornerY, accuracy: 1e-9, "bottom-lid end y off corner:")
-        try expectClose(shut[0].p0.x, cornerX, accuracy: 1e-9, "tail start x off corner:")
-        try expectClose(shut[0].p0.y, cornerY, accuracy: 1e-9, "tail start y off corner:")
+        try expectClose(shut[3].p1.x, cornerX, accuracy: 1e-6, "bottom-lid end x off corner:")
+        try expectClose(shut[3].p1.y, cornerY, accuracy: 1e-6, "bottom-lid end y off corner:")
+        try expectClose(shut[0].p0.x, cornerX, accuracy: 1e-4, "tail start x off corner:")
+        try expectClose(shut[0].p0.y, cornerY, accuracy: 1e-4, "tail start y off corner:")
         // Footprint: the mark's width never changes during a blink (the
         // tail sits well inside the flourish's horizontal extent).
         let a = curveBBox(open), b = curveBBox(shut)

@@ -44,7 +44,10 @@ public enum AndeyeLogoImage {
                              height: CGFloat = 18) -> NSImage {
         let segs = AndeyeLogo.stroke(t: t, wink: wink)
         let logoWidth = (height / AndeyeLogo.aspect).rounded()
-        let gap: CGFloat = 4
+        // Tightened 4 → 2 (Martin, 2026-07-08: "closer to the text") — the
+        // mark's right side is an eye outline with visual whitespace of its
+        // own, so a slim gap reads right.
+        let gap: CGFloat = 2
         // Defensive max: the reservation comes from the same font, so the
         // live text can never exceed it — but if it ever did, growing beats
         // clipping (and the growth would be a bug to chase, not a crop).

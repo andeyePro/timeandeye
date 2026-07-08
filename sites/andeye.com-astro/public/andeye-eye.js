@@ -26,14 +26,22 @@
     [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
   ];
   var W = 17;   // the brand stroke width
-  // The eye's true LEFT CORNER: where the two strokes of the & cross
-  // (computed numerically from the brand cubics — curve 0 at u≈0.036 meets
-  // curve 1 at u≈0.996, within 0.3px). Both lids hinge HERE (Martin, 8 Jul
-  // 17:31): as the eye closes, the bottom lid's end AND the flourish's
-  // start travel tail→corner together, so the winking mark is a single
-  // loop — no tail left behind. The tail exists only as the draw-on's
-  // starting point (the pen starts there to show it's an ampersand).
-  var CROSS = P(121.11, 138.06);
+  // The eye's true LEFT CORNER: where the two strokes of the & cross — the
+  // point ON curve 0 at u=0.03565 (numerically, curve 1 meets it at v≈0.996
+  // within 0.01px). Both lids hinge HERE, and the tail retracts ALONG ITS
+  // OWN CURVE (a de Casteljau trim of curve 0's leading arc, never an
+  // endpoint drag — Martin, 8 Jul 19:53: dragging the endpoint swelled the
+  // &'s top loop). The winking mark is a single loop, no tail left behind;
+  // the tail exists only as the draw-on's starting point.
+  var CROSS = P(121.243, 138.111);
+  var TAIL_CROSS_U = 0.03565;
+  // The trailing [u, 1] part of a cubic — the same curve minus its lead-in.
+  function trailing(c, u) {
+    function m(a, b) { return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }; }
+    var q0 = m(c[0], c[1]), q1 = m(c[1], c[2]), q2 = m(c[2], c[3]);
+    var r0 = m(q0, q1), r1 = m(q1, q2);
+    return [m(r0, r1), r1, q2, c[3]];
+  }
   // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
   // fraction (a real wink lifts the bottom lid, not just drops the top), and
   // `smooth` flattens the closed TOP lid near the left corner, softening the
@@ -52,7 +60,7 @@
   function cubics(wink) {
     var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
-    c[0] = [lerp(c[0][0], CROSS, wink), c[0][1], c[0][2], c[0][3]];   // tail retracts
+    c[0] = trailing(c[0], TAIL_CROSS_U * wink);   // tail retracts along itself
     c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
     c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink),
             lerp(c[3][3], CROSS, wink)];

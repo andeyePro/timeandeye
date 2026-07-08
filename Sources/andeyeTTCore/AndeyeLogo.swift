@@ -60,22 +60,39 @@ public enum AndeyeLogo {
     /// Closed-eye pose (SVG space). The two lid segments' control points
     /// move, and — Martin, 2026-07-08 — the mark's TAIL retracts: the eye's
     /// true left corner is where the two & strokes CROSS (computed
-    /// numerically: curve 0 at u≈0.036 meets curve 1 at u≈0.996, within
-    /// 0.3px), and BOTH the bottom lid's end and the flourish's start
-    /// travel from the tail point (145,157) to that corner as the eye
-    /// closes. Apart from the draw-on (which starts at the tail to show
-    /// it's an ampersand), a winking eye is a single loop — both lids hinge
-    /// at the corners, no tail left behind. The top-lid values are a
+    /// numerically: curve 0 at u=0.03565 meets curve 1 at v≈0.996, within
+    /// 0.01px). The tail retracts ALONG ITS OWN CURVE — a de Casteljau trim
+    /// of curve 0's leading arc, never an endpoint drag, so the & keeps its
+    /// exact shape through the wink (his 19:53 note: dragging the endpoint
+    /// swelled the &'s top loop) — while the bottom lid's end travels to
+    /// the same corner. Apart from the draw-on (which starts at the tail to
+    /// show it's an ampersand), a winking eye is a single loop — both lids
+    /// hinge at the corners, no tail left behind. The top-lid values are a
     /// least-squares fit of its cubic (endpoints pinned) onto the reversed
     /// closed bottom lid, so at wink 1 the lids lie along one gentle ‿ arc.
     static let topLidClosed = (c1: Point(230.81, 197.41), c2: Point(311.59, 140.29))
     static let bottomLidClosed = (c1: Point(311, 141), c2: Point(232, 196))
-    /// Where the two strokes of the & cross — the eye's left corner.
-    static let leftCorner = Point(121.11, 138.06)
+    /// Where the two strokes of the & cross — the eye's left corner: the
+    /// point ON curve 0 at `tailCrossU`.
+    static let leftCorner = Point(121.243, 138.111)
+    /// Curve 0's parameter at the crossing; the wink trims [0, wink·this].
+    static let tailCrossU = 0.03565
+
+    /// The trailing [u, 1] part of a cubic (de Casteljau) — the same curve,
+    /// minus its leading arc.
+    static func trailing(_ c: (Point, Point, Point, Point), from u: Double)
+        -> (Point, Point, Point, Point) {
+        func lerp(_ a: Point, _ b: Point) -> Point {
+            Point(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u)
+        }
+        let q0 = lerp(c.0, c.1), q1 = lerp(c.1, c.2), q2 = lerp(c.2, c.3)
+        let r0 = lerp(q0, q1), r1 = lerp(q1, q2)
+        return (lerp(r0, r1), r1, q2, c.3)
+    }
 
     /// The complete mark at blink amount `wink` (0 open … 1 shut): an eyelid
     /// close, not a squash. The lid control points lerp toward the closed
-    /// pose above and the tail retracts into the left corner; the flourish's
+    /// pose above and the tail trims into the left corner; the flourish's
     /// sweep and the mark's footprint hold still through a blink.
     public static func fullStroke(wink: Double) -> [Cubic] {
         let w = min(max(wink, 0), 1)
@@ -83,7 +100,7 @@ public enum AndeyeLogo {
             Point(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w)
         }
         var svg = svgCubics
-        svg[0].0 = lerp(svg[0].0, leftCorner)          // tail start retracts
+        svg[0] = trailing(svg[0], from: tailCrossU * w)   // tail retracts along itself
         svg[2].1 = lerp(svg[2].1, topLidClosed.c1)
         svg[2].2 = lerp(svg[2].2, topLidClosed.c2)
         svg[3].1 = lerp(svg[3].1, bottomLidClosed.c1)
