@@ -142,6 +142,16 @@ public final class AppController: ObservableObject {
     /// and RootScenes' ZStack. Empty while stopped: "–" never changes width, so
     /// there's nothing to reserve against.
     @Published public private(set) var menuSizingTemplates: [String] = []
+    /// AppKit-measured reserved width for the menu-bar text (points, 0 = none):
+    /// the widest of the sizing templates AND the current text, measured with
+    /// the same monospaced-digit system font SwiftUI's .monospacedDigit()
+    /// resolves to. Martin observed (2026-07-08) the icon still shifts exactly
+    /// when the time text changes width — the hidden-template ZStack was not
+    /// holding the MenuBarExtra label's width — so RootScenes now applies this
+    /// as an explicit minWidth: measured reservation the label can't undercut,
+    /// while content sizing remains the fallback if measurement ever runs low
+    /// (minWidth can't clip, unlike a fixed frame).
+    @Published public private(set) var menuReservedWidth: CGFloat = 0
     /// Elapsed time only (no task name) for the popover, which shows the task as
     /// its headline — see refreshTitle.
     @Published public private(set) var elapsedText = "–"
@@ -894,6 +904,18 @@ public final class AppController: ObservableObject {
         if force || newSizingTemplates != menuSizingTemplates {
             menuSizingTemplates = newSizingTemplates
         }
+        // Measure the reservation from the SAME candidate set the ZStack
+        // overlays, plus the live text (belt-and-braces: the live text should
+        // never exceed its bracket's templates, but if it ever does the
+        // reservation grows instead of clipping). NSFont.systemFontSize is the
+        // 13pt body size MenuBarExtra labels render at; monospacedDigit maps
+        // to monospacedDigitSystemFont.
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize,
+                                                    weight: .regular)
+        let newWidth = (newSizingTemplates + [newText])
+            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+            .max().map { ($0 + 1).rounded(.up) } ?? 0
+        if force || newWidth != menuReservedWidth { menuReservedWidth = newWidth }
         if force || !newColour.isEqual(menuColour) {
             menuColour = newColour
             renderLogo()   // the mark carries the certainty tint

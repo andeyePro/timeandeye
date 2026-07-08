@@ -34,6 +34,16 @@ public enum AndeyeScenes {
                     Text(controller.menuText)
                         .monospacedDigit()
                 }
+                // The hidden templates alone did NOT hold the MenuBarExtra
+                // label's width (Martin, 2026-07-08: the icon shifts exactly
+                // when the time text changes width), so the controller
+                // measures the widest candidate with AppKit and the label
+                // reserves it explicitly. minWidth, not a fixed frame: if the
+                // measurement ever runs a hair low the content still wins and
+                // nothing clips — the reservation only stops shrinking.
+                .frame(minWidth: controller.menuReservedWidth > 0
+                                 ? controller.menuReservedWidth : nil,
+                       alignment: .leading)
             }
             .onAppear {
                 NSApp.setActivationPolicy(.accessory)

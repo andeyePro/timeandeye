@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>andeye logo lab v4 — closed-pose tuning</title>
+<title>andeye logo lab v5 — corner hinge</title>
 <style>
   body { margin: 0; background: #0c0f16; color: #eef1f6;
          font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
@@ -28,8 +28,8 @@
 </head>
 <body>
 <main>
-  <h1>andeye logo lab v4</h1>
-  <p>Filled iris throughout (your verdict). Every mark below is driven by ONE set of controls. NEW: two tuning sliders for your 14:54 notes — <b>lid raise</b> lifts the closed lower eyelid a fraction more, <b>smoothing</b> softens the bump where the closed lids meet the flourish. Both start at my suggested values; 0/0 is the original pose. Scrub wink to 1.000, dial them in, and tell me the two numbers.</p>
+  <h1>andeye logo lab v5</h1>
+  <p>Corner hinge (your 15:20 note): the bottom eyelid now hinges from the eye's CORNER — the point where the two strokes of the &amp; cross (computed from the brand curves: 121.1, 138.1) — not from the tail. As the eye closes, the lid's left end travels tail→corner, so both lids shut corner-to-corner and the tail below stays put. The lid raise / smoothing sliders from v4 still apply on top; scrub wink to 1.000, dial, quote me the numbers.</p>
 
   <div class="controls">
     <div class="line">
@@ -98,16 +98,20 @@
     [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
   ];
   var W = 17;   // the brand stroke width
-  // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
-  // fraction (a real wink lifts the bottom lid, not just drops the top), and
-  // `smooth` flattens the closed TOP lid near the left corner, softening the
-  // bump where the closed lids meet the flourish. 0/0 reproduces the app's
-  // original fullStroke pose.
+  // The eye's true LEFT CORNER: where the two strokes of the & cross
+  // (computed numerically from the brand cubics). The winking bottom lid
+  // hinges from HERE, not from the tail of the & (Martin, 8 Jul 15:20): its
+  // left endpoint travels tail→corner as the eye closes, so both lids shut
+  // corner-to-corner like a real eye while the tail below stays put.
+  var CROSS = P(121.11, 138.06);
+  // Closed-pose tuning: `lift` raises the closed LOWER lid a fraction,
+  // `smooth` flattens the closed TOP lid near the left corner. 0/0 is the
+  // app's original pose (with the new corner hinge).
   var TUNE = { lift: 0, smooth: 0 };
   function closedPose() {
     return {
       top: { c1: P(171.03, 187.18 - 22 * TUNE.smooth), c2: P(258.9, 178.05 - 6 * TUNE.smooth) },
-      bot: { c1: P(311, 141 - 6 * TUNE.lift), c2: P(232, 196 - 26 * TUNE.lift) },
+      bot: { c1: P(311, 141 - 6 * TUNE.lift), c2: P(220, 190 - 26 * TUNE.lift) },
     };
   }
 
@@ -116,7 +120,8 @@
     var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
     c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
-    c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink), c[3][3]];
+    c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink),
+            lerp(c[3][3], CROSS, wink)];
     return c;
   }
   function seg(c) {

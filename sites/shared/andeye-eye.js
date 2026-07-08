@@ -26,6 +26,13 @@
     [P(311, 137), P(311, 137), P(232, 221), P(145, 157)],
   ];
   var W = 17;   // the brand stroke width
+  // The eye's true LEFT CORNER: where the two strokes of the & cross
+  // (computed numerically from the brand cubics — curve 0 at u≈0.036 meets
+  // curve 1 at u≈0.996, within 0.3px). The winking bottom lid hinges from
+  // HERE, not from the tail of the & (Martin, 8 Jul 15:20): its left
+  // endpoint travels tail→corner as the eye closes, so both lids shut
+  // corner-to-corner like a real eye while the tail below stays put.
+  var CROSS = P(121.11, 138.06);
   // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
   // fraction (a real wink lifts the bottom lid, not just drops the top), and
   // `smooth` flattens the closed TOP lid near the left corner, softening the
@@ -36,7 +43,7 @@
   function closedPose() {
     return {
       top: { c1: P(171.03, 187.18 - 22 * TUNE.smooth), c2: P(258.9, 178.05 - 6 * TUNE.smooth) },
-      bot: { c1: P(311, 141 - 6 * TUNE.lift), c2: P(232, 196 - 26 * TUNE.lift) },
+      bot: { c1: P(311, 141 - 6 * TUNE.lift), c2: P(220, 190 - 26 * TUNE.lift) },
     };
   }
 
@@ -45,7 +52,8 @@
     var closed = closedPose();
     var c = OPEN.map(function (seg) { return seg.slice(); });
     c[2] = [c[2][0], lerp(c[2][1], closed.top.c1, wink), lerp(c[2][2], closed.top.c2, wink), c[2][3]];
-    c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink), c[3][3]];
+    c[3] = [c[3][0], lerp(c[3][1], closed.bot.c1, wink), lerp(c[3][2], closed.bot.c2, wink),
+            lerp(c[3][3], CROSS, wink)];
     return c;
   }
   function seg(c) {
