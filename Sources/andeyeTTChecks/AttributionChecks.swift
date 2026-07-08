@@ -45,6 +45,56 @@ func attributorChecks(_ c: Checks) {
         try expectEq(pending.best?.target, .task(.remote("g-1")))
     }
 
+    c.check("empty task list never auto-stops: dnt gets no walkover softmax (B6)") {
+        let a = Attributor(instanceHost: host)
+        var learning = LearningStore()
+        learning.learn(ghostty, target: .doNotTrack, weight: 5)
+        a.replaceLearning(learning)
+        // A transiently empty cache (startup, backend refresh): even a
+        // signal LEARNED as non-work must not clear the 0.6 bar with no
+        // real candidates to beat.
+        let result = a.attribute(ghostty, tasks: [], now: now)
+        try expectEq(result.best?.target, .doNotTrack)
+        try expect(result.certainty < 0.6,
+                   "no candidates ⇒ no confidence (got \(result.certainty))")
+    }
+
+    c.check("a pending prime EXPIRES: a glance can't outrank a confirmed prime forever (B8)") {
+        let a = Attributor(instanceHost: host)
+        a.confirm(ghostty, task: .op(1))                    // confirmed 0.95 for op(1)
+        _ = a.attribute(opPage(2), tasks: tasks, now: now)  // glance at task 2's page…
+        a.noteDwell(ghostty, at: now)                       // …then dwell back on the surface
+        let fresh = a.attribute(ghostty, tasks: tasks, now: now.addingTimeInterval(60))
+        try expectEq(fresh.best?.target, .task(.op(2)), "fresh hypothesis leads at 0.7")
+        let later = a.attribute(ghostty, tasks: tasks, now: now.addingTimeInterval(1_000))
+        try expectEq(later.best?.target, .task(.op(1)),
+                     "past the TTL the CONFIRMED prime rules again")
+        try expectClose(later.certainty, 0.95)
+    }
+
+    c.check("a correction SUBTRACTS from the displaced learned belief (B9)") {
+        let a = Attributor(instanceHost: host)
+        var learning = LearningStore()
+        for _ in 0..<5 { learning.learn(ghostty, target: .task(.op(2)), weight: 2) }
+        a.replaceLearning(learning)
+        let before = a.attribute(ghostty, tasks: tasks, now: now)
+        try expectEq(before.best?.target, .task(.op(2)), "the learned belief leads")
+        // The user corrects to op(1): the op(2) association must lose count
+        // weight (not just be outscored on this exact surface) so SIBLING
+        // surfaces sharing features stop inheriting the mistake. One
+        // correction doesn't have to FLIP five confirmations — it must move
+        // the needle both ways.
+        let beforeScores = a.learning.scores(for: ghostty,
+                                             among: [.task(.op(1)), .task(.op(2))])
+        a.confirm(ghostty, task: .op(1), tasks: tasks, now: now)
+        let after = a.learning.scores(for: ghostty,
+                                      among: [.task(.op(1)), .task(.op(2))])
+        try expect((after[.task(.op(2))] ?? 0) < (beforeScores[.task(.op(2))] ?? 1),
+                   "the displaced belief lost weight")
+        try expect((after[.task(.op(1))] ?? 0) > (beforeScores[.task(.op(1))] ?? 0),
+                   "the corrected-to task gained weight")
+    }
+
     c.check("priming flow: open -> dwell -> confirm") {
         let a = Attributor(instanceHost: host)
         _ = a.attribute(opPage(1), tasks: tasks, now: now)

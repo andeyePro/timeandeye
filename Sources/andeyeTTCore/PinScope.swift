@@ -61,14 +61,21 @@ public struct PinScope: Hashable, Codable, Sendable {
     public func matches(_ signal: ActivitySignal) -> Bool {
         guard let id = Self.identity(of: signal), id.kind == kind,
               let root = id.segments.first, let pinnedRoot = prefix.first else { return false }
+        // Case-insensitive segment comparison (reviewer B14): every PinOp is
+        // case-insensitive, but scopes compared raw — an app retitling
+        // "Andeye" → "andeye" silently unpinned while the expression path
+        // still matched.
+        func eq(_ a: String, _ b: String) -> Bool {
+            a.compare(b, options: .caseInsensitive) == .orderedSame
+        }
         switch kind {
         case .url:
             guard id.segments.count >= prefix.count else { return false }
-            return Array(id.segments.prefix(prefix.count)) == prefix
+            return zip(id.segments.prefix(prefix.count), prefix).allSatisfy(eq)
         case .app:
-            guard root == pinnedRoot else { return false }
+            guard eq(root, pinnedRoot) else { return false }
             let titleSegments = id.segments.dropFirst()
-            return prefix.dropFirst().allSatisfy { titleSegments.contains($0) }
+            return prefix.dropFirst().allSatisfy { p in titleSegments.contains { eq($0, p) } }
         }
     }
 

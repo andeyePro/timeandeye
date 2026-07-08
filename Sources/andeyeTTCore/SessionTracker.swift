@@ -365,7 +365,7 @@ public final class SessionTracker {
         handleInput(now)   // a focus change counts as input; also runs the idle check
         if let prev = currentSignal, let start = currentStart {
             if now.timeIntervalSince(start) >= config.primeDwellSeconds {
-                attributor.noteDwell(prev)
+                attributor.noteDwell(prev, at: now)
             }
             endCurrentSpan(at: now)
         }
@@ -513,18 +513,39 @@ public final class SessionTracker {
     /// doNotTrack stop): flush the finished task, then flip state.
     private func commitSwitch(to target: Target, score: Double, at now: Date) {
         let current: Target? = { if case .tracking(let t, _) = state { return t }; return nil }()
+        let graceStart = pendingSwitch?.since
         pendingSwitch = nil
         if target == .doNotTrack {
+            // NOTHING in the non-work grace window may bill to the work task
+            // (reviewer B4: changing Steam windows during the pend closed a
+            // work-tagged span mid-grace, so up to switchGraceSeconds of games
+            // billed to a client per occurrence). Close the work story at the
+            // PEND moment and drop/clip the grace-window spans.
+            let boundary = graceStart ?? now
+            let liveSignal = currentSignal
+            if let start = currentStart, start >= boundary {
+                currentSignal = nil
+                currentStart = nil
+            } else if currentSignal != nil {
+                endCurrentSpan(at: boundary)
+            }
+            spans.removeAll { $0.start >= boundary }
+            for i in spans.indices where spans[i].end > boundary {
+                spans[i].end = boundary
+            }
             if config.nonWorkTracksLocally, let leisure = config.leisureTask {
                 if current != .task(leisure) {
-                    flushSessions(asOf: now)
+                    flushSessions(asOf: boundary)
                     state = .tracking(.task(leisure), certainty: score)
+                    // Leisure time began at the pend, and the sensor won't
+                    // re-emit an unchanged surface: resume the span from the
+                    // boundary under the NEW (leisure) state.
+                    currentSignal = liveSignal
+                    currentStart = boundary
                     onPrompt(.taskChanged(to: .task(leisure)))
                 }
             } else {
-                currentSignal = nil
-                currentStart = nil
-                stop(at: now, manual: false)   // auto-stop: work surfaces may resume
+                stop(at: boundary, manual: false)   // auto-stop: work surfaces may resume
             }
             return
         }
@@ -690,7 +711,11 @@ public final class SessionTracker {
     private func commentText(for run: (target: Target, start: Date, end: Date),
                              in spans: [FocusSpan]) -> String? {
         var durations: [String: TimeInterval] = [:]
-        for s in spans where s.end > run.start && s.start < run.end {
+        // Only the run's OWN spans feed its comment (reviewer B10): a
+        // doNotTrack/other-task span inside a minute this task won could put
+        // a personal window title into an OP/Xero time-entry comment.
+        for s in spans where s.target == run.target
+            && s.end > run.start && s.start < run.end {
             let label = [s.signal.app, s.signal.windowTitle].compactMap { $0 }
                 .joined(separator: " – ")
             let overlap = min(s.end, run.end).timeIntervalSince(max(s.start, run.start))

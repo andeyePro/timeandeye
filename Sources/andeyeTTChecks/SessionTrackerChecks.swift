@@ -770,6 +770,25 @@ func sessionTrackerChecks(_ c: Checks) {
         try expect(total <= 600, "no sleep-spanning attribution on a backward clock (got \(total))")
     }
 
+    c.check("non-work grace time never bills to the work task, even across non-work window changes (B4)") {
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        var learning = LearningStore()
+        learning.learn(sig("Steam", "Library", at: 0), target: .doNotTrack, weight: 5)
+        attributor.replaceLearning(learning)
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.input(t(500)))                                 // stay under the idle threshold
+        tracker.handle(.focus(sig("Steam", "Library", at: 1000)))      // pend non-work at t1000
+        tracker.handle(.focus(sig("Steam", "Store page", at: 1015)))   // non-work window CHANGE mid-grace
+        tracker.handle(.input(t(1040)))                                // grace (30s) elapsed → stop commits
+        let work = sessions.filter { $0.task == .op(1) }
+        try expectEq(work.count, 1)
+        try expectEq(work[0].end, t(1000),
+                     "the work slice ends at the PEND moment — no Steam time on the client")
+    }
+
     c.check("reevaluate re-tags the open spans and live target when a pin moves the target") {
         // A pin added mid-session must take effect immediately, not only on the
         // next focus change — reevaluate re-attributes the open spans and lifts

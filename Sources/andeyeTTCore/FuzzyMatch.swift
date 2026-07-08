@@ -4,8 +4,10 @@ import Foundation
 /// "tim" finds Timesheets and "aeml" still finds "andeye email triage".
 public enum FuzzyMatch {
     public static func isSubsequence(_ needle: String, of haystack: String) -> Bool {
-        var iterator = haystack.lowercased().makeIterator()
-        outer: for ch in needle.lowercased() {
+        var iterator = haystack.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                                        locale: nil).makeIterator()
+        outer: for ch in needle.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                                        locale: nil) {
             while let h = iterator.next() {
                 if h == ch { continue outer }
             }
@@ -15,8 +17,9 @@ public enum FuzzyMatch {
     }
 
     public static func score(_ query: String, in text: String) -> Int {
-        let q = query.lowercased()
-        let t = text.lowercased()
+        // Diacritic folding (reviewer B15): "cafe" finds "Café accounts".
+        let q = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+        let t = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
         if q.isEmpty { return 1 }
         if t.hasPrefix(q) { return 4 }
         if t.contains(" " + q) { return 3 }

@@ -152,7 +152,7 @@ public enum EmailMatcher {
         for level in order.reversed() {
             let here = rules.filter { $0.level == level && $0.matches(context) }
             if here.isEmpty { continue }
-            return here.first { $0.pinned } ?? here.first
+            return here.first { $0.pinned } ?? here.last   // newest unpinned wins (B11: last word wins)
         }
         return nil
     }

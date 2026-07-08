@@ -136,7 +136,12 @@ public final class Attributor {
     private let ranker: TaskRanker
 
     private var lastOpenedBackendTask: TaskRef?
-    private var pendingPrime: (surface: Surface, task: TaskRef)?
+    private var pendingPrime: (surface: Surface, task: TaskRef, at: Date)?
+    /// A pending prime is a HYPOTHESIS ("you just opened task X, this next
+    /// surface is probably its workspace") — it must not outrank a confirmed
+    /// prime forever (reviewer B8: one glance at another task's page silently
+    /// re-attributed a confirmed surface at 0.7 for the rest of the run).
+    static let pendingPrimeTTL: TimeInterval = 900
     /// Public so the app can persist and restore it across launches —
     /// losing primed associations on relaunch dropped session certainty
     /// below the push threshold (found 2026-06-11).
@@ -228,10 +233,12 @@ public final class Attributor {
         }
         let surface = Surface(signal: signal)
         var ranked = scored(signal, tasks: tasks, now: now)
-        if let pending = pendingPrime, pending.surface == surface {
+        if let pending = pendingPrime, pending.surface == surface,
+           now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
             ranked.removeAll { $0.target == .task(pending.task) }
             ranked.insert(Candidate(target: .task(pending.task), score: 0.7), at: 0)
         } else if let primed = primedSurfaces[surface] {
+            if pendingPrime?.surface == surface { pendingPrime = nil }   // expired: dead hypothesis
             ranked.removeAll { $0.target == .task(primed) }
             ranked.insert(Candidate(target: .task(primed), score: 0.95), at: 0)
         }
@@ -240,7 +247,7 @@ public final class Attributor {
 
     /// SessionTracker calls this when a surface has held focus beyond the
     /// prime-dwell threshold. Consumes lastOpenedBackendTask ("immediately following").
-    public func noteDwell(_ signal: ActivitySignal) {
+    public func noteDwell(_ signal: ActivitySignal, at now: Date = Date()) {
         if let url = signal.tabURL, recognizer.taskRef(inURL: url) != nil {
             return
         }
@@ -252,7 +259,7 @@ public final class Attributor {
         lastOpenedBackendTask = nil
         let surface = Surface(signal: signal)
         if primedSurfaces[surface] != task {
-            pendingPrime = (surface, task)
+            pendingPrime = (surface, task, now)
         }
     }
 
@@ -280,8 +287,10 @@ public final class Attributor {
     /// correction. Nothing is captured when the engine already agreed with
     /// the pick, or believed nothing: there is no story to straighten.
     /// Called BEFORE `recordSticky`, while the displaced belief still answers.
+    @discardableResult
     private func recordDisplaced(_ signal: ActivitySignal, by target: Target,
-                                 tasks: [WorkTask], now: Date) {
+                                 tasks: [WorkTask], now: Date)
+        -> (target: Target, source: AttributionExplanation.Source)? {
         // Prune BEFORE consulting the store: a day-old snapshot must not
         // survive midnight just because this correction is the first touch
         // of the day (explain() below would prune too late - the guard
@@ -289,14 +298,16 @@ public final class Attributor {
         // written after us would then shield it indefinitely).
         _ = stickyMatch(for: signal, now: now)
         let key = Self.stickyKey(for: signal)
-        guard displacedByCorrection[key] == nil else { return }
         let before = explain(signal, tasks: tasks, now: now)
-        guard let chosen = before.chosen, chosen != target, before.source != .none else { return }
+        guard let chosen = before.chosen, chosen != target, before.source != .none,
+              before.chosenScore > 0.01 else { return nil }
         // A zero-evidence ranked "belief" is noise, not a displaced story -
         // don't enshrine "Do not track 0%" as history on a cold start.
-        guard before.chosenScore > 0.01 else { return }
-        displacedByCorrection[key] = .init(source: before.source, chosen: chosen,
-                                           score: before.chosenScore)
+        if displacedByCorrection[key] == nil {
+            displacedByCorrection[key] = .init(source: before.source, chosen: chosen,
+                                               score: before.chosenScore)
+        }
+        return (chosen, before.source)
     }
 
     private func recordSticky(_ signal: ActivitySignal, target: Target, now: Date) {
@@ -407,9 +418,17 @@ public final class Attributor {
     /// sources still snapshot correctly).
     public func confirm(_ signal: ActivitySignal, task: TaskRef,
                         tasks: [WorkTask] = [], now: Date = Date()) {
-        recordDisplaced(signal, by: .task(task), tasks: tasks, now: now)
+        let displaced = recordDisplaced(signal, by: .task(task), tasks: tasks, now: now)
         recordSticky(signal, target: .task(task), now: now)
         learnSurface(signal, to: task, weight: 2)
+        // A correction SUBTRACTS from the displaced learned belief (reviewer
+        // B9: `correct` was dead code — the mistaken association kept its
+        // counts and kept winning on sibling surfaces, so the user had to
+        // correct each one individually). Only ranked (learned) beliefs
+        // subtract; a displaced pin/prime/sticky isn't a count problem.
+        if let displaced, displaced.source == .ranked {
+            learning.learn(signal, target: displaced.target, weight: -1)
+        }
     }
 
     /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
@@ -426,7 +445,7 @@ public final class Attributor {
     /// §5.4) — see `confirm` (including its `tasks` note).
     public func assign(_ signal: ActivitySignal, target: Target,
                        tasks: [WorkTask] = [], now: Date = Date()) {
-        recordDisplaced(signal, by: target, tasks: tasks, now: now)
+        let displaced = recordDisplaced(signal, by: target, tasks: tasks, now: now)
         recordSticky(signal, target: target, now: now)
         let surface = Surface(signal: signal)
         if case .task(let t) = target {
@@ -436,6 +455,9 @@ public final class Attributor {
         }
         if pendingPrime?.surface == surface { pendingPrime = nil }
         learning.learn(signal, target: target, weight: 2)
+        if let displaced, displaced.source == .ranked {
+            learning.learn(signal, target: displaced.target, weight: -1)   // B9
+        }
     }
 
     /// Add or update a pin (by id). New pins go last → most recent for ties.
@@ -478,6 +500,13 @@ public final class Attributor {
     /// prior contribution — the data behind both `scored()` and `explain()`.
     private func scoredComponents(_ signal: ActivitySignal, tasks: [WorkTask],
                                   now: Date) -> [AttributionExplanation.Line] {
+        // A transiently EMPTY task list (startup, backend refresh, re-auth)
+        // must not auto-stop the clock: softmax over the lone doNotTrack
+        // candidate returns 1.0 for ANY signal (reviewer B6). No candidates,
+        // no confidence.
+        guard !tasks.isEmpty else {
+            return [.init(target: .doNotTrack, score: 0, learned: 0, prior: 0)]
+        }
         let targets = tasks.map { Target.task($0.ref) } + [.doNotTrack]
         let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets)
         let priors = tasks.map { ranker.score($0, at: now, learning: learning) }
@@ -535,7 +564,8 @@ public final class Attributor {
         }
         let lines = scoredComponents(signal, tasks: tasks, now: now)
         let surface = Surface(signal: signal)
-        if let pending = pendingPrime, pending.surface == surface {
+        if let pending = pendingPrime, pending.surface == surface,
+           now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
             return .init(source: .pendingPrime, chosen: .task(pending.task), chosenScore: 0.7,
                          lines: lines, features: feats)
         }

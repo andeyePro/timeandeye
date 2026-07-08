@@ -2,6 +2,28 @@
 
 ## 2026-07-08
 
+- [x] ** review fixes, batch 4 (reviewer B mediums + lows).** (B4)
+  Non-work grace time never bills to the work task: the doNotTrack commit now
+  closes the work story at the PEND moment and drops/clips the grace-window
+  spans, so changing Steam windows mid-grace can't put games time on a client
+  (the leisure-tracking variant resumes the span under the leisure state).
+  (B6) An empty task cache (startup, backend refresh) can't auto-stop the
+  clock – no candidates, no walkover softmax for doNotTrack. (B8) A pending
+  prime (the "you just opened task X" hypothesis) expires after 15 minutes –
+  a glance at another task's page no longer outranks a CONFIRMED surface for
+  the rest of the run. (B9) Corrections now SUBTRACT from the displaced
+  learned belief (source .ranked only): the mistaken association loses count
+  weight so sibling surfaces stop inheriting it – LearningStore.correct's
+  logic finally has a production caller. (B10) A session's auto-comment draws
+  only from its OWN spans – no other-target window titles leaking into
+  OP/Xero entry comments. (B11) Same-level email-rule conflicts: newest
+  unpinned rule wins (was: oldest, forever). (B14) Pin-scope segments compare
+  case-insensitively, matching every PinOp. (B15) Fuzzy match folds
+  diacritics ("cafe" finds "Café accounts"). Deferred with context to
+  TODO.md: B7 (surface query identity – needs design), B12/B13 (pin editor
+  hardening), B16 (recency horizon), C10/C13/C14. Four new checks (B4, B6,
+  B8, B9). Mac-verified: 460 passed, 0 failed.
+
 - [x] ** review fixes, batch 3 (Fable reviewer B – attribution/tracker
   HIGHs + sleep-clock guards).** (B1) A manual start now begins span accrual
   at the tap – focus changes made while STOPPED no longer bill their pre-start
