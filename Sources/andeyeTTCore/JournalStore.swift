@@ -103,6 +103,15 @@ public protocol JournalStore {
     /// the note must never silently vanish. Timestamped, newest last.
     func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws
     func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)]
+
+    // MARK: Invoice locks (the invoice-lock layer)
+
+    /// Invoice refs the user explicitly UNLOCKED for `backendID`: the
+    /// engine's poll must not re-apply a lock with the same ref (the backend
+    /// keeps reporting the entry invoiced until a credit-note/void, which is
+    /// the accountant's act — a NEW invoice ref locks again as normal).
+    func unlockedInvoiceRefs(backendID: String) throws -> Set<String>
+    func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws
 }
 
 public extension JournalStore {
@@ -129,6 +138,8 @@ public final class InMemoryJournalStore: JournalStore {
     private var comments: [String: [(date: Date, text: String)]] = [:]
     /// Posting ledger keyed "sessionID|backendID" — the idempotency key.
     private var ledger: [String: PostingRecord] = [:]
+    /// Per-backend invoice refs the user unlocked (never auto re-locked).
+    private var unlockedInvoices: [String: Set<String>] = [:]
 
     private func ledgerKey(_ session: UUID, _ backendID: String) -> String {
         "\(session.uuidString)|\(backendID)"
@@ -203,6 +214,14 @@ public final class InMemoryJournalStore: JournalStore {
     public func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
         ledger.values.filter { $0.state == state && $0.backendID == backendID }
             .sorted { $0.sessionID.uuidString < $1.sessionID.uuidString }
+    }
+
+    public func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
+        unlockedInvoices[backendID] ?? []
+    }
+
+    public func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+        unlockedInvoices[backendID, default: []].insert(ref)
     }
 
     public func sessions(needingPostTo backendID: String,

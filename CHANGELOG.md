@@ -2,6 +2,36 @@
 
 ## 2026-07-08
 
+- [x] **Invoice-lock layer (Martin's proposal, spec D4b) — billed time can't
+  be silently rewritten.** New `TaskBackend.invoiceLocks(for:)` seam
+  (default: nothing locks); the sync engine polls it half-hourly (shared
+  `InvoicePollClock` throttle across per-pass engines, batch-capped) and
+  stamps the invoice ref onto the posting-ledger row. Locked rows are exempt
+  from the amendment loop AND the resurrection sweep: a journal edit over
+  billed time surfaces on the row naming the invoice instead of amending,
+  retracting, or re-posting it. Per-invoice Unlock in Posting health lifts
+  the guard and re-arms amendment; the same ref never auto re-locks
+  (`unlocked_invoices`), a new invoice does. Xero implements the seam off
+  the Projects API entry status (one listTime per project per poll; the API
+  exposes no invoice number — verified — so the ref is "Xero" until an
+  Accounting API lookup exists). Ledger gains `locked_invoice_ref`
+  (additive migration). Mac-verified: 470 passed 0 failed; Pro 38/0.
+
+- [x] **Menu-bar jiggle fixed for real (Martin: "the icon moves… only when
+  the time text varies in width").** The hidden sizing-template ZStack was
+  not holding the MenuBarExtra label's width, so the AppKit-measured widest
+  candidate is now reserved as an explicit `minWidth` on the label — can't
+  clip (content still wins if measurement runs low), only stops shrinking.
+  Also eye engine v5: the winking bottom lid hinges from the eye's true left
+  corner (the computed crossing of the two & strokes, 121.11/138.06), not
+  the tail; lab v5 adds lid-raise/smoothing tuning sliders. Commit c918b02.
+
+- [x] **Licence spec §1 LOCKED (Martin, exact phrase, 15:20).** The v2
+  nine-field payload contract is frozen; §1 mirrored verbatim into a private notes repo
+  the cross-repo note for the Pro side; any future change needs both repos plus
+  a version bump. OpenProject pinned as a community connector (Plus's one
+  connector = one standard connector). Commits 12622ad, daffdbb.
+
 - [x] **Pin rules: quoted values with embedded quotes round-trip (B12).** A
   rule whose value contained a double quote (an email subject like
   `re: "urgent"`) rendered unparseable, so the pin editor couldn't re-save an

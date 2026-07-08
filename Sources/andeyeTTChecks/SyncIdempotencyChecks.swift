@@ -91,6 +91,12 @@ final class FailingLedgerJournalStore: JournalStore {
     func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
         try inner.taskComments(for: ref)
     }
+    func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
+        try inner.unlockedInvoiceRefs(backendID: backendID)
+    }
+    func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+        try inner.addUnlockedInvoiceRef(ref, backendID: backendID)
+    }
 }
 
 func syncIdempotencyChecks(_ c: Checks) async {

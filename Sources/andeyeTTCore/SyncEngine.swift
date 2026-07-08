@@ -22,6 +22,13 @@ import Foundation
 /// Failure isolation: each backend's pass is independent — one backend
 /// erroring (recorded on its ledger row, surfaced in its report) never blocks
 /// the others, and never throws out of this engine.
+/// Holds the per-backend "when did we last poll invoice status" times
+/// ACROSS engine instances — see SyncEngine.invoicePollClock.
+public final class InvoicePollClock {
+    fileprivate var last: [String: Date] = [:]
+    public init() {}
+}
+
 public final class SyncEngine {
     /// Per-backend outcome of one pass. `error` nil = clean pass.
     public struct BackendReport: Sendable {
@@ -40,18 +47,22 @@ public final class SyncEngine {
         /// pass: frozen at the backend (terminal, needs a human) or not yet
         /// reachable (amendment errored / capped this pass).
         public var diverged = 0
+        /// Rows under an invoice lock this pass — billed time the amendment
+        /// loop deliberately leaves alone (surfaced, not a problem per se).
+        public var locked = 0
         public var error: String?
 
         public init(backendID: String, posted: Int = 0,
                     permanentlySkipped: Int = 0, amended: Int = 0,
                     retracted: Int = 0, diverged: Int = 0,
-                    error: String? = nil) {
+                    locked: Int = 0, error: String? = nil) {
             self.backendID = backendID
             self.posted = posted
             self.permanentlySkipped = permanentlySkipped
             self.amended = amended
             self.retracted = retracted
             self.diverged = diverged
+            self.locked = locked
             self.error = error
         }
     }
@@ -109,6 +120,11 @@ public final class SyncEngine {
         let rows = ((try? journal.postingRecords(state: .posted,
                                                  backendID: entry.id)) ?? [])
         for row in rows {
+            // Invoice-locked rows are exempt: demoting one to `.failed`
+            // would re-post — a duplicate of already-billed time. Their
+            // journal-vs-books disagreement surfaces in amendDiverged's
+            // locked branch instead.
+            guard row.lockedInvoiceRef == nil else { continue }
             guard stampChanged(row),
                   let taskID = ((try? journal.session(id: row.sessionID)) ?? nil)?
                       .task.backendTaskID,
@@ -146,6 +162,70 @@ public final class SyncEngine {
     /// posted history forever (reviewer A7).
     public static let divergenceScanHorizon: TimeInterval = 45 * 86_400
 
+    // MARK: Invoice locks (Martin's invoice-lock proposal, adopted 2026-07-08)
+
+    /// Invoices are human-cadence events; polling the backend's invoice
+    /// status every sync pass would burn Xero's 5,000/day tenant budget for
+    /// nothing. Half-hourly keeps worst-case daily calls in the tens.
+    public static let invoicePollInterval: TimeInterval = 1800
+    /// Ids per poll, newest first — bounds one poll's API cost after a long
+    /// offline gap; the remainder locks on later polls.
+    public static let invoicePollBatch = 40
+
+    /// Ask the backend which recent posted entries a SENT invoice now covers,
+    /// and stamp the lock (ref) onto their ledger rows. Refs the user
+    /// explicitly unlocked are never re-applied (same invoice; a NEW ref
+    /// locks as normal). Locks only ever SET here — clearing is the human's
+    /// per-invoice unlock, so a voided invoice can't silently re-open billed
+    /// time. A poll failure changes nothing (fail closed = stay unlocked and
+    /// let the amendment path's frozen handling catch any write refusal).
+    private func pollInvoiceLocks(_ entry: RegisteredBackend, now: Date) async {
+        if let last = invoicePollClock.last[entry.id],
+           now.timeIntervalSince(last) < Self.invoicePollInterval { return }
+        invoicePollClock.last[entry.id] = now
+        let candidates = ((try? journal.postingRecords(state: .posted,
+                                                       backendID: entry.id)) ?? [])
+            .filter { $0.lockedInvoiceRef == nil && $0.entryID != nil }
+            .filter { ($0.postedStart ?? .distantPast) > now.addingTimeInterval(-Self.divergenceScanHorizon) }
+            .sorted { ($0.postedStart ?? .distantPast) > ($1.postedStart ?? .distantPast) }
+            .prefix(Self.invoicePollBatch)
+        guard !candidates.isEmpty else { return }
+        guard let locks = try? await entry.backend.invoiceLocks(
+            for: candidates.compactMap(\.entryID)) else { return }
+        guard !locks.isEmpty else { return }
+        let suppressed = ((try? journal.unlockedInvoiceRefs(backendID: entry.id)) ?? [])
+        for row in candidates {
+            guard let entryID = row.entryID, let ref = locks[entryID],
+                  !suppressed.contains(ref) else { continue }
+            var updated = row
+            updated.lockedInvoiceRef = ref
+            updated.updatedAt = now
+            try? journal.setPostingRecord(updated)
+            onDebug("invoice lock applied at \(entry.id) for \(row.sessionID): \(ref)")
+        }
+    }
+
+    /// The per-invoice UNLOCK: lifts the app-side guard on every row locked
+    /// under `ref`, un-parks any that diverged WHILE locked (back to
+    /// `.posted`; the stamp mismatch re-arms amendment on the next pass),
+    /// and remembers the ref so polling never re-applies the same invoice.
+    /// The backend side (credit-note/void) stays the accountant's act —
+    /// entries still frozen at the backend park again via frozen handling.
+    public func unlockInvoice(ref: String, backendID: String, now: Date = Date()) {
+        try? journal.addUnlockedInvoiceRef(ref, backendID: backendID)
+        for state in [PostingState.posted, .diverged] {
+            for row in ((try? journal.postingRecords(state: state, backendID: backendID)) ?? [])
+            where row.lockedInvoiceRef == ref {
+                var updated = row
+                updated.lockedInvoiceRef = nil
+                updated.lastError = nil
+                if state == .diverged { updated.state = .posted }
+                updated.updatedAt = now
+                try? journal.setPostingRecord(updated)
+            }
+        }
+    }
+
     /// D4 — the CONVERGENCE loop. Every `.posted` row with a snapshot is
     /// compared against the CURRENT resolved journal; where the journal has
     /// moved, the backend FOLLOWS:
@@ -164,8 +244,8 @@ public final class SyncEngine {
                                defaultActivityID: Int?,
                                activityOverrides: [TaskRef: Int],
                                includeComments: Bool) async
-        -> (amended: Int, retracted: Int, diverged: Int) {
-        var amended = 0, retracted = 0, diverged = 0
+        -> (amended: Int, retracted: Int, diverged: Int, locked: Int) {
+        var amended = 0, retracted = 0, diverged = 0, locked = 0
         var budget = Self.amendmentsPerPass
 
         // Re-open retractions whose journal side came back.
@@ -185,6 +265,35 @@ public final class SyncEngine {
         let rows = ((try? journal.postingRecords(state: .posted,
                                                  backendID: entry.id)) ?? [])
         for row in rows {
+            // INVOICE LOCK: billed time is untouchable through this loop.
+            // If the journal has since moved (drift or the session gone),
+            // surface the disagreement ONCE on the row — never amend, never
+            // retract; the human unlocks the invoice to reconcile. Checked
+            // by CONTENT (the same drift math as below), not by stamp:
+            // single-device stores have no stamps and their edits must
+            // surface too.
+            if let ref = row.lockedInvoiceRef {
+                locked += 1
+                if row.lastError == nil, let sentDuration = row.postedDuration {
+                    let contribution = ((try? journal.resolvedContribution(sessionID: row.sessionID)) ?? nil)
+                    let moved: Bool
+                    if let contribution {
+                        moved = abs(contribution.seconds - sentDuration) > Self.divergenceTolerance
+                            || (row.postedStart.map {
+                                    abs(contribution.start.timeIntervalSince($0)) > Self.divergenceTolerance
+                                } ?? false)
+                    } else {
+                        moved = true   // journal side gone entirely: definitely moved
+                    }
+                    if moved {
+                        var updated = row
+                        updated.lastError = "locked by invoice \(ref) — the journal moved but this time is billed; unlock the invoice to reconcile"
+                        updated.updatedAt = now
+                        try? journal.setPostingRecord(updated)
+                    }
+                }
+                continue
+            }
             guard let sentDuration = row.postedDuration else { continue }   // pre-snapshot row
             let recent = (row.postedStart ?? .distantPast) > now.addingTimeInterval(-Self.divergenceScanHorizon)
             guard recent || stampChanged(row) else { continue }
@@ -259,7 +368,7 @@ public final class SyncEngine {
                 diverged += 1   // untouched; retried next pass
             }
         }
-        return (amended, retracted, diverged)
+        return (amended, retracted, diverged, locked)
     }
 
     /// Amendment landed: refresh the snapshot to what the backend NOW holds,
@@ -379,10 +488,18 @@ public final class SyncEngine {
     /// sentinel rows, which are internal state, not tracked time).
     public var excludedSessionIDs: Set<UUID> = []
     public var onDebug: (String) -> Void = { _ in }
+    /// The invoice-poll throttle OUTLIVES the engine (the controller builds
+    /// a fresh engine every pass): the owner holds one clock and hands it to
+    /// each engine, else every pass would re-poll and burn the API budget.
+    /// The default (a fresh clock) polls on first pass — right for checks
+    /// and single-shot engines.
+    private let invoicePollClock: InvoicePollClock
 
-    public init(journal: any JournalStore, backends: [RegisteredBackend]) {
+    public init(journal: any JournalStore, backends: [RegisteredBackend],
+                invoicePollClock: InvoicePollClock = InvoicePollClock()) {
         self.journal = journal
         self.backends = backends
+        self.invoicePollClock = invoicePollClock
     }
 
     /// Single-backend convenience (iOS engine, checks, integration harness).
@@ -430,6 +547,10 @@ public final class SyncEngine {
             // a resurrection whose entry device A already deleted re-queues
             // HERE so this same pass re-posts it.
             await verifyTouchedPosted(entry, now: now)
+            // Invoice locks next (throttled inside): entries a SENT invoice
+            // covers get their lock stamped BEFORE the convergence loop, so
+            // billed time is off-limits the moment the backend reports it.
+            await pollInvoiceLocks(entry, now: now)
             // Then the D4 CONVERGENCE loop: the backend follows the journal
             // (update / delete+recreate / retract); frozen entries park
             // `.diverged` for a human; unknown failures retry next pass.
@@ -440,6 +561,7 @@ public final class SyncEngine {
             report.amended = amendment.amended
             report.retracted = amendment.retracted
             report.diverged = amendment.diverged
+            report.locked = amendment.locked
             let queue = ((try? journal.sessions(needingPostTo: entry.id,
                                                 atOrAbove: threshold)) ?? [])
                 .filter { !excludedSessionIDs.contains($0.id) }

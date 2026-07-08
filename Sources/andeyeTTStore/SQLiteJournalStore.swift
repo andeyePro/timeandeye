@@ -108,6 +108,17 @@ public final class SQLiteJournalStore: JournalStore {
         try? exec("ALTER TABLE posting_ledger ADD COLUMN posted_start REAL")
         try? exec("ALTER TABLE posting_ledger ADD COLUMN posted_duration REAL")
         try? exec("ALTER TABLE posting_ledger ADD COLUMN session_stamp TEXT")
+        // Invoice-lock layer: the ref of the sent invoice covering this row
+        // (NULL = not invoiced), plus the per-backend set of refs the user
+        // explicitly unlocked (the poll never re-applies those).
+        try? exec("ALTER TABLE posting_ledger ADD COLUMN locked_invoice_ref TEXT")
+        try exec("""
+        CREATE TABLE IF NOT EXISTS unlocked_invoices (
+            backend_id TEXT NOT NULL,
+            invoice_ref TEXT NOT NULL,
+            PRIMARY KEY (backend_id, invoice_ref)
+        )
+        """)
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
@@ -335,11 +346,12 @@ public final class SQLiteJournalStore: JournalStore {
                 ? nil : Date(timeIntervalSince1970: sqlite3_column_double(stmt, 7)),
             postedDuration: sqlite3_column_type(stmt, 8) == SQLITE_NULL
                 ? nil : sqlite3_column_double(stmt, 8),
-            sessionStamp: sqlite3_column_text(stmt, 9).map { String(cString: $0) })
+            sessionStamp: sqlite3_column_text(stmt, 9).map { String(cString: $0) },
+            lockedInvoiceRef: sqlite3_column_text(stmt, 10).map { String(cString: $0) })
     }
 
     private static let postingColumns =
-        "session_id, backend_id, state, entry_id, last_error, attempts, updated, posted_start, posted_duration, session_stamp"
+        "session_id, backend_id, state, entry_id, last_error, attempts, updated, posted_start, posted_duration, session_stamp, locked_invoice_ref"
 
     public func postingRecords(session: UUID) throws -> [PostingRecord] {
         var out: [PostingRecord] = []
@@ -380,8 +392,8 @@ public final class SQLiteJournalStore: JournalStore {
             let sql = """
             INSERT OR REPLACE INTO posting_ledger
                 (session_id, backend_id, state, entry_id, last_error, attempts, updated,
-                 posted_start, posted_duration, session_stamp)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+                 posted_start, posted_duration, session_stamp, locked_invoice_ref)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
@@ -417,6 +429,37 @@ public final class SQLiteJournalStore: JournalStore {
             } else {
                 sqlite3_bind_null(stmt, 10)
             }
+            if let lockedInvoiceRef = record.lockedInvoiceRef {
+                sqlite3_bind_text(stmt, 11, lockedInvoiceRef, -1, Self.transient)
+            } else {
+                sqlite3_bind_null(stmt, 11)
+            }
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+        }
+    }
+
+    public func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
+        var out: Set<String> = []
+        try query("SELECT invoice_ref FROM unlocked_invoices WHERE backend_id = ?",
+                  bind: { sqlite3_bind_text($0, 1, backendID, -1, Self.transient) }) { stmt in
+            if let text = sqlite3_column_text(stmt, 0) { out.insert(String(cString: text)) }
+        }
+        return out
+    }
+
+    public func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                db, "INSERT OR IGNORE INTO unlocked_invoices (backend_id, invoice_ref) VALUES (?,?)",
+                -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, backendID, -1, Self.transient)
+            sqlite3_bind_text(stmt, 2, ref, -1, Self.transient)
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }

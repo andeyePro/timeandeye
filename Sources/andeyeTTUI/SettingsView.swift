@@ -266,6 +266,22 @@ struct SettingsView: View {
                                 .font(.caption)
                             }
                         }
+                        // Invoice locks: billed time held safe from edits.
+                        // Unlock is per invoice and deliberate — the same
+                        // invoice never re-locks itself.
+                        ForEach(item.lockedInvoices, id: \.ref) { lock in
+                            HStack {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                Text("Invoice \(lock.ref) — \(lock.count) entr\(lock.count == 1 ? "y" : "ies") locked")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Unlock") {
+                                    controller.unlockInvoice(ref: lock.ref, backendID: item.id)
+                                }
+                                .font(.caption)
+                            }
+                        }
                     }
                 }
             }

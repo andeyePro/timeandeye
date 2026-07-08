@@ -319,4 +319,119 @@ func resolvedPostingChecks(_ c: Checks) async {
         _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
         try expectEq(pm.created.first?.duration, 3600, "raw span billed, as ever")
     }
+
+    // MARK: Invoice-lock layer (Martin's proposal, adopted 2026-07-08).
+    // A SENT invoice covering posted time locks it in the app: the poll
+    // stamps the ref onto the ledger row; from then on the amendment loop
+    // must never touch the entry — billed books can't be silently rewritten
+    // by a journal edit. Unlock is per invoice, deliberate, and sticky the
+    // other way too: the SAME invoice never re-locks itself.
+
+    await c.check("invoice lock: poll stamps the ref; a journal edit then surfaces but NEVER amends billed time") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        var s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let entryID = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.entryID
+        try expect(entryID != nil, "posted with an entry id")
+
+        // The backend reports the entry invoiced; the next pass locks it.
+        pm.invoiced[entryID!] = "INV-7"
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                      now: t(4000 + 1900))
+        var row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.lockedInvoiceRef, "INV-7", "poll stamped the invoice ref")
+
+        // The user shortens the session AFTER invoicing: the drift must be
+        // SURFACED on the row but the backend entry must stay untouched —
+        // no update, no delete, state stays .posted (not demoted).
+        nowMillis = Int64(t(6000).timeIntervalSince1970 * 1000)
+        s.end = t(1800)
+        try store.save(s)
+        let reports = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                                now: t(4000 + 3900))
+        try expectEq(pm.updated.count, 0, "billed time was never amended")
+        try expectEq(pm.deleted.count, 0, "billed time was never deleted")
+        row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .posted, "locked row is not demoted")
+        try expect(row?.lastError?.contains("INV-7") == true,
+                   "the disagreement names the invoice")
+        try expectEq(reports.first?.locked, 1, "pass report counts the locked row")
+    }
+
+    await c.check("invoice unlock: re-arms amendment, and the SAME ref never re-locks (a NEW invoice does)") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        var s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let entryID = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)!.entryID!
+        pm.invoiced[entryID] = "INV-7"
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(6000))
+        nowMillis = Int64(t(6100).timeIntervalSince1970 * 1000)
+        s.end = t(1800)
+        try store.save(s)
+
+        // UNLOCK: the guard lifts, the queued drift amends on the next pass.
+        engine.unlockInvoice(ref: "INV-7", backendID: "pm-a", now: t(6200))
+        var row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectNil(row?.lockedInvoiceRef, "unlock cleared the ref")
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(6300))
+        try expectEq(pm.updated.first?.duration, 1800, "unlock re-armed the amendment")
+
+        // The backend still reports INV-7 (a void is the accountant's act) —
+        // a poll-due pass must NOT re-lock the unlocked invoice…
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(6300 + 1900))
+        row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectNil(row?.lockedInvoiceRef, "same ref suppressed after unlock")
+        // …but a NEW invoice ref locks again as normal.
+        pm.invoiced[entryID] = "INV-9"
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(6300 + 3900))
+        row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.lockedInvoiceRef, "INV-9", "a fresh invoice re-locks")
+    }
+
+    await c.check("invoice poll is throttled: back-to-back passes ask the backend once") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        let s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let firstPolls = pm.invoicePolls
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4060))
+        try expectEq(pm.invoicePolls, firstPolls, "a pass a minute later did not re-poll")
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000 + 1900))
+        try expectEq(pm.invoicePolls, firstPolls + 1, "past the interval it polls again")
+    }
+
+    await c.check("a locked row whose entry vanished is NOT demoted for re-post (no duplicate of billed time)") {
+        let store = try makeStore()
+        store.clock = makeClock()
+        var s = Session(task: .op(1), start: t(0), end: t(3600), certainty: 0.95)
+        try store.save(s)
+        let pm = FakeBackend(owns: .op)
+        let engine = SyncEngine(journal: store, backend: pm, id: "pm-a", class: .pm)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(4000))
+        let entryID = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)!.entryID!
+        pm.invoiced[entryID] = "INV-7"
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(6000))
+        // The entry disappears from the backend's list AND the session is
+        // touched — the resurrection sweep would normally demote for a
+        // re-post; on a locked row that would duplicate invoiced time.
+        pm.held.removeAll()
+        nowMillis = Int64(t(6100).timeIntervalSince1970 * 1000)
+        s.comment = "touched"
+        try store.save(s)
+        _ = await engine.pushEligible(threshold: 0.8, includeComments: false, now: t(6200))
+        let row = ((try? store.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .posted, "locked row held its claim")
+        try expectEq(pm.created.count, 1, "no duplicate create")
+    }
 }

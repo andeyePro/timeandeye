@@ -239,12 +239,18 @@ public struct PostingRecord: Equatable, Codable, Sendable {
     /// made resurrections invisible, an ahead-clock one re-verified every
     /// pass forever.) nil on pre-stamp rows and sync-off stores.
     public var sessionStamp: String?
+    /// Non-nil = this entry is covered by a SENT invoice at the backend
+    /// (the invoice-lock layer): the amendment loop must never touch it, and
+    /// the UI shows the ref. Set by the engine's invoice poll; cleared ONLY
+    /// by an explicit per-invoice unlock (deliberately sticky — a voided
+    /// invoice doesn't silently re-open billed time; the human does).
+    public var lockedInvoiceRef: String?
 
     public init(sessionID: UUID, backendID: String, state: PostingState,
                 entryID: RemoteEntryID? = nil, lastError: String? = nil,
                 attempts: Int = 0, updatedAt: Date = Date(),
                 postedStart: Date? = nil, postedDuration: TimeInterval? = nil,
-                sessionStamp: String? = nil) {
+                sessionStamp: String? = nil, lockedInvoiceRef: String? = nil) {
         self.sessionID = sessionID
         self.backendID = backendID
         self.state = state
@@ -255,5 +261,6 @@ public struct PostingRecord: Equatable, Codable, Sendable {
         self.postedStart = postedStart
         self.postedDuration = postedDuration
         self.sessionStamp = sessionStamp
+        self.lockedInvoiceRef = lockedInvoiceRef
     }
 }

@@ -2335,15 +2335,23 @@ public final class AppController: ObservableObject {
     /// re-run hourly off the sync tick.
     private var lastLicenseRevalidation = Date.distantPast
 
+    /// Invoice-poll throttle shared across the per-pass engines — a fresh
+    /// clock per pass would re-poll the backend's invoice status every
+    /// minute instead of half-hourly.
+    private let invoicePollClock = InvoicePollClock()
+
     /// Per-backend posting health for Settings (A5): rows the queue can no
     /// longer move on its own. `stuck` = quarantined after the transient
     /// cap; `diverged` = posted entries the journal has since moved away
-    /// from (D4 detection). Only backends with something wrong appear.
+    /// from (D4 detection); `lockedInvoices` = sent invoices covering posted
+    /// time (the invoice-lock layer) with a per-invoice unlock. Only
+    /// backends with something to show appear.
     public struct PostingHealth: Identifiable {
         public let id: String        // backend id (ledger identity)
         public let name: String      // display name for the row
         public let stuck: Int
         public let diverged: Int
+        public let lockedInvoices: [(ref: String, count: Int)]
     }
 
     public func postingHealthReport() -> [PostingHealth] {
@@ -2355,10 +2363,34 @@ public final class AppController: ObservableObject {
             let diverged = (postingDivergences[entry.id] ?? 0)
                 + ((try? journal.postingRecords(state: .diverged,
                                                 backendID: entry.id)) ?? []).count
-            guard stuck > 0 || diverged > 0 else { return nil }
+            // Invoice locks live on posted rows (and on rows that were
+            // parked .diverged while locked) — grouped by invoice ref for
+            // the per-invoice unlock gesture.
+            var lockCounts: [String: Int] = [:]
+            for state in [PostingState.posted, .diverged] {
+                for row in ((try? journal.postingRecords(state: state,
+                                                         backendID: entry.id)) ?? []) {
+                    if let ref = row.lockedInvoiceRef { lockCounts[ref, default: 0] += 1 }
+                }
+            }
+            let lockedInvoices = lockCounts.sorted { $0.key < $1.key }
+                .map { (ref: $0.key, count: $0.value) }
+            guard stuck > 0 || diverged > 0 || !lockedInvoices.isEmpty else { return nil }
             return PostingHealth(id: entry.id, name: entry.backend.displayName,
-                                 stuck: stuck, diverged: diverged)
+                                 stuck: stuck, diverged: diverged,
+                                 lockedInvoices: lockedInvoices)
         }
+    }
+
+    /// Per-invoice unlock (the invoice-lock layer): lifts the app-side guard
+    /// on every entry billed under `ref` so deliberate corrections can flow
+    /// again; the same invoice is never auto re-locked. The Xero-side
+    /// credit-note/void remains the accountant's act.
+    public func unlockInvoice(ref: String, backendID: String) {
+        SyncEngine(journal: journal, backends: registry.entries)
+            .unlockInvoice(ref: ref, backendID: backendID)
+        actionNote = "Unlocked invoice \(ref) — edits can reconcile again"
+        Task { await syncIfEnabled() }
     }
 
     /// The repair gesture for quarantined rows: clearing a `.stuck` row puts
@@ -2386,7 +2418,8 @@ public final class AppController: ObservableObject {
         if syncing { syncRequested = true; return }
         syncing = true
         defer { syncing = false }
-        let engine = SyncEngine(journal: journal, backends: registry.entries)
+        let engine = SyncEngine(journal: journal, backends: registry.entries,
+                                invoicePollClock: invoicePollClock)
         engine.excludedSessionIDs = [Self.liveCheckpointID]
         engine.onDebug = { DebugLog.write("sync: \($0)") }
         repeat {

@@ -119,6 +119,20 @@ public protocol TaskBackend: AnyObject {
     /// Post a note to the task itself (OP: the work package's activity feed),
     /// where it is findable — not buried on a single time entry.
     func addTaskComment(taskID: String, text: String) async throws
+
+    // MARK: Invoice locks (the invoice-lock layer — Martin's proposal, 2026-07-08)
+    /// Which of `ids` are covered by a SENT invoice at the backend, and under
+    /// which reference. The answer is authoritative for the ids ASKED: an id
+    /// absent from the result is not invoiced. Xero's Projects API exposes
+    /// entry status (INVOICED/LOCKED) but not the invoice number, so its ref
+    /// is the constant "Xero"; a backend that can name the invoice returns
+    /// the number. Backends without an invoicing concept (OP) keep the
+    /// default: [:], nothing ever locks.
+    func invoiceLocks(for ids: [RemoteEntryID]) async throws -> [RemoteEntryID: String]
+}
+
+public extension TaskBackend {
+    func invoiceLocks(for ids: [RemoteEntryID]) async throws -> [RemoteEntryID: String] { [:] }
 }
 
 /// Thrown by a connector when a posting can NEVER succeed — the task was

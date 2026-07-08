@@ -244,7 +244,20 @@ from late-arriving revisions, and reassignments — one mechanism, run by the
 posting owner, eventually consistent. Snapshot equality is cheap (a hash
 column if profiling ever says so).
 
-## D4b. Invoice-lock layer (Martin, 2026-07-08 — adopted)
+## D4b. Invoice-lock layer (Martin, 2026-07-08 — adopted; IMPLEMENTED 2026-07-08)
+
+Status: BUILT and checked (main suite 470/0, Pro 38/0). The seam is
+`TaskBackend.invoiceLocks(for:)` (default [:]); the engine polls half-hourly
+(`invoicePollInterval`, batch-capped, throttle shared across per-pass engines
+via `InvoicePollClock`), stamps `PostingRecord.lockedInvoiceRef`, and the
+amendment/verify passes exempt locked rows (drift surfaces on the row naming
+the invoice; nothing amends, retracts, or demotes billed time). Unlock is
+per-invoice (`SyncEngine.unlockInvoice` / Posting health button) and
+suppresses re-lock of the SAME ref (`unlocked_invoices` table); a new ref
+locks again. Xero side: Projects API `status` INVOICED/LOCKED decides, one
+listTime per project per poll; the invoice NUMBER is not exposed by the
+Projects API (verified), so the ref is the constant "Xero" — the fallback
+below — until an Accounting API lookup exists.
 
 Martin's proposal, adopted as the POST-INVOICE half of convergence: when a
 posted entry is included in a SENT Xero invoice, that fact feeds back and the

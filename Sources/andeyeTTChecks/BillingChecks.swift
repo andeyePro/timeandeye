@@ -237,6 +237,15 @@ final class FakeBackend: TaskBackend {
         return held.filter { $0.start >= from && $0.start <= to }
     }
     func addTaskComment(taskID: String, text: String) async throws {}
+
+    /// Entry id → invoice ref: what a SENT invoice covers (the invoice-lock
+    /// poll's answer). Also counts polls so the throttle is checkable.
+    var invoiced: [RemoteEntryID: String] = [:]
+    private(set) var invoicePolls = 0
+    func invoiceLocks(for ids: [RemoteEntryID]) async throws -> [RemoteEntryID: String] {
+        invoicePolls += 1
+        return invoiced.filter { ids.contains($0.key) }
+    }
 }
 
 func multiBackendSyncChecks(_ c: Checks) async {
