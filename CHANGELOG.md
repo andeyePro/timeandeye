@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+- [x] **Popover: right-click task menu – Open in backend, Comments.** Each
+  pick-list row gains a context menu: "Open in <backend>" opens the task's web
+  page via the connector (hidden in standalone mode), and "Comments…" shows
+  the timestamped notes stored locally against the task – the read half of
+  standalone comment-to-task (notes that couldn't or shouldn't go to a
+  backend land there; until now nothing displayed them). WorkTask is now
+  Identifiable (keyed by its ref). Mac: build clean, 460/0.
+
 - [x] **Timeline: [+all] window selector.** With a window selected in a
   slice's detail strip, a "+ all" button appears top-right whenever other
   windows in the slice carry the SAME recorded data (app + title + tab URL –

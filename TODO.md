@@ -315,11 +315,13 @@ and recorded rather than fixed blind:
   backend, activity picker hidden when the backend has none. Still open from
   this item: CSV/Markdown timesheet export (next), standalone comment storage.
   Plugin loader deferred until a second backend exists. - 2026-06-22
-- [ ] Right-click 'Open in <backend>' (task URL from the connector); standalone
-  → 'Open task' showing the timestamped comment list. - 2026-06-22
-- [ ] Standalone 'comment to task' storage: persist notes against the local
-  task in SQLite as a timestamped list (the standalone half of the comment
-  toggles already shipped for OP). - 2026-06-22
+- [x] Right-click 'Open in <backend>' + Comments… — DONE 2026-07-08
+  overnight: pick-list rows gain a context menu with "Open in <backend>"
+  (connector taskURL; hidden standalone) and "Comments…" (a sheet listing the
+  timestamped locally-stored notes — the read half of comment-to-task).
+- [x] Standalone 'comment to task' storage — storage half shipped earlier
+  (task_comments table + fallback writes); the READ surface landed 2026-07-08
+  overnight with the Comments… sheet above.
 - [x] Semantic-ish task search (DONE 2026-07-01): `searchTasks` now also matches a
   task by the words the learner has associated with it — `LearningStore.
   learnedValues(for:)` (titleToken/urlHost/app) fed into `FuzzyMatch.filter` via a

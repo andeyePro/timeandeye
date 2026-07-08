@@ -46,7 +46,9 @@ public enum Target: Hashable, Codable, Sendable {
     case doNotTrack
 }
 
-public struct WorkTask: Equatable, Codable, Sendable {
+public struct WorkTask: Equatable, Codable, Sendable, Identifiable {
+    /// Stable identity: the backend ref (what pick lists already key by).
+    public var id: TaskRef { ref }
     public var ref: TaskRef
     public var subject: String
     /// Display TITLE of the containing project (what lists/pies group by).

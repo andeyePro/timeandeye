@@ -26,6 +26,8 @@ struct PopoverView: View {
     /// it's a journal query, not for every popover render.
     @State private var todayNodes: [TimeAggregator.Node] = []
     @State private var changeMode = false
+    /// Task whose locally-stored comment list is showing (right-click → Comments…).
+    @State private var commentsFor: WorkTask?
     @FocusState private var noteFocused: Bool
     @FocusState private var filterFocused: Bool
     // The Evidence Card's inline expansion under the why-caption (⌘E) — see
@@ -139,6 +141,9 @@ struct PopoverView: View {
             changeMode = controller.settings.popoverDefaultsToChangeMode
             todayNodes = controller.todaySpentNodes()
             DispatchQueue.main.async { filterFocused = true }
+        }
+        .sheet(item: $commentsFor) { task in
+            commentsSheet(task)
         }
     }
 
@@ -983,6 +988,45 @@ struct PopoverView: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, 2)
+        // Right-click: the task's out-of-band actions (TODO 2026-06-22).
+        .contextMenu {
+            if let id = task.ref.backendTaskID, let url = controller.taskWebURL(id: id) {
+                Button("Open in \(controller.primaryBackendName ?? "backend")") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            Button("Comments…") { commentsFor = task }
+        }
+    }
+
+    /// Timestamped locally-stored notes for one task (the standalone half of
+    /// comment-to-task): read-only list, newest at the bottom like a chat.
+    private func commentsSheet(_ task: WorkTask) -> some View {
+        let comments = controller.storedTaskComments(for: task.ref)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Comments — \(task.subject)").font(.headline)
+            if comments.isEmpty {
+                Text("No local comments yet. Notes typed in the comment bar land here when they can't (or shouldn't) go to a backend.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(comments.enumerated()), id: \.offset) { _, c in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(c.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                Text(c.text).font(.callout).textSelection(.enabled)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 260)
+            }
+            HStack { Spacer(); Button("Done") { commentsFor = nil } }
+        }
+        .padding(14)
+        .frame(width: 340)
     }
 
     private var footer: some View {

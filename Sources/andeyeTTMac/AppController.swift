@@ -2229,6 +2229,17 @@ public final class AppController: ObservableObject {
         backend?.taskURL(id: id)
     }
 
+    /// The primary backend's display name, for menu labels ("Open in
+    /// OpenProject"). nil in standalone mode.
+    public var primaryBackendName: String? { backend?.displayName }
+
+    /// The timestamped comment list stored locally against a task — the
+    /// standalone half of comment-to-task (notes for .local tasks, backends
+    /// without a comment endpoint, and failed posts land here). Newest last.
+    public func storedTaskComments(for ref: TaskRef) -> [(date: Date, text: String)] {
+        (try? journal.taskComments(for: ref)) ?? []
+    }
+
     /// The journal for a period rendered as CSV or Markdown — the standalone
     /// way OUT of andeye (invoicing, records) with or without a backend.
     public enum TimesheetFormat { case csv, markdown }
