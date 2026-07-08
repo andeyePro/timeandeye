@@ -1,17 +1,18 @@
-# sites/ – the andeye web estate (static, no build step)
+# sites/ – the andeye web estate
 
-Each subdirectory is one Cloudflare Pages project serving plain static
-files – no framework, no dependencies, nothing to rot. The Time andeye
-product site (Astro + Starlight, incl. the manual) stays at `/site` and is
-unchanged by this directory.
+Two Astro projects, one shared eye engine, one previews folder. The Time
+andeye product site (Astro + Starlight, incl. the manual) is NOT here – it
+stays at `/site` in the repo root and deploys to time.andeye.com.
 
-| Directory | Domain | Status |
+| Path | Domain | What it is |
 |---|---|---|
-| `andeye.com-astro/` | andeye.com | CURRENT – Astro, copy editable in src/content/home.md |
-| `vibe.andeye.com-astro/` | vibe.andeye.com | CURRENT – Astro, copy editable in src/content/home.md |
-| `andeye.com/`, `vibe.andeye.com/` | – | superseded static drafts (first-pass logos) – delete after sign-off |
-| `logo-lab.html` | – | the logo variant picker (self-contained; open in a browser) |
-| `shared/andeye-eye.js` | – | the eye engine both Astro projects copy into public/ |
+| `andeye.com-astro/` | andeye.com | suite/values home – copy editable in src/content/home.md |
+| `vibe.andeye.com-astro/` | vibe.andeye.com | vibe explainer – copy editable in src/content/home.md |
+| `shared/andeye-eye.js` | – | the eye engine (source of truth; both projects copy it into public/) |
+| `previews/` | – | SELF-CONTAINED review files (open in any browser): andeye.com.html, vibe.andeye.com.html, logo-lab.html – regenerated in place after every change, same filenames |
+
+Superseded static drafts (`andeye.com/`, `vibe.andeye.com/`, the root
+`logo-lab.html`) were pruned 2026-07-08 – git history keeps them.
 
 ## Deploying (Martin, ~5 min each, Cloudflare dashboard)
 
@@ -27,11 +28,10 @@ unchanged by this directory.
 
 - The eye mark is drawn live from the ORIGINAL brand file
   (assets/brand/andeye.svg: blue #56C1FF, 17px stroke, exact path) with the
-  app's real eyelid wink; the iris is clipped by the aperture so a closing
-  lid crops it. Variants + weights: sites/logo-lab.html. Page copy lives in
-  each project's src/content/home.md – edit the markdown, push, Pages
-  rebuilds.
-- Palette matches the Time andeye site drafts (dark navy, #f0a13a accent).
+  app's real eyelid wink; the tail retracts along its own curve so the &
+  holds shape; the iris is clipped by the aperture and appears after the
+  draw-on. Tuning: previews/logo-lab.html.
+- Palette matches the Time andeye site (dark navy, #f0a13a accent).
 - Copy rules: Martin's voice; no em dashes (en dash with spaces); the
   values copy is from his 2026-07-07 brief (recorded in
   a private path
