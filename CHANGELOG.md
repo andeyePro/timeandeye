@@ -2,6 +2,17 @@
 
 ## 2026-07-08
 
+- [x] **Pick list: the recent-first block gains a horizon (B16).** Journal
+  back-fill gave every ever-tracked task a lastConfirmedAt, so a task touched
+  once months ago sat above never-tracked "Now" work forever. The block now
+  caps at two recency half-lives (default 14 days); older tasks rank
+  normally, where their recency still feeds the score. Also: the Pro
+  cross-project check evolved to the amendment contract (mustRecreate, Pro
+  suite 38/0); criterion 10's mapping-skip reopen recorded as D6-gated; the
+  deferral list restored to TODO.md (its original write was a silent
+  replace no-op — same bug family as the SyncEngine corruption, caught by
+  its absence). Mac-verified: 465 passed, 0 failed.
+
 - [x] **D4 amendment half: the backend now FOLLOWS the journal.** The
   convergence loop replaces detection-only counting: a posted entry whose
   session was trimmed/moved gets updateTimeEntry in place; a backend that

@@ -577,6 +577,25 @@ and recorded rather than fixed blind:
   collectionBehavior .fullScreenAuxiliary + .canJoinAllSpaces, or an
   NSPanel .nonactivatingPanel) so it can float over full-screen. Opus job.
 
+## Deferred from the overnight review (2026-07-08, queued with context)
+- [ ] B7: Surface identity drops URL query/fragment for non-mail sites — one
+  correction re-points ALL query-routed pages (?v=, ticket ids, SPA #/routes).
+  Needs the known-host recipe mechanism extended (mail-style) WITHOUT breaking
+  persisted primed.json keys. Design first.
+- [ ] B12: predicate render/re-parse breaks on embedded quotes (no escaping) —
+  the pin editor can't re-save such a rule. Escape on render + unescape in
+  tokenizer, with a migration-safe round-trip check.
+- [ ] B13: invalid regex in a `matches` pin silently never matches — validate
+  at editor save time and surface the error.
+- [x] B16 — DONE 2026-07-08 (window 2, a4d02c9): recent-first block capped at
+  two recency half-lives; ancient one-offs rank normally below live Now tasks.
+- [ ] B10 check: comment-source filtering is fixed but unpinned — needs a
+  harness path that closes an other-target span inside a work run.
+- [ ] C10: SensorHub.onEvent should be @MainActor-guarded before the
+  AXObserver (event-driven) refinement lands; today all emitters are main.
+- [ ] C13: undo key-monitor token never removed (app-lifetime today).
+- [ ] C14: pmset subprocess on the launch path — cache/defer off main.
+
 ## Fable session outputs (2026-07-07 night — review + code, NOT yet Mac-verified)
 - [x] RUN `swift run andeyeTTChecks` on the Mac — DONE 2026-07-08 00:2x BST
   via the the local build bridge bridge: TOTAL 441 passed, 0 failed (twice).

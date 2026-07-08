@@ -346,7 +346,10 @@ until then, document that billable flags should be set on the posting owner.
 10. Unmapped finance task → `.skipped("no Xero mapping…")`, queue proceeds;
     mapping added → session posts on the next pass (skipped rows for THIS
     reason re-open, unlike other skips — model as `.skipped` reason-code the
-    engine re-tests, or clear-on-mapping-change).
+    engine re-tests, or clear-on-mapping-change). NOTE 2026-07-08: the reopen
+    ships WITH the D6 mapping store — its change-handler is the only sane
+    trigger; a generic reason-code re-test has no change signal to key on.
+    The skip half is live (PermanentPostError path, checked).
 11. Downgrade safety: rows in the new states read as `.posted` by a decoder
     limited to the old enum (never-double-post direction preserved).
 12. Anti-entropy (D0.1): replicas A and B concurrently edit S; B's stale
