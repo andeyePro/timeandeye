@@ -254,4 +254,20 @@ func taskRankerChecks(_ c: Checks) {
         let picks = ranker.recentThenRanked(tasks, at: now)
         try expectEq(picks.map(\.subject), ["recent1", "recent2", "likelyNow", "likelyNext", "tail"])
     }
+
+    c.check("recent-first block has a horizon: an ancient one-off never outranks a live Now task (B16)") {
+        // Journal back-fill gives EVERY ever-tracked task a lastConfirmedAt;
+        // without a horizon a task touched once in March sat above
+        // never-tracked "Now" work forever.
+        let tasks = [
+            task(1, "ancient", "Closed", confirmedDaysAgo: 60),
+            task(2, "liveNow", "Now"),
+            task(3, "fresh", "Open", confirmedDaysAgo: 1),
+        ]
+        let picks = ranker.recentThenRanked(tasks, at: now)
+        try expectEq(picks.first?.subject, "fresh", "inside the horizon: recent-first holds")
+        try expect(picks.map(\.subject).firstIndex(of: "liveNow")!
+                    < picks.map(\.subject).firstIndex(of: "ancient")!,
+                   "outside the horizon: ranking wins over stale recency")
+    }
 }

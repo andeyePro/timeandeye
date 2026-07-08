@@ -62,8 +62,15 @@ public struct TaskRanker: Sendable {
     /// guarantee worth keeping (your just-used task sits at the top).
     public func recentThenRanked(_ tasks: [WorkTask], at now: Date,
                                  learning: LearningStore? = nil) -> [WorkTask] {
+        // The recent-first block has a HORIZON (reviewer B16): after journal
+        // back-fill, every task ever tracked carried a lastConfirmedAt, so
+        // ancient one-offs sat above never-tracked "Now" tasks forever. Two
+        // half-lives ≈ "recent enough to be your working set"; older tasks
+        // still rank normally below (their recency feeds the ranked score).
+        let horizon = now.addingTimeInterval(-2 * config.recencyHalfLifeDays * 86_400)
         let recent = tasks
             .compactMap { t in t.lastConfirmedAt.map { (t, $0) } }
+            .filter { $0.1 > horizon }
             .sorted { $0.1 > $1.1 }
             .map(\.0)
         let taken = Set(recent.map(\.ref))
