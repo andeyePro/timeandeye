@@ -7,13 +7,16 @@ unchanged by this directory.
 
 | Directory | Domain | Status |
 |---|---|---|
-| `andeye.com/` | andeye.com | ready to deploy – values home + product cards |
-| `vibe.andeye.com/` | vibe.andeye.com | ready to deploy – explainer/holding page |
+| `andeye.com-astro/` | andeye.com | CURRENT – Astro, copy editable in src/content/home.md |
+| `vibe.andeye.com-astro/` | vibe.andeye.com | CURRENT – Astro, copy editable in src/content/home.md |
+| `andeye.com/`, `vibe.andeye.com/` | – | superseded static drafts (first-pass logos) – delete after sign-off |
+| `logo-lab.html` | – | the logo variant picker (self-contained; open in a browser) |
+| `shared/andeye-eye.js` | – | the eye engine both Astro projects copy into public/ |
 
 ## Deploying (Martin, ~5 min each, Cloudflare dashboard)
 
-1. Cloudflare Pages → Create project → "Direct upload" (or connect the repo
-   with root directory `sites/<domain>` and NO build command, output `/`).
+1. Cloudflare Pages → Create project → connect the repo with root directory
+   `sites/<domain>-astro`, build command `npm run build`, output `dist`.
 2. Add the custom domain (andeye.com / vibe.andeye.com) to the project.
 3. BEFORE pointing andeye.com here: create the conferences project and move
    the CURRENT andeye.com content to conferences.andeye.com (its source is
@@ -22,9 +25,12 @@ unchanged by this directory.
 
 ## Design notes
 
-- The eye mark is code-drawn SVG using the app's own AndeyeLogo cubic
-  geometry – never a screenshot. Orange
-  clock-iris = Time andeye; white circle-iris-with-`>` = Vibe andeye.
+- The eye mark is drawn live from the ORIGINAL brand file
+  (assets/brand/andeye.svg: blue #56C1FF, 17px stroke, exact path) with the
+  app's real eyelid wink; the iris is clipped by the aperture so a closing
+  lid crops it. Variants + weights: sites/logo-lab.html. Page copy lives in
+  each project's src/content/home.md – edit the markdown, push, Pages
+  rebuilds.
 - Palette matches the Time andeye site drafts (dark navy, #f0a13a accent).
 - Copy rules: Martin's voice; no em dashes (en dash with spaces); the
   values copy is from his 2026-07-07 brief (recorded in

@@ -1,0 +1,64 @@
+---
+import AndeyeEye from '../components/AndeyeEye.astro';
+import { frontmatter, Content } from '../content/home.md';
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{frontmatter.title} – {frontmatter.tagline}</title>
+<meta name="description" content={frontmatter.description}>
+<style>
+  :root { --bg:#0c0f16; --panel:#131826; --line:#232b40; --text:#eef1f6;
+          --muted:#98a0b3; --faint:#6a7382; --accent:#f0a13a; --radius:14px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); line-height:1.6;
+         font-family:-apple-system,"SF Pro Display","Segoe UI",sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  a { color:var(--accent); }
+  main { max-width:720px; margin:0 auto; padding:64px 24px 96px; }
+  header { display:flex; align-items:center; gap:16px; margin-bottom:48px; }
+  header :global(svg) { width:104px; height:68px; }
+  h1 { font-size:26px; margin:0; }
+  .tagline { color:var(--muted); font-size:15px; }
+  h2 { font-size:19px; margin:36px 0 10px; }
+  .prose { color:var(--muted); font-size:16px; }
+  .prose :global(strong) { color:var(--text); }
+  .how { display:grid; gap:6px; padding:0; margin:18px 0; list-style:none; }
+  .how li { padding:10px 14px; background:var(--panel); border:1px solid var(--line);
+            border-radius:var(--radius); color:var(--muted); font-size:15px; }
+  .how li strong { color:var(--text); }
+  .soon { display:inline-block; margin-top:28px; padding:8px 14px;
+          border:1px solid var(--line); border-radius:999px;
+          color:var(--faint); font-size:13.5px; }
+  footer { margin-top:64px; padding-top:18px; border-top:1px solid var(--line);
+           color:var(--faint); font-size:13.5px; }
+  footer a { color:var(--faint); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <AndeyeEye variant="vibe" weight="stroke" />
+    <div>
+      <h1>{frontmatter.title}</h1>
+      <div class="tagline">{frontmatter.tagline}</div>
+    </div>
+  </header>
+
+  <div class="prose"><Content /></div>
+
+  <h2>How it keeps the quality up</h2>
+  <ul class="how">
+    {frontmatter.how.map((h) => (
+      <li><strong>{h.heading}</strong> {h.body}</li>
+    ))}
+  </ul>
+
+  <p class="soon">{frontmatter.status}</p>
+
+  <footer><p><a href="https://andeye.com">andeye</a> · {frontmatter.footer}</p></footer>
+</main>
+</body>
+</html>

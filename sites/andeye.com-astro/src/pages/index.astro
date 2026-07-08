@@ -1,0 +1,78 @@
+---
+import AndeyeEye from '../components/AndeyeEye.astro';
+import { frontmatter, Content } from '../content/home.md';
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{frontmatter.title} – {frontmatter.tagline}</title>
+<meta name="description" content={frontmatter.description}>
+<style>
+  :root { --bg:#0c0f16; --panel:#131826; --line:#232b40; --text:#eef1f6;
+          --muted:#98a0b3; --faint:#6a7382; --accent:#f0a13a; --radius:14px; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); line-height:1.6;
+         font-family:-apple-system,"SF Pro Display","Segoe UI",sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  a { color:var(--text); } a:hover { color:var(--accent); }
+  main { max-width:880px; margin:0 auto; padding:48px 24px 96px; }
+  header { display:flex; align-items:center; gap:16px; margin:24px 0 56px; }
+  header h1 { font-size:28px; margin:0; letter-spacing:.5px; }
+  header :global(svg) { width:96px; height:62px; }
+  .tagline { color:var(--muted); font-size:15px; margin-top:2px; }
+  h2 { font-size:20px; margin:40px 0 12px; }
+  .prose { color:var(--muted); font-size:16px; max-width:64ch; }
+  .prose :global(strong) { color:var(--text); }
+  .values { display:grid; gap:6px; margin:20px 0 8px; padding:0; list-style:none; }
+  .values li { padding:10px 14px; background:var(--panel); border:1px solid var(--line);
+               border-radius:var(--radius); color:var(--muted); font-size:15px; }
+  .values li strong { color:var(--text); }
+  .products { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+              gap:20px; margin-top:28px; }
+  .card { display:block; text-decoration:none; background:var(--panel);
+          border:1px solid var(--line); border-radius:var(--radius); padding:26px;
+          transition:border-color .15s,transform .15s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); color:var(--text); }
+  .card :global(svg) { height:96px; width:100%; margin-bottom:14px; }
+  .card h3 { margin:0 0 6px; font-size:18px; }
+  .card p { font-size:14.5px; margin:0; color:var(--muted); }
+  footer { margin-top:72px; padding-top:20px; border-top:1px solid var(--line);
+           color:var(--faint); font-size:13.5px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <AndeyeEye variant="main" />
+    <div>
+      <h1>{frontmatter.title}</h1>
+      <div class="tagline">{frontmatter.tagline}</div>
+    </div>
+  </header>
+
+  <div class="prose"><Content /></div>
+
+  <h2>What we believe</h2>
+  <ul class="values">
+    {frontmatter.values.map((v) => (
+      <li><strong>{v.heading}</strong> {v.body}</li>
+    ))}
+  </ul>
+
+  <h2>What we make</h2>
+  <div class="products">
+    {frontmatter.products.map((p) => (
+      <a class="card" href={p.href}>
+        <AndeyeEye variant={p.eye} weight="fill" />
+        <h3>{p.name}</h3>
+        <p>{p.blurb}</p>
+      </a>
+    ))}
+  </div>
+
+  <footer><p>{frontmatter.footer} · <a href="https://github.com/andeyePro">GitHub</a></p></footer>
+</main>
+</body>
+</html>
