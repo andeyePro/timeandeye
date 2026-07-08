@@ -48,14 +48,14 @@
     </div>
     <div class="line">
       <label>lid raise</label>
-      <input type="range" id="lift" min="0" max="1000" value="400">
-      <output id="liftV">0.400</output>
+      <input type="range" id="lift" min="0" max="1000" value="0">
+      <output id="liftV">0.000</output>
       <span style="font-size:12px;color:#6a7382">closed LOWER lid rises this much more (0 = original)</span>
     </div>
     <div class="line">
       <label>smoothing</label>
-      <input type="range" id="smooth" min="0" max="1000" value="500">
-      <output id="smoothV">0.500</output>
+      <input type="range" id="smooth" min="0" max="1000" value="1000">
+      <output id="smoothV">1.000</output>
       <span style="font-size:12px;color:#6a7382">flattens the closed top lid at the left — softens the bump against the flourish</span>
     </div>
     <div class="line" style="font-size:12px;color:#6a7382">
@@ -113,7 +113,8 @@
   // Closed-pose tuning: `lift` raises the closed LOWER lid a fraction,
   // `smooth` flattens the closed TOP lid near the left corner. 0/0 is the
   // app's original pose (with the new corner hinge).
-  var TUNE = { lift: 0, smooth: 0 };
+  // MARTIN'S BAKED VERDICT (8 Jul 20:48): lift 0, smooth 1.
+  var TUNE = { lift: 0, smooth: 1 };
   function closedPose() {
     return {
       top: { c1: P(171.03, 187.18 - 22 * TUNE.smooth), c2: P(258.9, 178.05 - 6 * TUNE.smooth) },

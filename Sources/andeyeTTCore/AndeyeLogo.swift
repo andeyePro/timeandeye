@@ -70,8 +70,13 @@ public enum AndeyeLogo {
     /// hinge at the corners, no tail left behind. The top-lid values are a
     /// least-squares fit of its cubic (endpoints pinned) onto the reversed
     /// closed bottom lid, so at wink 1 the lids lie along one gentle ‿ arc.
-    static let topLidClosed = (c1: Point(230.81, 197.41), c2: Point(311.59, 140.29))
-    static let bottomLidClosed = (c1: Point(311, 141), c2: Point(232, 196))
+    /// MARTIN'S BAKED POSE (2026-07-08 20:48, dialled in the lab): lid
+    /// raise 0, smoothing 1 — any more lift and the lower lid crosses above
+    /// the upper; any less smoothing and the upper overshoots the lower.
+    /// Max lid separation at full wink: 1.96 SVG units against the
+    /// 17-unit stroke, so the shut lids render as one line.
+    static let topLidClosed = (c1: Point(171.03, 165.18), c2: Point(258.9, 172.05))
+    static let bottomLidClosed = (c1: Point(311, 141), c2: Point(220, 190))
     /// Where the two strokes of the & cross — the eye's left corner: the
     /// point ON curve 0 at `tailCrossU`.
     static let leftCorner = Point(121.243, 138.111)

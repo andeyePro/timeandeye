@@ -42,13 +42,11 @@
     var r0 = m(q0, q1), r1 = m(q1, q2);
     return [m(r0, r1), r1, q2, c[3]];
   }
-  // Closed-pose tuning (Martin, 8 Jul): `lift` raises the closed LOWER lid a
-  // fraction (a real wink lifts the bottom lid, not just drops the top), and
-  // `smooth` flattens the closed TOP lid near the left corner, softening the
-  // bump where the closed lids meet the flourish. 0/0 reproduces the app's
-  // original fullStroke pose; the lab exposes sliders and the picked values
-  // get baked here once confirmed.
-  var TUNE = { lift: 0, smooth: 0 };
+  // Closed-pose tuning. MARTIN'S BAKED VERDICT (8 Jul 20:48): lift 0,
+  // smooth 1 — any more lift and the lower lid crosses above the upper;
+  // any less smoothing and the upper lid overshoots the lower. The sliders
+  // in the lab still adjust from these defaults.
+  var TUNE = { lift: 0, smooth: 1 };
   function closedPose() {
     return {
       top: { c1: P(171.03, 187.18 - 22 * TUNE.smooth), c2: P(258.9, 178.05 - 6 * TUNE.smooth) },
