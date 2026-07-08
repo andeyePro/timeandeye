@@ -1148,6 +1148,21 @@ struct TimelineView: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if !spans.isEmpty {
                     Spacer()
+                    // [+all]: with a window selected, one click extends the
+                    // selection to every window carrying the SAME recorded
+                    // data (app + title + tab, NOT the times) — the "move all
+                    // the Calendar windows at once" gesture. Appears only
+                    // when it would actually add something.
+                    let addable = identicalUnselected(in: spans)
+                    if !addable.isEmpty {
+                        Button {
+                            selectedSpanIdx.formUnion(addable)
+                        } label: {
+                            Text("+ all")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .help("Select the \(addable.count) other window\(addable.count == 1 ? "" : "s") recorded with the same app + title")
+                    }
                     Button { stripPxPerSec = max(stripPxPerSec / 1.6, 0.2) } label: {
                         Image(systemName: "minus.magnifyingglass")
                     }
@@ -1209,6 +1224,25 @@ struct TimelineView: View {
             .frame(width: max(secs * stripPxPerSec, 3), height: 28)
             .help("\(label)\n\(secs < 60 ? "\(Int(secs))s" : "\(Int(secs/60))m")  ·  \(span.start.formatted(date: .omitted, time: .standard))")
             .onTapGesture { selectSpan(index) }
+    }
+
+    /// A window's identity for [+all]: everything the window reported about
+    /// ITSELF (app, title, tab URL) — never the times.
+    private func spanIdentity(_ span: FocusSpan) -> String {
+        "\(span.signal.app)|\(span.signal.windowTitle ?? "")|\(span.signal.tabURL ?? "")"
+    }
+
+    /// Unselected span indices whose identity matches ANY selected span —
+    /// what [+all] would add. Empty when nothing is selected or every twin
+    /// is already in the selection.
+    private func identicalUnselected(in spans: [FocusSpan]) -> Set<Int> {
+        let selectedKeys = Set(selectedSpanIdx.compactMap { i -> String? in
+            i < spans.count ? spanIdentity(spans[i]) : nil
+        })
+        guard !selectedKeys.isEmpty else { return [] }
+        return Set(spans.indices.filter { i in
+            !selectedSpanIdx.contains(i) && selectedKeys.contains(spanIdentity(spans[i]))
+        })
     }
 
     /// Finder-style selection: plain click selects just this one, ⌘-click

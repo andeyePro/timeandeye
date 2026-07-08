@@ -504,11 +504,11 @@ and recorded rather than fixed blind:
 
 ## Window detail selection helpers (Martin, 2026-07-07)
 
-- [ ] [+all] button — top-right of each window row in a slice's detail
-  strip, shown ONLY when the slice holds more than one IDENTICAL window
-  (identical = the raw app+title the window reported on itself, e.g.
-  "Calendar – Calendar", NOT the start/end times). Click selects every
-  identical window in the slice. Ship this first.
+- [x] [+all] button — DONE 2026-07-08 overnight (Martin's 01:53 the maintainer channel
+  request): "+ all" appears top-right of the detail strip whenever the
+  current selection has unselected twins (identity = app + title + tab URL,
+  never the times); one click extends the selection to all of them; help
+  text counts what it will add. Full build + suite green on the bridge.
 - [ ] [+similar] button (later, non-critical) — pressable repeatedly to
   accumulate windows similar to the current one; a paired [-similar] steps
   the accumulation back so you can undo over-pressing. After [+all].

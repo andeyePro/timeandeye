@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+- [x] **Timeline: [+all] window selector.** With a window selected in a
+  slice's detail strip, a "+ all" button appears top-right whenever other
+  windows in the slice carry the SAME recorded data (app + title + tab URL –
+  never the times): one click extends the selection to all of them, ready for
+  a single reassign/move. Hidden when it would add nothing; the tooltip
+  counts what it will select. Requested live mid-run.
+
 - [x] **Docs-drift pass (reviewer C22–C33).** README: the API key goes to an
   owner-only file in app support, NOT the Keychain (the old claim was
   factually wrong); the architecture bullet stops crediting andeyeTTMac with
