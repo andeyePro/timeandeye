@@ -7,9 +7,10 @@
 - [ ] Evidence Card text selectable (drag + cmd-C over the whole card; no
   copy button).
 - [ ] "forget that fallback too" line: why orange? restyle to match.
-- [ ] CLA: add Scots-law governing clause + arbitration seated in Glasgow.
-- [ ] ICO item is DONE (ZAxxxxxx renews 01/08/2026 by DD) – update
-  responder spec §Martin-actions + TODO.md to reflect already-registered.
+- [x] CLA: Scots-law governing clause + Glasgow arbitration — already present
+  as CLA.md §8 (verified 2026-07-08 overnight run); item was stale.
+- [x] ICO item — verified 2026-07-08: responder spec AND TODO.md already
+  say DONE/ZAxxxxxx; nothing to update. Item was stale.
 - [ ] Update site waitlist/manual wording if needed for time.andeye.com
   domain decision (pending strategy answer).
 - [ ] the maintainer channel 15:28 item 6 cadence: attribution-follows-within-seconds
