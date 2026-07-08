@@ -1,7 +1,7 @@
 # OpusTODO – work Opus handles as well as Fable (park for post-trial)
 
-- [ ] Silence the `_ = try?` unused-result warnings (AppController.swift:263,
-  PhoneController.swift:51, BillingChecks.swift:333) – prefix with `_ =`.
+- [x] Silence the `_ = try?` unused-result warnings — verified 2026-07-08
+  overnight: a full Mac build emits ZERO warnings; already fixed upstream.
 - [ ] Light-mode contrast: AndeyeColors.highlight needs a light-scheme
   variant (light blue weak on white/blue; dark mode confirmed good).
 - [ ] Evidence Card text selectable (drag + cmd-C over the whole card; no
