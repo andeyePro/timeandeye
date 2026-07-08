@@ -579,10 +579,15 @@ const copy = (await getEntry('copy', 'home')).data;
   .flow-node:hover { border-color: rgba(240, 161, 58, 0.45); }
   .flow-node.pinned { border-color: var(--accent); background: var(--panel-2); }
   .flow-arrow { color: var(--faint); flex: none; }
+  /* The old 7.6em min-height reserved a huge VOID below the one-line
+     default (Martin, 2026-07-08: "spaces so large I'm assuming something
+     got lost"). Now the box hugs its content; growing on CLICK is fine —
+     that's deliberate, unlike hover (the CTA box above is fixed because
+     hover movement is not). */
   .flow-detail {
     max-width: 640px;
     margin: 1.8rem auto 0;
-    min-height: 7.6em;
+    min-height: 2.6em;
     text-align: center;
     color: var(--muted);
     font-size: 0.98rem;
@@ -657,7 +662,9 @@ const copy = (await getEntry('copy', 'home')).data;
     background: var(--accent);
     transition: left 0.25s ease, width 0.25s ease;
   }
-  .cpanel { margin-top: 1.7rem; min-height: 8.4em; }
+  /* Sized to the LONGER tab body (3 lines + link) so switching tabs moves
+     nothing — 8.4em left a two-line void under both (the gaps sweep). */
+  .cpanel { margin-top: 1.7rem; min-height: 5.6em; }
   .cpanel p { color: var(--muted); font-size: 0.97rem; max-width: 600px; margin: 0 0 1rem; }
   .cpanel a { font-weight: 700; text-decoration: none; color: var(--accent); }
   .cpanel a:hover { text-decoration: underline; }
