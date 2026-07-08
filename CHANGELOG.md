@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+- [x] **Pin rules: quoted values with embedded quotes round-trip (B12).** A
+  rule whose value contained a double quote (an email subject like
+  `re: "urgent"`) rendered unparseable, so the pin editor couldn't re-save an
+  untouched rule. Render now escapes quotes and backslashes, the tokenizer
+  unescapes them, and unknown escapes pass through so existing rules parse
+  exactly as before. Round-trip check added. Mac-verified: 466 passed,
+  0 failed.
+
 - [x] **Pick list: the recent-first block gains a horizon (B16).** Journal
   back-fill gave every ever-tracked task a lastConfirmedAt, so a task touched
   once months ago sat above never-tracked "Now" work forever. The block now

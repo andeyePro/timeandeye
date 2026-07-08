@@ -59,7 +59,12 @@ public enum PredicateParser {
     public static func string(from predicate: Predicate) -> String {
         switch predicate {
         case .leaf(let f, let op, let v):
-            return "\(f.rawValue) \(word(for: op)) \"\(v)\""
+            // Escape embedded quotes/backslashes (B12): a subject like
+            // `re: "urgent"` used to render unparseable, bricking the pin
+            // editor's re-save of an untouched rule.
+            let escaped = v.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return "\(f.rawValue) \(word(for: op)) \"\(escaped)\""
         case .and(let ps):
             return ps.map(atom).joined(separator: " and ")
         case .or(let ps):
@@ -103,7 +108,19 @@ public enum PredicateParser {
             if c == "\"" {
                 i += 1
                 var v = ""
-                while i < chars.count, chars[i] != "\"" { v.append(chars[i]); i += 1 }
+                // Backslash escapes inside quotes (B12): \" is a literal
+                // quote, \\ a literal backslash; an unknown escape keeps
+                // both characters (old rules without escapes parse as ever).
+                while i < chars.count, chars[i] != "\"" {
+                    if chars[i] == "\\", i + 1 < chars.count,
+                       chars[i + 1] == "\"" || chars[i + 1] == "\\" {
+                        v.append(chars[i + 1])
+                        i += 2
+                    } else {
+                        v.append(chars[i])
+                        i += 1
+                    }
+                }
                 if i < chars.count { i += 1 }   // consume closing quote
                 toks.append(.quoted(v))
                 continue

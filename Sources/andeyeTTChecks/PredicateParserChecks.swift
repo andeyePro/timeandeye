@@ -156,4 +156,15 @@ func predicateParserChecks(_ c: Checks) {
         try expect(p.evaluate(email), "bare keyword now hits a correspondent")
         try expect(try parsed("policy").evaluate(email), "bare keyword hits the subject too")
     }
+    c.check("quoted values with embedded quotes/backslashes round-trip render→parse (B12)") {
+        let nasty = Predicate.leaf(field: .subject, op: .contains,
+                                   value: "re: \"urgent\" \\ final")
+        let rendered = PredicateParser.string(from: nasty)
+        try expectEq(try parsed(rendered), nasty,
+                     "the pin editor must be able to re-save an untouched rule")
+        // Old rules without escapes parse exactly as before.
+        try expectEq(try parsed("subject contains \"plain\""),
+                     .leaf(field: .subject, op: .contains, value: "plain"))
+    }
+
 }

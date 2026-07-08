@@ -582,9 +582,9 @@ and recorded rather than fixed blind:
   correction re-points ALL query-routed pages (?v=, ticket ids, SPA #/routes).
   Needs the known-host recipe mechanism extended (mail-style) WITHOUT breaking
   persisted primed.json keys. Design first.
-- [ ] B12: predicate render/re-parse breaks on embedded quotes (no escaping) —
-  the pin editor can't re-save such a rule. Escape on render + unescape in
-  tokenizer, with a migration-safe round-trip check.
+- [x] B12 — DONE 2026-07-08 (window 2): render escapes quotes/backslashes,
+  the tokenizer unescapes; unknown escapes pass through so old rules parse
+  unchanged; round-trip check added.
 - [ ] B13: invalid regex in a `matches` pin silently never matches — validate
   at editor save time and surface the error.
 - [x] B16 — DONE 2026-07-08 (window 2, a4d02c9): recent-first block capped at
