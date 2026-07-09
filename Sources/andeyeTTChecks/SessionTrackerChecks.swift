@@ -961,4 +961,30 @@ func sessionTrackerChecks(_ c: Checks) {
                        || $0.start >= excursion[0].end.addingTimeInterval(-1) },
                    "dominant slices must not overlap the carved pinned slice")
     }
+
+    c.check("rapid MANUAL pick + comment + pick back: the pinned middle survives the relabels (Martin's 02:01 test)") {
+        // Picking a task from the list is a RELABEL (this whole visit was X),
+        // and picking back relabels again — which re-tagged the commented
+        // middle stretch and erased it before flush. Pinned spans are immune.
+        let (tracker, _) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        // Comment on op(1) at 60 s, then PICK op(2), comment, PICK back.
+        tracker.pinCurrentVisit(target: .task(.op(1)), at: t(60))
+        tracker.relabelCurrentSession(to: .op(2))
+        tracker.handle(.focus(sig("Ghostty", "Mon&I", at: 70)))
+        tracker.pinCurrentVisit(target: .task(.op(2)), at: t(80))
+        tracker.relabelCurrentSession(to: .op(1))
+        tracker.handle(.input(t(150)))
+        tracker.stop(at: t(180))
+
+        let mid = sessions.filter { $0.task == .op(2) }
+        try expectEq(mid.count, 1, "the commented middle pick must survive as its own slice")
+        try expect(mid[0].start >= t(59) && mid[0].end <= t(81),
+                   "the middle slice covers just the pinned stretch, got \(mid[0].start.timeIntervalSince(t(0)))–\(mid[0].end.timeIntervalSince(t(0)))")
+        try expect(!sessions.filter { $0.task == .op(1) }.isEmpty,
+                   "the surrounding op(1) time still flushes")
+    }
 }

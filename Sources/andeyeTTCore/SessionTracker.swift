@@ -235,7 +235,11 @@ public final class SessionTracker {
         guard case .tracking = state else { return }
         pendingSwitch = nil
         pendingNotify = nil
-        for i in spans.indices {
+        // Pinned spans keep their attested target: a rapid pick-comment-pick
+        // sequence (Martin's Time&I → Mon&I → Time&I test, 2026-07-09) is a
+        // relabel each way, and re-tagging the commented middle stretch
+        // erased its identity before the flush could surface it.
+        for i in spans.indices where !isPinned(spans[i]) {
             spans[i].target = .task(task)
             spans[i].certainty = 0.95
         }
@@ -243,6 +247,14 @@ public final class SessionTracker {
             attributor.confirm(signal, task: task, tasks: tasks())
         }
         state = .tracking(.task(task), certainty: 0.95)
+    }
+
+    /// Whether a span covers a comment-pinned moment for ITS OWN target —
+    /// such spans are immune to relabel/reevaluate re-tagging.
+    private func isPinned(_ span: FocusSpan) -> Bool {
+        pins.contains { $0.target == span.target
+            && $0.at >= span.start.addingTimeInterval(-1)
+            && $0.at <= span.end.addingTimeInterval(1) }
     }
 
     /// Re-evaluate the current surface against the attributor WITHOUT splitting
@@ -256,7 +268,9 @@ public final class SessionTracker {
               let best = attributor.attribute(signal, tasks: tasks(), now: signal.timestamp).best,
               best.score >= config.uncertainBelow else { return }
         if best.target != displayTarget {
-            for i in spans.indices { spans[i].target = best.target }
+            for i in spans.indices where !isPinned(spans[i]) {
+                spans[i].target = best.target
+            }
         }
         state = .tracking(best.target, certainty: best.score)
     }
