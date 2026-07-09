@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build timeandeye.app (Time&i) from the SwiftPM executable.
+# Build timeandeye.app (Time&I) from the SwiftPM executable.
 # Run on the Mac, from the repo root:  ./scripts/make-app.sh [output-dir]
 set -euo pipefail
 
@@ -26,18 +26,19 @@ if pgrep -xq andeye; then
     fi
 fi
 
-swift build -c release --product andeyeApp
-BIN="$(swift build -c release --show-bin-path)/andeyeApp"
+swift build -c release --product timeandeyeApp
+BIN="$(swift build -c release --show-bin-path)/timeandeyeApp"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/andeye"
 
-# Naming: bundle/folder = timeandeye, short human name = Time&i (XML-escaped
-# as Time&amp;i below), long human name = Time andeye.
-# CFBundleIdentifier MUST NOT change: TCC grants (Accessibility, Automation,
-# Calendar) key off this identifier plus the stable signing identity — a new
-# id silently revokes every grant.
+# Naming: bundle/folder = timeandeye, human name = Time&I (XML-escaped as
+# Time&amp;I below; there is no separate long form — CFBundleName and
+# CFBundleDisplayName are both Time&I).
+# CFBundleIdentifier MUST NOT change, EVER — not even for a rebrand: TCC
+# grants (Accessibility, Automation, Calendar) key off this identifier plus
+# the stable signing identity — a new id silently revokes every grant.
 # CFBundleExecutable stays "andeye" deliberately: the quit-wait above
 # (pgrep -x andeye) must match BOTH the old andeye.app and this bundle's
 # process during an upgrade, and nothing user-visible shows the executable
@@ -49,8 +50,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key><string>com.andeye.mac</string>
-    <key>CFBundleName</key><string>Time&amp;i</string>
-    <key>CFBundleDisplayName</key><string>Time andeye</string>
+    <key>CFBundleName</key><string>Time&amp;I</string>
+    <key>CFBundleDisplayName</key><string>Time&amp;I</string>
     <key>CFBundleExecutable</key><string>andeye</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
@@ -58,13 +59,13 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Time&amp;i reads the active browser tab URL to attribute time to the right task.</string>
+    <string>Time&amp;I reads the active browser tab URL to attribute time to the right task.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Time&amp;i observes whether the microphone is in use (call detection); it never records audio.</string>
+    <string>Time&amp;I observes whether the microphone is in use (call detection); it never records audio.</string>
     <key>NSCalendarsUsageDescription</key>
-    <string>Time&amp;i reads your calendar (read-only) to guess what you're supposed to be doing right now and to hint at old review-queue rows that overlap a past event. It never creates, edits or deletes anything on your calendar.</string>
+    <string>Time&amp;I reads your calendar (read-only) to guess what you're supposed to be doing right now and to hint at old review-queue rows that overlap a past event. It never creates, edits or deletes anything on your calendar.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Time&amp;i talks to your own backend instance, which may be on your local network.</string>
+    <string>Time&amp;I talks to your own backend instance, which may be on your local network.</string>
     <!-- v0.1: user-entered OP URLs may be plain http on a LAN/NAS; without
          this exception ATS silently blocks every request from a bundled app. -->
     <key>NSAppTransportSecurity</key>

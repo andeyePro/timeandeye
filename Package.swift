@@ -2,41 +2,41 @@
 import PackageDescription
 
 let package = Package(
-    name: "andeyeTT",
+    name: "timeandeye",
     platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
-        .library(name: "andeyeTTCore", targets: ["andeyeTTCore"]),
+        .library(name: "timeandeyeCore", targets: ["timeandeyeCore"]),
         // The pro repo's executable wraps these two (plus its paid backends).
-        .library(name: "andeyeTTMac", targets: ["andeyeTTMac"]),
-        .library(name: "andeyeTTUI", targets: ["andeyeTTUI"]),
-        .library(name: "andeyeTTStore", targets: ["andeyeTTStore"]),
-        .library(name: "andeyeTTPhone", targets: ["andeyeTTPhone"]),
+        .library(name: "timeandeyeMac", targets: ["timeandeyeMac"]),
+        .library(name: "timeandeyeUI", targets: ["timeandeyeUI"]),
+        .library(name: "timeandeyeStore", targets: ["timeandeyeStore"]),
+        .library(name: "timeandeyePhone", targets: ["timeandeyePhone"]),
     ],
     targets: [
-        .target(name: "andeyeTTCore"),
+        .target(name: "timeandeyeCore"),
         // Platform-NEUTRAL persistence + sync transport: SQLite replica,
         // CloudKit pipe, key file store. macOS AND iOS build on this.
-        .target(name: "andeyeTTStore", dependencies: ["andeyeTTCore"]),
+        .target(name: "timeandeyeStore", dependencies: ["timeandeyeCore"]),
         // The iOS app's engine (manual tracking, pick list, export) —
         // UI-framework-free, so the CLT-only Mac loop compile-guards and
         // checks it; only the SwiftUI shell in ios/ needs Xcode.
-        .target(name: "andeyeTTPhone", dependencies: ["andeyeTTCore", "andeyeTTStore"]),
+        .target(name: "timeandeyePhone", dependencies: ["timeandeyeCore", "timeandeyeStore"]),
         // macOS-only layer: sensors, app controller, menu-bar glue.
-        .target(name: "andeyeTTMac", dependencies: ["andeyeTTCore", "andeyeTTStore"]),
+        .target(name: "timeandeyeMac", dependencies: ["timeandeyeCore", "timeandeyeStore"]),
         // The whole SwiftUI layer as a LIBRARY, so app flavours are thin
         // wrappers: Community (below) and the private Pro executable both
         // return AndeyeScenes.body(controller:).
-        .target(name: "andeyeTTUI", dependencies: ["andeyeTTCore", "andeyeTTMac"]),
+        .target(name: "timeandeyeUI", dependencies: ["timeandeyeCore", "timeandeyeMac"]),
         // The Community menu-bar app (wrapped into timeandeye.app by scripts/make-app.sh).
-        .executableTarget(name: "andeyeApp",
-                          dependencies: ["andeyeTTCore", "andeyeTTMac", "andeyeTTUI"]),
+        .executableTarget(name: "timeandeyeApp",
+                          dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyeUI"]),
         // Check harness instead of a test target: the build Mac has Command
-        // Line Tools only (no XCTest / Swift Testing). Run: swift run andeyeTTChecks
-        .executableTarget(name: "andeyeTTChecks",
-                          dependencies: ["andeyeTTCore", "andeyeTTMac", "andeyeTTPhone"]),
+        // Line Tools only (no XCTest / Swift Testing). Run: swift run timeandeyeChecks
+        .executableTarget(name: "timeandeyeChecks",
+                          dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyePhone"]),
         // Headless end-to-end against a REAL OpenProject as a test user:
-        // swift run andeyeTTIntegration <base-url> <key-file>
-        .executableTarget(name: "andeyeTTIntegration",
-                          dependencies: ["andeyeTTCore", "andeyeTTMac"]),
+        // swift run timeandeyeIntegration <base-url> <key-file>
+        .executableTarget(name: "timeandeyeIntegration",
+                          dependencies: ["timeandeyeCore", "timeandeyeMac"]),
     ]
 )

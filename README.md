@@ -1,6 +1,6 @@
-# Time&i
+# Time&I
 
-**Time&i** (long form *Time andeye*, repo `timeandeye`) — automatic time
+**Time&I** (repo `timeandeye`) — automatic time
 tracking against your project-management tool's tasks. A macOS
 menu-bar app that watches which window, app or browser tab is active and
 attributes the time to the most likely task, learning from your confirmations
@@ -28,7 +28,7 @@ cd timeandeye
 Run the checks (no XCTest needed – plain executable):
 
 ```bash
-swift run andeyeTTChecks   # expect: TOTAL: N passed, 0 failed
+swift run timeandeyeChecks   # expect: TOTAL: N passed, 0 failed
 ```
 
 ## First-run setup
@@ -36,9 +36,9 @@ swift run andeyeTTChecks   # expect: TOTAL: N passed, 0 failed
 1. **Launch**: right-click `timeandeye.app` → Open (it is ad-hoc signed, not
    notarized). A grey dot + `–` appears in the menu bar.
 2. **Accessibility** (window titles): System Settings → Privacy & Security →
-   Accessibility → enable Time andeye. The app prompts on first launch.
+   Accessibility → enable Time&I. The app prompts on first launch.
 3. **Automation → browser** (tab URLs): the first time Chrome/Opera/Brave is
-   frontmost, macOS asks "Time andeye wants to control Google Chrome" → Allow.
+   frontmost, macOS asks "Time&I wants to control Google Chrome" → Allow.
 4. **Connect OpenProject**: menu-bar dot → Settings → enter your instance URL
    and an API key (OP: Account settings → Access tokens → API). The key is
    stored in an owner-only file in the app's support folder (not the
@@ -52,7 +52,7 @@ swift run andeyeTTChecks   # expect: TOTAL: N passed, 0 failed
 
 ## Nomenclature
 
-andeye records time in a small hierarchy — these are the words used in the
+Time&I records time in a small hierarchy — these are the words used in the
 UI, this README, and the code:
 
 - **Slice** — one contiguous stretch of time tracked to a single task. A slice
@@ -115,18 +115,18 @@ non-work time land there instead of stopping the clock.
 
 ## Architecture
 
-- `andeyeTTCore` – platform-independent engine: attribution (task URL ≈ 100%,
+- `timeandeyeCore` – platform-independent engine: attribution (task URL ≈ 100%,
   task-priming, learned associations, ranking priors), dominant-minute session
   resolution, journal protocol, the `TaskBackend` seam (OpenProject behind
   `OPBackend`; Xero next; standalone = no backend), sync, timesheet export,
   AI-assist, settings. No AppKit; the iOS companion (planned in this repo, as
   an `ios/` Xcode project) reuses it unchanged.
-- `andeyeTTMac` – sensors (NSWorkspace, Accessibility window titles, browser
+- `timeandeyeMac` – sensors (NSWorkspace, Accessibility window titles, browser
   tabs via Apple Events, idle, sleep/wake, mic-in-use) and the app
   controller. Persistence (raw-sqlite3 journal, API-key file store) lives in
-  `andeyeTTStore`.
-- `andeyeApp` – SwiftUI `MenuBarExtra` popover, review window, settings.
-- `andeyeTTChecks` – the test suite as a plain executable (no XCTest
+  `timeandeyeStore`.
+- `timeandeyeApp` – SwiftUI `MenuBarExtra` popover, review window, settings.
+- `timeandeyeChecks` – the test suite as a plain executable (no XCTest
   anywhere); CI runs it on macOS (the Mac layer imports AppKit/SQLite3, so
   Linux can't build the full suite).
 

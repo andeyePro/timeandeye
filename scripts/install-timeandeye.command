@@ -1,5 +1,5 @@
 #!/bin/bash
-# Double-click this to update Time&i (timeandeye.app). No passwords, no
+# Double-click this to update Time&I (timeandeye.app). No passwords, no
 # rename dance.
 #
 # Claude ships the build as a ZIP (not a loose .app) so there is never a second
@@ -37,9 +37,9 @@ ditto "$NEW" "$DEST"
 rm -rf "$TMP"
 
 # Make this app THE registration for its bundle id, so its name resolves to
-# "Time&i" (not a stray duplicate).
+# "Time&I" (not a stray duplicate).
 LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
 [ -x "$LSREG" ] && "$LSREG" -f "$DEST" >/dev/null 2>&1 || true
 
 open "$DEST"
-echo "Updated Time&i → $DEST and relaunched."
+echo "Updated Time&I → $DEST and relaunched."

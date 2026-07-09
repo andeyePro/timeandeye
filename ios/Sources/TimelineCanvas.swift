@@ -1,5 +1,5 @@
 import SwiftUI
-import andeyeTTCore
+import timeandeyeCore
 
 // The phone timeline's DRAWING, factored out of TimelinePhoneView so it can
 // be rendered headless with injected sample slices (visual verification on
@@ -117,7 +117,7 @@ struct TimelineCanvas: View {
     }
 
     /// The Mac's slice shape: rounded rect, but the live slice gets a zig-zag
-    /// (torn) right edge meaning "ongoing" — same geometry as andeyeTTUI's
+    /// (torn) right edge meaning "ongoing" — same geometry as timeandeyeUI's
     /// SliceShape, as a plain Path so the phone Canvas can use it.
     static func slicePath(in rect: CGRect, zigzag: Bool) -> Path {
         let r: CGFloat = 3

@@ -1,6 +1,6 @@
 ---
 title: Auto-tracking and attribution
-description: How Time&i decides which task your time belongs to, and how to see why.
+description: How Time&I decides which task your time belongs to, and how to see why.
 ---
 
 Every time the front window, app or tab changes, andeye scores the candidate

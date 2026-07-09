@@ -12,7 +12,7 @@ hero:
   cta_andeye_label: More from andeye
   sub_default: This very page was planned, built, tested and reviewed by a vibe session.
   sub_how: One rule underneath it all – the model that writes the code never marks its own homework.
-  sub_andeye: From the maker of Time andeye – automatic time tracking for your Mac.
+  sub_andeye: From the maker of Time&I – automatic time tracking for your Mac.
   fineprint: In development – built on the same open-core values as everything andeye makes.
 demo:
   title: vibe – yourproject

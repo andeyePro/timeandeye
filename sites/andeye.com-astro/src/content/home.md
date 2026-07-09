@@ -20,7 +20,7 @@ products:
   eyebrow: "What we make"
   h2: "Two tools so far"
   items:
-    - name: Time andeye
+    - name: Time&I
       href: https://time.andeye.com
       link_label: time.andeye.com
       eye: time

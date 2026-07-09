@@ -6,8 +6,8 @@ anything – this file is a map, not a substitute for those.
 
 ## What this is
 
-timeandeye (human short form **Time&i**, long form **Time andeye**; the
-umbrella brand/company stays **andeye**): a macOS menu-bar app that
+timeandeye (human name **Time&I**; the umbrella brand/company stays
+**andeye**): a macOS menu-bar app that
 automatically time-tracks against a
 project-management backend (OpenProject fully supported, Xero next,
 standalone/no-backend works today too). It watches the active window/app/
@@ -19,38 +19,38 @@ flavour lives in a separate private repo and depends on this package.
 
 ## Module map
 
-SwiftPM targets, all lowercase (`andeyeTT*`, `andeyeApp`) – Swift **type**
+SwiftPM targets, all lowercase (`timeandeye*`) – Swift **type**
 names stay UpperCamelCase (`AndeyeLogo`, `AndeyeApp` the App struct, etc).
-Never write `andeyeTTPro`: the paid product is `andeyePro`, a separate
+Never write `timeandeyePro`: the paid product is `andeyePro`, a separate
 package, not a module in this one.
 
-- `andeyeTTCore` – platform-independent engine: attribution, the
+- `timeandeyeCore` – platform-independent engine: attribution, the
   `TaskBackend` seam, sync, learning, settings. No AppKit/UIKit.
-- `andeyeTTStore` – platform-neutral persistence/sync transport (SQLite
+- `timeandeyeStore` – platform-neutral persistence/sync transport (SQLite
   replica, CloudKit pipe, key store). Both macOS and iOS build on this.
-- `andeyeTTPhone` – the iOS app's engine (manual tracking, pick list,
+- `timeandeyePhone` – the iOS app's engine (manual tracking, pick list,
   export). UI-framework-free so the CLT-only Mac loop can check it too.
-- `andeyeTTMac` – macOS-only: sensors (NSWorkspace, Accessibility, Apple
+- `timeandeyeMac` – macOS-only: sensors (NSWorkspace, Accessibility, Apple
   Events, idle/sleep), Keychain, app controller.
-- `andeyeTTUI` – the SwiftUI layer as a library; Community and Pro
+- `timeandeyeUI` – the SwiftUI layer as a library; Community and Pro
   executables are both thin wrappers over it.
-- `andeyeApp` – the Community menu-bar executable, wrapped into
+- `timeandeyeApp` – the Community menu-bar executable, wrapped into
   `timeandeye.app` by `scripts/make-app.sh`.
-- `andeyeTTChecks` / `andeyeTTIntegration` – the test suites (see below).
+- `timeandeyeChecks` / `timeandeyeIntegration` – the test suites (see below).
 
 ## Build, check, run
 
 ```bash
 rm -rf .build                  # required after any module rename/pull (case-insensitive fs caches by dir name)
-swift run andeyeTTChecks       # the whole suite – expect: TOTAL: N passed, 0 failed
+swift run timeandeyeChecks       # the whole suite – expect: TOTAL: N passed, 0 failed
 ./scripts/make-app.sh          # build + install timeandeye.app (macOS 14+, CLT only)
 cd ios && xcodegen             # regenerate andeye.xcodeproj after project.yml changes
 ```
 
 No XCTest anywhere – the build Mac has Command Line Tools only, so
-`andeyeTTChecks` is a plain executable that IS the test suite (tiny
+`timeandeyeChecks` is a plain executable that IS the test suite (tiny
 assertion vocabulary, real scenarios, comments explaining WHY a case
-matters). `andeyeTTIntegration` runs headless end-to-end against a real
+matters). `timeandeyeIntegration` runs headless end-to-end against a real
 OpenProject instance. This container has no macOS, so checks must be run
 on a Mac – don't claim a check result you haven't actually seen.
 

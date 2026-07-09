@@ -31,7 +31,7 @@ Superseded static drafts (`andeye.com/`, `vibe.andeye.com/`, the root
   app's real eyelid wink; the tail retracts along its own curve so the &
   holds shape; the iris is clipped by the aperture and appears after the
   draw-on. Tuning: previews/logo-lab.html.
-- Palette matches the Time andeye site (dark navy, #f0a13a accent).
+- Palette matches the Time&I site (dark navy, #f0a13a accent).
 - Copy rules: Martin's voice; no em dashes (en dash with spaces); the
   values copy is from his 2026-07-07 brief (recorded in
   a private path

@@ -8,7 +8,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
 packages:
-  andeyeTT:
+  timeandeye:
     path: ..
 targets:
   andeye:
@@ -16,12 +16,12 @@ targets:
     platform: iOS
     sources: [Sources]
     dependencies:
-      - package: andeyeTT
-        product: andeyeTTCore
-      - package: andeyeTT
-        product: andeyeTTStore
-      - package: andeyeTT
-        product: andeyeTTPhone
+      - package: timeandeye
+        product: timeandeyeCore
+      - package: timeandeye
+        product: timeandeyeStore
+      - package: timeandeye
+        product: timeandeyePhone
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

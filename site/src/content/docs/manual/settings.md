@@ -40,7 +40,7 @@ description: Comments, popover defaults, the Switch Buffer, local tasks, your Op
 - **iCloud footprint** - a live readout of what your synced journal (and,
   separately, your local-only window detail) is costing you in your private
   CloudKit database - typically a few hundred bytes a slice, 15-25 MB a year
-  of heavy tracking; nobody gets pushed into a paid iCloud tier by Time&i.
+  of heavy tracking; nobody gets pushed into a paid iCloud tier by Time&I.
 - **Consolidate old history** - collapses slices older than a number of years
   you choose into daily totals. Totals and invoicing history survive exactly
   - only the minute-by-minute detail goes.

@@ -1,6 +1,6 @@
-# Time&i - User Manual
+# Time&I - User Manual
 
-Time&i (long form "Time andeye") is a macOS menu-bar app that tracks where your time goes and files it
+Time&I is a macOS menu-bar app that tracks where your time goes and files it
 against your OpenProject work packages (it calls them "tasks") automatically. It
 watches which window, app or browser tab is in front, attributes the time to the
 most likely task, and learns from your corrections so it asks less over time.
@@ -12,7 +12,7 @@ This manual covers day-to-day use. For building and first-run setup see
 
 ## The menu-bar popover
 
-Click the Time&i icon in the menu bar to open the popover. The icon itself
+Click the Time&I icon in the menu bar to open the popover. The icon itself
 shows the current elapsed time, and a small coloured dot whose colour reflects
 how certain the attribution is (red = uncertain, green = certain).
 
@@ -340,7 +340,7 @@ midnight. Day boundaries are marked with the date.
 - **iCloud footprint** - a live readout of what your synced journal (and,
   separately, your local-only window detail) is costing you in your private
   CloudKit database - typically a few hundred bytes a slice, 15-25 MB a year
-  of heavy tracking; nobody gets pushed into a paid iCloud tier by Time&i.
+  of heavy tracking; nobody gets pushed into a paid iCloud tier by Time&I.
 - **Consolidate old history** - collapses slices older than a number of years
   you choose into daily totals. Totals and invoicing history survive exactly
   - only the minute-by-minute detail goes.
@@ -386,7 +386,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **⌘⇧L** - I'm leaving my desk (away) / I'm back.
 - **⌘Z** - undo, as many times as you like: task switches, timeline edits,
   review sweeps, pins and learned rules, colours, deletes - each press steps
-  one action back. The history lasts until you quit Time&i.
+  one action back. The history lasts until you quit Time&I.
 
 ### Popover
 
@@ -402,7 +402,7 @@ setting, or its project's.
 - **↵** in the filter - pick the top task in the list.
 - **⌘↵** - claim the "you were away" idle gap as work.
 - **⌘Y** - open the Time window. **⌘U** - open the Review queue.
-- **⌘,** - Settings. **⌘Q** - quit Time&i.
+- **⌘,** - Settings. **⌘Q** - quit Time&I.
 
 ### Evidence Card
 

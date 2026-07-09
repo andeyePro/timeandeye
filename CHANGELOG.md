@@ -2,6 +2,28 @@
 
 ## 2026-07-09
 
+- [x] **Full rebrand: modules andeyeTT* → timeandeye*, human name Time&I.**
+  Martin's final naming directive (`<X>&I` / `<x>andeye` / `<x>.andeye.com`
+  only; capital I supersedes the earlier "Time&i"; the long form "Time
+  andeye" is retired). SwiftPM package `andeyeTT` → `timeandeye`; every
+  target/product/directory renamed via `git mv` (andeyeTTCore →
+  timeandeyeCore, ~Store, ~Mac, ~UI, ~Phone, ~Checks, ~Integration;
+  andeyeApp → timeandeyeApp) with all imports, CI (`swift run
+  timeandeyeChecks`), ios/project.yml package+product refs (regenerate
+  `andeye.xcodeproj` with `cd ios && xcodegen`), and docs (CLAUDE.md,
+  README, CONTRIBUTING, MANUAL.md, site manual pages, entitled-build)
+  following. Human strings: CFBundleName AND CFBundleDisplayName are both
+  now `Time&I`; window titles, Settings/About fallback, usage-description
+  strings, manuals and site copy all read Time&I. Deliberately UNCHANGED:
+  CFBundleIdentifier `com.andeye.mac` and the signing identity/keychain
+  (TCC grants), CFBundleExecutable `andeye` (quit-wait during upgrades),
+  Swift type names (`Andeye*` — the brand lives on, only TT dies), and
+  
+  Product-site domain refs aligned to time.andeye.com (astro `site:`,
+  canonical, responder manual link); andeye.com/terms + /privacy left —
+  Xero-registered, "must not change". Mac to run: `rm -rf .build && swift
+  run timeandeyeChecks`.
+
 - [x] **Site recipes v1: pluggable page understanding beyond Gmail.**
   Closes NAIL item (e) per the 2026-07-09 site-recipes spec (§11 v1 cut;
   §0 questions resolved as the spec's own recommendations). Tier 0 ONLY —

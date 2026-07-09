@@ -7,7 +7,7 @@ Something wrong, or just not sure how something works? Here's where to go.
 
 ## Everyone: bugs and ideas on GitHub
 
-Time&i is developed in the open at
+Time&I is developed in the open at
 [github.com/andeyePro/timeandeye](https://github.com/andeyePro/timeandeye). Found
 a bug, or have an idea for a feature? That's the place, and it's free for
 everyone, no andeyePro subscription needed.
@@ -27,7 +27,7 @@ You don't need to be a developer to use it. Here's the walkthrough:
 4. **Write it up.** For a bug, the more detail the better - but even a rough
    description is worth posting. If you can, include:
    - Your macOS version (Apple menu ▸ About This Mac).
-   - Your Time&i version (open Settings from the Time&i menu - it's shown at
+   - Your Time&I version (open Settings from the Time&I menu - it's shown at
      the top).
    - What you expected to happen.
    - What actually happened instead.

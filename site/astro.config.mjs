@@ -2,11 +2,11 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://andeye.com',
+  site: 'https://time.andeye.com',
   integrations: [
     starlight({
-      title: 'Time&i manual',
-      description: "Time&i's user manual – the community macOS menu-bar time tracker.",
+      title: 'Time&I manual',
+      description: "Time&I's user manual – the community macOS menu-bar time tracker.",
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/andeyePro/timeandeye' },
       ],

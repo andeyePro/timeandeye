@@ -1,10 +1,10 @@
 ---
-title: Time&i manual
-description: The user manual for Time&i, the community macOS menu-bar time tracker.
+title: Time&I manual
+description: The user manual for Time&I, the community macOS menu-bar time tracker.
 ---
 
-This manual documents Time&i (long form "Time andeye"), the community macOS
-app. Time&i is a menu-bar
+This manual documents Time&I, the community macOS
+app. Time&I is a menu-bar
 app that tracks where your time goes and files it against your OpenProject
 work packages (it calls them "tasks") automatically. It watches which
 window, app or browser tab is in front, attributes the time to the most

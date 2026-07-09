@@ -1,7 +1,7 @@
 ---
 // andeye landing page - the "Watchful" treatment, productionised from
 // the design bake-off. The hero demo geometry is a verbatim port of
-// Sources/andeyeTTCore/AndeyeLogo.swift (svgCubics, translate,
+// Sources/timeandeyeCore/AndeyeLogo.swift (svgCubics, translate,
 // strokeWidth, the eyelid-close wink control points); keep them in sync.
 // The HERO mark is always the orange accent (it's andeye saying hello).
 // Only the small MENU-BAR mark carries the certainty tint, verbatim from
@@ -25,7 +25,7 @@ const copy = (await getEntry('copy', 'home')).data;
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>andeye - automatic time tracking for your Mac</title>
 <meta name="description" content="andeye tracks your time automatically, on your Mac. It watches what you are working on and attributes each minute to the right task with an honest certainty score. The watching stays on your machine; only the finished hours you approve are sent, to your own tools." />
-<link rel="canonical" href="https://andeye.com/" />
+<link rel="canonical" href="https://time.andeye.com/" />
 <style>
   :root {
     --bg: #0c0f16;
@@ -731,7 +731,7 @@ const copy = (await getEntry('copy', 'home')).data;
 <header class="hero" id="top">
   <div class="wrap">
     <div class="eyewrap">
-      <canvas id="heroEye" role="img" aria-label="The Time andeye mark: a single-stroke ampersand that closes into an eye, with a clock face as its iris"></canvas>
+      <canvas id="heroEye" role="img" aria-label="The Time&I mark: a single-stroke ampersand that closes into an eye, with a clock face as its iris"></canvas>
     </div>
     <p class="eyebrow reveal" style="--d:0s">{copy.hero.eyebrow}</p>
     <h1 class="reveal" style="--d:0.08s">{copy.hero.h1[0]}<br>{copy.hero.h1[1]}</h1>
@@ -1051,7 +1051,7 @@ window.COPY = COPY;
 (function () {
 'use strict';
 
-// --- geometry begin (literal port of Sources/andeyeTTCore/AndeyeLogo.swift,
+// --- geometry begin (literal port of Sources/timeandeyeCore/AndeyeLogo.swift,
 //     verbatim from the verified logo-preview) ---
 
 // SVG viewBox is 365 x 235; everything normalises by the WIDTH, so the

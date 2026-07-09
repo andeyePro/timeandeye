@@ -14,7 +14,7 @@ the handful of "do not clean this up" rules that will bite you otherwise.
 ```bash
 git clone https://github.com/andeyePro/timeandeye.git
 cd timeandeye
-swift run andeyeTTChecks   # the whole test suite — expect: TOTAL: N passed, 0 failed
+swift run timeandeyeChecks   # the whole test suite — expect: TOTAL: N passed, 0 failed
 ./scripts/make-app.sh          # build + install timeandeye.app (macOS 14+, CLT only)
 ```
 

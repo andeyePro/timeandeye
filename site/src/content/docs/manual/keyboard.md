@@ -1,6 +1,6 @@
 ---
 title: Keyboard
-description: Every Time&i shortcut, by surface.
+description: Every Time&I shortcut, by surface.
 ---
 
 Every action can be done with the mouse. The everyday surfaces - the popover and
@@ -15,7 +15,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **⌘⇧L** - I'm leaving my desk (away) / I'm back.
 - **⌘Z** - undo, as many times as you like: task switches, timeline edits,
   review sweeps, pins and learned rules, colours, deletes - each press steps
-  one action back. The history lasts until you quit Time&i.
+  one action back. The history lasts until you quit Time&I.
 
 ## Popover
 
@@ -27,7 +27,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **↵** in the filter - pick the top task in the list.
 - **⌘↵** - claim the "you were away" idle gap as work.
 - **⌘Y** - open the Time window. **⌘U** - open the Review queue.
-- **⌘,** - Settings. **⌘Q** - quit Time&i.
+- **⌘,** - Settings. **⌘Q** - quit Time&I.
 
 ## Evidence Card
 

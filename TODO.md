@@ -165,11 +165,11 @@ and recorded rather than fixed blind:
   only (connector resolves its own project) so the editor works through the
   seam's fetchTasks alone; store made lock-protected with a snapshot key
   table (the connector reads from the sync context).
-- [ ] andeyeTTTheme extraction (a sibling project request, 2026-07-08):
+- [ ] timeandeyeTheme extraction (a sibling project request, 2026-07-08):
   a small SwiftUI-only target (colours, type scale, eye-mark renderer) pulled
-  out of andeyeTTUI so sibling apps (a sibling andeye app) consume theme without the
+  out of timeandeyeUI so sibling apps (a sibling andeye app) consume theme without the
   macOS app deps. Needed by Mon v0.3 (Plus gating + CloudKit); Mon ships a
-  local shim until then. HLC/sync/licence need nothing — andeyeTTCore
+  local shim until then. HLC/sync/licence need nothing — timeandeyeCore
   already exports them.
 - [ ] Invoice NUMBER for the invoice-lock ref needs the Xero Accounting API
   (Projects API doesn't expose it — verified 2026-07-08); until then locks
@@ -278,7 +278,7 @@ and recorded rather than fixed blind:
   `applyHardCapPrune`, `journalHardCapMB` setting, UI double confirm
   (two chained `confirmationDialog`s). (d) tombstone GC turned out to be
   ALREADY SHIPPED (`SQLiteJournalStore.purgeTombstones`, runs on init) —
-  nothing to build. NEEDS Mac-side `swift run andeyeTTChecks` + on-device
+  nothing to build. NEEDS Mac-side `swift run timeandeyeChecks` + on-device
   Settings verification (built clean only, container has no Swift toolchain).
 
 - [x] Full keyboard/mouse parity sweep (DONE 2026-06-28). Audited every
@@ -448,7 +448,7 @@ and recorded rather than fixed blind:
   off-LAN); OP-as-rendezvous (breaks standalone, and the backend shouldn't see
   second-by-second state). DECIDED 2026-07-01: it lives IN THIS REPO, not a
   new one. Rationale: the iOS app is a
-  thin SwiftUI shell over andeyeTTCore, and pre-1.0 Core API churns weekly — a
+  thin SwiftUI shell over timeandeyeCore, and pre-1.0 Core API churns weekly — a
   separate repo forces either a tag-per-change SPM dance or fragile local-path
   references, and every cross-cutting change becomes two PRs. In-repo, one
   commit updates Core and both shells, and the one check suite guards both.
@@ -618,7 +618,7 @@ and recorded rather than fixed blind:
   Evidence Card wrap-not-truncate + click-stability (`.animation(nil, ...)`),
   fallback "✕ forget that fallback too" button, Rules Ledger delete as a red
   trash icon behind a confirm dialog + inline Undo banner. See CHANGELOG
-  2026-07-06 for the full breakdown; `swift run andeyeTTChecks` covers the
+  2026-07-06 for the full breakdown; `swift run timeandeyeChecks` covers the
   pure logic (`forgettableWithout`) but none of the SwiftUI layout/animation
   claims — those need eyes on real hardware.
 
@@ -626,7 +626,7 @@ and recorded rather than fixed blind:
 
 - [x] Build the multi-backend seam + billable flag per .vs/spec.md
   (BUILT 2026-07-06, cycle 1; fuzzy mode – Reviewer verdict + Martin's
-  `swift run andeyeTTChecks` on the Mac pending). BackendRegistry +
+  `swift run timeandeyeChecks` on the Mac pending). BackendRegistry +
   pm/finance classes, per-(session, backend) posting ledger with one-time
   single-slot migration, billable project Bool + task tri-state in
   billing.json (stable project-id keys via the OP conformer's new href
@@ -673,6 +673,8 @@ and recorded rather than fixed blind:
   the accumulation back so you can undo over-pressing. After [+all].
 
  — from Pro coordination (2026-07-07, website side owns)
+
+
 
 
 
