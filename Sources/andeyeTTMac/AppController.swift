@@ -209,19 +209,31 @@ public final class AppController: ObservableObject {
     /// Committed comments awaiting their slice, PER TASK (Martin's three
     /// rapid test comments once all rode one global note onto one slice).
     /// Each task's note is consumed by ITS slice at flush.
-    public var manualNotes: [TaskRef: String] = [:]
+    /// TIMESTAMPED per task (Martin's 14:39 test: a comment typed after
+    /// returning from an excursion accumulated onto the PRE-excursion part of
+    /// the base slice — the carve splits one task's time into several slices,
+    /// so each slice must consume only the comments typed within ITS span).
+    public var manualNotes: [TaskRef: [(text: String, at: Date)]] = [:]
     /// Display-target shim over `manualNotes` — the live-slice comment the
     /// timeline editor and legacy paths read/write. Keyed by the task the
     /// popover currently shows; empty/ignored when not tracking a task.
     public var manualNote: String {
         get {
             guard case .task(let ref) = currentTarget else { return "" }
-            return manualNotes[ref] ?? ""
+            return Self.joinedNote(manualNotes[ref])
         }
         set {
             guard case .task(let ref) = currentTarget else { return }
-            if newValue.isEmpty { manualNotes[ref] = nil } else { manualNotes[ref] = newValue }
+            if newValue.isEmpty { manualNotes[ref] = nil }
+            else { manualNotes[ref] = [(text: newValue, at: Date())] }
         }
+    }
+
+    /// The pending comments' display/flush form — accumulateComment's exact
+    /// joining (separator + adjacent-repeat suppression), applied over the
+    /// timestamped entries.
+    static func joinedNote(_ entries: [(text: String, at: Date)]?) -> String {
+        (entries ?? []).reduce("") { CommentRouting.accumulateComment(existing: $0, adding: $1.text) }
     }
     @Published public var settings: AndeyeSettings {
         didSet {
@@ -628,7 +640,17 @@ public final class AppController: ObservableObject {
             // Consume THIS TASK's note when its slice is journalled — the
             // per-task map means a flush order surprise can never hand one
             // task's comment to another's slice.
-            let note = self.manualNotes.removeValue(forKey: s.task) ?? ""
+            // Consume only the entries typed within THIS slice's span (+5 s
+            // grace): the excursion carve splits one task's time into several
+            // slices, and a comment typed after the return must ride the
+            // POST-return part, not whichever part flushes first. Flush emits
+            // chronologically, so at <= end is sufficient and nothing orphans.
+            var entries = self.manualNotes[s.task] ?? []
+            let cutoff = s.end.addingTimeInterval(5)
+            let consumed = entries.filter { $0.at <= cutoff }
+            entries.removeAll { $0.at <= cutoff }
+            self.manualNotes[s.task] = entries.isEmpty ? nil : entries
+            let note = Self.joinedNote(consumed)
             // Route the note per the two toggles: 'comment to tracked time'
             // attaches it to the time entry (s.comment, pushed to OP); 'comment
             // to task' also posts it to the task's activity feed, where it is
@@ -1344,8 +1366,7 @@ public final class AppController: ObservableObject {
     public func commitComment(_ text: String) {
         guard case .tracking(let target, _) = trackerState,
               case .task(let ref) = target else { return }
-        manualNotes[ref] = CommentRouting.accumulateComment(
-            existing: manualNotes[ref] ?? "", adding: text)
+        manualNotes[ref, default: []].append((text: text, at: Date()))
         // A commented visit is work by attestation: pin it so its slice
         // surfaces however short (Martin, 2026-07-09 — three quick test
         // comments once collapsed into one slice on one task).
@@ -1699,9 +1720,10 @@ public final class AppController: ObservableObject {
             // comment shows in the timeline the moment it's entered — not
             // only after the slice flushes (Martin's 03:58 third comment
             // was invisible until the eventual flush).
+            let pending = Self.joinedNote(manualNotes[ref])
             list.append(Session(id: Self.liveSessionID, task: ref, start: liveStart,
                                 end: liveEnd, certainty: certainty,
-                                comment: manualNotes[ref]))
+                                comment: pending.isEmpty ? nil : pending))
         }
         return list
     }
