@@ -608,15 +608,14 @@ public final class AppController: ObservableObject {
                 note: note, autoCommentText: s.comment,
                 autoCommentEnabled: self.settings.autoComment,
                 toTrackedTime: self.settings.commentToTrackedTime)
-            let taskNote = CommentRouting.taskComment(note: note,
-                                                      toTask: self.settings.commentToTask)
             if !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 self.manualNote = ""
             }
             try? self.journal.save(s)
-            if let taskNote {
-                Task { await self.postTaskComment(ref: s.task, note: taskNote) }
-            }
+            // The TASK-feed half no longer rides the flush: commitComment
+            // posts it immediately to the DISPLAYED task. Consuming it here
+            // let a grace-delayed flush from the PREVIOUS task steal the
+            // note (Martin's comment landed on #238, 2026-07-09).
             // Tracked time counts as recency: the task you just worked on
             // belongs at the top of every pick list.
             if let i = self.taskCache.firstIndex(where: { $0.ref == s.task }) {
@@ -1272,6 +1271,25 @@ public final class AppController: ObservableObject {
     }
 
     public func dismissIdleGap() { pendingGap = nil }
+
+    /// One committed comment from the popover bar (enter pressed). Two
+    /// destinations, deliberately split (Martin, 2026-07-09 — his
+    /// comment posted to #238):
+    /// - The TASK's activity feed gets it NOW, addressed to the task the
+    ///   popover is DISPLAYING — what the user sees is what gets commented.
+    ///   Riding the flush was the bug: the note went to whichever slice
+    ///   happened to close next, which during a grace-delayed switch is the
+    ///   PREVIOUS task.
+    /// - The tracked-time comment still rides the slice (accumulated into
+    ///   manualNote, consumed at flush) — it belongs to the time entry.
+    public func commitComment(_ text: String) {
+        manualNote = CommentRouting.accumulateComment(existing: manualNote, adding: text)
+        guard let taskNote = CommentRouting.taskComment(note: text,
+                                                        toTask: settings.commentToTask),
+              case .tracking(let target, _) = trackerState,
+              case .task(let ref) = target else { return }
+        Task { await self.postTaskComment(ref: ref, note: taskNote) }
+    }
 
     /// Post a note to the task's activity feed (OP work-package comment), so
     /// 'comment to task' notes are findable on the task itself. With no backend

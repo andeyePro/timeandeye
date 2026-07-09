@@ -331,16 +331,16 @@ struct PopoverView: View {
         return nil
     }
 
-    /// Enter in the comment field: commit the current draft onto the CURRENT
-    /// tracked time. "Commit" = accumulate into `controller.manualNote` (the
-    /// text the flush path banks onto the slice), so nothing is lost and one
-    /// slice can carry several comments; identical-to-previous is de-duped by
-    /// the pure helper. Then clear the field and flash green.
+    /// Enter in the comment field: commit the current draft. The controller
+    /// accumulates it for the tracked-time comment AND (when the toggle is
+    /// on) posts it to the DISPLAYED task's activity feed immediately — see
+    /// commitComment for why immediacy matters (the flush path once stole
+    /// notes onto whichever slice happened to close next). Then clear the
+    /// field and flash green.
     private func submitComment() {
         let trimmed = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { noteFocused = false; return }
-        controller.manualNote = CommentRouting.accumulateComment(
-            existing: controller.manualNote, adding: commentDraft)
+        controller.commitComment(commentDraft)
         commentDraft = ""
         commentWarning = false
         flashCommitted()
