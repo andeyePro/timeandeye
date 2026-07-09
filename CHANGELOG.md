@@ -2,6 +2,15 @@
 
 ## 2026-07-09
 
+- [x] **Quiet while presenting.** While the mic is live (the call
+  detector's own signal) or any display is mirrored, floating banners that
+  would name a task or contact are suppressed — a toast naming a client on
+  a shared screen is a privacy leak the context-rules focus group flagged.
+  Content-free banners ("Stopped", "Welcome back") still show, the
+  suppressed information stays reachable in the popover, and the idle-gap
+  claim survives suppression. Settings toggle, on by default; detection is
+  conservative (a false positive costs one banner).
+
 - [x] **The app is now Time&i (bundle timeandeye.app).** Martin's final
   naming: repo and app name `timeandeye`, human short form **Time&i**
   (lowercase i), long form **Time andeye**; "andeye" continues as the

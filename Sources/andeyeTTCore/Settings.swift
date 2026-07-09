@@ -88,6 +88,11 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// First N characters of the tracked task name shown in the menu bar; 0 = off.
     public var menuTaskChars: Int
     public var systemNotifications: Bool
+    /// While presenting (mic live or a display mirrored), floating banners
+    /// that would name a task or contact are suppressed — a toast naming a
+    /// client on a shared screen is a privacy leak. Content-free banners
+    /// still show.
+    public var quietWhilePresenting: Bool
     /// The popover's default mode when tracking: true = "Change to" (relabel the
     /// running session), false = "Switch to" (start a fresh session). Clicking
     /// the running task title flips to the other mode for that open.
@@ -184,6 +189,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 offerIdleBackfill: Bool = false,
                 menuTaskChars: Int = 5,
                 systemNotifications: Bool = true,
+                quietWhilePresenting: Bool = true,
                 popoverDefaultsToChangeMode: Bool = true,
                 timeViewOpenMode: TimeViewOpenMode = .lastViewed,
                 lastViewedTimeView: TimeView = .timeline,
@@ -226,6 +232,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.offerIdleBackfill = offerIdleBackfill
         self.menuTaskChars = menuTaskChars
         self.systemNotifications = systemNotifications
+        self.quietWhilePresenting = quietWhilePresenting
         self.popoverDefaultsToChangeMode = popoverDefaultsToChangeMode
         self.timeViewOpenMode = timeViewOpenMode
         self.lastViewedTimeView = lastViewedTimeView
@@ -278,6 +285,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         offerIdleBackfill = c.lenient(.offerIdleBackfill, or: defaults.offerIdleBackfill)
         menuTaskChars = c.lenient(.menuTaskChars, or: defaults.menuTaskChars)
         systemNotifications = c.lenient(.systemNotifications, or: defaults.systemNotifications)
+        quietWhilePresenting = c.lenient(.quietWhilePresenting, or: defaults.quietWhilePresenting)
         popoverDefaultsToChangeMode = c.lenient(.popoverDefaultsToChangeMode, or: defaults.popoverDefaultsToChangeMode)
         timeViewOpenMode = c.lenient(.timeViewOpenMode, or: defaults.timeViewOpenMode)
         lastViewedTimeView = c.lenient(.lastViewedTimeView, or: defaults.lastViewedTimeView)

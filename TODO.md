@@ -213,8 +213,10 @@ and recorded rather than fixed blind:
   `deleteRule` now a one-row call into it); "Copy rules" plain-text export
   (`RulesLedger.exportText`, Core + checked) mirroring the timesheet
   export's copy-button/"Copied" pattern. UNVERIFIED — suite not run (no
-  Mac in this container). Still open: screen-share suppression, site
-  recipes beyond Gmail, candidates ▾ expansion (spec §6 "later polish").
+  Mac in this container). Still open: site
+  recipes beyond Gmail, candidates ▾ expansion (spec §6 "later polish");
+  screen-share suppression DONE 2026-07-09 ("Quiet while presenting" —
+  mic-live/display-mirrored gate on naming banners).
   (e) not started.
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —

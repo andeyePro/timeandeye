@@ -1012,6 +1012,8 @@ func settingsChecks(_ c: Checks) {
         try expect(!s.offerIdleBackfill, "the away-time backfill button is opt-in, not a surprise prompt")
         try expectEq(s.reviewFloorSeconds, 60,
                      "sub-minute surfaces stay off the review queue by default")
+        try expect(s.quietWhilePresenting,
+                   "naming banners stay off shared screens unless opted out")
     }
 
     c.check("never-auto-push is representable") {

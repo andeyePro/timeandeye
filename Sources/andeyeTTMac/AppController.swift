@@ -941,16 +941,18 @@ public final class AppController: ObservableObject {
             self.lastPrompt = prompt
             switch prompt {
             case .taskChanged(let target):
-                Notifier.notify(symbol: "arrow.right", text: self.name(of: target),
-                                sound: "Tink")
+                self.notifyContent(symbol: "arrow.right", text: self.name(of: target),
+                                   sound: "Tink")
             case .resumeAfterIdle(let stoppedAt):
                 // The gap defaults to a break (nothing recorded); offer a
                 // one-tap claim onto the task we were on, in case it was work.
                 if let last = self.lastTrackedTask() {
                     self.pendingGap = IdleGap(task: last.ref, from: stoppedAt, to: Date())
-                    Notifier.notify(symbol: "sun.max",
-                                    text: "Back — tap to count the gap as \(last.subject)",
-                                    sound: "Tink")
+                    // Suppressed while presenting: the pendingGap stays
+                    // claimable from the popover, only the naming banner goes.
+                    self.notifyContent(symbol: "sun.max",
+                                       text: "Back — tap to count the gap as \(last.subject)",
+                                       sound: "Tink")
                 } else {
                     Notifier.notify(symbol: "sun.max", text: "Welcome back", sound: "Tink")
                 }
@@ -1242,6 +1244,50 @@ public final class AppController: ObservableObject {
         return (event.title, rule?.target)
     }
 
+    // MARK: - Presenting (screen share / call) banner quietening
+
+    /// True while the user is plausibly presenting: the mic is live (a call
+    /// almost always accompanies a screen share — the same signal the call
+    /// detector uses) or a display is mirrored. While true, floating banners
+    /// that would NAME a task or contact are suppressed (Settings ▸ "Quiet
+    /// while presenting", default on): a toast naming a client on a shared
+    /// screen is a privacy leak — the context-rules focus group called it
+    /// "a genuine problem". Detection is deliberately conservative; a missed
+    /// share suppresses nothing worse than before, a false positive costs
+    /// one banner.
+    public private(set) var presenting = false
+    private var micLive = false
+    private var displayMirrored = false
+
+    private func refreshPresenting() {
+        let now = micLive || displayMirrored
+        guard now != presenting else { return }
+        presenting = now
+        DebugLog.write("presenting -> \(now) (mic \(micLive), mirrored \(displayMirrored))")
+    }
+
+    /// Any active display in a mirror set counts — AirPlay/sidecar/projector
+    /// mirroring is the no-mic presentation case (a lecture theatre).
+    private func refreshDisplayMirroring() {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(8, &ids, &count)
+        displayMirrored = (0..<Int(count)).contains { CGDisplayIsInMirrorSet(ids[$0]) != 0 }
+        refreshPresenting()
+    }
+
+    /// The gate for banners whose TEXT names a task or contact. Content-free
+    /// banners ("Stopped", "Welcome back") go out unconditionally — only the
+    /// naming ones vanish while presenting, and even then the information
+    /// stays reachable in the popover.
+    private func notifyContent(symbol: String?, text: String, sound: String) {
+        if presenting, settings.quietWhilePresenting {
+            DebugLog.write("presenting: suppressed a naming banner")
+            return
+        }
+        Notifier.notify(symbol: symbol, text: text, sound: sound)
+    }
+
     // MARK: - Away ("I'm leaving my desk") and scheduled stop
 
     @Published public private(set) var away = false
@@ -1255,12 +1301,12 @@ public final class AppController: ObservableObject {
         tracker.away = on
         DebugLog.write("away = \(on)")
         if on {
-            Notifier.notify(symbol: "figure.walk", text: "Away — still tracking \(currentTaskName())",
-                            sound: "Tink")
+            notifyContent(symbol: "figure.walk", text: "Away — still tracking \(currentTaskName())",
+                          sound: "Tink")
             if settings.lockOnLeave { lockScreen() }
         } else {
-            Notifier.notify(symbol: "figure.walk.motion", text: "Back — \(currentTaskName())",
-                            sound: "Tink")
+            notifyContent(symbol: "figure.walk.motion", text: "Back — \(currentTaskName())",
+                          sound: "Tink")
         }
         refreshTitle(force: true)
     }
@@ -1318,11 +1364,26 @@ public final class AppController: ObservableObject {
             case .input: break   // 2 s ticks would drown the log
             default: DebugLog.write("sensor \(event)")
             }
+            // The call detector's own signal doubles as the presenting cue —
+            // banner quietening must flip BEFORE the tracker reacts to the
+            // same event (a call's first switch banner is exactly the leak).
+            if case .microphone(let active, _) = event, active != self?.micLive {
+                self?.micLive = active
+                self?.refreshPresenting()
+            }
             self?.tracker.handle(event)
         }
         pushOwnEmail()
         DebugLog.write("startUp: AX trusted=\(sensors.accessibilityTrusted) grace=\(settings.switchGraceSeconds)s")
         sensors.start()
+        // Mirrored-display half of the presenting cue: rescan on every screen
+        // topology change (projector/AirPlay attach) and once now.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.refreshDisplayMirroring() }
+        }
+        refreshDisplayMirroring()
         // Calendar signal: `settings`'s own didSet drives start/stop on every
         // LATER toggle, but its initial assignment in init() runs before
         // `self` is fully initialized (two-phase init), so it never fired —
@@ -2157,7 +2218,7 @@ public final class AppController: ObservableObject {
             return
         }
         undoCount = undoStack.count
-        Notifier.notify(symbol: "arrow.uturn.backward", text: last.label, sound: "Pop")
+        notifyContent(symbol: "arrow.uturn.backward", text: last.label, sound: "Pop")
         Task { await last.inverse() }
     }
 

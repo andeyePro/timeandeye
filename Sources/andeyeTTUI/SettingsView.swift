@@ -224,6 +224,9 @@ struct SettingsView: View {
                 .pickerStyle(.menu).fixedSize()
                 Toggle("System notifications (sounds still play when off)",
                        isOn: $controller.settings.systemNotifications)
+                Toggle("Quiet while presenting",
+                       isOn: $controller.settings.quietWhilePresenting)
+                    .help("While your mic is live or a display is mirrored, banners that would name a task or contact stay hidden – nothing about your work shows on a shared screen.")
                 Toggle("Lock the Mac when I leave my desk (⌘⇧L)",
                        isOn: $controller.settings.lockOnLeave)
                 Toggle("Track leisure to local-only tasks (instead of stopping)",

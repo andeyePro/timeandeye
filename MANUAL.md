@@ -270,6 +270,9 @@ midnight. Day boundaries are marked with the date.
   slices total this many seconds (default 60; 0 shows everything). Briefer
   visits stay tracked - they just never queue.
 - **System notifications**, **lock on leave**, **track leisure to local tasks**.
+- **Quiet while presenting** - while your mic is live or a display is
+  mirrored, banners that would name a task or contact stay hidden, so
+  nothing about your work pops up on a shared screen (on by default).
 - **Idle backfill** - opt-in: when you return from an idle gap, offer to
   claim the gap for the task you were on (off by default; hours stepper caps
   how far back it offers).
