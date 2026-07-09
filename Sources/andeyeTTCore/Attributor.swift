@@ -161,6 +161,15 @@ public final class Attributor {
     /// The user-editable specificity order the email ladder resolves through
     /// (mirrors the setting; defaults general→specific).
     public var emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder
+    /// Fires exactly once per rule's lifetime, the moment it wins its FIRST
+    /// attribution ever (fireCount 0 → 1) — the popover's First-FIRE toast
+    /// hook (2026-07-03 spec §6 "later polish", brought forward: "the user
+    /// discovers the automation is real"). nil by default. `explain()` never
+    /// triggers it — only a real `attribute()` win bumps fireCount — and a
+    /// rule that's forgotten then re-taught fires again (it's a fresh
+    /// `EmailRule` with fireCount reset to 0, not the same rule). Wired in
+    /// `AppController` to publish a popover notice.
+    public var onFirstFire: ((EmailRule) -> Void)?
     /// Today's explicit categorisations, by context (see SessionSticky).
     /// Deliberately not persisted — a sticky is a same-day working decision.
     public private(set) var sessionStickies: [SessionSticky] = []
@@ -362,8 +371,10 @@ public final class Attributor {
     /// Provenance: this rule just WON an attribution ("fired 8×" on the card).
     private func recordFire(_ rule: EmailRule, now: Date) {
         guard let i = emailRules.firstIndex(where: { $0.sameRule(as: rule) }) else { return }
+        let isFirstFire = emailRules[i].fireCount == 0
         emailRules[i].fireCount += 1
         emailRules[i].lastFired = now
+        if isFirstFire { onFirstFire?(emailRules[i]) }
     }
 
     /// Shared webmail domains carry no task meaning (everyone is @gmail.com), so a

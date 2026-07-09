@@ -81,6 +81,58 @@ func emailGrainCommitMappingChecks(_ c: Checks) {
     }
 }
 
+// MARK: - Multi-correspondent expansion (2026-07-03 spec §5.5, "later polish")
+
+func multiCorrespondentChecks(_ c: Checks) {
+    c.check("correspondentChoices lists every distinct counterparty, first-seen order, case-insensitive dedup") {
+        let sig = gmailSignal(correspondents: ["r.naismith@harborlane.example",
+                                               "a.broker@harborlane.example",
+                                               "R.Naismith@HarborLane.example"])
+        try expectEq(ContextIdentity.correspondentChoices(sig),
+                     ["r.naismith@harborlane.example", "a.broker@harborlane.example"])
+    }
+
+    c.check("correspondentChoices is empty for a signal with no email context") {
+        let plain = ActivitySignal(app: "Ghostty", windowTitle: "andeyeTT", timestamp: t0)
+        try expect(ContextIdentity.correspondentChoices(plain).isEmpty)
+    }
+
+    c.check("correspondentChoices is one address for an ordinary single-party message") {
+        try expectEq(ContextIdentity.correspondentChoices(gmailSignal()),
+                     ["r.naismith@harborlane.example"])
+    }
+
+    c.check("correspondentRuleValues keeps only the checked addresses, matched case-insensitively") {
+        let sig = gmailSignal(correspondents: ["r.naismith@harborlane.example",
+                                               "a.broker@harborlane.example"])
+        try expectEq(ContextIdentity.correspondentRuleValues(sig, chosen: ["A.Broker@HarborLane.example"]),
+                     ["a.broker@harborlane.example"])
+    }
+
+    c.check("correspondentRuleValues ignores a chosen value that isn't actually on the message") {
+        let sig = gmailSignal(correspondents: ["r.naismith@harborlane.example",
+                                               "a.broker@harborlane.example"])
+        try expectEq(ContextIdentity.correspondentRuleValues(
+            sig, chosen: ["r.naismith@harborlane.example", "nobody@elsewhere.com"]),
+            ["r.naismith@harborlane.example"])
+    }
+
+    c.check("correspondentRuleValues preserves correspondentChoices' order, not the chosen set's") {
+        let sig = gmailSignal(correspondents: ["z.person@harborlane.example",
+                                               "a.person@harborlane.example"])
+        try expectEq(ContextIdentity.correspondentRuleValues(
+            sig, chosen: ["a.person@harborlane.example", "z.person@harborlane.example"]),
+            ["z.person@harborlane.example", "a.person@harborlane.example"],
+            "message order (sender first), not checkbox-set iteration order")
+    }
+
+    c.check("an empty chosen set commits nothing (the caller must no-op, not write an empty rule)") {
+        let sig = gmailSignal(correspondents: ["r.naismith@harborlane.example",
+                                               "a.broker@harborlane.example"])
+        try expect(ContextIdentity.correspondentRuleValues(sig, chosen: []).isEmpty)
+    }
+}
+
 // MARK: - RulesLedger sorting/filtering
 
 func rulesLedgerChecks(_ c: Checks) {

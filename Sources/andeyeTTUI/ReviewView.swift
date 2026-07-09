@@ -13,6 +13,13 @@ struct ReviewView: View {
     @State private var aiStatus = ""
     @State private var filter = ""
     @State private var newLocalName = ""
+    /// The post-assign grain footer (2026-07-03 spec §5.3, "later polish"):
+    /// what was just taught, mirroring `PopoverView`'s `justPicked` tuple.
+    /// Ignoring it is "once" — it never blocks assigning the next segment.
+    @State private var justAssigned: (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)?
+    /// Multi-correspondent checkbox selection for the footer (spec §5.5) —
+    /// all checked by default.
+    @State private var correspondentChecks: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -31,6 +38,7 @@ struct ReviewView: View {
             if !selection.isEmpty {
                 assignBar
             }
+            grainFooter
 
             Divider()
             aiSection
@@ -156,8 +164,86 @@ struct ReviewView: View {
     }
 
     private func assign(_ target: Target) {
-        controller.assignReview(Array(selection), to: target)
+        let ids = Array(selection)
+        // Snapshot the rows being assigned BEFORE the assign, which removes
+        // them from `pendingReview` — the footer's identity is built from
+        // what was just taught, not what's left in the queue.
+        let assigned = controller.pendingReview.filter { ids.contains($0.id) }
+        controller.assignReview(ids, to: target)
         selection.removeAll()
+        justAssigned = footerContext(for: assigned, target: target)
+        correspondentChecks = justAssigned.map { Set(ContextIdentity.correspondentChoices($0.signal)) } ?? []
+    }
+
+    /// The post-assign footer's context, or nil unless EVERY just-assigned
+    /// segment shares one email context (spec §5.3) — otherwise there's no
+    /// single grain to offer. Mirrors `PopoverView.pick`'s
+    /// `justPicked`-building gate (`isEmailGrain`), extended to require
+    /// agreement across a multi-row assign.
+    private func footerContext(for segments: [ReviewSegment], target: Target)
+        -> (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)? {
+        guard case .task(let ref) = target,
+              let task = controller.taskCache.first(where: { $0.ref == ref }),
+              let first = segments.first else { return nil }
+        let identities = segments.map { controller.identity(of: controller.signal(for: $0)) }
+        guard let shared = identities.first, identities.allSatisfy({ $0 == shared }),
+              shared.segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
+        return (task, controller.signal(for: first), shared)
+    }
+
+    /// The assign bar's post-assign grain footer — the same one-line
+    /// "remember for <grain> [Remember] [x]" the popover shows after a pick
+    /// (2026-07-03 spec §5.3), with the multi-correspondent checkbox
+    /// expansion (spec §5.5) when the message has more than one
+    /// counterparty. Never blocks assigning the next selection.
+    @ViewBuilder
+    private var grainFooter: some View {
+        if let ja = justAssigned, let count = ja.identity.cardDefaultGrainIndex,
+           count >= 1, count <= ja.identity.segments.count {
+            let seg = ja.identity.segments[count - 1]
+            let choices = ContextIdentity.correspondentChoices(ja.signal)
+            let expand = seg.kind == .correspondent && choices.count > 1
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("remember for").font(.caption2).foregroundStyle(.secondary)
+                    Text(expand ? "\(seg.display) +\(choices.count - 1)" : seg.display)
+                        .font(.caption2).lineLimit(1)
+                    Spacer()
+                    Button("Remember") {
+                        if expand {
+                            controller.commitCorrespondentGrain(ja.signal, chosen: correspondentChecks,
+                                                                to: ja.task.ref, pinned: false)
+                        } else {
+                            controller.commitGrain(ja.identity, grainCount: count, signal: ja.signal,
+                                                   to: ja.task.ref, pinned: false)
+                        }
+                        justAssigned = nil
+                    }
+                    .font(.caption2).buttonStyle(.borderless)
+                    Button { justAssigned = nil } label: { Image(systemName: "xmark.circle") }
+                        .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
+                        .help("Dismiss – once (today's soft correction stays; no durable rule)")
+                }
+                if expand {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(choices, id: \.self) { address in
+                            Toggle(isOn: Binding(
+                                get: { correspondentChecks.contains(address) },
+                                set: { on in
+                                    if on { correspondentChecks.insert(address) }
+                                    else { correspondentChecks.remove(address) }
+                                }
+                            )) {
+                                Text(address).font(.caption2)
+                            }
+                            .toggleStyle(.checkbox)
+                        }
+                    }
+                }
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
     }
 
     private func duration(_ s: ReviewSegment) -> String {

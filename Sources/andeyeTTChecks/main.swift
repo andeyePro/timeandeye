@@ -101,6 +101,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("Forget", forgetChecks),
     ("CardDefaultGrain", cardDefaultGrainChecks),
     ("EmailGrainCommitMapping", emailGrainCommitMappingChecks),
+    ("MultiCorrespondent", multiCorrespondentChecks),
     ("RulesLedger", rulesLedgerChecks),
     ("CorrectionHistory", correctionHistoryChecks),
     ("TimesheetExport", timesheetExportChecks),

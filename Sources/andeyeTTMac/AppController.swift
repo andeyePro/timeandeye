@@ -367,6 +367,7 @@ public final class AppController: ObservableObject {
             self?.taskCache ?? []
         }
         wireTracker()
+        wireFirstFireNotice()
         rebuildClient()
         revalidateLicense()
         configureSyncReplica()
@@ -1127,6 +1128,10 @@ public final class AppController: ObservableObject {
     }
 
     public func userPicked(_ task: WorkTask) {
+        // "Auto-dismisses after ~8s or on next pick" (spec §6) — a fresh pick
+        // always closes out a leftover learn/fire notice from the one before.
+        learnNotice = nil
+        fireNotice = nil
         tracker.confirm(task: task.ref, at: Date())
         // Re-emit the unchanged surface so span accrual restarts immediately
         // (B1's other half): after a manual stop the sensor's dedup key
@@ -1222,6 +1227,10 @@ public final class AppController: ObservableObject {
     /// not reset). Distinct from userPicked, which starts a fresh session.
     public func changeCurrentTask(to ref: TaskRef, undoable: Bool = true) {
         guard case .tracking(let oldTarget, _) = trackerState, .task(ref) != oldTarget else { return }
+        // "Auto-dismisses after ~8s or on next pick" (spec §6) — a genuine
+        // reassign counts as the next pick too.
+        learnNotice = nil
+        fireNotice = nil
         // Make the popover relabel reversible: ⌘Z relabels back to the task it
         // was on (the inverse is itself a change, marked non-undoable so it
         // doesn't stack endlessly).
@@ -1378,6 +1387,16 @@ public final class AppController: ObservableObject {
             persistAssociations()
         }
         reloadReview()
+    }
+
+    /// The synthetic `ActivitySignal` for a review-queue row — the same
+    /// construction `assignReview` feeds the attributor above, exposed so
+    /// the review queue's post-assign grain footer (2026-07-03 spec §5.3,
+    /// "later polish") can build the identity of what it JUST taught,
+    /// mirroring `PopoverView`'s `justPicked` tuple.
+    public func signal(for segment: ReviewSegment) -> ActivitySignal {
+        ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
+                       tabURL: segment.tabURL, timestamp: segment.start)
     }
 
     private func reloadReview() {
@@ -1775,11 +1794,106 @@ public final class AppController: ObservableObject {
                                       pinned: pinned, origin: .card, now: now)
             persistAssociations()
             tracker.reevaluate()
+            showLearnNotice(rules: [EmailRule(level: level, value: segment.emailMatchValue,
+                                              target: ref, pinned: pinned, createdAt: now, origin: .card)],
+                            signal: signal)
             objectWillChange.send()
         } else if pinned, let id = PinScope.identity(of: signal) {
             let prefix = Array(id.segments.prefix(grainCount))
             guard !prefix.isEmpty else { return }
             commitPin(kind: id.kind, prefix: prefix, to: ref)
+        }
+    }
+
+    /// `commitGrain`'s multi-correspondent sibling (2026-07-03 spec §5.5,
+    /// "later polish", additive — `commitGrain` itself is untouched). When a
+    /// message carries more than one counterparty, the correspondent grain
+    /// writes one `EmailRule` per CHECKED address instead of `commitGrain`'s
+    /// single rule for the primary correspondent. `chosen` is the grain
+    /// footer's / Evidence Card's checkbox selection, matched case-
+    /// insensitively against `ContextIdentity.correspondentChoices(signal)`
+    /// (the pure fan-out lives there, check-covered without an Attributor).
+    /// A no-op if `chosen` picks nothing.
+    public func commitCorrespondentGrain(_ signal: ActivitySignal, chosen: Set<String>,
+                                         to ref: TaskRef, pinned: Bool, now: Date = Date()) {
+        let values = ContextIdentity.correspondentRuleValues(signal, chosen: chosen)
+        guard !values.isEmpty else { return }
+        for value in values {
+            attributor.learnEmailRule(signal, to: ref, level: .correspondent, value: value,
+                                      pinned: pinned, origin: .card, now: now)
+        }
+        persistAssociations()
+        tracker.reevaluate()
+        // Fan-out learning must not be silent either — ONE notice covering
+        // every rule just written, whose [undo] removes them all.
+        showLearnNotice(rules: values.map {
+            EmailRule(level: .correspondent, value: $0, target: ref,
+                      pinned: pinned, createdAt: now, origin: .card)
+        }, signal: signal)
+        objectWillChange.send()
+    }
+
+    // MARK: - First-LEARN / First-FIRE notices (2026-07-03 spec §6)
+
+    /// A one-line popover-anchored trace of the durable rule(s) a commit just
+    /// wrote — so learning is never silent (spec §6 MVP item 6). Usually one
+    /// rule; the multi-correspondent fan-out passes them all, so [undo]
+    /// removes the whole batch. `signal` is the exact signal the rules were
+    /// committed against, so undo forgets them through the same
+    /// `forget(_:signal:)` path (with its usual undo-stack registration)
+    /// rather than a bespoke removal.
+    public struct LearnNotice: Equatable, Sendable {
+        public let rules: [EmailRule]
+        public let taskName: String
+        public let signal: ActivitySignal
+    }
+    /// A one-line popover-anchored trace of a learned rule's FIRST-ever win
+    /// (spec §6 later-polish item, brought forward) — informational only, no
+    /// undo (a rule that's working as intended is a Rules Ledger/Evidence
+    /// Card matter, not a passing toast's).
+    public struct FireNotice: Equatable, Sendable {
+        public let rule: EmailRule
+        public let taskName: String
+    }
+    @Published public private(set) var learnNotice: LearnNotice?
+    @Published public private(set) var fireNotice: FireNotice?
+    /// Popover-anchored only — never a system notification (spec §6 MVP
+    /// item 6 explicitly). Auto-dismisses after this long, or sooner on the
+    /// next task pick (see `userPicked`/`changeCurrentTask`) — never blocks
+    /// the express path either way.
+    static let noticeDismissSeconds: TimeInterval = 8
+
+    private func showLearnNotice(rules: [EmailRule], signal: ActivitySignal) {
+        guard let first = rules.first else { return }
+        let notice = LearnNotice(rules: rules, taskName: name(of: .task(first.target)), signal: signal)
+        learnNotice = notice
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.noticeDismissSeconds) { [weak self] in
+            guard let self, self.learnNotice == notice else { return }
+            self.learnNotice = nil
+        }
+    }
+
+    /// The First-LEARN notice's [undo]: forgets exactly the rule(s) it named.
+    public func undoLearnNotice() {
+        guard let notice = learnNotice else { return }
+        learnNotice = nil
+        for rule in notice.rules { forget(.emailRule(rule), signal: notice.signal) }
+    }
+
+    public func dismissLearnNotice() { learnNotice = nil }
+    public func dismissFireNotice() { fireNotice = nil }
+
+    /// Wires `Attributor.onFirstFire` to publish the First-FIRE notice. Called
+    /// once from `init`, after `attributor`/`tracker` are both set up.
+    private func wireFirstFireNotice() {
+        attributor.onFirstFire = { [weak self] rule in
+            guard let self else { return }
+            let notice = FireNotice(rule: rule, taskName: self.name(of: .task(rule.target)))
+            self.fireNotice = notice
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.noticeDismissSeconds) { [weak self] in
+                guard let self, self.fireNotice == notice else { return }
+                self.fireNotice = nil
+            }
         }
     }
 

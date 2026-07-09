@@ -99,7 +99,12 @@ struct PopoverView: View {
             switchList
             if let jp = justPicked { grainFooter(jp) }
             Divider()
-            commentBar
+            // Grouped so the notices don't push the 10-child VStack over
+            // SwiftUI's ViewBuilder.buildBlock cap (see the NOTE above).
+            Group {
+                commentBar
+                contextNotices
+            }
             footer
         }
         .padding(12)
@@ -969,11 +974,53 @@ struct PopoverView: View {
                 .font(.caption2).buttonStyle(.borderless)
                 Button { justPicked = nil } label: { Image(systemName: "xmark.circle") }
                     .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
-                    .help("Dismiss — once (today's soft correction stays; no durable rule)")
+                    .help("Dismiss – once (today's soft correction stays; no durable rule)")
             }
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+    }
+
+    /// First-LEARN + First-FIRE notices (2026-07-03 spec §6): popover-anchored
+    /// only, never a system notification, never blocking. Both auto-dismiss on
+    /// the controller's own timer or the next pick — this view just renders
+    /// whatever's currently live and offers undo/dismiss.
+    @ViewBuilder
+    private var contextNotices: some View {
+        if let notice = controller.learnNotice, let first = notice.rules.first {
+            HStack(spacing: 6) {
+                Text("✉ \(noticeValue(first))"
+                     + (notice.rules.count > 1 ? " +\(notice.rules.count - 1)" : "")
+                     + " → \(notice.taskName)")
+                    .font(.caption2).lineLimit(1)
+                Spacer()
+                Button("Undo") { controller.undoLearnNotice() }
+                    .font(.caption2).buttonStyle(.borderless)
+                Button { controller.dismissLearnNotice() } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
+                    .help("Dismiss")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+        if let notice = controller.fireNotice {
+            HStack(spacing: 6) {
+                Text("✉ \(noticeValue(notice.rule)) matched → \(notice.taskName)")
+                    .font(.caption2).lineLimit(1)
+                Spacer()
+                Button { controller.dismissFireNotice() } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
+                    .help("Dismiss")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    /// The rule's matched value for a notice line — the system row's value is
+    /// empty ("any mail in the system"), same fallback as `whyGlyph`.
+    private func noticeValue(_ rule: EmailRule) -> String {
+        rule.value.isEmpty ? "any mail" : rule.value
     }
 
     /// ↵ in the filter selects the top of the current list — keyboard route to

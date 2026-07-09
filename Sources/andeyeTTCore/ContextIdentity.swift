@@ -174,6 +174,35 @@ public struct ContextIdentity: Sendable, Equatable {
     }
 }
 
+/// Multi-correspondent expansion (2026-07-03 spec §5.5, "later polish"): a
+/// message with more than one counterparty must let the user choose WHICH
+/// addresses the correspondent-grain rule keys on, rather than silently
+/// committing to the first (all `emailSegments` above tracks). Pure — the
+/// Attributor write itself is the caller's job
+/// (`AppController.commitCorrespondentGrain`).
+extension ContextIdentity {
+    /// Every distinct correspondent on `signal`, first-seen order,
+    /// case-insensitively de-duplicated — the checkbox list source for the
+    /// grain footer / Evidence Card. Empty for a signal with no email
+    /// context at all.
+    public static func correspondentChoices(_ signal: ActivitySignal) -> [String] {
+        guard let ctx = EmailContext.from(signal) else { return [] }
+        var seen = Set<String>()
+        return ctx.correspondents.filter { seen.insert($0).inserted }
+    }
+
+    /// The addresses a correspondent-grain commit should write one rule
+    /// each for: `chosen` filtered against, and ordered by,
+    /// `correspondentChoices` — so the commit order is stable and `chosen`
+    /// is matched case-insensitively (a checkbox label is the lowercased
+    /// display value, but a caller shouldn't have to know that).
+    public static func correspondentRuleValues(_ signal: ActivitySignal,
+                                               chosen: Set<String>) -> [String] {
+        let chosenLower = Set(chosen.map { $0.lowercased() })
+        return correspondentChoices(signal).filter { chosenLower.contains($0.lowercased()) }
+    }
+}
+
 extension ContextIdentity.SegmentKind {
     /// True for the four email-ladder levels (system/domain/correspondent/
     /// subject) — distinguishes an email-flavoured chain from the plain

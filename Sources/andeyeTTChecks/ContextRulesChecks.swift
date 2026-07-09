@@ -241,6 +241,51 @@ func emailRuleMetadataChecks(_ c: Checks) {
         try expectEq(a.emailRules[0].lastFired, later)
     }
 
+    c.check("onFirstFire fires exactly once, on the fireCount 0→1 transition (the First-FIRE toast hook)") {
+        let a = Attributor(instanceHost: "op.example.com")
+        let tasks = [WorkTask(ref: .op(1), subject: "Insurance", status: "Now")]
+        a.emailRules = [EmailRule(level: .correspondentDomain,
+                                  value: "harborlane.example", target: .op(1), createdAt: t0)]
+        var fired: [EmailRule] = []
+        a.onFirstFire = { fired.append($0) }
+        let sig = gmailSignal()
+        _ = a.attribute(sig, tasks: tasks, now: t0)
+        try expectEq(fired.count, 1, "the FIRST win notifies")
+        try expectEq(fired[0].value, "harborlane.example")
+        try expectEq(fired[0].fireCount, 1, "the rule passed to the hook already reflects the fire")
+        _ = a.attribute(sig, tasks: tasks, now: t0.addingTimeInterval(600))
+        _ = a.attribute(sig, tasks: tasks, now: t0.addingTimeInterval(1200))
+        try expectEq(fired.count, 1, "every later win is silent — only the FIRST ever notifies")
+    }
+
+    c.check("onFirstFire never fires from explain() — only a real attribute() win") {
+        let a = Attributor(instanceHost: "op.example.com")
+        let tasks = [WorkTask(ref: .op(1), subject: "Insurance", status: "Now")]
+        a.emailRules = [EmailRule(level: .correspondentDomain,
+                                  value: "harborlane.example", target: .op(1), createdAt: t0)]
+        var fired: [EmailRule] = []
+        a.onFirstFire = { fired.append($0) }
+        _ = a.explain(gmailSignal(), tasks: tasks, now: t0)
+        try expect(fired.isEmpty, "previewing/explaining must never trip the first-fire hook")
+    }
+
+    c.check("a forgotten-then-retaught rule fires onFirstFire again (a fresh rule, not the same one)") {
+        let a = Attributor(instanceHost: "op.example.com")
+        let tasks = [WorkTask(ref: .op(1), subject: "Insurance", status: "Now")]
+        let sig = gmailSignal()
+        a.learnEmailRule(sig, to: .op(1), level: .correspondentDomain,
+                        value: "harborlane.example", now: t0)
+        var fired: [EmailRule] = []
+        a.onFirstFire = { fired.append($0) }
+        _ = a.attribute(sig, tasks: tasks, now: t0)
+        try expectEq(fired.count, 1)
+        a.forget(.emailRule(a.emailRules[0]), signal: sig)
+        a.learnEmailRule(sig, to: .op(1), level: .correspondentDomain,
+                        value: "harborlane.example", now: t0)
+        _ = a.attribute(sig, tasks: tasks, now: t0.addingTimeInterval(60))
+        try expectEq(fired.count, 2, "the re-taught rule is fresh (fireCount reset) — it fires again")
+    }
+
     c.check("learnEmailRule stamps provenance (createdAt = correction time, origin = correction)") {
         let a = Attributor(instanceHost: "op.example.com")
         // Called directly: `confirm` no longer calls this silently (2026-07-03

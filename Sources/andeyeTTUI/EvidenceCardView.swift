@@ -24,11 +24,22 @@ struct EvidenceCardView: View {
     @State private var grainCount = 1
     @State private var pickedTask: WorkTask?
     @FocusState private var ladderFocused: Bool
+    /// Multi-correspondent checkbox selection (spec §5.5, "later polish") —
+    /// all checked by default; only meaningful when the selected grain is
+    /// the correspondent row AND `correspondentChoices` has more than one.
+    @State private var correspondentChecks: Set<String> = []
 
     private var explanation: AttributionExplanation { controller.explain(signal) }
     private var identity: ContextIdentity { controller.identity(of: signal) }
     private var hasEmailGrain: Bool { identity.segments.contains { $0.kind.isEmailGrain } }
     private var unlearn: Attributor.Unlearn? { controller.forgettable(for: signal) }
+    /// Every distinct counterparty on this message — more than one triggers
+    /// the checkbox expansion instead of a plain correspondent row.
+    private var correspondentChoices: [String] { ContextIdentity.correspondentChoices(signal) }
+    private var isCorrespondentGrainSelected: Bool {
+        grainCount >= 1 && grainCount <= identity.segments.count
+            && identity.segments[grainCount - 1].kind == .correspondent
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -44,7 +55,10 @@ struct EvidenceCardView: View {
                 wrongTaskSection
             }
         }
-        .onAppear { grainCount = max(1, identity.cardDefaultGrainIndex ?? identity.defaultGrainCount) }
+        .onAppear {
+            grainCount = max(1, identity.cardDefaultGrainIndex ?? identity.defaultGrainCount)
+            correspondentChecks = Set(correspondentChoices)   // all checked by default
+        }
         .padding(host == .popover ? 6 : 8)
         .frame(maxWidth: host == .popover ? 268 : 340, alignment: .leading)
         .background(.quaternary.opacity(host == .popover ? 0.5 : 1),
@@ -308,7 +322,7 @@ struct EvidenceCardView: View {
                             .font(.system(size: 9))
                         // Wrap rather than truncate — long correspondents/
                         // subjects were clipping instead of reading in full.
-                        Text(seg.display).font(.caption2)
+                        Text(seg.display + correspondentCountSuffix(for: seg)).font(.caption2)
                             .fixedSize(horizontal: false, vertical: true)
                         if seg.shared {
                             Text("shared").font(.caption2).foregroundStyle(.orange)
@@ -323,6 +337,9 @@ struct EvidenceCardView: View {
                 .buttonStyle(.plain)
                 .disabled(!seg.available)
                 .help(seg.available ? "Grain: \(seg.display)" : "not captured on this window")
+                if seg.kind == .correspondent, grainCount == count, correspondentChoices.count > 1 {
+                    correspondentCheckboxes
+                }
             }
         }
         // No implicit animation on selecting a grain — clicking a row was
@@ -344,6 +361,36 @@ struct EvidenceCardView: View {
         .onAppear { ladderFocused = true }
     }
 
+    /// "+2" beside the correspondent row when the message has other
+    /// counterparties (spec §5.5's "r.naismith@… +2" example) — the visible
+    /// cue that checking the row expands to per-address checkboxes.
+    private func correspondentCountSuffix(for seg: ContextIdentity.Segment) -> String {
+        guard seg.kind == .correspondent, correspondentChoices.count > 1 else { return "" }
+        return " +\(correspondentChoices.count - 1)"
+    }
+
+    /// The multi-correspondent expansion (spec §5.5, "later polish"): all
+    /// counterparties as checkboxes, checked by default; Remember/Always
+    /// then write one rule per checked address instead of `commitGrain`'s
+    /// single rule for the primary correspondent.
+    private var correspondentCheckboxes: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(correspondentChoices, id: \.self) { address in
+                Toggle(isOn: Binding(
+                    get: { correspondentChecks.contains(address) },
+                    set: { on in
+                        if on { correspondentChecks.insert(address) }
+                        else { correspondentChecks.remove(address) }
+                    }
+                )) {
+                    Text(address).font(.caption2).fixedSize(horizontal: false, vertical: true)
+                }
+                .toggleStyle(.checkbox)
+            }
+        }
+        .padding(.leading, 14)
+    }
+
     private func conflict(for segment: ContextIdentity.Segment) -> EmailRule? {
         guard let level = segment.kind.emailMatchLevel else { return nil }
         return controller.conflictingRule(level: level, value: segment.emailMatchValue)
@@ -352,8 +399,13 @@ struct EvidenceCardView: View {
     private func commit(_ task: WorkTask, pinned: Bool?) {
         onPick?(task)
         if let pinned {
-            controller.commitGrain(identity, grainCount: grainCount, signal: signal,
-                                   to: task.ref, pinned: pinned)
+            if isCorrespondentGrainSelected, correspondentChoices.count > 1 {
+                controller.commitCorrespondentGrain(signal, chosen: correspondentChecks,
+                                                    to: task.ref, pinned: pinned)
+            } else {
+                controller.commitGrain(identity, grainCount: grainCount, signal: signal,
+                                       to: task.ref, pinned: pinned)
+            }
         }
         pickedTask = nil
         filter = ""

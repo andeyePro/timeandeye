@@ -173,11 +173,17 @@ and recorded rather than fixed blind:
   timeline's window panes; silent `learnEmailRule` retired from
   `confirm`/`assign` per spec §5.4, replaced by the card + the popover's
   post-pick grain footer; Rules Ledger (list + provenance + delete,
-  Settings ▸ Email → task matching ▸ "Context rules…") — UNVERIFIED, no
-  Mac to run checks/build on. Still open: first-learn/first-fire toasts,
-  screen-share suppression, site recipes beyond Gmail, review-queue grain
-  footer, multi-correspondent checkbox expansion, ledger row → card,
-  bulk-forget/export (spec §6 "later polish").
+  Settings ▸ Email → task matching ▸ "Context rules…") — since verified,
+  suite green on the bridge. 2026-07-09: first-learn notice (one line +
+  undo, popover-anchored) + first-fire toast (Attributor.onFirstFire,
+  fireCount 0→1 only), review-queue grain footer, multi-correspondent
+  checkbox expansion (Evidence Card + review footer; one undoable notice
+  covers the whole rule fan-out) — all landed, suite 491/0. Still open:
+  screen-share suppression, site recipes beyond Gmail, ledger row → card,
+  bulk-forget/export, candidates ▾ expansion (spec §6 "later polish").
+  Note: review-queue rows carry no stored correspondents, so their footer
+  offers the narrowest AVAILABLE grain (often system-level) — enriching
+  ReviewSegment with email evidence is the follow-on if wanted.
   (e) not started.
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —
