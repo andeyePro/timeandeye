@@ -146,6 +146,15 @@ public enum TimelineMath {
         return out
     }
 
+    /// Join comment fragments in the given order: nils/empties dropped, the
+    /// rest joined with `CommentRouting.commentSeparator` ("; "). The ONE
+    /// joiner shared by `mergeAdjacent`, `foldLive` and the live display
+    /// composition, so a comment reads the same wherever its slice ends up.
+    public static func joinComments(_ parts: [String?]) -> String? {
+        let kept = parts.compactMap { $0 }.filter { !$0.isEmpty }
+        return kept.isEmpty ? nil : kept.joined(separator: CommentRouting.commentSeparator)
+    }
+
     /// Merge same-task sessions that butt up against each other (end ≈ start,
     /// within `tolerance`) into one, losing no data: the survivor spans both,
     /// keeps the earliest start / latest end, joins comments, takes the lower
@@ -159,8 +168,7 @@ public enum TimelineMath {
             if var last = out.last, last.task == s.task,
                abs(s.start.timeIntervalSince(last.end)) <= tolerance {
                 last.end = Swift.max(last.end, s.end)
-                let comments = [last.comment, s.comment].compactMap { $0 }.filter { !$0.isEmpty }
-                last.comment = comments.isEmpty ? nil : comments.joined(separator: "; ")
+                last.comment = joinComments([last.comment, s.comment])
                 last.certainty = Swift.min(last.certainty, s.certainty)
                 last.pushedToOP = false
                 out[out.count - 1] = last
@@ -169,6 +177,46 @@ public enum TimelineMath {
             }
         }
         return out
+    }
+
+    /// The displayed live block's fold. The journal only coalesces on flush,
+    /// so while tracking, journalled same-task slices can butt up against the
+    /// live start; the timeline shows them and the live clock as ONE slice.
+    /// Walks back over contiguous (gap ≤ `tolerance`) same-task rows, removing
+    /// them and extending the start over them — and carries their stored
+    /// comments, joined oldest-first, so folding a commented row under the
+    /// live block never hides its comment from the display.
+    public struct LiveFold: Equatable, Sendable {
+        /// The live block's extended start (earliest folded row's start).
+        public var start: Date
+        /// The input rows minus the folded ones — what still draws separately.
+        public var remaining: [Session]
+        /// The folded rows' stored comments, joined oldest-first; nil when
+        /// none of them carried one.
+        public var foldedComment: String?
+        public init(start: Date, remaining: [Session], foldedComment: String?) {
+            self.start = start; self.remaining = remaining; self.foldedComment = foldedComment
+        }
+    }
+
+    public static func foldLive(_ sessions: [Session], task: TaskRef,
+                                liveStart: Date,
+                                tolerance: TimeInterval = 2) -> LiveFold {
+        var list = sessions
+        var start = liveStart
+        var folded: [Session] = []
+        // Repeated first-match walk (not a single pass): each fold moves the
+        // start earlier, which can bring the NEXT row into contiguity.
+        while let i = list.firstIndex(where: {
+            $0.task == task && $0.start < start
+                && abs($0.end.timeIntervalSince(start)) <= tolerance }) {
+            start = Swift.min(start, list[i].start)
+            folded.append(list[i])
+            list.remove(at: i)
+        }
+        folded.sort { $0.start < $1.start }
+        return LiveFold(start: start, remaining: list,
+                        foldedComment: joinComments(folded.map(\.comment)))
     }
 
     /// Result of a keyboard move over the slice bar: the range anchor, the

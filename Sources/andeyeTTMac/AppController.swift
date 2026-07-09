@@ -1682,6 +1682,10 @@ public final class AppController: ObservableObject {
         guard case .tracking(let target, _) = trackerState,
               case .task(let ref) = target else { return }
         manualNotes[ref, default: []].append((text: text, at: Date()))
+        // The timeline's cached fetch composes the live slice's comment from
+        // these notes: bump the revision so an open timeline shows the comment
+        // the moment it's committed, not on the next 30 s reload.
+        journalRevision &+= 1
         // A commented visit is work by attestation: pin it so its slice
         // surfaces however short (Martin, 2026-07-09 — three quick test
         // comments once collapsed into one slice on one task).
@@ -1976,9 +1980,11 @@ public final class AppController: ObservableObject {
         reloadReview()
     }
 
-    /// Bumped on every journal mutation (this is called on all of them), so a
-    /// view can invalidate a cached journal read without polling — even when the
-    /// summary STRING is unchanged (e.g. a same-duration reassign).
+    /// Bumped on every journal mutation (this is called on all of them) and on
+    /// a committed in-flight note (which the timeline composes into the live
+    /// slice), so a view can invalidate a cached journal read without polling —
+    /// even when the summary STRING is unchanged (e.g. a same-duration
+    /// reassign).
     @Published public private(set) var journalRevision = 0
 
     private func updateJournalSummary() {
@@ -2107,25 +2113,39 @@ public final class AppController: ObservableObject {
             // continues (the journal only coalesces on flush): walk back over
             // contiguous same-task journalled slices, drop them, extend the
             // live start to cover them.
-            while let i = list.firstIndex(where: {
-                $0.task == ref && $0.start < liveStart
-                    && abs($0.end.timeIntervalSince(liveStart)) <= 2 }) {
-                liveStart = Swift.min(liveStart, list[i].start)
-                list.remove(at: i)
-            }
-            // The live slice CARRIES its pending committed note, so a
-            // comment shows in the timeline the moment it's entered — not
-            // only after the slice flushes (Martin's 03:58 third comment
-            // was invisible until the eventual flush).
+            let fold = TimelineMath.foldLive(list, task: ref, liveStart: liveStart)
+            list = fold.remaining
+            liveStart = fold.start
+            // The live slice CARRIES the folded rows' stored comments plus
+            // its pending committed note, so a comment stays visible in the
+            // timeline from the moment it's entered — through the flush that
+            // journals it AND any merge under the live block. (Martin's
+            // comments used to vanish until he stopped and left a gap.)
             let pending = Self.joinedNote(manualNotes[ref])
             list.append(Session(id: Self.liveSessionID, task: ref, start: liveStart,
                                 end: liveEnd, certainty: certainty,
-                                comment: pending.isEmpty ? nil : pending))
+                                comment: TimelineMath.joinComments([fold.foldedComment,
+                                                                    pending])))
         }
         return list
     }
 
     public static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
+
+    /// The stored comments of the journalled rows the displayed live block
+    /// folds (see `timelineSessions`) — read-only context for the timeline
+    /// editor, whose comment field edits ONLY the in-flight note (the stored
+    /// parts belong to journalled slices). Bounded to a 2-day lookback: the
+    /// fold chains only across ≤2 s gaps, so anything older can't be part of
+    /// the live block anyway.
+    public func liveFoldedComment() -> String? {
+        guard case .tracking(.task(let ref), _) = trackerState else { return nil }
+        let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
+        let rows = ((try? journal.sessions(from: liveStart.addingTimeInterval(-2 * 86_400),
+                                           to: liveStart.addingTimeInterval(2))) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        return TimelineMath.foldLive(rows, task: ref, liveStart: liveStart).foldedComment
+    }
 
     /// Read-only projection of the tracker's provisional-switch window for the
     /// timeline hatch: the sub-range of the live slice whose commit is still

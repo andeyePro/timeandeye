@@ -127,11 +127,11 @@ and recorded rather than fixed blind:
   admission floor (`meetingReviewFloor`, Settings-backed, applied at
   reloadReview + the retro re-add so persisted rows vanish with no
   migration; journal/timeline untouched); drawer button now "Unknown".
-- [ ] Timeline comment visibility (Martin, 2026-07-09 evening): a comment
-  must be visible in the timeline while still tracking (no stop, no gap) and
-  after its slice merges with a neighbour; live displayed block must show
-  the folded rows' stored comments plus the in-flight note, lossless editor
-  round-trip.
+- [x] Timeline comment visibility (Martin, 2026-07-09 evening) — DONE same
+  evening: pure `TimelineMath.foldLive` carries folded rows' comments into
+  the displayed live block (+ in-flight note via shared `joinComments`);
+  hover tooltips carry comments, commented slices wear a bubble mark; live
+  editor shows folded comments read-only, edits only the note (lossless).
 - [x] Finance-mapping Settings editor (D6 follow-up, 2026-07-08): DONE same
   day — registry-driven "Billing mappings" Settings section (visible only
   with a finance backend), billable projects each pick a finance-backend

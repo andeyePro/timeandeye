@@ -209,6 +209,57 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(TimelineMath.mergeAdjacent([prior, continued]).count, 1)
     }
 
+    c.check("joinComments drops nil/empty, keeps order — the one shared joiner") {
+        // mergeAdjacent, foldLive and the live display all join through this;
+        // if it drifted from "; " a merged slice would read differently from
+        // a live one carrying the same comments.
+        try expectEq(TimelineMath.joinComments(["design", nil, "", "test"]), "design; test")
+        try expectEq(TimelineMath.joinComments(["only"]), "only")
+        try expectNil(TimelineMath.joinComments([nil, ""]))
+    }
+
+    c.check("foldLive folds contiguous same-task rows and CARRIES their comments") {
+        // Mid-tracking flushes journal rows that butt up against the live
+        // start; the displayed block folds them. Martin's bug: a folded row's
+        // stored comment vanished from the timeline (only stop + a gap brought
+        // it back), because the fold dropped the rows without keeping their
+        // comments. The fold must extend the start AND surface them,
+        // oldest-first, matching mergeAdjacent's join order.
+        let older = Session(task: .op(1), start: t(0), end: t(300), certainty: 1, comment: "spec")
+        let newer = Session(task: .op(1), start: t(300), end: t(600), certainty: 1, comment: "build")
+        let fold = TimelineMath.foldLive([newer, older], task: .op(1), liveStart: t(600))
+        try expectEq(fold.start, t(0))
+        try expectEq(fold.remaining.count, 0)
+        try expectEq(fold.foldedComment, "spec; build")
+    }
+
+    c.check("foldLive stops at a gap or another task — those rows stay discrete") {
+        // A stop→start gap or an interleaved other-task slice breaks the
+        // chain: rows beyond it keep drawing (and commenting) as themselves.
+        let gapped = Session(task: .op(1), start: t(0), end: t(280), certainty: 1,
+                             comment: "before the gap")
+        let otherTask = Session(task: .op(2), start: t(290), end: t(600), certainty: 1)
+        let fold = TimelineMath.foldLive([gapped, otherTask], task: .op(1), liveStart: t(600))
+        try expectEq(fold.start, t(600))
+        try expectEq(fold.remaining.count, 2)
+        try expectNil(fold.foldedComment)
+    }
+
+    c.check("live display comment = folded stored comments + pending note, no duplication") {
+        // The timeline composes the live block's comment as stored-then-
+        // pending. The editor shows the stored part read-only and edits ONLY
+        // the pending note, so open→save-unchanged must round-trip losslessly:
+        // an empty pending adds nothing, and the pending never absorbs the
+        // stored part (or vice versa).
+        let stored = TimelineMath.foldLive(
+            [Session(task: .op(1), start: t(0), end: t(300), certainty: 1, comment: "spec"),
+             Session(task: .op(1), start: t(300), end: t(600), certainty: 1, comment: "build")],
+            task: .op(1), liveStart: t(600)).foldedComment
+        try expectEq(TimelineMath.joinComments([stored, "pending"]), "spec; build; pending")
+        try expectEq(TimelineMath.joinComments([stored, ""]), "spec; build")
+        try expectEq(TimelineMath.joinComments([nil, "pending"]), "pending")
+    }
+
     c.check("latest block walks back over <1h gaps") {
         let morning = session(from: 0, to: 1800)
         let later1 = session(from: 20_000, to: 21_000)

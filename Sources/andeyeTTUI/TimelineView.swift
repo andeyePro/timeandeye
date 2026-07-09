@@ -97,6 +97,10 @@ struct TimelineView: View {
     @State private var editStart = Date()
     @State private var editEnd = Date()
     @State private var editComment = ""
+    /// Live slice only: the stored comments of the journalled rows the
+    /// displayed block folds — shown read-only beside the editable in-flight
+    /// note (they belong to journalled slices, not to `manualNote`).
+    @State private var editStoredComment = ""
     @State private var editTask: TaskRef?
     @State private var conflicts: [Session] = []
     @State private var filter = ""
@@ -705,6 +709,7 @@ struct TimelineView: View {
         // apart by a zig-zag (torn) right edge meaning "ongoing", not by being
         // dimmer.
         let shape = SliceShape(zigzag: isLive)
+        let comment = session.comment ?? ""
         shape
             .fill(Color(nsColor: controller.colour(for: session.task)).opacity(0.9))
             .overlay(alignment: .leading) {
@@ -716,6 +721,22 @@ struct TimelineView: View {
                         .foregroundStyle(labelColour(for: session.task))
                 }
             }
+            // At-a-glance "this slice has a comment": a tiny bubble in the
+            // slice's own label colour. The live block's comment includes its
+            // folded rows' stored comments + the in-flight note, and a merged
+            // slice keeps its joined comment — so the dot never disappears
+            // just because tracking continued or slices fused. Skipped on
+            // slivers where it would smear; hover/editor still show the text.
+            .overlay(alignment: .topTrailing) {
+                if !comment.isEmpty, w > 16 {
+                    Image(systemName: "bubble.left.fill")
+                        .font(.system(size: 6))
+                        .foregroundStyle(labelColour(for: session.task).opacity(0.65))
+                        .padding(.top, 2)
+                        .padding(.trailing, isLive ? 8 : 3)   // clear the torn edge
+                        .allowsHitTesting(false)
+                }
+            }
             .overlay(shape.stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
             .frame(width: w, height: 44)
             // Handles overlaid AFTER the frame so the HStack spans the slice
@@ -723,7 +744,10 @@ struct TimelineView: View {
             // last-drawn slice).
             .overlay { edgeHandles(session, sliceWidth: w) }
             .position(x: x0 + w / 2, y: 56)
-            .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
+            // The hover tooltip carries the comment too, so reading one needs
+            // no click even on a sliver too thin for the bubble.
+            .help("\(controller.name(of: .task(session.task)))  \(slot(session))"
+                  + (comment.isEmpty ? "" : "\n\(comment)"))
             // `.local` here is the SLICE's own frame (0..<w); add its x0 to get
             // back to a bar-relative x, so a shift-click's date is exactly
             // where you clicked rather than snapping to the slice's edge.
@@ -1104,9 +1128,17 @@ struct TimelineView: View {
         isNewEditing = isNew
         editStart = session.start
         editEnd = session.end
-        // The live slice's comment is the in-flight note, not a stored field.
-        editComment = session.id == AppController.liveSessionID
-            ? controller.manualNote : (session.comment ?? "")
+        // The live slice's EDITABLE comment is the in-flight note; the stored
+        // comments of the rows the displayed block folds show read-only beside
+        // it, so nothing the block carries is hidden while tracking — and
+        // saving still writes only the note (no duplication either way).
+        if session.id == AppController.liveSessionID {
+            editComment = controller.manualNote
+            editStoredComment = controller.liveFoldedComment() ?? ""
+        } else {
+            editComment = session.comment ?? ""
+            editStoredComment = ""
+        }
         editTask = session.task
         conflicts = []
         selectedSpanIdx = []
@@ -1188,8 +1220,19 @@ struct TimelineView: View {
             .datePickerStyle(.field)
             HStack(spacing: 4) {
                 Image(systemName: "bubble.left").foregroundStyle(.secondary).font(.caption)
-                TextField("comment", text: $editComment)
+                if !editStoredComment.isEmpty {
+                    // Comments already journalled under this live block — read-
+                    // only here (they live on flushed slices); the field edits
+                    // only the in-flight note that follows them.
+                    Text(editStoredComment)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.head)
+                        .help(editStoredComment)
+                }
+                TextField(editStoredComment.isEmpty ? "comment" : "add to comment",
+                          text: $editComment)
                     .textFieldStyle(.roundedBorder).font(.caption)
+                    .frame(minWidth: 140)
                     .onSubmit { commitEditor(session) }
             }
             if isLive, editEnd > Date().addingTimeInterval(60) {

@@ -2,6 +2,24 @@
 
 ## 2026-07-09
 
+- [x] **Timeline comments visible live, through merges, at a glance.** A
+  comment now shows in the timeline the moment it's committed — no stop, no
+  gap: the displayed live block's comment is composed from the stored
+  comments of the journalled rows it folds PLUS the in-flight note (new pure
+  `TimelineMath.foldLive` + shared `joinComments`, unit-checked; previously
+  the fold silently dropped folded rows' comments and the live slice carried
+  only the pending note, so a comment vanished when its row flushed under
+  the live block and only reappeared after stop + a gap). Merged slices
+  already kept their joined comment in the journal; the display now shows
+  it: every slice's hover tooltip carries its comment, and commented slices
+  wear a tiny bubble mark in the slice's label colour. The live slice's
+  editor shows the folded stored comments read-only beside the note field,
+  which still edits ONLY the in-flight note — open→save-unchanged stays a
+  lossless no-op, nothing duplicates between the stored and pending parts.
+  `commitComment` bumps `journalRevision` so an open timeline recomposes
+  immediately instead of on the 30 s reload. Manuals updated (Time window →
+  Comments).
+
 - [x] **Review queue sub-minute floor + "Unknown" button rename.** The
   drawer stops asking about moments not worth a decision: a surface only
   enters the Review queue once its uncertain slices total at least

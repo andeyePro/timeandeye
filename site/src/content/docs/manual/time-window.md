@@ -39,6 +39,11 @@ midnight. Day boundaries are marked with the date.
 - **Edit a slice**: click it to open the editor (task, start, end, duration,
   comment, colour). Drag a slice's edge handles to resize; dragging over a
   neighbour eats into it.
+- **Comments**: a slice with a comment carries a small bubble mark, and its
+  hover tooltip shows the text. The ongoing slice shows its comments the
+  moment you commit them; earlier comments already saved under it appear
+  read-only in its editor, next to the note you can still edit. Slices that
+  merge keep both comments, joined.
 - **Create**: drag on empty space to draw a slice, or click a gap to fill it.
 - **Overlaps**: editing an end over a neighbour offers two resolutions - **Snap
   to windows** (↵, default) moves the boundary to the nearest tracked-window edge
