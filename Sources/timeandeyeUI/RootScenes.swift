@@ -116,6 +116,24 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 w.collectionBehavior = behaviours
                 DebugLog.write("window \(windowID ?? w.title): behaviours -> \(w.collectionBehavior.rawValue), level \(w.level.rawValue), visible \(w.isVisible), onActiveSpace \(w.isOnActiveSpace)")
             }
+            // LEVEL, the flags' successor (Martin's third log paste fully
+            // exonerated collectionBehavior: the clean banner combo 131329
+            // put the Review window ON the fullscreen Space for one log line
+            // before macOS evicted it — normal-LEVEL windows are simply
+            // kicked off fullscreen Spaces, and the banner that provably
+            // overlays them floats). Float ONLY while the screen looks
+            // fullscreen — menu bar hidden ⇒ visibleFrame reaches the top of
+            // the screen — and drop back to normal on ordinary desktops so
+            // these windows never squat above other apps. Re-evaluated on
+            // every re-render (~1Hz), so leaving fullscreen demotes fast.
+            let screen = w.screen ?? NSScreen.main
+            let looksFullscreen = screen.map {
+                $0.visibleFrame.maxY >= $0.frame.maxY - 1 } ?? false
+            let wantedLevel: NSWindow.Level = looksFullscreen ? .floating : .normal
+            if w.level != wantedLevel {
+                w.level = wantedLevel
+                DebugLog.write("window \(windowID ?? w.title): level -> \(w.level.rawValue) (fullscreen-look \(looksFullscreen)), onActiveSpace \(w.isOnActiveSpace)")
+            }
             // A stable identity for code that recognises this window (the
             // timeline scroll-pan monitor) without a title match.
             if let windowID, w.identifier?.rawValue != windowID {
