@@ -924,11 +924,15 @@ const copy = (await getEntry('copy', 'home')).data;
       <p class="lede">{copy.light.lede}</p>
       <p class="lede">{copy.light.line2}</p>
     </div>
-    <!-- The earth beside "doesn't cost the earth": REAL coastlines —
-         Natural Earth 110m land (public domain), orthographic Atlantic
-         view projected at build-authoring time (traced, not drawn —
-         Martin, 2026-07-08). Antarctica dropped; horizon runs close
-         along the rim. -->
+    <!-- The earth beside "doesn't cost the earth": REAL coastlines.
+         Source: Natural Earth 1:110m land (ne_110m_land.geojson via
+         github.com/nvkelso/natural-earth-vector, retrieved 2026-07-08).
+         Licence: PUBLIC DOMAIN — "All versions of Natural Earth raster +
+         vector map data found on this website are in the public domain"
+         (naturalearthdata.com/about/terms-of-use). Orthographic Atlantic
+         view projected in pure python at authoring time (traced, not
+         drawn — Martin's art rule); Antarctica dropped; horizon runs
+         close along the rim. -->
     <svg class="light-earth" viewBox="0 0 120 120" fill="none" aria-hidden="true">
       <defs><clipPath id="earthClip"><circle cx="60" cy="60" r="45"/></clipPath></defs>
       <circle cx="60" cy="60" r="46" stroke="currentColor" stroke-width="2.5"/>
