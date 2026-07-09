@@ -99,4 +99,84 @@ func journalPruneChecks(_ c: Checks) {
         try expect(!plan.deleteIDs.contains(boundary.id))
         try expectEq(plan.create.count, 1, "the two genuinely-old slices still roll up")
     }
+
+    c.check("totals survive exactly: sum of rollup durations == sum of the originals, per task per day") {
+        let t1a = s(.op(1), start: daysAgo(800, 3600), minutes: 20)
+        let t1b = s(.op(1), start: daysAgo(800, 7200), minutes: 35)
+        let t2a = s(.op(2), start: daysAgo(800, 3600), minutes: 15)
+        let t2b = s(.op(2), start: daysAgo(800, 10_800), minutes: 50)
+        let originalTotal = [t1a, t1b, t2a, t2b].reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        let plan = JournalPrune.plan(sessions: [t1a, t1b, t2a, t2b], olderThanDays: 730,
+                                     now: now, calendar: cal)
+        let rollupTotal = plan.create.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        try expectEq(rollupTotal, originalTotal, "not a second of tracked time invented or lost")
+    }
+
+    c.check("consolidation is idempotent: re-running the plan over its own output changes nothing further") {
+        let a = s(.op(1), start: daysAgo(800, 9 * 3600), minutes: 30, comment: "morning")
+        let b = s(.op(1), start: daysAgo(800, 14 * 3600), minutes: 45, comment: "afternoon")
+        let untouched = s(.op(2), start: daysAgo(800, 3600), minutes: 10)   // single, never rolled
+        let first = JournalPrune.plan(sessions: [a, b, untouched], olderThanDays: 730,
+                                      now: now, calendar: cal)
+        try expect(!first.isEmpty)
+        // Apply the plan by hand: drop the consolidated originals, add the rollup.
+        let deleted = Set(first.deleteIDs)
+        let afterApply = [a, b, untouched].filter { !deleted.contains($0.id) } + first.create
+        let second = JournalPrune.plan(sessions: afterApply, olderThanDays: 730,
+                                       now: now, calendar: cal)
+        try expect(second.isEmpty, "a lone rollup is a group of 1 — never re-consolidated")
+    }
+
+    c.check("comment fold is deduplicated and capped: repeats collapse, long runs truncate with a count") {
+        let base = daysAgo(800, 3600)
+        var slices: [Session] = []
+        for i in 0..<14 {
+            slices.append(s(.op(1), start: base.addingTimeInterval(Double(i) * 60), minutes: 1,
+                            comment: i < 3 ? "same note" : "note \(i)"))   // first 3 repeat verbatim
+        }
+        let plan = JournalPrune.plan(sessions: slices, olderThanDays: 730, now: now, calendar: cal)
+        try expectEq(plan.create.count, 1)
+        let comment = try unwrap(plan.create[0].comment)
+        try expectEq(comment.components(separatedBy: "same note").count - 1, 1,
+                     "the 3 identical comments collapse to ONE occurrence")
+        try expect(comment.contains("+"), "beyond the cap, the rest fold into a '+N more' count")
+        try expect(comment.hasSuffix("(consolidated 14 slices)"))
+    }
+
+    // MARK: - (c) Hard-cap prune
+
+    c.check("hard cap is a no-op when already under the ceiling") {
+        let a = s(.op(1), start: daysAgo(800, 3600), minutes: 20)
+        let plan = JournalPrune.hardCapPlan(sessions: [a], capBytes: 1_000_000)
+        try expect(plan.isEmpty)
+    }
+
+    c.check("hard cap deletes the OLDEST raw slices first and stops the moment the ceiling is met") {
+        let oldest = s(.op(1), start: daysAgo(800, 3600), minutes: 20, comment: "oldest")
+        let middle = s(.op(1), start: daysAgo(500, 3600), minutes: 20, comment: "middle")
+        let newest = s(.op(1), start: daysAgo(10, 3600), minutes: 20, comment: "newest")
+        // Derived from the REAL encoded sizes (never assume they're equal
+        // just because the durations match) — set the cap to exactly what's
+        // left once `oldest` alone is gone, so only it need be deleted.
+        let encoder = JSONEncoder()
+        let sizeOldest = try encoder.encode(oldest).count
+        let total = try [oldest, middle, newest].reduce(0) { $0 + (try encoder.encode($1).count) }
+        let capBytes = total - sizeOldest
+        let plan = JournalPrune.hardCapPlan(sessions: [newest, middle, oldest], capBytes: capBytes)
+        try expectEq(plan.deleteIDs, [oldest.id], "the single oldest slice is deleted, nothing newer touched")
+        try expect(plan.create.isEmpty, "hard cap never creates rollups")
+    }
+
+    c.check("hard cap NEVER deletes a consolidation rollup, even when it is the oldest bytes") {
+        let rollupID = SessionMerge.fragmentID(parent: UUID(), index: 0)
+        let ancientRollup = Session(id: rollupID, task: .op(1), start: daysAgo(900, 0),
+                                    end: daysAgo(900, 3600), certainty: 1, pushedToOP: true,
+                                    comment: "consolidated 40 slices")
+        let raw = s(.op(2), start: daysAgo(600, 3600), minutes: 20)
+        // Cap tighter than the total: SOMETHING has to be deleted to comply,
+        // and the rollup is both oldest AND largest — it must still survive.
+        let plan = JournalPrune.hardCapPlan(sessions: [ancientRollup, raw], capBytes: 1)
+        try expect(!plan.deleteIDs.contains(rollupID), "rollups are off-limits regardless of age or size")
+        try expect(plan.deleteIDs.contains(raw.id), "the raw slice is the only eligible candidate")
+    }
 }

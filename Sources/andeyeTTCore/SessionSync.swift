@@ -206,6 +206,15 @@ public enum SessionMerge {
         return UUID(uuid: u)
     }
 
+    /// True for a `fragmentID`-derived id (overlap-view fragments, and
+    /// JournalPrune's consolidation rollups) — the version-8 "custom" nibble
+    /// `fragmentID` stamps in is a namespace a real session's random v4 id
+    /// can never occupy. Lets a prune step tell rollups from raw slices
+    /// without a stored flag.
+    public static func isDerivedID(_ id: UUID) -> Bool {
+        id.uuid.6 & 0xF0 == 0x80
+    }
+
     /// The full pipeline: record-merge two replicas, then normalise overlaps.
     public static func converge(_ a: [SessionRevision], _ b: [SessionRevision]) -> [SessionRevision] {
         resolveOverlaps(merge(a, b))

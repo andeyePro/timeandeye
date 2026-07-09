@@ -297,6 +297,21 @@ public final class SQLiteJournalStore: JournalStore {
         return count
     }
 
+    /// (a) iCloud quota stewardship: SQL SUM(LENGTH(json)) instead of the
+    /// default's full decode — same "aggregate, never the whole table" rule
+    /// as sessionCount/pushedCount above.
+    public func journalFootprint() throws -> (syncedBytes: Int, localDetailBytes: Int) {
+        var synced = 0
+        try query("SELECT COALESCE(SUM(LENGTH(json)), 0) FROM sessions WHERE deleted = 0") { stmt in
+            synced = Int(sqlite3_column_int64(stmt, 0))
+        }
+        var detail = 0
+        try query("SELECT COALESCE(SUM(LENGTH(json)), 0) FROM spans") { stmt in
+            detail = Int(sqlite3_column_int64(stmt, 0))
+        }
+        return (synced, detail)
+    }
+
     public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE pushed = 0 AND is_op = 1 AND deleted = 0 AND certainty >= ? ORDER BY start",

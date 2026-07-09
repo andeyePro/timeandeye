@@ -119,6 +119,14 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// unasked — older sessions stay visibly pending until deliberately
     /// released. 0 = no gate.
     public var financeAutoPostWindowDays: Double
+    /// iCloud quota stewardship (b): Settings ▸ Maintenance's age-consolidation
+    /// prune collapses slices older than this many years into per-day
+    /// per-task rollups, on request — never automatic.
+    public var journalConsolidateAfterYears: Double
+    /// iCloud quota stewardship (c): the hard-cap prune's ceiling in MB —
+    /// STRONGLY DISCOURAGED, deletes oldest raw slices until the synced
+    /// journal is back under it. nil = no ceiling configured (the default).
+    public var journalHardCapMB: Double?
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -151,7 +159,9 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 journalSyncEnabled: Bool = false,
                 financeAutoPostWindowDays: Double = 14,
                 currencySymbolOverride: String? = nil,
-                ownEmailEntries: String = "") {
+                ownEmailEntries: String = "",
+                journalConsolidateAfterYears: Double = 2,
+                journalHardCapMB: Double? = nil) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
@@ -184,6 +194,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.currencySymbolOverride = currencySymbolOverride
         self.financeAutoPostWindowDays = financeAutoPostWindowDays
         self.ownEmailEntries = ownEmailEntries
+        self.journalConsolidateAfterYears = journalConsolidateAfterYears
+        self.journalHardCapMB = journalHardCapMB
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -233,6 +245,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         financeAutoPostWindowDays = c.lenient(.financeAutoPostWindowDays,
                                               or: defaults.financeAutoPostWindowDays)
         ownEmailEntries = c.lenient(.ownEmailEntries, or: defaults.ownEmailEntries)
+        journalConsolidateAfterYears = c.lenient(.journalConsolidateAfterYears,
+                                                 or: defaults.journalConsolidateAfterYears)
+        journalHardCapMB = ((try? c.decodeIfPresent(Double.self, forKey: .journalHardCapMB)) ?? nil)
+            ?? defaults.journalHardCapMB
     }
 }
 

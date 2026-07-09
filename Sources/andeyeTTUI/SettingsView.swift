@@ -29,6 +29,16 @@ struct SettingsView: View {
     @State private var exportPeriod: TimePeriod = .thisWeek
     @State private var exportCopied = false
     @State private var licenseKeyField = ""
+    // iCloud quota stewardship (b/c) — see the Maintenance section below.
+    @State private var consolidationPlan: JournalPrune.Plan?
+    @State private var hardCapCandidatePlan: JournalPrune.Plan?
+    @State private var hardCapConfirmedOnce = false
+    /// The chosen ceiling persists in settings (default 50 MB, well above any
+    /// realistic footprint) so a considered choice survives a relaunch.
+    private var hardCapMB: Binding<Double> {
+        Binding(get: { controller.settings.journalHardCapMB ?? 50 },
+                set: { controller.settings.journalHardCapMB = $0 })
+    }
 
     var body: some View {
         Form {
@@ -366,6 +376,85 @@ struct SettingsView: View {
                 }
                 Text("Copies the period's tracked time (all tasks, local included) to the clipboard — paste into a spreadsheet (CSV) or an email/invoice note (Markdown). Works with or without a connected backend.")
                     .font(.caption).foregroundStyle(.secondary)
+
+                Divider()
+                Text("iCloud footprint").font(.callout).bold()
+                Text(controller.journalFootprintSummary.isEmpty ? "Calculating…" : controller.journalFootprintSummary)
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Reality check: a slice is a few hundred bytes – heavy tracking runs to 15–25 MB a year in your private CloudKit database. Nobody gets pushed into a paid iCloud tier by andeye.")
+                    .font(.caption2).foregroundStyle(.secondary)
+
+                Divider()
+                Text("Consolidate old history").font(.callout).bold()
+                HStack {
+                    Text("Collapse slices older than")
+                    TextField("years", value: $controller.settings.journalConsolidateAfterYears,
+                              format: .number)
+                        .frame(width: 44).textFieldStyle(.roundedBorder)
+                    Text("years into daily totals")
+                    Spacer()
+                    Button("Preview") { consolidationPlan = controller.consolidationPreview() }
+                }
+                if let plan = consolidationPlan {
+                    if plan.isEmpty {
+                        Text("Nothing old enough to consolidate yet").font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        HStack {
+                            Text("\(plan.deleteIDs.count) old slices → \(plan.create.count) daily rollups")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Consolidate now") {
+                                controller.applyConsolidation(plan)
+                                consolidationPlan = nil
+                            }
+                        }
+                    }
+                }
+                Text("Totals and invoicing history survive exactly – only the minute-by-minute detail goes.")
+                    .font(.caption2).foregroundStyle(.secondary)
+
+                Divider()
+                Text("Hard cap – strongly discouraged").font(.callout).bold().foregroundStyle(.red)
+                Text("Deletes your OLDEST raw slices until the synced journal is back under a size you choose. Old totals can be lost for good. The synced journal is normally tiny (see above) – this is for a genuine emergency only.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("Cap at")
+                    TextField("MB", value: hardCapMB, format: .number)
+                        .frame(width: 50).textFieldStyle(.roundedBorder)
+                    Text("MB")
+                    Spacer()
+                    Button("Prune to cap…") {
+                        let plan = controller.hardCapPreview(capMB: hardCapMB.wrappedValue)
+                        hardCapCandidatePlan = plan.isEmpty ? nil : plan
+                    }
+                    .disabled(hardCapMB.wrappedValue <= 0)
+                }
+                .confirmationDialog("This permanently deletes old raw history", isPresented: Binding(
+                    get: { hardCapCandidatePlan != nil && !hardCapConfirmedOnce },
+                    // Continue ALSO dismisses this dialog, writing false here
+                    // — only treat that as cancel when the user hasn't just
+                    // confirmed, or the second dialog could never present.
+                    set: { if !$0 && !hardCapConfirmedOnce { hardCapCandidatePlan = nil } }
+                )) {
+                    Button("Continue", role: .destructive) { hardCapConfirmedOnce = true }
+                    Button("Cancel", role: .cancel) { hardCapCandidatePlan = nil }
+                } message: {
+                    Text("Strongly discouraged. Deletes your oldest raw slices to shrink the synced journal – rollups and recent history are never touched, but very old totals can be lost for good.")
+                }
+                .confirmationDialog("Delete \(hardCapCandidatePlan?.deleteIDs.count ?? 0) slices permanently?",
+                                    isPresented: Binding(
+                    get: { hardCapCandidatePlan != nil && hardCapConfirmedOnce },
+                    set: { if !$0 { hardCapCandidatePlan = nil; hardCapConfirmedOnce = false } }
+                )) {
+                    Button("Delete permanently", role: .destructive) {
+                        if let plan = hardCapCandidatePlan { controller.applyHardCapPrune(plan) }
+                        hardCapCandidatePlan = nil
+                        hardCapConfirmedOnce = false
+                    }
+                    Button("Cancel", role: .cancel) { hardCapCandidatePlan = nil; hardCapConfirmedOnce = false }
+                } message: {
+                    Text("There is no undo.")
+                }
             }
 
             Section("Email → task matching") {

@@ -13,6 +13,12 @@ public protocol JournalStore {
     /// so the journal summary never decodes the whole table just to size it.
     func sessionCount() throws -> Int
     func pushedCount() throws -> Int
+    /// (a) iCloud quota stewardship: the ACTUAL footprint, split honestly —
+    /// `syncedBytes` is the JSON payload size of every live session (what
+    /// really travels via CloudKit), `localDetailBytes` is the window-span
+    /// detail table (local-only, never syncs). Real byte counts, not a
+    /// per-row estimate/multiplier.
+    func journalFootprint() throws -> (syncedBytes: Int, localDetailBytes: Int)
     /// Sessions overlapping [from, to), oldest first — the timeline's feed.
     func sessions(from: Date, to: Date) throws -> [Session]
     /// Each task's most recent session end (minus `excluding`, e.g. the live
@@ -129,6 +135,18 @@ public extension JournalStore {
 
     /// Default: no revision stamps — the verify sweep stays inert.
     func sessionStamp(_ id: UUID) throws -> String? { nil }
+
+    /// Default footprint: real JSON-encoded byte counts via the existing
+    /// read methods (no full-table decode cost concern for the in-memory
+    /// store this serves). The SQLite replica overrides with a cheap SQL
+    /// SUM(LENGTH(json)) instead.
+    func journalFootprint() throws -> (syncedBytes: Int, localDetailBytes: Int) {
+        let encoder = JSONEncoder()
+        let synced = try allSessions().reduce(0) { $0 + ((try? encoder.encode($1).count) ?? 0) }
+        let detail = try spans(from: .distantPast, to: .distantFuture)
+            .reduce(0) { $0 + ((try? encoder.encode($1).count) ?? 0) }
+        return (synced, detail)
+    }
 }
 
 public final class InMemoryJournalStore: JournalStore {

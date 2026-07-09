@@ -187,6 +187,9 @@ public final class AppController: ObservableObject {
     /// moved (D4 detection; empty = books match the journal).
     @Published public private(set) var postingDivergences: [String: Int] = [:]
     @Published public private(set) var journalSummary = ""
+    /// (a) iCloud quota stewardship: Settings ▸ Maintenance's honest footprint
+    /// line — updated alongside `journalSummary` on every journal mutation.
+    @Published public private(set) var journalFootprintSummary = ""
     @Published public private(set) var connectedAs: String? {
         didSet { invalidatePickList() }   // RankingConfig.currentUser input
     }
@@ -375,6 +378,7 @@ public final class AppController: ObservableObject {
         taskCache = localWorkTasks()   // locals exist before OP ever connects
         applyJournalRecency()          // recency survives the relaunch
         renderLogo()
+        updateJournalSummary()         // so Settings ▸ Maintenance's footprint is populated at launch, not just after the first mutation
         // Wired AFTER the persisted-mappings load above, so loading doesn't
         // re-save or re-open anything. From here, every Settings edit
         // persists AND re-opens the no-mapping skips for exactly the changed
@@ -1432,7 +1436,20 @@ public final class AppController: ObservableObject {
         let awaiting = (try? journal.sessions(
             needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
         journalSummary = "\(total) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
+        journalFootprintSummary = Self.footprintText(try? journal.journalFootprint())
         journalRevision &+= 1
+    }
+
+    /// (a) iCloud quota stewardship: render the honest footprint split — real
+    /// byte counts, not an estimate, so the copy never overclaims OR scares
+    /// (the synced journal really is tiny; window-span detail never syncs).
+    private static func footprintText(_ footprint: (syncedBytes: Int, localDetailBytes: Int)?) -> String {
+        guard let footprint else { return "" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        let synced = formatter.string(fromByteCount: Int64(footprint.syncedBytes))
+        let detail = formatter.string(fromByteCount: Int64(footprint.localDetailBytes))
+        return "Synced journal: \(synced) · local-only window detail (never syncs): \(detail)"
     }
 
     // MARK: - Undo
@@ -1648,6 +1665,46 @@ public final class AppController: ObservableObject {
                 setPrimaryPosted(sid, entryID: action.survivorID)   // ledger follows
             }
         }
+        updateJournalSummary()
+    }
+
+    // MARK: - iCloud quota stewardship (b/c)
+
+    /// (b) Age-consolidation preview: plan collapsing everything older than
+    /// `settings.journalConsolidateAfterYears` into per-day per-task rollups,
+    /// without touching anything yet. The live-tracking sentinels are never
+    /// candidates (they're always recent, but excluded on principle like
+    /// every other journal read that plans against `allSessions()`).
+    public func consolidationPreview() -> JournalPrune.Plan {
+        let sessions = ((try? journal.allSessions()) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
+        let days = Int(settings.journalConsolidateAfterYears * 365)
+        return JournalPrune.plan(sessions: sessions, olderThanDays: days)
+    }
+
+    /// Apply a previewed consolidation plan: create the rollups, then delete
+    /// the raw originals they replace. Order matters not at all here (ids
+    /// never collide — the rollup carries a freshly-derived id) but creating
+    /// first means an interrupted apply never loses time outright.
+    public func applyConsolidation(_ plan: JournalPrune.Plan) {
+        for session in plan.create { try? journal.save(session) }
+        for id in plan.deleteIDs { try? journal.deleteSession(id) }
+        updateJournalSummary()
+    }
+
+    /// (c) Hard-cap preview — STRONGLY DISCOURAGED: plan deleting the oldest
+    /// raw slices (never rollups) until the synced journal is back under
+    /// `capMB`. Preview only; nothing is deleted until `applyHardCapPrune`.
+    public func hardCapPreview(capMB: Double) -> JournalPrune.Plan {
+        let sessions = ((try? journal.allSessions()) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
+        return JournalPrune.hardCapPlan(sessions: sessions, capBytes: Int(capMB * 1_048_576))
+    }
+
+    /// Apply a previewed hard-cap plan: permanent deletion, no creates (the
+    /// plan never proposes rollups). The UI double-confirms before this runs.
+    public func applyHardCapPrune(_ plan: JournalPrune.Plan) {
+        for id in plan.deleteIDs { try? journal.deleteSession(id) }
         updateJournalSummary()
     }
 

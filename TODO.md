@@ -200,19 +200,20 @@ and recorded rather than fixed blind:
   a real Core struct with String ids; ReconcileAction backend-neutral;
   OPBackend converts at its edge.)
 
-- [ ] iCloud quota stewardship (Martin, 2026-07-02). Reality check first: the
-  synced journal is TINY — a slice is a few hundred bytes, heavy tracking is
-  ~50k slices/year ≈ 15–25 MB/year in the user's CloudKit private DB, and the
-  bulky window-span detail is local-only (already 30-day pruned) and never
-  syncs. Nobody gets pushed into a paid iCloud tier by andeye; photos do
-  that. Still, build the stewardship story so the complaint can never land:
-  (a) Settings shows andeye's actual iCloud footprint; (b) an
-  age-consolidation prune — slices older than N years collapse into per-day
-  per-task rollups (durations summed, comments concatenated, backend entry
-  ids dropped) so totals/invoicing history survive at ~1% of the size;
-  (c) an extreme hard-cap prune (delete oldest raw slices beyond a chosen MB
-  ceiling), UI-labelled as strongly discouraged with a double confirm;
-  (d) tombstone GC after 90 days (already in the sync design).
+- [x] iCloud quota stewardship (Martin, 2026-07-02; DONE 2026-07-09). (a)
+  Settings ▸ Maintenance shows the real footprint (`JournalStore.journalFootprint()`
+  — synced-session bytes vs local-only window-span bytes, SQL SUM(LENGTH(json)),
+  never a full-table decode). (b) age-consolidation prune (`JournalPrune.plan`,
+  already built + check-covered pre-existing) is now wired to the store
+  (`AppController.consolidationPreview`/`applyConsolidation`) and a Preview →
+  Consolidate now control in Settings; `journalConsolidateAfterYears` setting,
+  default 2. (c) hard-cap prune (`JournalPrune.hardCapPlan`, new — oldest raw
+  slices first, `SessionMerge.isDerivedID` keeps rollups off-limits) wired via
+  `applyHardCapPrune`, `journalHardCapMB` setting, UI double confirm
+  (two chained `confirmationDialog`s). (d) tombstone GC turned out to be
+  ALREADY SHIPPED (`SQLiteJournalStore.purgeTombstones`, runs on init) —
+  nothing to build. NEEDS Mac-side `swift run andeyeTTChecks` + on-device
+  Settings verification (built clean only, container has no Swift toolchain).
 
 - [x] Full keyboard/mouse parity sweep (DONE 2026-06-28). Audited every
   interactive control (Explore inventory): every action has a mouse path. Added

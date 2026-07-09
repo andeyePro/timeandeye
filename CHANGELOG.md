@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-09
+
+- [x] **iCloud quota stewardship — Settings ▸ Maintenance grows a footprint
+  readout and two prune tools.** `JournalStore.journalFootprint()` (new
+  protocol requirement, default extension does a real JSON-byte count, the
+  SQLite replica overrides with a SQL `SUM(LENGTH(json))`) splits the synced
+  session bytes from the local-only window-span bytes honestly — no
+  estimate/multiplier. (b) age-consolidation (`JournalPrune.plan`, already
+  built and check-covered from an earlier batch) is now reachable: Settings
+  gets a years field (`journalConsolidateAfterYears`, default 2), a Preview
+  step, and `AppController.applyConsolidation` to run it against the real
+  journal. Its comment fold is now also capped (10 distinct comments, then
+  "+N more") so a years-long daily-switch history can't produce one
+  unreadable row. (c) new `JournalPrune.hardCapPlan` — oldest raw slices
+  first, stops the moment an MB ceiling is met, and can never touch a
+  consolidation rollup (`SessionMerge.isDerivedID`, reusing the version-8
+  "custom" UUID nibble `fragmentID` already stamps rollups with — no new
+  stored flag needed). UI is labelled strongly discouraged with two chained
+  `confirmationDialog`s (double confirm) before `applyHardCapPrune` runs.
+  (d) turned out to be already shipped: `SQLiteJournalStore.purgeTombstones`
+  (90-day retention) already runs on every store init — nothing to build.
+  New checks: totals-preserved, idempotent re-run, comment cap, and three
+  hard-cap checks (no-op under cap, oldest-first + stops at the ceiling,
+  never touches a rollup). Suite 500/0 + full release build verified on the
+  bridge Mac; the Settings pass (dialogs, field bindings) still wants an
+  on-device eyeball.
+
 ## 2026-07-08
 
 - [x] **D6 finance task mapping + criterion-10 reopen — billable OP time can

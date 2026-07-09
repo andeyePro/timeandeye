@@ -49,8 +49,15 @@ public enum JournalPrune {
                 let t = c.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !t.isEmpty, seen.insert(t).inserted { comments.append(t) }
             }
+            // Capped sensibly: a day+task group is normally a handful of
+            // slices, but years of daily switching could otherwise fold into
+            // one unreadably long row — keep the first 10 distinct comments
+            // (chronological, same order as `comments`) and count the rest.
+            let maxComments = 10
+            let shown = comments.count > maxComments ? Array(comments.prefix(maxComments))
+                + ["+\(comments.count - maxComments) more"] : comments
             let note = "consolidated \(sorted.count) slices"
-            let comment = comments.isEmpty ? note : comments.joined(separator: "; ") + " (\(note))"
+            let comment = shown.isEmpty ? note : shown.joined(separator: "; ") + " (\(note))"
             // DETERMINISTIC rollup id (C16): derived from the group's member
             // ids, so two devices pruning the same (day, task) group mint the
             // IDENTICAL rollup — after sync they merge as one record instead
@@ -79,5 +86,30 @@ public enum JournalPrune {
         create.sort { $0.start < $1.start }
         deleteIDs.sort { $0.uuidString < $1.uuidString }
         return Plan(create: create, deleteIDs: deleteIDs)
+    }
+
+    /// (c) Hard-cap prune — the STRONGLY DISCOURAGED escape hatch: delete the
+    /// OLDEST raw slices, oldest-first, until the estimated footprint is back
+    /// under `capBytes`. No creates (pure deletion, unlike (b)). Rollups
+    /// (`SessionMerge.isDerivedID`) are NEVER candidates — deleting them
+    /// barely helps (they're already ~1% of the size) and would destroy the
+    /// exact history (b) exists to protect. A no-op when already under cap.
+    public static func hardCapPlan(sessions: [Session], capBytes: Int) -> Plan {
+        let encoder = JSONEncoder()
+        func encodedSize(_ s: Session) -> Int { (try? encoder.encode(s).count) ?? 400 }
+        let sized = sessions.map { ($0, encodedSize($0)) }
+        var remaining = sized.reduce(0) { $0 + $1.1 }
+        guard remaining > capBytes else { return Plan(create: [], deleteIDs: []) }
+        let oldestFirst = sized
+            .filter { !SessionMerge.isDerivedID($0.0.id) }
+            .sorted { $0.0.start < $1.0.start }
+        var deleteIDs: [UUID] = []
+        for (session, bytes) in oldestFirst {
+            guard remaining > capBytes else { break }
+            deleteIDs.append(session.id)
+            remaining -= bytes
+        }
+        deleteIDs.sort { $0.uuidString < $1.uuidString }
+        return Plan(create: [], deleteIDs: deleteIDs)
     }
 }
