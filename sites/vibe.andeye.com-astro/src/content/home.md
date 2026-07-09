@@ -1,12 +1,12 @@
 ---
 title: Vibe andeye
-tagline: vibe coding you can actually trust
+tagline: vibe coding, verified
 description: Adversarial agentic models plan, build, test and review each other's work in a secure sandbox, so you ship code you can trust.
 hero:
   eyebrow: andeye · agentic coding on your own Mac
   h1:
     - vibe coding
-    - you can actually trust
+    - verified
   lede: Adversarial agentic models plan, build, test and review each other's work in a secure sandbox – so you ship code you can trust.
   cta_how_label: See how it works
   cta_andeye_label: More from andeye

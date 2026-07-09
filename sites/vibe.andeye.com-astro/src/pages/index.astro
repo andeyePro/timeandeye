@@ -657,12 +657,25 @@ nodes.forEach(function (n, i) {
   });
 });
 
-// --- sandbox accordions: click the headline row to open the dig-in layer ---
+// --- sandbox accordions: HOVER previews (open while the pointer rests),
+// click PINS open/closed — the same reveal contract as the flow pills
+// (Martin, 2026-07-09: "still do nothing on rollover"). ---
 document.querySelectorAll('.acc-item').forEach(function (item) {
   var head = item.querySelector('.acc-head');
-  head.addEventListener('click', function () {
-    var open = item.classList.toggle('open');
+  var pinned = false;
+  function set(open) {
+    item.classList.toggle('open', open);
     head.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  head.addEventListener('click', function () {
+    pinned = !pinned;
+    set(pinned);
+  });
+  ['mouseenter', 'focus'].forEach(function (ev) {
+    head.addEventListener(ev, function () { if (!pinned) set(true); });
+  });
+  ['mouseleave', 'blur'].forEach(function (ev) {
+    head.addEventListener(ev, function () { if (!pinned) set(false); });
   });
 });
 

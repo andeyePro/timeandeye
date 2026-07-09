@@ -911,7 +911,14 @@ struct PopoverView: View {
     /// replaced the retired silent `learnEmailRule`.
     private func pick(_ task: WorkTask) {
         let sig = controller.currentFocusSignal()
-        if changeMode {
+        // STOPPED overrides the mode: there is nothing to reassign, so a
+        // task click always STARTS tracking that task (Martin, 2026-07-09:
+        // after an idle stop, Reassign-mode clicks silently did nothing).
+        if case .stopped = controller.trackerState {
+            controller.userPicked(task)
+            changeMode = controller.settings.popoverDefaultsToChangeMode
+            filter = ""
+        } else if changeMode {
             controller.changeCurrentTask(to: task.ref)
             // Reset to the DEFAULT mode (not hardcoded false) so the header
             // returns to its plain resting look after a relabel.
