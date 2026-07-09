@@ -2,6 +2,12 @@
 
 ## 2026-07-09
 
+- [x] **Windows join a fullscreen Space before first show.** Opening
+  Timeline/Settings/Review over a fullscreen app no longer switches Space:
+  the window flags now apply synchronously when the content view lands in
+  its window (`viewDidMoveToWindow`), before macOS decides the Space
+  transition at order-front — the earlier deferred apply lost that race.
+
 - [x] **Timeline comments visible live, through merges, at a glance.** A
   comment now shows in the timeline the moment it's committed — no stop, no
   gap: the displayed live block's comment is composed from the stored
