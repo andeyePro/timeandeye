@@ -93,23 +93,23 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // (~1Hz from the menu clock), so only touch the window when
             // something actually differs — no per-render churn.
             //
-            // canJoinAllSpaces + fullScreenAuxiliary is the EXACT combination
-            // the app's own notification panel uses, and that panel provably
-            // shows over fullscreen apps on Martin's machine — while
-            // moveToActiveSpace(+fullScreenAuxiliary) provably does not: a
-            // window opened over a fullscreen app landed on "the next
-            // non-fullscreen space" (Martin, 2026-07-09, after both a
-            // flag-timing fix and an activation-ordering fix changed
-            // nothing). moveToActiveSpace's "active space" evidently means
-            // the active DESKTOP, so over a fullscreen Space it picks the
-            // adjacent desktop. The trade: these windows now sit on every
-            // Space while open (utility-window semantics — close them and
-            // they're gone), which also delivers the original
-            // "come to my current Space, don't yank me" behaviour for free.
-            let wanted: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            if !w.collectionBehavior.contains(wanted) {
-                w.collectionBehavior.remove(.moveToActiveSpace)
-                w.collectionBehavior.insert(wanted)
+            // THE actual culprit, from Martin's debug-log paste (2026-07-09,
+            // raw behaviours 131841): SwiftUI Window scenes ship with
+            // .fullScreenNone (bit 9) set, and fullScreenNone CONTRADICTS
+            // fullScreenAuxiliary — macOS resolved the conflict against us,
+            // so every flag combination that merely INSERTED bits (three
+            // fixes' worth) still landed the window on the next desktop the
+            // moment it became visible (log: visible true, onActiveSpace
+            // false). The poison bit has to be REMOVED. With it gone,
+            // moveToActiveSpace + fullScreenAuxiliary gives exactly the
+            // behaviour Martin asked for: the window appears on the Space —
+            // fullscreen included — where it was opened, and STAYS there
+            // (no follow-everywhere).
+            var behaviours = w.collectionBehavior
+            behaviours.remove([.fullScreenNone, .fullScreenPrimary, .canJoinAllSpaces])
+            behaviours.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+            if w.collectionBehavior != behaviours {
+                w.collectionBehavior = behaviours
                 DebugLog.write("window \(windowID ?? w.title): behaviours -> \(w.collectionBehavior.rawValue), level \(w.level.rawValue), visible \(w.isVisible), onActiveSpace \(w.isOnActiveSpace)")
             }
             // A stable identity for code that recognises this window (the

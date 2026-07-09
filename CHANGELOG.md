@@ -2,6 +2,16 @@
 
 ## 2026-07-09
 
+- [x] **Fullscreen fix five — the poison bit, found by log.** Martin's
+  debug-log paste showed SwiftUI Window scenes ship with `fullScreenNone`
+  set, which contradicts `fullScreenAuxiliary`; macOS resolved the
+  conflict against every previous flag combination (they only INSERTED
+  bits) and placed the window on the next desktop at the moment it became
+  visible. The bit is now removed and the windows use `moveToActiveSpace`
+  + `fullScreenAuxiliary`: they appear on the Space — fullscreen included
+  — where they were opened and stay there, exactly the stay-put behaviour
+  Martin asked for (no follow-everywhere).
+
 - [x] **Quiet while presenting.** While the mic is live (the call
   detector's own signal) or any display is mirrored, floating banners that
   would name a task or contact are suppressed — a toast naming a client on
