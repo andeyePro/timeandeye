@@ -607,6 +607,45 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.state, .stopped, "manual stop must be respected")
     }
 
+    c.check("idle stop auto-resumes to the pre-stop task on ANY returned input (Martin, 2026-07-09)") {
+        // The idle auto-stop left the app "stopped grey for no reason" until
+        // a >=0.9 surface happened by. Now returning input within 30 min of
+        // the stop resumes the task that was tracking — at the CURRENT
+        // signal's certainty, so a wrong guess queues for review instead of
+        // silently billing. The unknown surface here has no rule at all.
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 600
+        let (tracker, _) = makeTracker(config: config)
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.input(t(40)))
+        tracker.handle(.input(t(700)))   // idle stop
+        try expectEq(tracker.state, .stopped)
+        tracker.handle(.focus(sig("Mystery", "never seen", at: 800)))   // 100s later, no rule
+        guard case .tracking(.task(.op(1)), let certainty) = tracker.state, certainty < 0.6 else {
+            throw CheckFailure(description: "must resume pre-stop task at honest low certainty, got \(tracker.state)")
+        }
+    }
+
+    c.check("the stale-target resume rung is bounded to 30 min — no morning-after junk") {
+        // Resuming yesterday's task on today's first click would seed the
+        // review queue with junk; past the bound only the confident->0.9
+        // rung survives, exactly the pre-2026-07-09 behaviour.
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 600
+        let (tracker, _) = makeTracker(config: config)
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.handle(.input(t(40)))
+        tracker.handle(.input(t(700)))   // idle stop (trimmed to t(40))
+        try expectEq(tracker.state, .stopped)
+        tracker.handle(.focus(sig("Mystery", "never seen", at: 700 + 31 * 60)))
+        try expectEq(tracker.state, .stopped,
+                     "31 min after the stop an unknown surface must NOT resume")
+    }
+
     c.check("Martin's scenario: review-assigned surfaces, switch via typing") {
         // Both Ghostty windows primed via the REVIEW path (assign, not confirm),
         // tracking starts by auto-resume, then move to the other window and

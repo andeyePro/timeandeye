@@ -2,6 +2,14 @@
 
 ## 2026-07-09
 
+- [x] **Idle stops un-stick themselves.** Coming back within half an hour
+  of an idle auto-stop resumes tracking on any returned input — a clearly
+  recognised surface wins, a plausible one is next, and otherwise the task
+  that was tracking resumes at the current signal's honest certainty (so a
+  wrong guess queues for review rather than silently billing). Past the
+  half-hour bound only the old confident-surface resume applies, and a
+  manual stop never restarts on its own. Two tracker checks.
+
 - [x] **Calendar defaults confirmed + time-based meeting alerts (Martin's
   design).** The menu-bar mark now alerts on meeting TIME, replacing v1's
   off-calendar mismatch flash (which never shipped on): a QUIET slow amber

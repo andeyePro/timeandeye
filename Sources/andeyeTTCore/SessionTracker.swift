@@ -105,6 +105,11 @@ public final class SessionTracker {
     /// Manual Stop is respected (only a near-certain OP signal restarts);
     /// idle/auto stops may resume from any confident surface.
     private var stoppedManually = false
+    /// What was tracking when the idle auto-stop fired, and when — the
+    /// resume ladder's last rung (see the `.stopped` case in `handleFocus`).
+    /// Cleared on any manual start/stop and once any rung resumes.
+    private var idleStoppedTarget: Target?
+    private var idleStoppedTargetAt: Date?
     /// Set on willSleep; resolved on didWake. The clock is NOT stopped while
     /// this is set — a quick wake continues, a long one stops retroactively.
     private var sleepingSince: Date?
@@ -180,6 +185,7 @@ public final class SessionTracker {
         // runs — is closed app-side: the sensor re-emits the current surface
         // on manual start.)
         if currentSignal != nil { currentStart = date }
+        idleStoppedTarget = nil
         state = .tracking(.task(task), certainty: 1.0)
     }
 
@@ -187,6 +193,7 @@ public final class SessionTracker {
         pendingSwitch = nil
         pendingNotify = nil
         stoppedManually = manual
+        if manual { idleStoppedTarget = nil }
         endCurrentSpan(at: date)
         flushSessions(asOf: date)
         state = .stopped
@@ -401,13 +408,36 @@ public final class SessionTracker {
             // A MANUAL stop is fully sticky: nothing auto-resumes it until you
             // explicitly start again — so you can stop to fix the timeline
             // without the clock restarting under you and clobbering your edits.
-            // Only idle/auto stops resume from a confident surface (>= 0.9).
+            // Only idle/auto stops resume — and they resume on ANY returned
+            // input, not just a confident surface (Martin, 2026-07-09: the
+            // idle auto-stop left the app "stopped grey for no reason" until
+            // a >=0.9 surface happened by). Resume ladder: a confident task
+            // wins; else a merely-plausible one (>= uncertainBelow); else the
+            // task that was tracking when idle stopped — at the CURRENT
+            // signal's certainty, so a wrong guess lands in the review queue
+            // rather than silently billing. The stale-target rung is bounded
+            // to 30 min after the stop: resuming yesterday's task on this
+            // morning's first click would just seed the queue with junk.
             guard !stoppedManually else { return }
+            let idleContext = idleStoppedTargetAt.map { now.timeIntervalSince($0) <= 30 * 60 } ?? false
             if let best = attribution.best, best.score >= 0.9,
                case .task(let task) = best.target {
                 lastInput = now
+                idleStoppedTarget = nil
                 state = .tracking(.task(task), certainty: best.score)
                 onPrompt(.taskChanged(to: .task(task)))
+            } else if idleContext, let best = attribution.best,
+                      best.score >= config.uncertainBelow,
+                      case .task(let task) = best.target {
+                lastInput = now
+                idleStoppedTarget = nil
+                state = .tracking(.task(task), certainty: best.score)
+                onPrompt(.taskChanged(to: .task(task)))
+            } else if idleContext, let target = idleStoppedTarget, case .task = target {
+                lastInput = now
+                idleStoppedTarget = nil
+                state = .tracking(target, certainty: attribution.best?.score ?? 0)
+                onPrompt(.taskChanged(to: target))
             }
         case .tracking(let displayTarget, _):
             guard let best = attribution.best else {
@@ -695,7 +725,9 @@ public final class SessionTracker {
     private func idleStop(asOf date: Date, promptNow: Bool) {
         pendingSwitch = nil
         pendingNotify = nil
-        guard case .tracking = state else { return }
+        guard case .tracking(let target, _) = state else { return }
+        idleStoppedTarget = target
+        idleStoppedTargetAt = date
         if let start = currentStart, date > start {
             endCurrentSpan(at: date)
         } else {

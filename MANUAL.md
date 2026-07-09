@@ -47,7 +47,10 @@ The task list:
   first, then everything else, all scrollable. Typing fuzzy-searches every task.
 - **Resume / idle gap.** When stopped, a "Resume <last task>" button restarts the
   clock. After an idle stretch a one-tap "Worked <time> on <task>?" offer lets
-  you claim the gap as work.
+  you claim the gap as work. An idle stop also un-sticks itself: come back
+  within half an hour and tracking resumes by itself - to whatever the screen
+  says if that's clear, otherwise to the task you were on (flagged for review
+  if andeye wasn't sure). A manual stop never restarts on its own.
 - **Right-click a task** - open it in your backend, or Comments… for its
   local comment history (notes typed in the comment bar land there whenever
   they can't, or shouldn't, go to a backend feed).
