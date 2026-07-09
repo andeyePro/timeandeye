@@ -131,6 +131,31 @@ public struct ActivitySignal: Equatable, Codable, Sendable {
         self.correspondents = correspondents
         self.emailSubject = emailSubject
     }
+
+    /// Fold a second capture's email evidence into this signal — the ONE
+    /// merge rule for evidence accumulating over time (a review row extended
+    /// across a same-surface return visit, repeated rows of one surface in a
+    /// multi-select teach). Correspondents union: first-seen order, case-
+    /// insensitively de-duplicated (mirrors `correspondentChoices`), because
+    /// the downstream checkbox fan-out lets the user PRUNE addresses but
+    /// nothing can restore one a merge silently dropped. Subject: first
+    /// non-empty wins — a same-surface extension is the same message, and the
+    /// subject grain wants one stable value — but a slice captured before the
+    /// async page recipe delivered adopts the first subject that appears.
+    public mutating func mergeEmailEvidence(correspondents incoming: [String]?,
+                                            subject: String?) {
+        if let incoming, !incoming.isEmpty {
+            var merged = correspondents ?? []
+            var seen = Set(merged.map { $0.lowercased() })
+            for address in incoming where seen.insert(address.lowercased()).inserted {
+                merged.append(address)
+            }
+            correspondents = merged
+        }
+        if emailSubject?.isEmpty != false, let subject, !subject.isEmpty {
+            emailSubject = subject
+        }
+    }
 }
 
 /// Everything the platform sensor layer can tell Core. Sensors emit these;
@@ -295,19 +320,54 @@ public struct ReviewSegment: Equatable, Codable, Sendable, Identifiable {
     public var app: String
     public var windowTitle: String?
     public var tabURL: String?
+    /// Email evidence the originating signal carried at queue time (see
+    /// `ActivitySignal.correspondents`/`emailSubject`), so the drawer's
+    /// post-assign grain footer can offer correspondent/domain/subject rules
+    /// instead of falling back to the whole mail system. Optional so rows
+    /// journalled before these keys existed still decode (nil — synthesized
+    /// Codable decodes optionals with `decodeIfPresent`, the same leniency
+    /// `ActivitySignal` itself relies on).
+    public var correspondents: [String]?
+    public var emailSubject: String?
     public var start: Date
     public var end: Date
     public var assigned: Target?
 
     public init(id: UUID = UUID(), app: String, windowTitle: String? = nil,
-                tabURL: String? = nil, start: Date, end: Date, assigned: Target? = nil) {
+                tabURL: String? = nil, correspondents: [String]? = nil,
+                emailSubject: String? = nil, start: Date, end: Date,
+                assigned: Target? = nil) {
         self.id = id
         self.app = app
         self.windowTitle = windowTitle
         self.tabURL = tabURL
+        self.correspondents = correspondents
+        self.emailSubject = emailSubject
         self.start = start
         self.end = end
         self.assigned = assigned
+    }
+
+    /// The synthetic `ActivitySignal` a review row reconstructs — what the
+    /// assign path teaches the attributor from and the grain footer builds
+    /// its `ContextIdentity` from. ONE construction point, so no consumer can
+    /// silently drop the stored email evidence and regress the footer to
+    /// system-level offers.
+    public var signal: ActivitySignal {
+        ActivitySignal(app: app, windowTitle: windowTitle, tabURL: tabURL,
+                       timestamp: start, correspondents: correspondents,
+                       emailSubject: emailSubject)
+    }
+
+    /// Fold a same-surface extension's evidence into this row —
+    /// `ActivitySignal.mergeEmailEvidence`'s rule (correspondent union,
+    /// first non-empty subject), applied to the stored fields.
+    public mutating func mergeEmailEvidence(from signal: ActivitySignal) {
+        var merged = self.signal
+        merged.mergeEmailEvidence(correspondents: signal.correspondents,
+                                  subject: signal.emailSubject)
+        correspondents = merged.correspondents
+        emailSubject = merged.emailSubject
     }
 }
 
@@ -317,15 +377,23 @@ public extension Array where Element == ReviewSegment {
     /// teaches the attributor from. Every covered surface teaches (the old
     /// glue taught only the FIRST selected row — approvals-drawer spec §1
     /// side-bug — so a 40-row assign threw away 39 rows of evidence), while
-    /// rows repeating one surface (same app|title|URL) teach once.
+    /// rows repeating one surface (same app|title|URL) teach once. A repeat's
+    /// EMAIL evidence still counts, though: a later slice may have captured
+    /// correspondents the first missed (the capture races focus changes), so
+    /// each surface's signal carries the union of its rows' evidence — the
+    /// same merge rule `SessionTracker.queueReview` applies at queue time.
     func teachingSignals(for ids: Set<UUID>) -> [ActivitySignal] {
-        var seen = Set<String>()
+        var indexOf: [String: Int] = [:]
         var out: [ActivitySignal] = []
         for s in self where ids.contains(s.id) {
             let key = "\(s.app)|\(s.windowTitle ?? "")|\(s.tabURL ?? "")"
-            guard seen.insert(key).inserted else { continue }
-            out.append(ActivitySignal(app: s.app, windowTitle: s.windowTitle,
-                                      tabURL: s.tabURL, timestamp: s.start))
+            if let i = indexOf[key] {
+                out[i].mergeEmailEvidence(correspondents: s.correspondents,
+                                          subject: s.emailSubject)
+            } else {
+                indexOf[key] = out.count
+                out.append(s.signal)
+            }
         }
         return out
     }

@@ -273,16 +273,39 @@ struct ReviewView: View {
     /// segment shares one email context (spec §5.3) — otherwise there's no
     /// single grain to offer. Mirrors `PopoverView.pick`'s
     /// `justPicked`-building gate (`isEmailGrain`), extended to require
-    /// agreement across a multi-row assign.
+    /// agreement across a multi-row assign. Rows carry the email evidence
+    /// their originating signals had, so agreement usually means a full
+    /// correspondent/domain/subject ladder; rows whose EVIDENCE disagrees
+    /// (two different messages in one batch) retry with the evidence
+    /// stripped, so the batch still gets the broader offer the shared
+    /// surface supports (typically the whole mail system) instead of none.
     private func footerContext(for segments: [ReviewSegment], target: Target)
         -> (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)? {
         guard case .task(let ref) = target,
               let task = controller.taskCache.first(where: { $0.ref == ref }),
-              let first = segments.first else { return nil }
-        let identities = segments.map { controller.identity(of: controller.signal(for: $0)) }
+              !segments.isEmpty else { return nil }
+        let signals = segments.map { controller.signal(for: $0) }
+        if let shared = sharedEmailIdentity(of: signals) {
+            return (task, signals[0], shared)
+        }
+        let bare = signals.map { signal -> ActivitySignal in
+            var s = signal
+            s.correspondents = nil
+            s.emailSubject = nil
+            return s
+        }
+        guard let shared = sharedEmailIdentity(of: bare) else { return nil }
+        return (task, bare[0], shared)
+    }
+
+    /// The one identity every signal agrees on, provided it carries an email
+    /// grain — the footer's "single grain to offer" gate, factored so the
+    /// evidence-bearing pass and the evidence-stripped retry share it.
+    private func sharedEmailIdentity(of signals: [ActivitySignal]) -> ContextIdentity? {
+        let identities = signals.map { controller.identity(of: $0) }
         guard let shared = identities.first, identities.allSatisfy({ $0 == shared }),
               shared.segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
-        return (task, controller.signal(for: first), shared)
+        return shared
     }
 
     /// The assign bar's post-assign grain footer — the same one-line

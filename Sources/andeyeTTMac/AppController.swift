@@ -1822,10 +1822,12 @@ public final class AppController: ObservableObject {
     /// construction `assignReview` feeds the attributor above, exposed so
     /// the review queue's post-assign grain footer (2026-07-03 spec §5.3,
     /// "later polish") can build the identity of what it JUST taught,
-    /// mirroring `PopoverView`'s `justPicked` tuple.
+    /// mirroring `PopoverView`'s `justPicked` tuple. Delegates to the row's
+    /// own reconstruction so the email evidence captured at queue time rides
+    /// along — that evidence is what lets the footer offer correspondent/
+    /// domain/subject grains rather than only the whole mail system.
     public func signal(for segment: ReviewSegment) -> ActivitySignal {
-        ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
-                       tabURL: segment.tabURL, timestamp: segment.start)
+        segment.signal
     }
 
     private func reloadReview() {

@@ -46,6 +46,23 @@ func reviewStackChecks(_ c: Checks) {
         let b = seg("Chrome", 60, 120, title: "Tab B")
         try expectEq([a, b].stacked().count, 2)
     }
+
+    c.check("stacking and the floor pass segments through WHOLE — per-slice email evidence intact") {
+        // The grain footer reads evidence off the segments a stack hands it,
+        // and the floor runs on every reload — if either path rebuilt rows
+        // from just the surface fields, the evidence would silently vanish
+        // between queue time and the footer's offer.
+        var a = seg("Mail", 0, 40, title: "Inbox")
+        a.correspondents = ["amy@x.co"]
+        a.emailSubject = "Renewal"
+        var b = seg("Mail", 100, 140, title: "Inbox")
+        b.correspondents = ["bob@y.co"]
+        let stack = try unwrap([a, b].stacked().first)
+        try expectEq(stack.segments, [a, b],
+                     "the stack holds the exact segments — differing per-slice evidence untouched")
+        try expectEq([a, b].meetingReviewFloor(60), [a, b],
+                     "the floor filters (80s surface total >= 60s), never rewrites")
+    }
 }
 
 // MARK: - RetroAcceptance.plan (approvals-drawer spec §3)

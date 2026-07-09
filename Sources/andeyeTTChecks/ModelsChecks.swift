@@ -98,4 +98,49 @@ func modelsChecks(_ c: Checks) {
         try expectEq(signals[0].timestamp, a.start, "the surface's FIRST row supplies the timestamp")
         try expectEq(signals[1].app, "Xcode")
     }
+
+    c.check("review segment email evidence round-trips JSON; pre-evidence rows decode nil") {
+        // Rows written before the evidence keys existed are on real users'
+        // disks (the journal keeps review rows indefinitely until assigned) —
+        // they must load as evidence-free rows, never fail the whole
+        // pendingReview() decode.
+        let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+        let seg = ReviewSegment(app: "Google Chrome", windowTitle: "Gmail",
+                                tabURL: "https://mail.google.com/mail/u/0/#inbox/abc",
+                                correspondents: ["amy@harborlane.example", "bob@y.co"],
+                                emailSubject: "Insurance Renewals",
+                                start: t0, end: t0.addingTimeInterval(120))
+        let back = try JSONDecoder().decode(ReviewSegment.self, from: JSONEncoder().encode(seg))
+        try expectEq(back, seg)
+        let legacy = #"{"id":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","app":"Mail","start":100,"end":160}"#
+        let old = try JSONDecoder().decode(ReviewSegment.self, from: Data(legacy.utf8))
+        try expectNil(old.correspondents)
+        try expectNil(old.emailSubject)
+        try expectEq(old.app, "Mail")
+    }
+
+    c.check("teachingSignals: repeats of one surface UNION their email evidence; first subject wins") {
+        // The email capture races focus changes, so a later slice of the same
+        // surface can hold correspondents (or the subject) an earlier slice
+        // missed. The surface's one teaching signal must carry the union —
+        // first-seen order, case-insensitive dedup — not whichever slice
+        // happened to come first.
+        let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+        let url = "https://mail.google.com/mail/u/0/#inbox/abc"
+        let first = ReviewSegment(app: "Chrome", windowTitle: "Gmail", tabURL: url,
+                                  correspondents: ["amy@x.co"],
+                                  start: t0, end: t0.addingTimeInterval(60))
+        let second = ReviewSegment(app: "Chrome", windowTitle: "Gmail", tabURL: url,
+                                   correspondents: ["Amy@x.co", "bob@y.co"],
+                                   emailSubject: "Renewal",
+                                   start: t0.addingTimeInterval(120), end: t0.addingTimeInterval(180))
+        let plain = ReviewSegment(app: "Xcode", windowTitle: "andeyeTT",
+                                  start: t0.addingTimeInterval(240), end: t0.addingTimeInterval(300))
+        let signals = [first, second, plain].teachingSignals(for: [first.id, second.id, plain.id])
+        try expectEq(signals.count, 2)
+        try expectEq(signals[0].correspondents, ["amy@x.co", "bob@y.co"],
+                     "union — the duplicate Amy@x.co folds into the first spelling")
+        try expectEq(signals[0].emailSubject, "Renewal", "a later subject fills the empty slot")
+        try expectNil(signals[1].correspondents, "a plain surface reconstructs evidence-free")
+    }
 }

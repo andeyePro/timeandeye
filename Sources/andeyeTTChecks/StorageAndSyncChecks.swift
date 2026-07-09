@@ -165,6 +165,29 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.pendingReview().map(\.id), [seg2.id])
     }
 
+    c.check("review segment email evidence round-trips persistence; evidence-free rows stay nil") {
+        // The evidence lives inside the row's JSON blob (no schema change),
+        // so this exercises the real encode→store→decode path on BOTH stores
+        // — and the assign round-trip, because the retro pass re-reads
+        // ASSIGNED rows and must still see what the queue saw.
+        let s = make()
+        let evidence = ReviewSegment(app: "Google Chrome", windowTitle: "Gmail",
+                                     tabURL: "https://mail.google.com/mail/u/0/#inbox/abc",
+                                     correspondents: ["amy@harborlane.example", "bob@y.co"],
+                                     emailSubject: "Insurance Renewals",
+                                     start: t0, end: t0.addingTimeInterval(120))
+        let plain = ReviewSegment(app: "Xcode", start: t0.addingTimeInterval(200),
+                                  end: t0.addingTimeInterval(300))
+        try s.save(evidence)
+        try s.save(plain)
+        try expectEq(try s.pendingReview(), [evidence, plain],
+                     "whole-row equality — evidence included, and the plain row keeps nil (the shape every pre-evidence row on disk loads as)")
+        try s.assign([evidence.id], to: .task(.op(7)))
+        try expectEq(try s.reviewSegments(assignedTo: .task(.op(7))).first?.correspondents,
+                     ["amy@harborlane.example", "bob@y.co"],
+                     "assignment rewrites the row without stripping its evidence")
+    }
+
     c.check("reviewSegments(assignedTo:) finds only the matching target, leaving pendingReview") {
         let s = make()
         let unknownRef = WorkTask.unknown.ref

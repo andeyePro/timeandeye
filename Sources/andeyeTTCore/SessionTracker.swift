@@ -667,11 +667,20 @@ public final class SessionTracker {
         if var p = pendingReview, p.app == signal.app, p.windowTitle == signal.windowTitle,
            p.tabURL == signal.tabURL {
             p.end = end
+            // Evidence isn't part of the surface key, so an extension may
+            // carry MORE of it than the slice that opened the row (the async
+            // email capture races focus changes — see `focusEnrichment`).
+            // Merge rather than keep-first, or the row would teach/offer
+            // grains from whichever slice happened to capture least.
+            p.mergeEmailEvidence(from: signal)
             pendingReview = p
         } else {
             flushPendingReview()
             pendingReview = ReviewSegment(app: signal.app, windowTitle: signal.windowTitle,
-                                          tabURL: signal.tabURL, start: start, end: end)
+                                          tabURL: signal.tabURL,
+                                          correspondents: signal.correspondents,
+                                          emailSubject: signal.emailSubject,
+                                          start: start, end: end)
         }
     }
 

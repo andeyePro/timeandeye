@@ -58,9 +58,12 @@ The card shows, top to bottom:
 Picking a task from the popover's own list on an email surface also offers a
 one-line "remember for..." footer underneath - the same Remember, without
 opening the card. The Review queue offers the same footer under its assign
-bar: assign a batch of low-certainty windows to one task and, when every row
-in the batch shares one email context, the identical one-line Remember offer
-appears there too. Either place, when that context has more than one
+bar: queued rows keep the correspondents and subject captured while their
+time accrued, so assigning a batch of low-certainty windows to one task
+offers the identical Remember - at the correspondent, domain or subject
+grain when every row in the batch shares one email context, or at the
+mail-system grain when the batch only shares the mail system. Either place,
+when that context has more than one
 correspondent, checking the correspondent row expands it into a checkbox per
 address, so you choose exactly who the rule should cover, not just the first
 one andeye saw.

@@ -71,9 +71,12 @@ public enum RetroAcceptance {
                             score: (ActivitySignal) -> (target: Target, score: Double)?) -> RetroPlan {
         var clearances: [RetroClearance] = []
         for segment in pending {
-            let signal = ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
-                                        tabURL: segment.tabURL, timestamp: segment.start)
-            guard let result = score(signal), result.score >= bar else { continue }
+            // The row's own reconstruction (`ReviewSegment.signal`) carries
+            // its stored email evidence, so a rule keyed on a correspondent/
+            // domain/subject — e.g. one the grain footer just wrote — can
+            // retro-clear the OTHER rows from that counterparty, exactly as
+            // it would score them if the user opened each one now.
+            guard let result = score(segment.signal), result.score >= bar else { continue }
             clearances.append(RetroClearance(segmentID: segment.id, target: result.target,
                                              score: result.score))
         }

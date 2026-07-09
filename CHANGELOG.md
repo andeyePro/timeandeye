@@ -22,6 +22,24 @@
   actually visible on the current Space — at which point there is nothing
   to switch away to.
 
+- [x] **Review-queue rows carry their email evidence.** A low-certainty
+  email slice now queues WITH the correspondents and subject its signal
+  carried, so the drawer's post-assign "remember for…" footer offers the
+  same correspondent/domain/subject grain ladder as the Evidence Card
+  (including the multi-correspondent checkbox fan-out) instead of falling
+  back to the whole mail system — and app-mail rows (no tab URL) get an
+  email-grain offer for the first time. Same-surface extensions merge
+  evidence (correspondent union, first non-empty subject — the async
+  capture races focus changes, so the opening slice may hold less than a
+  return visit), and `teachingSignals` unions it per surface the same way.
+  Evidence persists inside the review row's existing JSON blob column — no
+  schema migration; rows journalled before the fields existed decode as
+  evidence-free and keep the old system-level offer, as does a multi-row
+  batch whose evidence disagrees (it degrades to the shared mail-system
+  grain rather than losing the footer). Stacking and the admission floor
+  pass segments through whole, checked. Manuals updated (Review queue
+  footer paragraph).
+
 - [x] **Windows join a fullscreen Space before first show.** Opening
   Timeline/Settings/Review over a fullscreen app no longer switches Space:
   the window flags now apply synchronously when the content view lands in

@@ -148,6 +148,35 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(reviews[1].end, t(85), "the 5 s thing2 span was dropped")
     }
 
+    c.check("review rows keep their email evidence, merged across the coalesced extension") {
+        // The review queue's follow-on to the email-context work: a row must
+        // carry the evidence its originating signals had, or the drawer's
+        // post-assign grain footer can only ever offer the whole mail system.
+        // The capture races focus changes, so the slice that OPENS the row
+        // may hold less than the return visit — the coalesced row needs the
+        // union, and the first subject seen.
+        let (tracker, _) = makeTracker()
+        var reviews: [ReviewSegment] = []
+        tracker.onReview = { reviews.append($0) }
+        func mail(_ at: TimeInterval, correspondents: [String]?, subject: String?) -> ActivitySignal {
+            ActivitySignal(app: "Mail", windowTitle: "Inbox", timestamp: t(at),
+                           correspondents: correspondents, emailSubject: subject)
+        }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(mail(0, correspondents: ["amy@x.co"], subject: nil)))
+        tracker.handle(.focus(mail(30, correspondents: ["Amy@x.co", "bob@y.co"], subject: "Renewal")))
+        tracker.handle(.focus(sig("Other", "thing", at: 60)))
+        tracker.stop(at: t(90))
+
+        let row = try unwrap(reviews.first)
+        try expectEq(row.app, "Mail")
+        try expectEq(row.end, t(60), "still ONE coalesced row — evidence never splits the surface")
+        try expectEq(row.correspondents, ["amy@x.co", "bob@y.co"],
+                     "union across the extension, case-insensitive, first spelling kept")
+        try expectEq(row.emailSubject, "Renewal", "the late-arriving subject fills the empty slot")
+    }
+
     c.check("confident non-work auto-stops") {
         let (tracker, attributor) = makeTracker()
         var states: [TrackerState] = []

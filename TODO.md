@@ -196,6 +196,15 @@ and recorded rather than fixed blind:
   Note: review-queue rows carry no stored correspondents, so their footer
   offers the narrowest AVAILABLE grain (often system-level) — enriching
   ReviewSegment with email evidence is the follow-on if wanted.
+  2026-07-09 (follow-on landed): `ReviewSegment` now stores the
+  correspondents/subject its signals carried at queue time (merged across
+  same-surface extensions: correspondent union, first non-empty subject),
+  rides through stacking/floor/persistence untouched (evidence lives in
+  the existing JSON blob column — no schema change, legacy rows decode
+  nil), and the footer offers the full correspondent/domain/subject
+  ladder; a batch whose evidence disagrees degrades to the shared
+  mail-system grain instead of losing the offer. UNVERIFIED — suite not
+  run (no Mac in this container).
   2026-07-09 (later polish continued): ledger row click now expands into a
   compact rule-detail disclosure (provenance sentence, fire stats, grain,
   target task — `EvidenceCardView` itself doesn't fit here, a ledger rule

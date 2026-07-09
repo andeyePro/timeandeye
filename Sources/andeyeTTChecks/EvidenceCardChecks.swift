@@ -55,6 +55,50 @@ func cardDefaultGrainChecks(_ c: Checks) {
             tabURL: "https://github.com/andeyePro/andeyeTT/issues", timestamp: t0))
         try expectNil(plain.cardDefaultGrainIndex)
     }
+
+    // MARK: Review-row reconstruction (the drawer footer's evidence source) —
+    // `ReviewSegment.signal` is the seam the post-assign grain footer builds
+    // its identity from, so these pin the whole rows-to-grains path without
+    // an AppController.
+
+    c.check("a review row WITH evidence reconstructs to the card's correspondent-grain ladder") {
+        let row = ReviewSegment(app: "Google Chrome",
+                                windowTitle: "Re: Insurance Renewals 2026 - Gmail",
+                                tabURL: "https://mail.google.com/mail/u/0/#inbox/FMfcgz001",
+                                correspondents: ["r.naismith@harborlane.example"],
+                                emailSubject: "Re: Insurance Renewals 2026",
+                                start: t0, end: t0.addingTimeInterval(300))
+        let id = ContextIdentity.from(row.signal)
+        try expectEq(id.cardDefaultGrainIndex, 2,
+                     "the org domain — the SAME conservative default the popover card offers")
+        try expectEq(id.segments[1].value, "harborlane.example")
+        try expectEq(ContextIdentity.correspondentChoices(row.signal),
+                     ["r.naismith@harborlane.example"],
+                     "the footer's checkbox fan-out reads the row's stored correspondents")
+    }
+
+    c.check("a review row WITHOUT evidence falls back to the system row (the pre-evidence offer)") {
+        // Rows journalled before evidence capture — or where the capture
+        // never delivered — degrade to the broad grain, never to no offer.
+        let row = ReviewSegment(app: "Google Chrome", windowTitle: "Inbox - Gmail",
+                                tabURL: "https://mail.google.com/mail/u/0/#inbox",
+                                start: t0, end: t0.addingTimeInterval(300))
+        let id = ContextIdentity.from(row.signal)
+        try expectEq(id.cardDefaultGrainIndex, 1)
+        try expect(ContextIdentity.correspondentChoices(row.signal).isEmpty)
+    }
+
+    c.check("an app-mail row (no tab URL) with evidence still offers the domain/correspondent grains") {
+        // Mail.app gives no URL, so system detection ghosts — before rows
+        // carried evidence such a row had NO email grain at all and the
+        // footer fell back to app/window level.
+        let row = ReviewSegment(app: "Mail", windowTitle: "Inbox",
+                                correspondents: ["amy@harborlane.example"],
+                                start: t0, end: t0.addingTimeInterval(300))
+        let id = ContextIdentity.from(row.signal)
+        try expectEq(id.cardDefaultGrainIndex, 2)
+        try expectEq(id.segments[1].kind, .correspondentDomain)
+    }
 }
 
 // MARK: - Segment -> EmailRule commit mapping (the card/footer's write path)
