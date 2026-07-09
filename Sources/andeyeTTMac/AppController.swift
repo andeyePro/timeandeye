@@ -2801,8 +2801,27 @@ public final class AppController: ObservableObject {
         let key = taskCache.first(where: { $0.ref == ref }).flatMap { projectKey(for: $0) }
         let hex = ColourEngine.taskHex(ref.storageKey, projectKey: key,
                                        in: &colourAssignments)
-        try? coloursStore.save(colourAssignments)
+        scheduleColoursSave()
         return NSColor(hex: hex) ?? .systemGray
+    }
+
+    /// One coalesced colours.json write per burst of first sights. A fresh
+    /// install rendering a full pie allocates dozens of records inside one
+    /// SwiftUI render pass — a synchronous save per record was dozens of
+    /// file writes for one frame. The records live in memory the moment they
+    /// allocate; the only crash-window cost is that an unsaved burst
+    /// re-allocates next launch (possibly in a different render order, so a
+    /// colour the user glimpsed for under a second could differ — nothing
+    /// already persisted ever moves).
+    private var coloursSaveScheduled = false
+    private func scheduleColoursSave() {
+        guard !coloursSaveScheduled else { return }
+        coloursSaveScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self else { return }
+            self.coloursSaveScheduled = false
+            try? self.coloursStore.save(self.colourAssignments)
+        }
     }
 
     /// Stable colour for the PROJECT containing `ref`: the project's own
@@ -2818,7 +2837,7 @@ public final class AppController: ObservableObject {
         let before = colourAssignments.recordCount
         let record = ColourEngine.projectRecord(key, in: &colourAssignments)
         if colourAssignments.recordCount != before {
-            try? coloursStore.save(colourAssignments)
+            scheduleColoursSave()
         }
         return NSColor(hex: record.hex)
     }
