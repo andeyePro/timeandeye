@@ -8,8 +8,8 @@ short answer up front: the whole Mac pipeline stays `swift build` + `codesign`
 one-time portal/console clicks, and the only place a real `.xcodeproj` is
 unavoidable is the planned iOS companion (already scoped that way in TODO.md).
 
-Bundle ID everywhere below: `com.andeye.mac` (already in make-app.sh).
-Container ID: `iCloud.com.andeye.mac`. `TEAMID` means the 10-character
+Bundle ID everywhere below: `com.timeandeye.mac` (already in make-app.sh).
+Container ID: `iCloud.com.timeandeye.mac`. `TEAMID` means the 10-character
 Team ID from https://developer.apple.com/account → Membership details.
 
 ---
@@ -69,11 +69,11 @@ All at https://developer.apple.com/account unless noted. Order matters.
    Also download Apple's **Developer ID G2 intermediate** if the identity
    shows as “not trusted” – https://www.apple.com/certificateauthority/.
 3. **Register the App ID** (Identifiers → “+” → App IDs → App):
-   explicit bundle ID `com.andeye.mac`; tick capabilities **iCloud**
+   explicit bundle ID `com.timeandeye.mac`; tick capabilities **iCloud**
    (with CloudKit support) and **Push Notifications** (push is how CloudKit
    zone subscriptions wake the app – wanted for sync, harmless if unused).
 4. **Create the iCloud container** (Identifiers → dropdown “iCloud
-   Containers” → “+”): `iCloud.com.andeye.mac`. Then edit the App ID's
+   Containers” → “+”): `iCloud.com.timeandeye.mac`. Then edit the App ID's
    iCloud capability and **assign** this container to it.
 5. **Create the Developer ID provisioning profile**
    (Profiles → “+” → Distribution → **Developer ID**): select the App ID from
@@ -129,11 +129,11 @@ Everything after this heading is scriptable.
     <!-- Restricted entitlements: must all be authorised by
          embedded.provisionprofile or the app is killed at launch. -->
     <key>com.apple.application-identifier</key>
-    <string>TEAMID.com.andeye.mac</string>
+    <string>TEAMID.com.timeandeye.mac</string>
     <key>com.apple.developer.team-identifier</key>
     <string>TEAMID</string>
     <key>com.apple.developer.icloud-container-identifiers</key>
-    <array><string>iCloud.com.andeye.mac</string></array>
+    <array><string>iCloud.com.timeandeye.mac</string></array>
     <key>com.apple.developer.icloud-services</key>
     <array><string>CloudKit</string></array>
     <!-- Developer ID profiles only ever authorise Production. -->
@@ -221,7 +221,7 @@ Gotchas specific to this repo:
   `security cms -D -i "$APP/Contents/embedded.provisionprofile"`.
 - CloudKit at runtime needs the *user* signed into iCloud (System Settings →
   Apple ID). `CKContainer.default()` resolves via the entitlement to
-  `iCloud.com.andeye.mac` – no code change needed to adopt the container.
+  `iCloud.com.timeandeye.mac` – no code change needed to adopt the container.
 - Push registration for zone subscriptions is
   `NSApplication.registerForRemoteNotifications()` – works fine for an
   `LSUIElement` menu-bar app; silent CloudKit pushes need no user-visible
@@ -331,8 +331,8 @@ Nothing above conflicts with Sparkle; notes so the pieces are cut to fit:
 ## 7. Who does what – the split
 
 **Martin, once, in the portal/console (≈30 min):** enrol; Developer ID
-Application cert; App ID `com.andeye.mac` with iCloud + Push; container
-`iCloud.com.andeye.mac` assigned to the App ID; Developer ID provisioning
+Application cert; App ID `com.timeandeye.mac` with iCloud + Push; container
+`iCloud.com.timeandeye.mac` assigned to the App ID; Developer ID provisioning
 profile downloaded to the build Mac; `SessionRevision` schema created and
 deployed to Production in CloudKit Console; notary credentials stored via
 `notarytool store-credentials`.

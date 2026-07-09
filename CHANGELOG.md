@@ -2,6 +2,15 @@
 
 ## 2026-07-09
 
+- [x] **Bundle identifier is com.timeandeye.mac.** Martin's per-app-id
+  decision: every andeye app gets its own identifier (a sibling andeye app etc. cannot
+  share one), so Time&I takes com.timeandeye.mac now — before the entitled
+  build, while no iCloud container or provisioning exists to migrate. The
+  planned container becomes iCloud.com.timeandeye.mac. One-time cost on
+  the next launch: macOS re-asks for Accessibility/Automation/Calendar,
+  and a Keychain-stored backend key may need re-entering. The upgrade
+  quit-wait handles both old and new identities during the transition.
+
 - [x] **Full rebrand: modules andeyeTT* → timeandeye*, human name Time&I.**
   Martin's final naming directive (`<X>&I` / `<x>andeye` / `<x>.andeye.com`
   only; capital I supersedes the earlier "Time&i"; the long form "Time

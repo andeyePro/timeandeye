@@ -18,6 +18,9 @@ INSTALL=0
 if pgrep -xq andeye; then
     if [ "$INSTALL" = 1 ]; then
         echo "Quitting running app to replace it…"
+        # Quit whichever identity is running: pre-rename builds carry
+        # com.andeye.mac, current builds com.timeandeye.mac.
+        osascript -e 'quit app id "com.timeandeye.mac"' 2>/dev/null || true
         osascript -e 'quit app id "com.andeye.mac"' 2>/dev/null || true
         for _ in $(seq 1 10); do pgrep -xq andeye || break; sleep 0.5; done
     else
@@ -36,7 +39,11 @@ cp "$BIN" "$APP/Contents/MacOS/andeye"
 # Naming: bundle/folder = timeandeye, human name = Time&I (XML-escaped as
 # Time&amp;I below; there is no separate long form — CFBundleName and
 # CFBundleDisplayName are both Time&I).
-# CFBundleIdentifier MUST NOT change, EVER — not even for a rebrand: TCC
+# CFBundleIdentifier is com.timeandeye.mac — Martin's per-app-id decision
+# (2026-07-09: every andeye app gets its own id; a sibling andeye app etc. cannot share
+# one). Changed from com.andeye.mac BEFORE the entitled build, so no iCloud
+# container or provisioning existed to migrate; the one-time cost was a
+# re-grant of TCC permissions. From here it MUST NOT change again: TCC
 # grants (Accessibility, Automation, Calendar) key off this identifier plus
 # the stable signing identity — a new id silently revokes every grant.
 # CFBundleExecutable stays "andeye" deliberately: the quit-wait above
@@ -49,7 +56,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key><string>com.andeye.mac</string>
+    <key>CFBundleIdentifier</key><string>com.timeandeye.mac</string>
     <key>CFBundleName</key><string>Time&amp;I</string>
     <key>CFBundleDisplayName</key><string>Time&amp;I</string>
     <key>CFBundleExecutable</key><string>andeye</string>
@@ -150,7 +157,7 @@ if [ "$INSTALL" = 1 ]; then
     rm -rf "/Applications/andeye.app"
     rm -rf "$DEST"
     ditto "$APP" "$DEST"          # preserves the signature + bundle structure
-    # Make this copy THE LaunchServices registration for com.andeye.mac, so
+    # Make this copy THE LaunchServices registration for com.timeandeye.mac, so
     # its name resolves to the new one and no stale registration lingers.
     LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
     [ -x "$LSREG" ] && "$LSREG" -f "$DEST" >/dev/null 2>&1 || true
