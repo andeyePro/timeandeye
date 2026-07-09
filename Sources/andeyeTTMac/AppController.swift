@@ -1974,11 +1974,20 @@ public final class AppController: ObservableObject {
 
     /// Ledger row delete (✕) — the same undo mechanism as the card's forget.
     public func deleteRule(_ rule: EmailRule) {
+        deleteRules([rule])
+    }
+
+    /// Bulk ledger forget (multi-select ✕ / a group's "Forget all") — every
+    /// rule removed in the SAME undo step, so one ⌘Z restores the whole act
+    /// instead of one row at a time (2026-07-03 spec §6, "bulk forget").
+    public func deleteRules(_ rules: [EmailRule]) {
+        guard !rules.isEmpty else { return }
         let saved = attributor.emailRules
-        attributor.emailRules.removeAll { $0.sameRule(as: rule) }
+        attributor.emailRules.removeAll { candidate in rules.contains { $0.sameRule(as: candidate) } }
         persistAssociations()
         tracker.reevaluate()
-        registerUndo("delete rule \(rule.value)") { [weak self] in
+        let label = rules.count == 1 ? "delete rule \(rules[0].value)" : "delete \(rules.count) rules"
+        registerUndo(label) { [weak self] in
             guard let self else { return }
             self.attributor.emailRules = saved
             self.persistAssociations()
@@ -1986,6 +1995,12 @@ public final class AppController: ObservableObject {
             self.objectWillChange.send()
         }
         objectWillChange.send()
+    }
+
+    /// The ledger's "Copy rules" export — every learned + pinned email rule
+    /// as human-readable plain text (2026-07-03 spec §6, "export").
+    public func rulesExportText() -> String {
+        RulesLedger.exportText(attributor.emailRules, nameOf: { name(of: .task($0)) })
     }
 
     /// Teach the attributor that this window is `ref` (a strong correction, like

@@ -2,6 +2,26 @@
 
 ## 2026-07-09
 
+- [x] **Rules Ledger: row-click disclosure, bulk forget, "Copy rules" export
+  (context-rules spec §6 "later polish").** Clicking a ledger row now
+  expands a compact rule-detail disclosure underneath it — provenance
+  sentence ("learned 12 Jun 2026 from your correction"), fire count/last
+  fired, grain and target task, plus the existing delete affordance;
+  `EvidenceCardView` itself wasn't embedded because it's signal-anchored
+  and a ledger rule has no live signal to explain. A group's header grows a
+  "Forget all" button (shown once a task has more than one rule) alongside
+  per-row delete, both going through a new `AppController.deleteRules(_:)`
+  that removes every passed rule in ONE undo step (`deleteRule` is now a
+  one-row call into it — same confirm-then-undo banner either way). New
+  `RulesLedger.exportText` (Core, pure/deterministic) renders every rule as
+  plain text grouped by task — grain, value, pinned/learned, fire count,
+  createdAt/lastFired — behind a "Copy rules" button next to the search
+  field, mirroring the timesheet export's copy-button/"Copied" pattern.
+  New checks: `RulesLedgerExport` (empty state, single rule, pinned
+  wording, lastFired presence/absence, `.distantPast` createdAt doesn't
+  format, multi-task grouping/ordering). UNVERIFIED — no Mac available in
+  this container to build/run the suite.
+
 - [x] **iCloud quota stewardship — Settings ▸ Maintenance grows a footprint
   readout and two prune tools.** `JournalStore.journalFootprint()` (new
   protocol requirement, default extension does a real JSON-byte count, the

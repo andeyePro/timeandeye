@@ -28,8 +28,12 @@ At the top:
   scope. Click it to adjust or remove the pin.
 - **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step
   away, ⌘⇧L), and **Stop** (⌘.).
-- **Note field** - a comment for the current task's time; where it goes is set in
-  Settings (the time entry and/or the task's activity feed).
+- **Note field** - type a comment and press ↵ to commit it (flashes green); a
+  slice can carry several, each ↵ adding another. It accumulates onto the
+  current time slice's own comment and, when Settings sends comments to the
+  task too, posts to the DISPLAYED task's activity feed immediately - what
+  you see commented is what gets commented, even if the tracked task changes
+  a moment later.
 
 The task list:
 
@@ -44,6 +48,9 @@ The task list:
 - **Resume / idle gap.** When stopped, a "Resume <last task>" button restarts the
   clock. After an idle stretch a one-tap "Worked <time> on <task>?" offer lets
   you claim the gap as work.
+- **Right-click a task** - open it in your backend, or Comments… for its
+  local comment history (notes typed in the comment bar land there whenever
+  they can't, or shouldn't, go to a backend feed).
 
 The footer:
 
@@ -96,9 +103,25 @@ The card shows, top to bottom:
 
 Picking a task from the popover's own list on an email surface also offers a
 one-line "remember for..." footer underneath - the same Remember, without
-opening the card. Every learned + pinned email rule lives in **Settings ▸
-Email → task matching ▸ Context rules…**, listed with its provenance; forget
-any of them from there too.
+opening the card. The Review queue offers the same footer under its assign
+bar: assign a batch of low-certainty windows to one task and, when every row
+in the batch shares one email context, the identical one-line Remember offer
+appears there too. Either place, when that context has more than one
+correspondent, checking the correspondent row expands it into a checkbox per
+address, so you choose exactly who the rule should cover, not just the first
+one andeye saw.
+
+Saving a rule shows a brief "✉ who → task" notice with an Undo, and the first
+time a learned rule goes on to fire for real, you're told once more, so a
+decision it makes on your behalf is never silent. Both notices sit in the
+popover, auto-dismiss on their own, and are never a system notification.
+
+Every learned + pinned email rule lives in **Settings ▸ Email → task
+matching ▸ Context rules…**, listed with its provenance. Click a row for its
+full detail; forget it there, or forget a whole task's rules at once with its
+group's **Forget all** button - either way, one undo (⌘Z) restores everything
+that click removed. **Copy rules** puts the lot on the clipboard as plain
+text.
 
 ## Pinning
 
@@ -208,6 +231,29 @@ midnight. Day boundaries are marked with the date.
   automatically (usually because they're locked into an invoice). Ordinary
   edits and deletions of already-posted time propagate to the backend on
   their own within a minute or two.
+- **Duplicate reconcile** - scans for OpenProject time entries logged twice
+  against the same task and minute. Click a match to see every difference
+  between its entries, then Apply: the richest entry survives (the others'
+  comments fold into it), the rest are deleted, and your journal re-points to
+  the survivor - confirm each. Each entry's ↗ opens that task's time-entries
+  report in OpenProject, so you can check anything not shown here (custom
+  fields, say) before deleting.
+- **iCloud footprint** - a live readout of what your synced journal (and,
+  separately, your local-only window detail) is costing you in your private
+  CloudKit database - typically a few hundred bytes a slice, 15-25 MB a year
+  of heavy tracking; nobody gets pushed into a paid iCloud tier by andeye.
+- **Consolidate old history** - collapses slices older than a number of years
+  you choose into daily totals. Totals and invoicing history survive exactly
+  - only the minute-by-minute detail goes.
+- **Hard cap - strongly discouraged** - deletes your oldest raw slices,
+  double-confirmed and with no undo, until the synced journal is back under a
+  size you pick. Old totals can be lost for good; it's for a genuine
+  iCloud-quota emergency only, since the synced journal is normally tiny (see
+  iCloud footprint above).
+- **Email → task matching** - your own addresses/domains (comma-separated),
+  so andeye never mistakes you for the other party when a message's
+  correspondent decides the task; see Auto-tracking and attribution above
+  for the rules themselves.
 - **Currency symbol** - shown wherever billable totals render; leave blank
   for your locale's own symbol.
 

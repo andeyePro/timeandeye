@@ -173,6 +173,65 @@ func rulesLedgerChecks(_ c: Checks) {
     }
 }
 
+// MARK: - RulesLedger.exportText ("Copy rules", 2026-07-03 spec §6)
+
+func rulesLedgerExportChecks(_ c: Checks) {
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = TimeZone(identifier: "UTC")!
+    func rule(_ level: EmailMatchLevel, _ value: String, _ target: TaskRef,
+             pinned: Bool = false, fireCount: Int = 0, createdAt: Date = t0,
+             lastFired: Date? = nil) -> EmailRule {
+        EmailRule(level: level, value: value, target: target, pinned: pinned,
+                 createdAt: createdAt, fireCount: fireCount, lastFired: lastFired)
+    }
+    let names: [TaskRef: String] = [.op(1): "Insurance Renewals", .op(2): "andeye"]
+    func nameOf(_ ref: TaskRef) -> String { names[ref] ?? "?" }
+
+    c.check("empty input: a plain 'nothing yet' line, not a blank string") {
+        try expectEq(RulesLedger.exportText([], nameOf: nameOf), "No email rules learned or pinned yet.\n")
+    }
+
+    c.check("one task, one rule: heading + indented grain/value/provenance/fire-count line") {
+        let r = rule(.correspondentDomain, "harborlane.example", .op(1), fireCount: 8)
+        let text = RulesLedger.exportText([r], nameOf: nameOf, calendar: utc)
+        try expectEq(text, "Insurance Renewals\n  Correspondent domain: harborlane.example · learned · 15 Jun 2025 · fired 8×\n")
+    }
+
+    c.check("pinned rule says pinned, not learned") {
+        let r = rule(.correspondent, "b@a.co", .op(1), pinned: true)
+        let text = RulesLedger.exportText([r], nameOf: nameOf, calendar: utc)
+        try expect(text.contains("· pinned ·"), "expected 'pinned', got: \(text)")
+    }
+
+    c.check("lastFired appears when present, omitted when nil") {
+        let withLast = rule(.subject, "x", .op(1), lastFired: t0.addingTimeInterval(86_400))
+        try expect(RulesLedger.exportText([withLast], nameOf: nameOf, calendar: utc)
+            .contains("last 16 Jun 2025"))
+        let withoutLast = rule(.subject, "x", .op(1))
+        try expect(!RulesLedger.exportText([withoutLast], nameOf: nameOf, calendar: utc).contains("last "))
+    }
+
+    c.check("distantPast createdAt (pre-metadata migration) omits the date, doesn't crash formatting it") {
+        let r = rule(.emailSystem, "", .op(1), createdAt: .distantPast)
+        let text = RulesLedger.exportText([r], nameOf: nameOf, calendar: utc)
+        try expectEq(text, "Insurance Renewals\n  Email system: any mail · learned · fired 0×\n")
+    }
+
+    c.check("multiple tasks: same grouping/ordering as the ledger list, one blank line between groups") {
+        let rules = [rule(.subject, "TestFlight", .op(2)),
+                    rule(.correspondentDomain, "harborlane.example", .op(1), fireCount: 8)]
+        let text = RulesLedger.exportText(rules, nameOf: nameOf, calendar: utc)
+        try expectEq(text, """
+        andeye
+          Subject: TestFlight · learned · 15 Jun 2025 · fired 0×
+
+        Insurance Renewals
+          Correspondent domain: harborlane.example · learned · 15 Jun 2025 · fired 8×
+
+        """)
+    }
+}
+
 // MARK: - Pre-correction snapshot (the card's honesty fix, 2026-07-05 report)
 
 // Martin's verbatim hardware-test verdict: the card said "Apple 71% certain,

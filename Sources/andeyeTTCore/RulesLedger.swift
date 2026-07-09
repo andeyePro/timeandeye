@@ -1,9 +1,8 @@
 import Foundation
 
 /// One task's learned + pinned email rules, for the Rules Ledger (2026-07-03
-/// context-rules spec §5.3 — this phase is scoped to list + provenance +
-/// delete; search-by-last-5-matches, bulk actions and export are later
-/// polish, §6).
+/// context-rules spec §5.3 — list + provenance + delete + bulk forget +
+/// export; search-by-last-5-matches is still later polish, §6).
 public struct RulesLedgerGroup: Equatable, Sendable {
     public var target: TaskRef
     public var rows: [EmailRule]
@@ -36,5 +35,48 @@ public enum RulesLedger {
                 return $0.createdAt > $1.createdAt
             })
         }.sorted { nameOf($0.target).localizedCaseInsensitiveCompare(nameOf($1.target)) == .orderedAscending }
+    }
+
+    /// Plain-text dump of every rule for the ledger's "Copy rules" button —
+    /// grouped exactly like the list (task name as heading), each rule's
+    /// grain, value, provenance and fire count on its own line. Pure and
+    /// deterministic (mirrors `TimesheetExport`'s style) so it's checkable
+    /// without a clipboard.
+    public static func exportText(_ rules: [EmailRule], nameOf: (TaskRef) -> String,
+                                  calendar: Calendar = .current) -> String {
+        let groups = grouped(rules, nameOf: nameOf)
+        guard !groups.isEmpty else { return "No email rules learned or pinned yet.\n" }
+        var out: [String] = []
+        for group in groups {
+            out.append(nameOf(group.target))
+            for rule in group.rows {
+                out.append("  " + exportLine(rule, calendar: calendar))
+            }
+            out.append("")
+        }
+        out.removeLast()   // drop the trailing blank separator
+        return out.joined(separator: "\n") + "\n"
+    }
+
+    private static func exportLine(_ rule: EmailRule, calendar: Calendar) -> String {
+        var parts = ["\(rule.level.label): \(rule.value.isEmpty ? "any mail" : rule.value)"]
+        parts.append(rule.pinned ? "pinned" : "learned")
+        if rule.createdAt != .distantPast {
+            parts.append(exportDayFormatter(calendar).string(from: rule.createdAt))
+        }
+        parts.append("fired \(rule.fireCount)×")
+        if let last = rule.lastFired {
+            parts.append("last \(exportDayFormatter(calendar).string(from: last))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func exportDayFormatter(_ calendar: Calendar) -> DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM yyyy"
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
     }
 }

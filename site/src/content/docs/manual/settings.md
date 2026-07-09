@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: Comments, popover defaults, the Switch Buffer, local tasks, your OpenProject connection, licence, and posting health.
+description: Comments, popover defaults, the Switch Buffer, local tasks, your OpenProject connection, licence, posting health, maintenance and email matching.
 ---
 
 - **Comments** - whether a note goes to the time entry, the task's feed, or both.
@@ -24,5 +24,29 @@ description: Comments, popover defaults, the Switch Buffer, local tasks, your Op
   automatically (usually because they're locked into an invoice). Ordinary
   edits and deletions of already-posted time propagate to the backend on
   their own within a minute or two.
+- **Duplicate reconcile** - scans for OpenProject time entries logged twice
+  against the same task and minute. Click a match to see every difference
+  between its entries, then Apply: the richest entry survives (the others'
+  comments fold into it), the rest are deleted, and your journal re-points to
+  the survivor - confirm each. Each entry's ↗ opens that task's time-entries
+  report in OpenProject, so you can check anything not shown here (custom
+  fields, say) before deleting.
+- **iCloud footprint** - a live readout of what your synced journal (and,
+  separately, your local-only window detail) is costing you in your private
+  CloudKit database - typically a few hundred bytes a slice, 15-25 MB a year
+  of heavy tracking; nobody gets pushed into a paid iCloud tier by andeye.
+- **Consolidate old history** - collapses slices older than a number of years
+  you choose into daily totals. Totals and invoicing history survive exactly
+  - only the minute-by-minute detail goes.
+- **Hard cap - strongly discouraged** - deletes your oldest raw slices,
+  double-confirmed and with no undo, until the synced journal is back under a
+  size you pick. Old totals can be lost for good; it's for a genuine
+  iCloud-quota emergency only, since the synced journal is normally tiny (see
+  iCloud footprint above).
+- **Email → task matching** - your own addresses/domains (comma-separated),
+  so andeye never mistakes you for the other party when a message's
+  correspondent decides the task; see
+  [Auto-tracking and attribution](/manual/auto-tracking-and-attribution/) for
+  the rules themselves.
 - **Currency symbol** - shown wherever billable totals render; leave blank
   for your locale's own symbol.

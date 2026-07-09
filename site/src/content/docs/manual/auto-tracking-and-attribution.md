@@ -19,12 +19,49 @@ only becomes its own slice once you've held it past the Switch Buffer (and never
 below one displayed minute), so glancing at Slack mid-task does not fragment your
 timeline.
 
-## Why was this tracked as X?
+## Context rules: see why, un-learn in one click
 
-Open the Time window's timeline, click a slice, then click a window in its detail
-strip. The pane explains the decision: the source (pinned / OP URL / remembered /
-learned, etc.), the candidate tasks with each score split into its learned and
-prior parts, and the exact signal features the learner keys on (app, title
-words, URL host). To fix future tracking, move that window to the right task in
-the strip below - that teaches the learner, so the window files correctly next
-time.
+In the popover, the certainty line grows a "why?" suffix whenever a signal is
+tracking (**⌘E**, or click it) - it expands the Evidence Card in place. In the
+[Time window](/manual/time-window/)'s timeline, click a slice then a window in
+its detail strip to see the same card full-size.
+
+The card shows, top to bottom:
+
+- **BECAUSE** - the source that fired (pinned, a learned email rule,
+  remembered, learned associations...), with the rule's provenance when one
+  fired (when it was learned, how many times it's fired). If something LEARNED
+  drove the decision, a **✕ forget** (or **✕ suppress** for a learned
+  association, which can't be deleted outright, only counter-taught) removes
+  exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you
+  click.
+- **sees:** - the evidence andeye actually captured: app and site/title
+  always, plus the correspondent, domain and subject when the surface is an
+  email. A field it didn't capture shows as "not captured", never hidden.
+- **Wrong? file as** - search for the right task, then choose how durably to
+  fix it: **Once** (today, this thread - today's soft correction, no lasting
+  rule), **Remember** (a revisable rule at the grain you pick - correspondent,
+  domain, subject or the whole mail system), or **Always 📌** (a pinned rule,
+  100% and standing law).
+
+Picking a task from the popover's own list on an email surface also offers a
+one-line "remember for..." footer underneath - the same Remember, without
+opening the card. The Review queue offers the same footer under its assign
+bar: assign a batch of low-certainty windows to one task and, when every row
+in the batch shares one email context, the identical one-line Remember offer
+appears there too. Either place, when that context has more than one
+correspondent, checking the correspondent row expands it into a checkbox per
+address, so you choose exactly who the rule should cover, not just the first
+one andeye saw.
+
+Saving a rule shows a brief "✉ who → task" notice with an Undo, and the first
+time a learned rule goes on to fire for real, you're told once more, so a
+decision it makes on your behalf is never silent. Both notices sit in the
+popover, auto-dismiss on their own, and are never a system notification.
+
+Every learned + pinned email rule lives in
+[Settings](/manual/settings/) ▸ Email → task matching ▸ Context rules…,
+listed with its provenance. Click a row for its full detail; forget it there,
+or forget a whole task's rules at once with its group's **Forget all** button -
+either way, one undo (⌘Z) restores everything that click removed. **Copy
+rules** puts the lot on the clipboard as plain text.

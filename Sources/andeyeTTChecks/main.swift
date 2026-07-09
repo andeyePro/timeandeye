@@ -103,6 +103,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("EmailGrainCommitMapping", emailGrainCommitMappingChecks),
     ("MultiCorrespondent", multiCorrespondentChecks),
     ("RulesLedger", rulesLedgerChecks),
+    ("RulesLedgerExport", rulesLedgerExportChecks),
     ("CorrectionHistory", correctionHistoryChecks),
     ("TimesheetExport", timesheetExportChecks),
     ("JournalPrune", journalPruneChecks),

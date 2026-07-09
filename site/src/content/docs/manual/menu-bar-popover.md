@@ -21,8 +21,12 @@ At the top:
   scope. Click it to adjust or remove the pin.
 - **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step
   away, ⌘⇧L), and **Stop** (⌘.).
-- **Note field** - a comment for the current task's time; where it goes is set in
-  Settings (the time entry and/or the task's activity feed).
+- **Note field** - type a comment and press ↵ to commit it (flashes green); a
+  slice can carry several, each ↵ adding another. It accumulates onto the
+  current time slice's own comment and, when Settings sends comments to the
+  task too, posts to the DISPLAYED task's activity feed immediately - what
+  you see commented is what gets commented, even if the tracked task changes
+  a moment later.
 
 The task list:
 
@@ -37,6 +41,9 @@ The task list:
 - **Resume / idle gap.** When stopped, a "Resume <last task>" button restarts the
   clock. After an idle stretch a one-tap "Worked <time> on <task>?" offer lets
   you claim the gap as work.
+- **Right-click a task** - open it in your backend, or Comments… for its
+  local comment history (notes typed in the comment bar land there whenever
+  they can't, or shouldn't, go to a backend feed).
 
 The footer:
 

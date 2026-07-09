@@ -182,12 +182,20 @@ and recorded rather than fixed blind:
   undo, popover-anchored) + first-fire toast (Attributor.onFirstFire,
   fireCount 0→1 only), review-queue grain footer, multi-correspondent
   checkbox expansion (Evidence Card + review footer; one undoable notice
-  covers the whole rule fan-out) — all landed, suite 491/0. Still open:
-  screen-share suppression, site recipes beyond Gmail, ledger row → card,
-  bulk-forget/export, candidates ▾ expansion (spec §6 "later polish").
+  covers the whole rule fan-out) — all landed, suite 491/0.
   Note: review-queue rows carry no stored correspondents, so their footer
   offers the narrowest AVAILABLE grain (often system-level) — enriching
   ReviewSegment with email evidence is the follow-on if wanted.
+  2026-07-09 (later polish continued): ledger row click now expands into a
+  compact rule-detail disclosure (provenance sentence, fire stats, grain,
+  target task — `EvidenceCardView` itself doesn't fit here, a ledger rule
+  has no live signal to explain); bulk forget via per-group "Forget all"
+  buttons, one undo restoring the whole group (`AppController.deleteRules`,
+  `deleteRule` now a one-row call into it); "Copy rules" plain-text export
+  (`RulesLedger.exportText`, Core + checked) mirroring the timesheet
+  export's copy-button/"Copied" pattern. UNVERIFIED — suite not run (no
+  Mac in this container). Still open: screen-share suppression, site
+  recipes beyond Gmail, candidates ▾ expansion (spec §6 "later polish").
   (e) not started.
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —
