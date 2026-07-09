@@ -481,11 +481,26 @@ and recorded rather than fixed blind:
 
 ## Approvals drawer (2026-07-06)
 
-- [ ] Approvals drawer overhaul (retro auto-acceptance + digest/undo,
-  grouped bulk accept, weekly summary ritual, invoice-range approve,
-  aging-to-archive, time-shaped badge) – spec at
-  docs/superpowers/specs/2026-07-06-approvals-drawer.md. Awaits Martin's
-  answers to the 6 front-loaded open questions before any /vs build.
+- [x] Approvals drawer v1 (DONE 2026-07-09, per Martin's answers that
+  morning): retro auto-acceptance at the push bar (clears queued rows a
+  later rule makes confident, lifts + re-points their UNPUSHED overlapping
+  sessions so they post; live-checkpoint and already-pushed rows are never
+  touched), journal-backed 30-day "Recently cleared" digest with one-undo-
+  per-pass, STACK-BY-DEFAULT drawer (identical surfaces collapse to one
+  decision: "[total] over N slices, first – last", expandable; his flip
+  idea), decision-count badge (stacks, not slices — days-framing rejected),
+  review threshold now a visible setting beside the push slider. Spec at
+  docs/superpowers/specs/2026-07-06-approvals-drawer.md.
+- [ ] Approvals drawer — parked pending Martin: aging-to-archive (his "not
+  so sure"), trust mode (ditto), weekly summary ritual, invoice-range
+  approve (spec §4/§5/§6 later scope).
+- [ ] Unknown task category (Martin, 2026-07-09): sweep stacks into a
+  built-in Unknown — time stays tracked with full detail, leaves the queue,
+  re-allocatable from the timeline, retro pass can claim it back out.
+- [ ] Timeline drag/shift-click a span → allocate, with Unknown drawn
+  clearly differently (Martin, 2026-07-09; queued behind Unknown).
+- [ ] Calendar overlay on the timeline (read-only EventKit) as an aid for
+  old items — PARKED, Martin to say the word (new permission surface).
 
 ## Colour strategy (2026-07-06)
 

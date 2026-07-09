@@ -124,6 +124,9 @@ let suites: [(String, (Checks) -> Void)] = [
     ("SQLiteSyncStamping", sqliteSyncStampingChecks),
     ("License", licenseChecks),
     ("Billing", billingChecks),
+    ("ReviewStack", reviewStackChecks),
+    ("RetroAcceptance", retroAcceptanceChecks),
+    ("ApprovalsDrawerAcceptance", approvalsDrawerAcceptanceChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

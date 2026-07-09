@@ -96,6 +96,12 @@ struct SettingsView: View {
                 Text(threshold > 1.0 ? "Never auto-push (review everything)"
                      : "Auto-push sessions ≥ \(Int((threshold * 100).rounded()))% certain")
                     .font(.caption).foregroundStyle(.secondary)
+                let reviewThreshold = controller.settings.reviewThreshold
+                Slider(value: $controller.settings.reviewThreshold, in: 0.0...1.0)
+                Text("Queue for review below \(Int((reviewThreshold * 100).rounded()))% certain "
+                     + "· auto-push at \(Int((threshold * 100).rounded()))% and above "
+                     + "· in between, andeye journals but neither asks nor posts")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Auto-comment time entries (apps/docs used)",
                        isOn: $controller.settings.autoComment)
                 Text(controller.journalSummary)

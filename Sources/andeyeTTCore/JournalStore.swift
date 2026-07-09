@@ -118,6 +118,16 @@ public protocol JournalStore {
     /// the accountant's act — a NEW invoice ref locks again as normal).
     func unlockedInvoiceRefs(backendID: String) throws -> Set<String>
     func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws
+
+    // MARK: Retro-acceptance digests (approvals-drawer §3)
+
+    /// Journal one retro-acceptance pass's receipt.
+    func saveRetroDigest(_ digest: RetroDigest) throws
+    /// Digests, newest first, capped at `limit` — the drawer's "Recently
+    /// cleared" section. 30-day retention (see JournalStore's default).
+    func retroDigests(limit: Int) throws -> [RetroDigest]
+    /// Remove a digest row (undo has fully applied — nothing left to re-undo).
+    func deleteRetroDigest(_ id: UUID) throws
 }
 
 public extension JournalStore {
@@ -147,7 +157,17 @@ public extension JournalStore {
             .reduce(0) { $0 + ((try? encoder.encode($1).count) ?? 0) }
         return (synced, detail)
     }
+
+    /// Default: no-op, so a store/mock that doesn't implement retro digests
+    /// (or a check double) keeps compiling and behaves as "nothing to show".
+    func saveRetroDigest(_ digest: RetroDigest) throws {}
+    func retroDigests(limit: Int) throws -> [RetroDigest] { [] }
+    func deleteRetroDigest(_ id: UUID) throws {}
 }
+
+/// 30-day retention for retro-acceptance digests — a receipt trail, not an
+/// archive (mirrors the spans table's own 30-day window in the SQLite store).
+public let retroDigestRetentionDays = 30
 
 public final class InMemoryJournalStore: JournalStore {
     private var sessions: [Session] = []
@@ -158,6 +178,7 @@ public final class InMemoryJournalStore: JournalStore {
     private var ledger: [String: PostingRecord] = [:]
     /// Per-backend invoice refs the user unlocked (never auto re-locked).
     private var unlockedInvoices: [String: Set<String>] = [:]
+    private var retroDigestRows: [RetroDigest] = []
 
     private func ledgerKey(_ session: UUID, _ backendID: String) -> String {
         "\(session.uuidString)|\(backendID)"
@@ -312,5 +333,27 @@ public final class InMemoryJournalStore: JournalStore {
 
     public func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
         (comments[ref.storageKey] ?? []).sorted { $0.date < $1.date }
+    }
+
+    // MARK: Retro-acceptance digests
+
+    private func pruneRetroDigests(now: Date = Date()) {
+        let cutoff = now.addingTimeInterval(-Double(retroDigestRetentionDays) * 86_400)
+        retroDigestRows.removeAll { $0.date < cutoff }
+    }
+
+    public func saveRetroDigest(_ digest: RetroDigest) throws {
+        pruneRetroDigests()
+        retroDigestRows.removeAll { $0.id == digest.id }
+        retroDigestRows.append(digest)
+    }
+
+    public func retroDigests(limit: Int) throws -> [RetroDigest] {
+        pruneRetroDigests()
+        return Array(retroDigestRows.sorted { $0.date > $1.date }.prefix(limit))
+    }
+
+    public func deleteRetroDigest(_ id: UUID) throws {
+        retroDigestRows.removeAll { $0.id == id }
     }
 }

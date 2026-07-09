@@ -1121,7 +1121,7 @@ struct PopoverView: View {
                 openWindow(id: "review")
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
-                Label("\(controller.pendingReview.count)", systemImage: "tray.full")
+                Label("\(controller.pendingDecisionCount)", systemImage: "tray.full")
             }
             .keyboardShortcut("u", modifiers: .command)
             .help("Review queue (⌘U)")

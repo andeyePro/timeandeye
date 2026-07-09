@@ -119,11 +119,23 @@ public final class SQLiteJournalStore: JournalStore {
             PRIMARY KEY (backend_id, invoice_ref)
         )
         """)
+        // Retro-acceptance digests (approvals-drawer §3): the drawer's
+        // "Recently cleared" receipts, 30-day retention (pruned below, like
+        // the spans table).
+        try exec("""
+        CREATE TABLE IF NOT EXISTS retro_digests (
+            id TEXT PRIMARY KEY,
+            date REAL NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS retro_digests_date ON retro_digests(date)
+        """)
         try backfillSessionEnds()
         // Span detail is for recent-history inspection, not an archive:
         // keep 30 days so the table cannot grow without bound.
         try exec("DELETE FROM spans WHERE start < \(Date().addingTimeInterval(-30 * 86_400).timeIntervalSince1970)")
         try purgeTombstones()
+        try pruneRetroDigests()
     }
 
     deinit {
@@ -792,6 +804,60 @@ public final class SQLiteJournalStore: JournalStore {
                 guard var segment = segments.first else { continue }
                 segment.assigned = target
                 try save(segment)
+            }
+        }
+    }
+
+    // MARK: - Retro-acceptance digests
+
+    /// 30-day retention, mirroring the spans table's own prune-on-init.
+    public func pruneRetroDigests(olderThanDays days: Int = retroDigestRetentionDays,
+                                  now: Date = Date()) throws {
+        let cutoff = now.addingTimeInterval(-Double(days) * 86_400).timeIntervalSince1970
+        try exec("DELETE FROM retro_digests WHERE date < \(cutoff)")
+    }
+
+    public func saveRetroDigest(_ digest: RetroDigest) throws {
+        try locked {
+            try pruneRetroDigests()
+            guard let json = try? encoder.encode(digest),
+                  let jsonString = String(data: json, encoding: .utf8) else {
+                throw StoreError.encode
+            }
+            var stmt: OpaquePointer?
+            let sql = "INSERT OR REPLACE INTO retro_digests (id, date, json) VALUES (?,?,?)"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, digest.id.uuidString, -1, Self.transient)
+            sqlite3_bind_double(stmt, 2, digest.date.timeIntervalSince1970)
+            sqlite3_bind_text(stmt, 3, jsonString, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+        }
+    }
+
+    public func retroDigests(limit: Int) throws -> [RetroDigest] {
+        try pruneRetroDigests()
+        var out: [RetroDigest] = []
+        try query("SELECT json FROM retro_digests ORDER BY date DESC LIMIT \(limit)") { stmt in
+            out.append(try self.decoder.decode(RetroDigest.self, from: self.jsonColumn(stmt, 0)))
+        }
+        return out
+    }
+
+    public func deleteRetroDigest(_ id: UUID) throws {
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "DELETE FROM retro_digests WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, id.uuidString, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
             }
         }
     }

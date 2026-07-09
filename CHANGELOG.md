@@ -2,6 +2,22 @@
 
 ## 2026-07-09
 
+- [x] **Approvals drawer v1 — the review pile stops building.** Per Martin's
+  same-morning answers to the spec's questions. Retro auto-acceptance:
+  a debounced pass after every learning/pin/rule write re-scores the pending
+  queue through the attributor's own explain() and clears whatever now
+  scores at/above the push bar, lifting + re-pointing the cleared rows'
+  UNPUSHED overlapping sessions so they post through normal sync (the
+  live-checkpoint sentinel and already-pushed rows are explicitly excluded
+  — a bulk pass must never amend posted time). Each pass journals ONE
+  RetroDigest (new store table, 30-day retention, both stores) shown in the
+  drawer's "Recently cleared" section with a whole-pass Undo. The drawer
+  itself is stack-by-default: identical surfaces collapse to one decision
+  row with total/count/span, expandable to slices; accepting teaches from
+  every surface. The popover badge counts DECISIONS (stacks). The review
+  threshold joined the push threshold as a visible Settings slider.
+  Suite 525/0 + full release build on the bridge.
+
 - [x] **Rules Ledger: row-click disclosure, bulk forget, "Copy rules" export
   (context-rules spec §6 "later polish").** Clicking a ledger row now
   expands a compact rule-detail disclosure underneath it — provenance

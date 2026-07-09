@@ -165,6 +165,56 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.pendingReview().map(\.id), [seg2.id])
     }
 
+    // MARK: Retro-acceptance digests (approvals-drawer §3) — same suite for
+    // both stores, so the SQLite table and the in-memory list obey one
+    // contract (mirrors the posting-ledger section above).
+
+    c.check("retro digest round-trip, newest first, and undo-by-delete") {
+        let s = make()
+        // Dated relative to REAL now: retention compares against the wall
+        // clock (not injectable), so a fixed-t0 fixture would be pruned as
+        // 30-days-stale the moment it's read.
+        let base = Date().addingTimeInterval(-3600)
+        let older = RetroDigest(date: base, clearedSegmentIDs: [UUID()], target: .task(.op(1)),
+                               count: 1, reason: "test", priorSessions: [])
+        let newer = RetroDigest(date: base.addingTimeInterval(60), clearedSegmentIDs: [UUID(), UUID()],
+                                target: .task(.op(2)), count: 2, reason: "test 2",
+                                priorSessions: [RetroDigest.PriorSessionState(
+                                    id: UUID(), task: .op(3), certainty: 0.4)])
+        try s.saveRetroDigest(older)
+        try s.saveRetroDigest(newer)
+        let all = try s.retroDigests(limit: 10)
+        try expectEq(all.map(\.id), [newer.id, older.id], "newest first")
+        try expectEq(all.first?.priorSessions.first?.certainty, 0.4, "the undo payload round-trips")
+        try s.deleteRetroDigest(newer.id)
+        try expectEq(try s.retroDigests(limit: 10).map(\.id), [older.id])
+    }
+
+    c.check("retro digest limit caps the read") {
+        let s = make()
+        let base = Date().addingTimeInterval(-3600)   // see the retention note above
+        for i in 0..<5 {
+            try s.saveRetroDigest(RetroDigest(date: base.addingTimeInterval(Double(i)),
+                                              clearedSegmentIDs: [], target: .doNotTrack,
+                                              count: 0, reason: "r\(i)", priorSessions: []))
+        }
+        try expectEq(try s.retroDigests(limit: 2).count, 2)
+        try expectEq(try s.retroDigests(limit: 100).count, 5)
+    }
+
+    c.check("retro digests older than 30 days are pruned on save/read") {
+        let s = make()
+        let stale = RetroDigest(date: Date().addingTimeInterval(-31 * 86_400),
+                                clearedSegmentIDs: [], target: .doNotTrack, count: 0,
+                                reason: "ancient", priorSessions: [])
+        let fresh = RetroDigest(date: Date(), clearedSegmentIDs: [], target: .doNotTrack,
+                                count: 0, reason: "fresh", priorSessions: [])
+        try s.saveRetroDigest(stale)
+        try s.saveRetroDigest(fresh)   // a save after the stale one prunes it
+        try expectEq(try s.retroDigests(limit: 10).map(\.id), [fresh.id],
+                     "a digest older than 30 days must not survive a save or a read")
+    }
+
     // MARK: Posting ledger — the per-(session, backend) replacement for the
     // single pushed/opTimeEntryID slot. Same suite for both stores, so the
     // SQLite table and the in-memory map obey one contract.

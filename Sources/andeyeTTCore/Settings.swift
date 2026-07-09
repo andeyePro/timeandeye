@@ -52,6 +52,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var opBaseURL: String
     /// Sessions at/above this certainty auto-push to OP. > 1.0 means never.
     public var certaintyAutoPushThreshold: Double
+    /// Spans below this certainty queue for review (`SessionTracker.Config
+    /// .uncertainBelow`) — the drawer's OTHER threshold, visible next to the
+    /// push threshold (approvals-drawer spec, open question (a)).
+    public var reviewThreshold: Double
     public var colourLow: String      // hex; certainty 0 end of the gradient
     public var colourHigh: String     // hex; certainty 1 end
     public var showPercent: Bool
@@ -130,6 +134,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
+                reviewThreshold: Double = 0.6,
                 colourLow: String = "#FF3B30",
                 colourHigh: String = "#34C759",
                 showPercent: Bool = false,
@@ -164,6 +169,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 journalHardCapMB: Double? = nil) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
+        self.reviewThreshold = reviewThreshold
         self.colourLow = colourLow
         self.colourHigh = colourHigh
         self.showPercent = showPercent
@@ -208,6 +214,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         let defaults = AndeyeSettings(opBaseURL: "")
         opBaseURL = c.lenient(.opBaseURL, or: defaults.opBaseURL)
         certaintyAutoPushThreshold = c.lenient(.certaintyAutoPushThreshold, or: defaults.certaintyAutoPushThreshold)
+        reviewThreshold = c.lenient(.reviewThreshold, or: defaults.reviewThreshold)
         colourLow = c.lenient(.colourLow, or: defaults.colourLow)
         colourHigh = c.lenient(.colourHigh, or: defaults.colourHigh)
         showPercent = c.lenient(.showPercent, or: defaults.showPercent)

@@ -2,36 +2,38 @@ import SwiftUI
 import andeyeTTCore
 import andeyeTTMac
 
-/// The low-certainty review queue: multi-select rows (click-drag, shift-click,
-/// ⌘-click — native List selection), grouped by day, then one-click assign.
-/// Assign to any task (fuzzy-filtered), to "Do not track", or create a new
-/// local (non-OpenProject) task on the spot and assign to it.
+/// The low-certainty review queue: stacked by default (2026-07-06 spec §2/§4,
+/// approvals-drawer v1) — one row per identical surface (app · window title ·
+/// tab URL), not one row per slice. Multi-select rows (click-drag,
+/// shift-click, ⌘-click — native List selection) at the STACK level, then
+/// one-click assign. A stack with more than one slice expands to a read-only
+/// list on click. Assign to any task (fuzzy-filtered), to "Do not track", or
+/// create a new local (non-OpenProject) task on the spot and assign to it.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
-    @State private var selection = Set<UUID>()
+    @State private var selection = Set<String>()
+    @State private var expanded = Set<String>()
     @State private var aiResponse = ""
     @State private var aiStatus = ""
     @State private var filter = ""
     @State private var newLocalName = ""
     /// The post-assign grain footer (2026-07-03 spec §5.3, "later polish"):
     /// what was just taught, mirroring `PopoverView`'s `justPicked` tuple.
-    /// Ignoring it is "once" — it never blocks assigning the next segment.
+    /// Ignoring it is "once" — it never blocks assigning the next stack.
     @State private var justAssigned: (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)?
     /// Multi-correspondent checkbox selection for the footer (spec §5.5) —
     /// all checked by default.
     @State private var correspondentChecks: Set<String> = []
+    /// "Recently cleared" (spec §3 digest) — collapsed by default; it's a
+    /// receipt, not something to review every time the drawer opens.
+    @State private var clearedExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            header
             List(selection: $selection) {
-                ForEach(daySections, id: \.title) { section in
-                    Section {
-                        ForEach(section.items) { segment in
-                            row(segment).tag(segment.id)
-                        }
-                    } header: {
-                        if let title = section.title { Text(title) }
-                    }
+                ForEach(keyedStacks, id: \.key) { entry in
+                    stackRow(entry.stack).tag(entry.key)
                 }
             }
 
@@ -39,6 +41,7 @@ struct ReviewView: View {
                 assignBar
             }
             grainFooter
+            clearedSection
 
             Divider()
             aiSection
@@ -46,38 +49,91 @@ struct ReviewView: View {
         .padding(10)
     }
 
-    /// Group by calendar day; a single header is omitted when everything is
-    /// from one day (usually today).
-    private var daySections: [(title: String?, items: [ReviewSegment])] {
-        let cal = Calendar.current
-        let grouped = Dictionary(grouping: controller.pendingReview) {
-            cal.startOfDay(for: $0.start)
-        }
-        let days = grouped.keys.sorted()
-        if days.count <= 1 {
-            return [(nil, controller.pendingReview)]
-        }
-        return days.map { day in
-            let title = cal.isDateInToday(day) ? "Today"
-                : cal.isDateInYesterday(day) ? "Yesterday"
-                : day.formatted(date: .abbreviated, time: .omitted)
-            return (title, grouped[day]!.sorted { $0.start < $1.start })
+    /// The window header: decisions (stacks) up front, per spec §7 — the
+    /// exact slice count stays here for the curious, never in the badge.
+    private var header: some View {
+        HStack {
+            Text("\(controller.pendingDecisionCount) to decide").font(.headline)
+            Spacer()
+            Text("\(totalSlices) slices").font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    private func row(_ segment: ReviewSegment) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text("\(segment.app)\(segment.windowTitle.map { " – \($0)" } ?? "")")
-                    .lineLimit(1)
-                if let url = segment.tabURL {
-                    Text(url).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+    private var stacks: [ReviewStack] { controller.reviewStacks() }
+
+    private var totalSlices: Int { stacks.reduce(0) { $0 + $1.segments.count } }
+
+    private func surfaceKey(_ stack: ReviewStack) -> String {
+        "\(stack.app)|\(stack.windowTitle ?? "")|\(stack.tabURL ?? "")"
+    }
+
+    private var keyedStacks: [(key: String, stack: ReviewStack)] {
+        stacks.map { (surfaceKey($0), $0) }
+    }
+
+    private var selectedStacks: [ReviewStack] {
+        keyedStacks.filter { selection.contains($0.key) }.map(\.stack)
+    }
+
+    private func stackRow(_ stack: ReviewStack) -> some View {
+        let key = surfaceKey(stack)
+        let expandable = stack.segments.count > 1
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                if expandable {
+                    Button {
+                        if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
+                    } label: {
+                        Image(systemName: expanded.contains(key) ? "chevron.down" : "chevron.right")
+                    }
+                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading) {
+                    Text(stackTitle(stack)).lineLimit(1)
+                    if let url = stack.tabURL {
+                        Text(url).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer()
+                // Single-slice stacks look like today's rows (duration + start
+                // time); a stack the user hasn't split into slices shouldn't
+                // read differently from the old flat list.
+                if expandable {
+                    Text(stackSummaryTail(stack)).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(durationText(stack.total)).font(.caption).foregroundStyle(.secondary)
+                    Text(stack.first.formatted(date: .omitted, time: .shortened)).font(.caption)
                 }
             }
-            Spacer()
-            Text(duration(segment)).font(.caption).foregroundStyle(.secondary)
-            Text(segment.start.formatted(date: .omitted, time: .shortened)).font(.caption)
+            if expandable, expanded.contains(key) {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(stack.segments) { segment in
+                        HStack {
+                            Text(segment.start.formatted(date: .omitted, time: .shortened))
+                            Spacer()
+                            Text(durationText(segment.end.timeIntervalSince(segment.start)))
+                        }
+                        .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.leading, 20)
+            }
         }
+    }
+
+    private func stackTitle(_ s: ReviewStack) -> String {
+        "\(s.app)\(s.windowTitle.map { " – \($0)" } ?? "")"
+    }
+
+    /// "<total> over N slices, <first> – <last>" — the trailing detail for a
+    /// multi-slice stack (spec §4 grouped drawer, amended to group by
+    /// surface rather than task/day).
+    private func stackSummaryTail(_ s: ReviewStack) -> String {
+        let sameDay = Calendar.current.isDate(s.first, inSameDayAs: s.last)
+        let span = sameDay
+            ? "\(s.first.formatted(date: .omitted, time: .shortened)) – \(s.last.formatted(date: .omitted, time: .shortened))"
+            : "\(s.first.formatted(date: .abbreviated, time: .shortened)) – \(s.last.formatted(date: .abbreviated, time: .shortened))"
+        return "\(durationText(s.total)) over \(s.segments.count) slices, \(span)"
     }
 
     private var assignBar: some View {
@@ -163,15 +219,22 @@ struct ReviewView: View {
         }
     }
 
+    /// Express path stays one-selection-one-assign fast: a single stack
+    /// routes through `assignStack` directly; a multi-stack selection
+    /// flattens to the underlying segment ids and goes through the existing
+    /// `assignReview` path (both teach the attributor from every distinct
+    /// surface covered — approvals-drawer spec §1 side-bug fix).
     private func assign(_ target: Target) {
-        let ids = Array(selection)
-        // Snapshot the rows being assigned BEFORE the assign, which removes
-        // them from `pendingReview` — the footer's identity is built from
-        // what was just taught, not what's left in the queue.
-        let assigned = controller.pendingReview.filter { ids.contains($0.id) }
-        controller.assignReview(ids, to: target)
+        let picked = selectedStacks
+        guard !picked.isEmpty else { return }
+        let assignedSegments = picked.flatMap(\.segments)
+        if picked.count == 1 {
+            controller.assignStack(picked[0], to: target)
+        } else {
+            controller.assignReview(assignedSegments.map(\.id), to: target)
+        }
         selection.removeAll()
-        justAssigned = footerContext(for: assigned, target: target)
+        justAssigned = footerContext(for: assignedSegments, target: target)
         correspondentChecks = justAssigned.map { Set(ContextIdentity.correspondentChoices($0.signal)) } ?? []
     }
 
@@ -246,8 +309,52 @@ struct ReviewView: View {
         }
     }
 
-    private func duration(_ s: ReviewSegment) -> String {
-        let minutes = Int(s.end.timeIntervalSince(s.start) / 60)
-        return minutes >= 1 ? "\(minutes)m" : "<1m"
+    /// "Cleared <count> to <task> – <reason>" (spec §3 digest) — collapsed,
+    /// hidden entirely when empty so a quiet queue stays quiet.
+    @ViewBuilder
+    private var clearedSection: some View {
+        if !controller.retroDigest.isEmpty {
+            DisclosureGroup(isExpanded: $clearedExpanded) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(controller.retroDigest, id: \.id) { entry in
+                        clearedRow(entry)
+                    }
+                }
+                .padding(.top, 4)
+            } label: {
+                Text("Recently cleared (\(controller.retroDigest.count))").font(.caption)
+            }
+        }
+    }
+
+    private func clearedRow(_ entry: RetroDigest) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Cleared \(entry.count) to \(targetName(entry.target)) – \(entry.reason)")
+                    .font(.caption).lineLimit(2)
+                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Undo") { controller.undoRetroDigest(entry.id) }
+                .font(.caption2).buttonStyle(.borderless)
+        }
+    }
+
+    private func targetName(_ target: Target) -> String {
+        switch target {
+        case .doNotTrack: return "Do not track"
+        case .task(let ref):
+            return controller.taskCache.first(where: { $0.ref == ref })?.subject ?? "unknown task"
+        }
+    }
+
+    /// "Xm" under an hour, "%dh %02dm" style otherwise — matches the
+    /// menu-bar clock's vocabulary (`MenuTitle.text`).
+    private func durationText(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        if total < 60 { return "<1m" }
+        if total < 3600 { return "\(total / 60)m" }
+        return String(format: "%dh %02dm", total / 3600, (total % 3600) / 60)
     }
 }

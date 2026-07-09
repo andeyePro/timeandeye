@@ -176,6 +176,10 @@ public final class AppController: ObservableObject {
         }
     }
     @Published public private(set) var pendingReview: [ReviewSegment] = []
+    /// Retro-acceptance receipts, newest first — the drawer's "Recently
+    /// cleared" section (approvals-drawer spec §3). Loaded at startup,
+    /// refreshed after every pass and after undo.
+    @Published public private(set) var retroDigest: [RetroDigest] = []
     @Published public private(set) var activities: [TimeActivity] = []
     @Published public private(set) var lastPrompt: TrackerPrompt?
     /// An idle stretch that defaulted to "break" (untracked). A single tap in
@@ -363,6 +367,7 @@ public final class AppController: ObservableObject {
             // startUp's async refresh applies the live value.
             idleThresholdSeconds: UserDefaults.standard
                 .object(forKey: "cachedDisplaySleepSeconds") as? TimeInterval ?? 600,
+            uncertainBelow: loadedSettings.reviewThreshold,
             nonWorkTracksLocally: loadedSettings.trackLeisureLocally && leisure != nil,
             leisureTask: leisure,
             switchGraceSeconds: loadedSettings.switchGraceSeconds,
@@ -1157,6 +1162,7 @@ public final class AppController: ObservableObject {
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
         try? emailRulesStore.save(attributor.emailRules)
+        scheduleRetroPass()
     }
 
     /// The full broad→narrow identity of the current focus surface plus the
@@ -1397,6 +1403,25 @@ public final class AppController: ObservableObject {
         reloadReview()
     }
 
+    /// The drawer's default shape (Martin's stack-by-default choice): every
+    /// pending row collapsed to ONE decision per distinct surface.
+    public func reviewStacks() -> [ReviewStack] {
+        pendingReview.stacked()
+    }
+
+    /// The drawer badge's count — stacks, not raw rows (Hick's law: present
+    /// ~5 decisions, never 1,040).
+    public var pendingDecisionCount: Int {
+        reviewStacks().count
+    }
+
+    /// Accept a whole stack at once: assigns every segment in it via the
+    /// existing `assignReview`, which already teaches from every distinct
+    /// surface it covers (a stack IS one surface, so this teaches once).
+    public func assignStack(_ stack: ReviewStack, to target: Target) {
+        assignReview(stack.segments.map(\.id), to: target)
+    }
+
     /// Push the settings' own-address list into the capture engine (never
     /// reported as counterparties). Called at startup and on settings change.
     private func pushOwnEmail() {
@@ -1416,7 +1441,118 @@ public final class AppController: ObservableObject {
 
     private func reloadReview() {
         pendingReview = (try? journal.pendingReview()) ?? []
+        retroDigest = (try? journal.retroDigests(limit: 200)) ?? []
         updateJournalSummary()
+    }
+
+    // MARK: - Retro-acceptance (approvals-drawer spec §3)
+
+    /// A correction burst (a pin, several quick assigns) settles into ONE
+    /// pass this long after the last mutation, instead of re-scoring the
+    /// whole queue on every single write.
+    private static let retroPassDebounceSeconds: TimeInterval = 2
+    /// Per-pass ceiling so a large queue can't beachball the main thread.
+    private static let retroPassCap = 500
+    private var retroPassTimer: Timer?
+
+    private func scheduleRetroPass() {
+        retroPassTimer?.invalidate()
+        retroPassTimer = Timer.scheduledTimer(withTimeInterval: Self.retroPassDebounceSeconds,
+                                              repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.runRetroPass() }
+        }
+    }
+
+    /// Re-score the pending queue against the retro bar (the push threshold —
+    /// Martin's answer to open question (d): a bulk clear should meet the
+    /// same bar as unattended posting) and apply whatever clears. Scoring
+    /// reuses the attributor's own `explain()` — the same path `explainSpan`/
+    /// the Evidence Card read — so a retro clearance can never disagree with
+    /// what a human would see opening that row right now.
+    private func runRetroPass() {
+        let bar = settings.certaintyAutoPushThreshold
+        let pending = Array(pendingReview.prefix(Self.retroPassCap))
+        guard !pending.isEmpty else { return }
+        let cache = taskCache
+        let attributor = self.attributor
+        // Scored at the SEGMENT's own start time (like explainSpan), so the
+        // time-of-day prior matches what actually happened, not "now".
+        let scoring: (ActivitySignal) -> (target: Target, score: Double)? = { signal in
+            let explanation = attributor.explain(signal, tasks: cache, now: signal.timestamp)
+            guard let chosen = explanation.chosen else { return nil }
+            return (chosen, explanation.chosenScore)
+        }
+        // Lifts must never touch the live-checkpoint sentinel (its task/
+        // certainty are crash-recovery state, not history) NOR an already-
+        // pushed session — re-pointing a pushed row's task would propagate an
+        // amendment to the backend off the back of a bulk pass. The retro
+        // lift exists for the UNPUSHED low-certainty pile only.
+        let sessions = ((try? journal.allSessions()) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && !$0.pushedToOP }
+        let plan = RetroAcceptance.plan(pending: pending, sessions: sessions, bar: bar, score: scoring)
+        guard !plan.clearances.isEmpty else { return }
+        applyRetroPlan(plan, bar: bar)
+    }
+
+    /// Apply a retro-acceptance plan: clear the segments, lift the overlapping
+    /// sessions, and journal ONE digest for the whole pass so it can be undone
+    /// as a unit ("Cleared N items – undo").
+    private func applyRetroPlan(_ plan: RetroPlan, bar: Double) {
+        var idsByTarget: [Target: [UUID]] = [:]
+        for clearance in plan.clearances {
+            idsByTarget[clearance.target, default: []].append(clearance.segmentID)
+        }
+        for (target, ids) in idsByTarget {
+            try? journal.assign(ids, to: target)
+        }
+        var priorSessions: [RetroDigest.PriorSessionState] = []
+        for lift in plan.lifts {
+            priorSessions.append(RetroDigest.PriorSessionState(
+                id: lift.sessionID, task: lift.priorTask, certainty: lift.priorCertainty))
+            if var session = try? journal.session(id: lift.sessionID) {
+                session.task = lift.newTask
+                session.certainty = lift.newCertainty
+                try? journal.update(session)
+            }
+        }
+        let count = plan.clearances.count
+        let digest = RetroDigest(
+            clearedSegmentIDs: plan.clearances.map(\.segmentID),
+            target: dominantRetroTarget(in: plan.clearances),
+            count: count,
+            reason: "Confidence reached \(Int((bar * 100).rounded()))% or above",
+            priorSessions: priorSessions)
+        try? journal.saveRetroDigest(digest)
+        reloadReview()
+    }
+
+    /// The digest's headline target: the most-common clearance target in the
+    /// pass (ties keep the first one seen) — display only, undo doesn't need
+    /// it (it restores each segment/session from the stored payload).
+    private func dominantRetroTarget(in clearances: [RetroClearance]) -> Target {
+        var counts: [Target: Int] = [:]
+        var order: [Target] = []
+        for clearance in clearances {
+            if counts[clearance.target] == nil { order.append(clearance.target) }
+            counts[clearance.target, default: 0] += 1
+        }
+        return order.max { (counts[$0] ?? 0) < (counts[$1] ?? 0) } ?? clearances[0].target
+    }
+
+    /// Undo one retro-acceptance pass: restores every cleared segment to
+    /// pending, restores every lifted session's prior task+certainty, and
+    /// removes the digest — "nothing is lost" (spec §8 criterion 1).
+    public func undoRetroDigest(_ id: UUID) {
+        guard let digest = retroDigest.first(where: { $0.id == id }) else { return }
+        try? journal.assign(digest.clearedSegmentIDs, to: nil)
+        for prior in digest.priorSessions {
+            guard var session = try? journal.session(id: prior.id) else { continue }
+            session.task = prior.task
+            session.certainty = prior.certainty
+            try? journal.update(session)
+        }
+        try? journal.deleteRetroDigest(id)
+        reloadReview()
     }
 
     /// Bumped on every journal mutation (this is called on all of them), so a
