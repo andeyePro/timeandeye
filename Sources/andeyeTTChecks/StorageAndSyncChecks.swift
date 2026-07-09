@@ -277,6 +277,30 @@ final class MockTransport: HTTPTransport, @unchecked Sendable {
 // MARK: - OPClient (plan task 10)
 
 func opClientChecks(_ c: Checks) async {
+    c.check("OPBackend deep-links: task page vs the WP-filtered cost report") {
+        // The reconcile flow lands on the LOGGED-TIME page (OP has no
+        // per-time-entry web page; the cost report filtered to the WP is
+        // OP's own spent-time link target), not the bare task page.
+        let b = OPBackend(baseURL: URL(string: "https://op.example.com")!,
+                          apiKey: "k", transport: MockTransport())
+        try expectEq(b.taskURL(id: "42")?.absoluteString,
+                     "https://op.example.com/work_packages/42")
+        let url = b.taskTimeEntriesURL(id: "42")
+        // Parse rather than string-match: Foundation's bracket encoding in
+        // query strings is an implementation detail; OP accepts both.
+        let comps = url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }
+        try expectEq(comps?.path, "/cost_reports")
+        let items = Dictionary(uniqueKeysWithValues:
+            (comps?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        try expectEq(items["fields[]"], "WorkPackageId")
+        try expectEq(items["operators[WorkPackageId]"], "=")
+        try expectEq(items["values[WorkPackageId]"], "42")
+        try expectEq(items["set_filter"], "1")
+        // Non-numeric ids are cross-backend corruption: no link, never a
+        // mangled one.
+        try expectNil(b.taskTimeEntriesURL(id: "GUID-STYLE"))
+    }
+
     func makeClient(_ transport: MockTransport) -> OPClient {
         OPClient(baseURL: URL(string: "https://op.example.com")!,
                  apiKey: "SECRET", transport: transport)

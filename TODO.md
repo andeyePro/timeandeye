@@ -10,9 +10,13 @@
   picker moved below the calendar. "This week" → tapped day's whole week;
   "Last 7 days" → 7 days ending on today's weekday; future days disabled.
 - [x] Pie view — OpenProject-only + total moved bottom-left (DONE 2026-06-28).
-- [ ] Reconcile "open in OpenProject" currently opens the entry's work package
-  (OP has no per-time-entry web page). Find a better deep-link to the WP's time
-  entries / cost view if one is stable across OP versions.
+- [x] Reconcile "open in OpenProject" opened the bare work package — DONE
+  2026-07-09: reconcile now lands on the global cost report pre-filtered to
+  the WP (`/cost_reports?fields[]=WorkPackageId&...&set_filter=1`), the same
+  link OP's own "spent time" field builds (verified in opf/openproject
+  source; grammar stable since at least v12). New TaskBackend seam method
+  `taskTimeEntriesURL` (default nil → falls back to the task page); the
+  popover right-click keeps the task page.
 
 ## Optimisation backlog (programme review, consolidated 2026-06-26/27)
 

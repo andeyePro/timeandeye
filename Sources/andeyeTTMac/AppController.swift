@@ -2512,6 +2512,14 @@ public final class AppController: ObservableObject {
         backend?.taskURL(id: id)
     }
 
+    /// The backend's LOGGED-TIME page for a task — reconcile flows land here
+    /// (OP: the cost report filtered to the work package) so "check the
+    /// entries" doesn't dump the user on the task page to hunt. Falls back to
+    /// the task page for backends without one.
+    public func taskTimeEntriesWebURL(id: String) -> URL? {
+        backend?.taskTimeEntriesURL(id: id) ?? backend?.taskURL(id: id)
+    }
+
     /// The primary backend's display name, for menu labels ("Open in
     /// OpenProject"). nil in standalone mode.
     public var primaryBackendName: String? { backend?.displayName }

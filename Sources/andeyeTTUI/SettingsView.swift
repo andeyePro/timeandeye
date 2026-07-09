@@ -511,7 +511,9 @@ struct SettingsView: View {
     }
 
     private func openInBackend(_ taskID: String) {
-        if let url = controller.taskWebURL(id: taskID) { openURL(url) }
+        // Reconcile is about ENTRIES: land on the task's logged-time page
+        // (OP: the cost report filtered to the WP), not the bare task page.
+        if let url = controller.taskTimeEntriesWebURL(id: taskID) { openURL(url) }
     }
 
     /// The single non-work catch-all, expressed as a one-of selection over the

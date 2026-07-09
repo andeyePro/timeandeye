@@ -97,6 +97,11 @@ public protocol TaskBackend: AnyObject {
     func fetchActivities() async throws -> [TimeActivity]
     /// The task's web page, for "Open in <backend>".
     func taskURL(id: String) -> URL?
+    /// The task's LOGGED-TIME page, for reconcile flows — where the user goes
+    /// to check entries, not the task itself (OP has no per-time-entry web
+    /// page; its cost report filtered to the work package is the stable
+    /// equivalent). Default nil = fall back to `taskURL`.
+    func taskTimeEntriesURL(id: String) -> URL?
 
     // MARK: Time entries
     /// Creates an entry and returns its id (nil when the backend replies
@@ -133,6 +138,7 @@ public protocol TaskBackend: AnyObject {
 
 public extension TaskBackend {
     func invoiceLocks(for ids: [RemoteEntryID]) async throws -> [RemoteEntryID: String] { [:] }
+    func taskTimeEntriesURL(id: String) -> URL? { nil }
 }
 
 /// Thrown by a connector when a posting can NEVER succeed — the task was

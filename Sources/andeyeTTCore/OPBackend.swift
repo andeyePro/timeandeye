@@ -59,6 +59,25 @@ public final class OPBackend: TaskBackend {
         Int(id).map { baseURL.appendingPathComponent("work_packages/\($0)") }
     }
 
+    /// The global cost report pre-filtered to this work package — the same
+    /// link OP's own "spent time" field builds (wp-spent-time-display-field
+    /// in opf/openproject, verified 2026-07-09; the query grammar is the
+    /// reporting module's CostQuery filter, unchanged since at least v12).
+    /// OP has no per-time-entry page, so this is where "check the entries"
+    /// lands.
+    public func taskTimeEntriesURL(id: String) -> URL? {
+        guard let n = Int(id),
+              var comps = URLComponents(url: baseURL.appendingPathComponent("cost_reports"),
+                                        resolvingAgainstBaseURL: false) else { return nil }
+        comps.queryItems = [
+            URLQueryItem(name: "fields[]", value: "WorkPackageId"),
+            URLQueryItem(name: "operators[WorkPackageId]", value: "="),
+            URLQueryItem(name: "values[WorkPackageId]", value: String(n)),
+            URLQueryItem(name: "set_filter", value: "1"),
+        ]
+        return comps.url
+    }
+
     /// OP entry/task ids are ints; the seam speaks String (Xero uses GUIDs).
     /// A non-numeric id here can only mean cross-backend corruption — surface
     /// it, never silently no-op.
