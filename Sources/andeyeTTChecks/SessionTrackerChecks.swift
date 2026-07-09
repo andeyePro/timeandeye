@@ -987,4 +987,27 @@ func sessionTrackerChecks(_ c: Checks) {
         try expect(!sessions.filter { $0.task == .op(1) }.isEmpty,
                    "the surrounding op(1) time still flushes")
     }
+
+    c.check("a comment on the DOMINANT task never duplicates its own run (Martin's 03:58 log walk)") {
+        // A pin whose chain overlaps a same-target dominant run must exempt
+        // that run from the gate, NOT add a twin — the twin journalled two
+        // overlapping slices of one task and stole the comment onto one.
+        let (tracker, attributor) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+        tracker.pinCurrentVisit(target: .task(.op(1)), at: t(90))   // comment on the base task
+        tracker.handle(.input(t(150)))
+        tracker.stop(at: t(200))
+        let own = sessions.filter { $0.task == .op(1) }
+        try expectEq(own.count, 1, "one task, one slice — no pinned twin")
+        // And no two emitted sessions may overlap at all.
+        let sorted = sessions.sorted { $0.start < $1.start }
+        for i in 1..<max(sorted.count, 1) where i < sorted.count {
+            try expect(sorted[i].start >= sorted[i-1].end.addingTimeInterval(-0.001),
+                       "overlapping sessions emitted: \(sorted[i-1].task)/\(sorted[i].task)")
+        }
+    }
 }

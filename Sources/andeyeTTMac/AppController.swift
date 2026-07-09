@@ -1486,8 +1486,13 @@ public final class AppController: ObservableObject {
                 liveStart = Swift.min(liveStart, list[i].start)
                 list.remove(at: i)
             }
+            // The live slice CARRIES its pending committed note, so a
+            // comment shows in the timeline the moment it's entered — not
+            // only after the slice flushes (Martin's 03:58 third comment
+            // was invisible until the eventual flush).
             list.append(Session(id: Self.liveSessionID, task: ref, start: liveStart,
-                                end: liveEnd, certainty: certainty))
+                                end: liveEnd, certainty: certainty,
+                                comment: manualNotes[ref]))
         }
         return list
     }

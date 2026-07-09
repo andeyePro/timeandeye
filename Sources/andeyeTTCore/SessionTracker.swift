@@ -771,9 +771,24 @@ public final class SessionTracker {
         }
         pins = futurePins
         for f in forced {
+            // If a same-target run already overlaps the pinned chain — the
+            // pin was on the DOMINANT task — adding a forced twin would
+            // journal two overlapping slices of the same task (found via
+            // Martin's 03:58 log walk, 2026-07-09: the base-task comment's
+            // chain duplicated the base run and stole the note onto one
+            // twin). Just exempt the covering run(s) from the length gate.
+            var coveredByOwnRun = false
+            for i in runs.indices where runs[i].target == f.target
+                && runs[i].start < f.end && runs[i].end > f.start {
+                runs[i].pinned = true
+                coveredByOwnRun = true
+            }
+            if coveredByOwnRun { continue }
             var carved: [(target: Target, start: Date, end: Date, pinned: Bool)] = []
-            for run in runs where !run.pinned {
-                if run.end <= f.start || run.start >= f.end || run.target == f.target {
+            for run in runs {
+                if run.pinned {
+                    carved.append(run)   // earlier pins pass through intact
+                } else if run.end <= f.start || run.start >= f.end || run.target == f.target {
                     carved.append(run)
                 } else {
                     if run.start < f.start { carved.append((run.target, run.start, f.start, false)) }
