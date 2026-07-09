@@ -491,6 +491,30 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Calendar") {
+                Toggle("Use my calendar", isOn: Binding(
+                    get: { controller.settings.calendarSignalEnabled },
+                    set: { on in
+                        if on { controller.enableCalendarSignal() } else { controller.disableCalendarSignal() }
+                    }))
+                    .help("Read-only — andeye never writes to your calendar. The first time you turn this on, macOS asks you to grant Calendar access.")
+                Toggle("Flash the menu bar when off-calendar",
+                       isOn: $controller.settings.calendarFlashEnabled)
+                    .disabled(!controller.settings.calendarSignalEnabled)
+                TextField("Excluded calendars", text: Binding(
+                    get: { controller.settings.calendarExcludedNames.joined(separator: ", ") },
+                    set: { controller.settings.calendarExcludedNames = $0
+                        .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty } }))
+                    .disabled(!controller.settings.calendarSignalEnabled)
+                    .help("Comma-separated calendar names to ignore (e.g. Holidays, Birthdays) — birthday and subscription calendars are already excluded automatically.")
+                Stepper("Review-queue lookback: \(Int(controller.settings.calendarHintLookbackDays)) days",
+                        value: $controller.settings.calendarHintLookbackDays, in: 7...365, step: 7)
+                    .disabled(!controller.settings.calendarSignalEnabled)
+                Text("When on, andeye reads your Mac's calendars (read-only) to guess what you're supposed to be doing right now, nudge the pick list towards it, and hint at old review-queue rows that overlap a past event. Nothing calendar-derived ever leaves this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Diagnostics (dev)") {
                 Button("Probe email sender (front browser)") {
                     Task { senderProbe = await controller.probeEmailSender() }

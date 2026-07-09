@@ -73,8 +73,14 @@ public struct AttributionExplanation: Equatable, Sendable {
         public var score: Double
         public var learned: Double   // contribution from learned associations
         public var prior: Double     // contribution from status/recency/time-of-day
-        public init(target: Target, score: Double, learned: Double, prior: Double) {
+        /// Contribution from a live calendar match (calendar signal spec §5)
+        /// – defaults to 0 so every existing call site stays source-compatible;
+        /// the Attributor's scoring path sets it once wired.
+        public var calendarPart: Double
+        public init(target: Target, score: Double, learned: Double, prior: Double,
+                    calendarPart: Double = 0) {
             self.target = target; self.score = score; self.learned = learned; self.prior = prior
+            self.calendarPart = calendarPart
         }
     }
     /// What the engine believed BEFORE the user's correction displaced it —
@@ -170,6 +176,13 @@ public final class Attributor {
     /// `EmailRule` with fireCount reset to 0, not the same rule). Wired in
     /// `AppController` to publish a popover notice.
     public var onFirstFire: ((EmailRule) -> Void)?
+    /// The live calendar match (2026-07-09 calendar-signal spec §5), set by
+    /// the platform layer whenever the bridge's event window or a boundary
+    /// crossing changes it. Feeds the ranker's calendar term inside
+    /// `scoredComponents`, so a live meeting nudges the ranked fallback —
+    /// bounded by the existing 0.9 cap, never above a pin/sticky/URL/email
+    /// match.
+    public var currentCalendarMatch: (task: TaskRef, tentative: Bool)?
     /// Today's explicit categorisations, by context (see SessionSticky).
     /// Deliberately not persisted — a sticky is a same-day working decision.
     public private(set) var sessionStickies: [SessionSticky] = []
@@ -547,7 +560,8 @@ public final class Attributor {
         }
         let targets = tasks.map { Target.task($0.ref) } + [.doNotTrack]
         let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets)
-        let priors = tasks.map { ranker.score($0, at: now, learning: learning) }
+        let priors = tasks.map { ranker.score($0, at: now, learning: learning,
+                                              calendarMatch: currentCalendarMatch) }
         let maxPrior = max(priors.max() ?? 1, 0.001)
         // On a backend PROJECT page without a task id, trust the ranking
         // outright (spec: "most appropriate task in that project"); other
@@ -571,8 +585,16 @@ public final class Attributor {
                 : 0.2
             let learnedPart = 0.7 * (learned[.task(task.ref)] ?? 0)
             let priorPart = priorWeight * prior / maxPrior
+            // The calendar term's share of priorPart, surfaced separately so
+            // the Evidence Card can say "boosted because <event> is on now"
+            // without ever claiming a boost that didn't happen.
+            let calendarRaw: Double = {
+                guard let m = currentCalendarMatch, m.task == task.ref else { return 0 }
+                return 0.3 * (m.tentative ? 0.5 : 1.0)
+            }()
+            let calendarPart = priorWeight * calendarRaw / maxPrior
             out.append(.init(target: .task(task.ref), score: min(0.9, learnedPart + priorPart),
-                             learned: learnedPart, prior: priorPart))
+                             learned: learnedPart, prior: priorPart, calendarPart: calendarPart))
         }
         let dntLearned = 0.7 * (learned[.doNotTrack] ?? 0)
         out.append(.init(target: .doNotTrack, score: dntLearned, learned: dntLearned, prior: 0))

@@ -48,6 +48,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <string>andeye reads the active browser tab URL to attribute time to the right task.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>andeye observes whether the microphone is in use (call detection); it never records audio.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>andeye reads your calendar (read-only) to guess what you're supposed to be doing right now and to hint at old review-queue rows that overlap a past event. It never creates, edits or deletes anything on your calendar.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>andeye talks to your own backend instance, which may be on your local network.</string>
     <!-- v0.1: user-entered OP URLs may be plain http on a LAN/NAS; without

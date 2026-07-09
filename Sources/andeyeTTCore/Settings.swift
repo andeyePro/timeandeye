@@ -131,6 +131,24 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// STRONGLY DISCOURAGED, deletes oldest raw slices until the synced
     /// journal is back under it. nil = no ceiling configured (the default).
     public var journalHardCapMB: Double?
+    /// Calendar signal (2026-07-09 spec): read-only EventKit capture, off
+    /// until the user explicitly turns it on (that flip is what triggers the
+    /// one-time permission prompt — see `AppController.enableCalendarSignal`).
+    public var calendarSignalEnabled: Bool
+    /// Menu-bar flash when the tracked task disagrees with the live calendar
+    /// match (spec §6). Off by default until Martin confirms the recommended
+    /// defaults from a live look.
+    public var calendarFlashEnabled: Bool
+    /// Calendar names to ignore entirely (birthday/subscription calendars
+    /// are already excluded by type, unconditionally — this is the user's
+    /// own opt-out on top of that).
+    public var calendarExcludedNames: [String]
+    /// How many days back the Review queue's calendar hint (spec §7) looks
+    /// for an overlapping past event.
+    public var calendarHintLookbackDays: Double
+    /// The calendar→task specificity ladder (general → specific), the
+    /// calendar-side mirror of `emailMatchOrder`.
+    public var calendarMatchOrder: [CalendarMatchLevel]
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -166,7 +184,12 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 currencySymbolOverride: String? = nil,
                 ownEmailEntries: String = "",
                 journalConsolidateAfterYears: Double = 2,
-                journalHardCapMB: Double? = nil) {
+                journalHardCapMB: Double? = nil,
+                calendarSignalEnabled: Bool = false,
+                calendarFlashEnabled: Bool = false,
+                calendarExcludedNames: [String] = [],
+                calendarHintLookbackDays: Double = 90,
+                calendarMatchOrder: [CalendarMatchLevel] = CalendarMatchLevel.defaultOrder) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.reviewThreshold = reviewThreshold
@@ -202,6 +225,11 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.ownEmailEntries = ownEmailEntries
         self.journalConsolidateAfterYears = journalConsolidateAfterYears
         self.journalHardCapMB = journalHardCapMB
+        self.calendarSignalEnabled = calendarSignalEnabled
+        self.calendarFlashEnabled = calendarFlashEnabled
+        self.calendarExcludedNames = calendarExcludedNames
+        self.calendarHintLookbackDays = calendarHintLookbackDays
+        self.calendarMatchOrder = calendarMatchOrder
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -256,6 +284,16 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                                                  or: defaults.journalConsolidateAfterYears)
         journalHardCapMB = ((try? c.decodeIfPresent(Double.self, forKey: .journalHardCapMB)) ?? nil)
             ?? defaults.journalHardCapMB
+        calendarSignalEnabled = c.lenient(.calendarSignalEnabled, or: defaults.calendarSignalEnabled)
+        calendarFlashEnabled = c.lenient(.calendarFlashEnabled, or: defaults.calendarFlashEnabled)
+        calendarExcludedNames = c.lenient(.calendarExcludedNames, or: defaults.calendarExcludedNames)
+        calendarHintLookbackDays = c.lenient(.calendarHintLookbackDays,
+                                             or: defaults.calendarHintLookbackDays)
+        // Same renamed/unknown-level-safe decode as emailMatchOrder above.
+        let rawCalendarOrder = ((try? c.decodeIfPresent([String].self, forKey: .calendarMatchOrder)) ?? nil) ?? []
+        let mappedCalendarOrder = rawCalendarOrder.compactMap { CalendarMatchLevel(rawValue: $0) }
+        calendarMatchOrder = Set(mappedCalendarOrder) == Set(CalendarMatchLevel.allCases)
+            ? mappedCalendarOrder : defaults.calendarMatchOrder
     }
 }
 

@@ -197,6 +197,18 @@ public final class AppController: ObservableObject {
     @Published public private(set) var connectedAs: String? {
         didSet { invalidatePickList() }   // RankingConfig.currentUser input
     }
+    /// The live calendar match (calendar-signal spec §5): whichever task the
+    /// current calendar event resolves to via `calendarRules`, and whether
+    /// that event is only tentative. nil when the signal is off, nothing is
+    /// live right now, or nothing matched. Drives the pick-list clock badge,
+    /// the ranker boost, and the mismatch banner/flash below.
+    @Published public private(set) var currentCalendarMatch: (task: TaskRef, eventTitle: String, tentative: Bool)? {
+        didSet { invalidatePickList() }   // TaskRanker.recentThenRanked's calendarMatch input
+    }
+    /// True once a live calendar match has disagreed with the tracked task
+    /// for the settle window (§6) — drives the popover banner and gates the
+    /// flash loop.
+    @Published public private(set) var calendarMismatchActive = false
     /// The validated licence, or nil for Community (no key / bad key / expired
     /// — `licenseProblem` says which). Pro builds gate paid backends on this.
     @Published public private(set) var license: License?
@@ -248,6 +260,36 @@ public final class AppController: ObservableObject {
             // straight into the live cache so every list, the timeline and the
             // pie reflect them at once.
             if oldValue.localTasks != settings.localTasks { mergeLocalTasksIntoCache() }
+            // Calendar signal: the setting is the ONE source of truth for
+            // whether the bridge runs — `enableCalendarSignal`/
+            // `disableCalendarSignal` just flip it (after the permission
+            // round-trip for the former), so every path that changes it
+            // (Settings toggle, a refused permission prompt) starts/stops
+            // the bridge and clears state uniformly, right here.
+            if oldValue.calendarSignalEnabled != settings.calendarSignalEnabled {
+                if settings.calendarSignalEnabled {
+                    calendarBridge.onEvent = { [weak self] events in self?.handleCalendarEvents(events) }
+                    calendarBridge.start(excludedCalendarNames: settings.calendarExcludedNames)
+                } else {
+                    calendarBridge.stop()
+                    calendarBoundaryTimer?.invalidate(); calendarBoundaryTimer = nil
+                    calendarEventWindow = []
+                    calendarLookbackCache = nil
+                    currentCalendarMatch = nil
+                    attributor.currentCalendarMatch = nil
+                    invalidatePickList()
+                    calendarMismatchSince = nil
+                    calendarMismatchActive = false
+                    stopCalendarFlash()
+                }
+            }
+            if oldValue.calendarExcludedNames != settings.calendarExcludedNames {
+                calendarBridge.setExcludedCalendarNames(settings.calendarExcludedNames)
+            }
+            if oldValue.calendarFlashEnabled != settings.calendarFlashEnabled,
+               !settings.calendarFlashEnabled {
+                stopCalendarFlash()
+            }
         }
     }
 
@@ -255,11 +297,23 @@ public final class AppController: ObservableObject {
     private let attributor: Attributor
     private var tracker: SessionTracker!
     private let sensors = SensorHub()
+    /// Calendar-signal spec (2026-07-09): read-only EventKit capture, owned
+    /// here exactly like `sensors` — its own store, its own lazy permission
+    /// request, wired into the same main-actor state this controller owns.
+    private let calendarBridge = CalendarBridge()
     private let settingsStore: JSONFileStore<AndeyeSettings>
     private let learningStore: JSONFileStore<LearningStore>
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
     private let pinsStore: JSONFileStore<[Pin]>
     private let emailRulesStore: JSONFileStore<[EmailRule]>
+    /// The calendar→task ladder (mirrors `emailRules` exactly): learned from
+    /// corrections, editable rule ladder — see `teachCalendarRule`. Kept on
+    /// the Mac side rather than on `Attributor` (unlike `emailRules`)
+    /// because `CalendarRule`/`CalendarMatcher` are plain, storage-free Core
+    /// types with no Attributor-owned ladder of their own (v1 scope — no
+    /// Rules Ledger UI yet, spec §10 "later").
+    private let calendarRulesStore: JSONFileStore<[CalendarRule]>
+    private var calendarRules: [CalendarRule] = []
     private let billingStore: JSONFileStore<BillableRules>
     private let financeMappingsStore: JSONFileStore<[String: FinanceMapping]>
     /// D6: sourceProjectKey → the finance backend's task. Core-owned;
@@ -302,6 +356,34 @@ public final class AppController: ObservableObject {
     private var targetSince: Date?
     private var visitSolid = false
 
+    // MARK: - Calendar signal (2026-07-09 spec)
+
+    /// The bridge's last-emitted rolling window (today ± a day or two, see
+    /// `CalendarBridge.refresh`) — replaced on every bridge emission and
+    /// re-consulted on every event-boundary crossing.
+    private var calendarEventWindow: [CalendarEvent] = []
+    /// Fires the next time a fetched event's start/end is crossed, so the
+    /// live match / mismatch state updates the moment a meeting begins or
+    /// ends, not just on the next bridge emission.
+    private var calendarBoundaryTimer: Timer?
+    /// When the current mismatch (if any) started holding — nil once it
+    /// clears. Compared against the settle window before the banner/flash
+    /// go live (§6 — a brief walk-in shouldn't flash before you've sat down).
+    private var calendarMismatchSince: Date?
+    /// "Clicking the menu bar pauses it for that mismatch episode" (§6):
+    /// set the moment the popover opens during a live mismatch, cleared when
+    /// the mismatch itself clears (a NEW episode gets its own fresh flash).
+    private var calendarFlashPausedForEpisode = false
+    private var calendarFlashAnimation: Task<Void, Never>?
+    /// A cheap render-time cache for the review-queue hint (§7) — one
+    /// EventKit query per drawer refresh, not one per stack row (mirrors
+    /// `pickListCache`'s own 60 s-scale TTL shape).
+    private var calendarLookbackCache: (at: Date, events: [CalendarEvent])?
+    /// How long a mismatch must hold before the banner/flash go live.
+    private static let calendarMismatchSettleSeconds: TimeInterval = 60
+    /// The flash's own cadence — a gentle pulse, not a strobe (§6).
+    private static let calendarFlashIntervalSeconds: TimeInterval = 10
+
     public static func supportDirectory() -> URL {
         AppSupport.directory()
     }
@@ -321,6 +403,7 @@ public final class AppController: ObservableObject {
         primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
         pinsStore = JSONFileStore<[Pin]>(url: dir.appendingPathComponent("pins.json"))
         emailRulesStore = JSONFileStore<[EmailRule]>(url: dir.appendingPathComponent("emailrules.json"))
+        calendarRulesStore = JSONFileStore<[CalendarRule]>(url: dir.appendingPathComponent("calendarrules.json"))
         billingStore = JSONFileStore<BillableRules>(url: dir.appendingPathComponent("billing.json"))
         billing = (try? billingStore.load().flatMap { $0 }) ?? BillableRules()
         financeMappingsStore = JSONFileStore<[String: FinanceMapping]>(
@@ -353,6 +436,9 @@ public final class AppController: ObservableObject {
         attributor.emailMatchOrder = loadedSettings.emailMatchOrder
         if let rules = (try? emailRulesStore.load()).flatMap({ $0 }) {
             attributor.emailRules = rules
+        }
+        if let calRules = (try? calendarRulesStore.load()).flatMap({ $0 }) {
+            calendarRules = calRules
         }
         if let pins = (try? pinsStore.load()).flatMap({ $0 }) {
             attributor.pins = pins
@@ -418,6 +504,10 @@ public final class AppController: ObservableObject {
     /// Current pose of the mark; renderLogo composes these with menuColour.
     private var logoT = 0.0
     private var logoWink = 0.0
+    /// The off-calendar flash's current amount (0...1) — a THIRD, independent
+    /// pose alongside t/wink, driven by its own loop (`calendarFlashAnimation`,
+    /// below) on its own slow cadence, never by `logoAnimation`'s draw-on/wink.
+    private var logoFlash = 0.0
     private var logoAnimation: Task<Void, Never>?
     /// The target last shown, so the wink fires exactly when the tracked task
     /// changes (nil when stopped — a fresh start from stopped doesn't wink).
@@ -428,8 +518,8 @@ public final class AppController: ObservableObject {
         // reserved-width column — so the item's width is ours, not a text
         // layout's, and the mark cannot be nudged by a digit tick (the
         // third and final jiggle fix; see AndeyeLogoImage.label).
-        logoImage = AndeyeLogoImage.label(t: logoT, wink: logoWink,
-                                          colour: menuColour, text: menuText,
+        logoImage = AndeyeLogoImage.label(t: logoT, wink: logoWink, colour: menuColour,
+                                          flash: logoFlash, text: menuText,
                                           reservedTextWidth: menuReservedWidth)
     }
 
@@ -462,6 +552,41 @@ public final class AppController: ObservableObject {
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
         }
+    }
+
+    /// The off-calendar mismatch's ambient reminder (§6): a gentle pulse —
+    /// never a strobe — every `calendarFlashIntervalSeconds` while the
+    /// mismatch persists. A standing loop, unlike `playWink`'s one-shot: it
+    /// runs until `stopCalendarFlash` cancels it (mismatch clears, the
+    /// signal/toggle turns off, or the episode is paused by opening the
+    /// popover). Skips a beat silently while paused, rather than stopping
+    /// outright, so it resumes on its own cadence if the SAME episode
+    /// somehow un-pauses (defensive; today only a fresh episode clears the
+    /// pause).
+    private func startCalendarFlashIfNeeded() {
+        guard settings.calendarFlashEnabled, settings.calendarSignalEnabled,
+              calendarFlashAnimation == nil else { return }
+        calendarFlashAnimation = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                if !self.calendarFlashPausedForEpisode {
+                    for amount in [1.0, 0.0] {
+                        guard !Task.isCancelled else { return }
+                        self.logoFlash = amount
+                        self.renderLogo()
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                    }
+                }
+                try? await Task.sleep(
+                    nanoseconds: UInt64(Self.calendarFlashIntervalSeconds * 1_000_000_000))
+            }
+        }
+    }
+
+    private func stopCalendarFlash() {
+        calendarFlashAnimation?.cancel()
+        calendarFlashAnimation = nil
+        calendarFlashPausedForEpisode = false
+        if logoFlash != 0 { logoFlash = 0; renderLogo() }
     }
 
     /// This device's stable sync identity + clock. The clock only attaches to
@@ -831,6 +956,175 @@ public final class AppController: ObservableObject {
         registry.remove(id: backendID)
     }
 
+    // MARK: - Calendar signal (2026-07-09 spec)
+
+    /// Settings ▸ Calendar's enable toggle: requests EventKit access lazily,
+    /// on this FIRST turn-on only (never at launch — mirrors the
+    /// Accessibility/Automation TCC precedent, "ask once, degrade silently
+    /// if refused, never nag"). A refusal leaves the setting off, so
+    /// Settings always reflects what's actually running — no silent
+    /// partial-enable.
+    public func enableCalendarSignal() {
+        calendarBridge.requestAccess { [weak self] granted in
+            Task { @MainActor in self?.settings.calendarSignalEnabled = granted }
+        }
+    }
+
+    public func disableCalendarSignal() {
+        settings.calendarSignalEnabled = false   // the didSet does the actual teardown
+    }
+
+    private func handleCalendarEvents(_ events: [CalendarEvent]) {
+        calendarEventWindow = events
+        recomputeCalendarMatch()
+        scheduleCalendarBoundaryCheck()
+    }
+
+    private func liveCalendarEvents(at now: Date, in window: [CalendarEvent]) -> [CalendarEvent] {
+        window.filter { !$0.allDay && $0.start <= now && now < $0.end }
+    }
+
+    /// The live prior (§5): the first currently-live event that resolves
+    /// through `calendarRules`, non-all-day (an all-day banner is never
+    /// "what you're doing this minute" — §3). Feeds `currentCalendarMatch`,
+    /// which in turn feeds the ranker boost, the pick-list clock badge, and
+    /// the mismatch check below.
+    private func recomputeCalendarMatch() {
+        let now = Date()
+        let live = liveCalendarEvents(at: now, in: calendarEventWindow)
+        var match: (task: TaskRef, eventTitle: String, tentative: Bool)?
+        for event in live {
+            if let rule = CalendarMatcher.bestRule(rules: calendarRules, event: event,
+                                                   order: settings.calendarMatchOrder) {
+                match = (rule.target, event.title, event.tentative)
+                break
+            }
+        }
+        if match?.task != currentCalendarMatch?.task || match?.eventTitle != currentCalendarMatch?.eventTitle
+            || match?.tentative != currentCalendarMatch?.tentative {
+            currentCalendarMatch = match
+            // Mirror into the attributor so the live prior nudges ATTRIBUTION
+            // too (spec §5's other half), not just the pick-list order — and
+            // refresh the memoised pick list, whose ranking input just changed.
+            attributor.currentCalendarMatch = match.map { ($0.task, $0.tentative) }
+            invalidatePickList()
+            tracker.reevaluate()
+        }
+        updateCalendarMismatch(now: now)
+    }
+
+    /// Recomputes exactly when a fetched event's own start/end is next
+    /// crossed — event-driven, not a poll: calendars change on their own
+    /// schedule, and the bridge's 5-minute fallback (+ change/wake
+    /// notifications) already covers new/edited events, so this only needs
+    /// to catch a boundary the CURRENT window already knows about.
+    private func scheduleCalendarBoundaryCheck() {
+        calendarBoundaryTimer?.invalidate()
+        calendarBoundaryTimer = nil
+        let now = Date()
+        let upcoming = calendarEventWindow.flatMap { [$0.start, $0.end] }.filter { $0 > now }
+        guard let next = upcoming.min() else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: max(next.timeIntervalSince(now), 1),
+                                         repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.recomputeCalendarMatch()
+                self?.scheduleCalendarBoundaryCheck()
+            }
+        }
+        timer.tolerance = 5
+        calendarBoundaryTimer = timer
+    }
+
+    /// The off-calendar mismatch (§6): a live match exists, the tracked
+    /// target disagrees with it, and that disagreement has held past the
+    /// settle window. Starts/stops the flash loop on the RISING/FALLING
+    /// edge only — never re-triggers mid-episode.
+    private func updateCalendarMismatch(now: Date) {
+        let mismatched: Bool
+        if settings.calendarSignalEnabled, let match = currentCalendarMatch,
+           case .tracking(let target, _) = trackerState, target != .task(match.task) {
+            mismatched = true
+        } else {
+            mismatched = false
+        }
+        guard mismatched else {
+            calendarMismatchSince = nil
+            if calendarMismatchActive {
+                calendarMismatchActive = false
+                calendarFlashPausedForEpisode = false
+                stopCalendarFlash()
+            }
+            return
+        }
+        if calendarMismatchSince == nil { calendarMismatchSince = now }
+        let held = now.timeIntervalSince(calendarMismatchSince!) >= Self.calendarMismatchSettleSeconds
+        if held, !calendarMismatchActive {
+            calendarMismatchActive = true
+            startCalendarFlashIfNeeded()
+        }
+    }
+
+    /// "Clicking the menu bar pauses it for that mismatch episode" (§6) —
+    /// called from the popover's own `onAppear`. A no-op outside a live
+    /// mismatch, so opening the popover for any other reason does nothing.
+    public func pauseCalendarFlashForEpisode() {
+        guard calendarMismatchActive else { return }
+        calendarFlashPausedForEpisode = true
+    }
+
+    /// Teach a `CalendarRule` from a correction landing while a calendar
+    /// event covers `timestamp` and either matched nothing or matched a
+    /// DIFFERENT task — mirrors `Attributor.learnEmailRule`'s teach-on-
+    /// correction shape (including the Unknown no-teach guard,
+    /// `Target.teachesAttributor`'s calendar-side equivalent), kept on the
+    /// Mac side because `CalendarRule` has no Attributor-owned ladder yet
+    /// (v1 scope — see `calendarRulesStore`'s doc comment).
+    private func teachCalendarRule(to ref: TaskRef, at timestamp: Date, in events: [CalendarEvent]) {
+        guard settings.calendarSignalEnabled, ref != WorkTask.unknown.ref,
+              let event = events.first(where: {
+                  !$0.allDay && $0.start <= timestamp && timestamp < $0.end
+              }) else { return }
+        let existing = CalendarMatcher.bestRule(rules: calendarRules, event: event,
+                                                order: settings.calendarMatchOrder)
+        guard existing?.target != ref else { return }   // already correct — nothing to learn
+        let rule = CalendarMatcher.learnableRule(event: event, for: ref)
+        // Replace an existing UNPINNED rule at the same level+value (mirrors
+        // EmailMatcher's own replacement semantics) — a pinned rule is
+        // standing law and survives a correction untouched.
+        calendarRules.removeAll {
+            $0.level == rule.level && !$0.pinned
+                && $0.value.caseInsensitiveCompare(rule.value) == .orderedSame
+        }
+        calendarRules.append(rule)
+    }
+
+    /// The review-queue hint's cached lookback fetch (§7) — one EventKit
+    /// query per drawer refresh (60 s TTL, same shape as `fullPickList`'s
+    /// own cache), not one per stack row.
+    private func calendarLookbackEvents() -> [CalendarEvent] {
+        guard settings.calendarSignalEnabled else { return [] }
+        let now = Date()
+        if let cache = calendarLookbackCache, now.timeIntervalSince(cache.at) < 60 { return cache.events }
+        let from = now.addingTimeInterval(-settings.calendarHintLookbackDays * 86_400)
+        let events = calendarBridge.events(overlapping: (start: from, end: now), from: from, to: now)
+        calendarLookbackCache = (now, events)
+        return events
+    }
+
+    /// The review drawer's hint chip (§7): the calendar event overlapping
+    /// `stack`'s span, if any, and the task it resolves to (nil target =
+    /// "show the event title, but there's no rule yet — open the picker
+    /// prefilled with it"). All-day and free-marked events count here even
+    /// though they never drive the live prior (§7 — "Annual leave"
+    /// overlapping a queued day is still a legitimate allocation hint).
+    public func calendarHint(for stack: ReviewStack) -> (eventTitle: String, target: TaskRef?)? {
+        guard let event = calendarLookbackEvents()
+            .first(where: { $0.start < stack.last && $0.end > stack.first }) else { return nil }
+        let rule = CalendarMatcher.bestRule(rules: calendarRules, event: event,
+                                            order: settings.calendarMatchOrder)
+        return (event.title, rule?.target)
+    }
+
     // MARK: - Away ("I'm leaving my desk") and scheduled stop
 
     @Published public private(set) var away = false
@@ -912,6 +1206,15 @@ public final class AppController: ObservableObject {
         pushOwnEmail()
         DebugLog.write("startUp: AX trusted=\(sensors.accessibilityTrusted) grace=\(settings.switchGraceSeconds)s")
         sensors.start()
+        // Calendar signal: `settings`'s own didSet drives start/stop on every
+        // LATER toggle, but its initial assignment in init() runs before
+        // `self` is fully initialized (two-phase init), so it never fired —
+        // start here explicitly if a past session already left it enabled
+        // (permission itself was already granted then; this never prompts).
+        if settings.calendarSignalEnabled {
+            calendarBridge.onEvent = { [weak self] events in self?.handleCalendarEvents(events) }
+            calendarBridge.start(excludedCalendarNames: settings.calendarExcludedNames)
+        }
         Notifier.requestAuthorization()
         titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -922,6 +1225,7 @@ public final class AppController: ObservableObject {
                     self.userStopped()
                 }
                 self.refreshTitle(force: false)
+                self.updateCalendarMismatch(now: Date())
             }
         }
         taskRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -1161,7 +1465,8 @@ public final class AppController: ObservableObject {
         if let c = pickListCache, now.timeIntervalSince(c.at) < 5 { return c.tasks }
         let ranked = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
                                                       currentUser: connectedAs))
-            .recentThenRanked(taskCache, at: now, learning: attributor.learning)
+            .recentThenRanked(taskCache, at: now, learning: attributor.learning,
+                              calendarMatch: currentCalendarMatch.map { (task: $0.task, tentative: $0.tentative) })
         pickListCache = (ranked, now)
         return ranked
     }
@@ -1180,6 +1485,7 @@ public final class AppController: ObservableObject {
         if let i = taskCache.firstIndex(where: { $0.ref == task.ref }) {
             taskCache[i].lastConfirmedAt = Date()
         }
+        teachCalendarRule(to: task.ref, at: Date(), in: calendarEventWindow)
         persistAssociations()
         lastPrompt = nil
     }
@@ -1190,6 +1496,7 @@ public final class AppController: ObservableObject {
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
         try? emailRulesStore.save(attributor.emailRules)
+        try? calendarRulesStore.save(calendarRules)
         scheduleRetroPass()
     }
 
@@ -1292,6 +1599,7 @@ public final class AppController: ObservableObject {
             attributor.assign(signal, target: .task(ref), tasks: taskCache)
             persistAssociations()
         }
+        teachCalendarRule(to: ref, at: now, in: calendarEventWindow)
         // Preserve the displayed clock onto the corrected task and continue.
         currentTarget = .task(ref)
         targetSince = now.addingTimeInterval(-elapsed)
@@ -1441,6 +1749,16 @@ public final class AppController: ObservableObject {
             let signals = pendingReview.teachingSignals(for: Set(ids))
             for signal in signals {
                 attributor.assign(signal, target: target, tasks: taskCache)
+            }
+            // Calendar teach, same Unknown-guarded shape as the live paths —
+            // the review queue's own signals are typically PAST timestamps
+            // (unlike userPicked/changeCurrentTask's "now"), so this checks
+            // the cached lookback window rather than the live one.
+            if case .task(let ref) = target {
+                let lookback = calendarLookbackEvents()
+                for signal in signals {
+                    teachCalendarRule(to: ref, at: signal.timestamp, in: lookback)
+                }
             }
             if !signals.isEmpty { persistAssociations() }
         }

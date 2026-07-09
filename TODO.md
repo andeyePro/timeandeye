@@ -514,8 +514,18 @@ and recorded rather than fixed blind:
   never teaches (`teachAssociation` now guards on `Target.teachesAttributor`,
   closing a latent gap where Unknown was never actually reachable from that
   helper's other callers before).
-- [ ] Calendar overlay on the timeline (read-only EventKit) as an aid for
-  old items — PARKED, Martin to say the word (new permission surface).
+- [x] Calendar signal v1 (Martin's GO 2026-07-09, "you should know in
+  realtime what I'm supposed to be doing"; spec
+  docs/superpowers/specs/2026-07-09-calendar-signal.md; DONE same day):
+  read-only EventKit CalendarBridge (change-notification + wake + 5-min
+  fallback, never a poll; lazy permission on first enable), CalendarRule
+  ladder mirroring email (correction-taught on the same paths,
+  Unknown-guarded), TaskRanker calendar term feeding BOTH the attributor's
+  ranked fallback (bounded by the 0.9 cap) and the pick list, clock badge
+  on the live-matched task, popover mismatch banner with Switch, quiet
+  menu-bar flash (ships OFF pending Martin's), review-stack hint chips
+  from past events. Later per spec §10: segmented ledger + manual rule
+  form, screen-share suppression, iOS glance, next-event lookahead.
 
 ## Colour strategy (2026-07-06)
 

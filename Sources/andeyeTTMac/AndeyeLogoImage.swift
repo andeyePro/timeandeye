@@ -27,21 +27,31 @@ public enum AndeyeLogoImage {
         (text as NSString).size(withAttributes: [.font: menuFont]).width
     }
 
+    /// The off-calendar flash's fixed target tint (calendar-signal spec
+    /// §6) — a warm amber, deliberately distinct from the certainty
+    /// gradient `menuColour` already carries, so a flash reads as "a
+    /// different KIND of signal" at a glance rather than a certainty dip.
+    public static let flashTint = NSColor(hex: "#FF9F0A") ?? .systemOrange
+
     @MainActor
-    public static func image(t: Double, wink: Double, colour: NSColor,
+    public static func image(t: Double, wink: Double, colour: NSColor, flash: Double = 0,
                              height: CGFloat = 18) -> NSImage {
-        label(t: t, wink: wink, colour: colour, text: "", reservedTextWidth: 0,
+        label(t: t, wink: wink, colour: colour, flash: flash, text: "", reservedTextWidth: 0,
               height: height)
     }
 
     /// The full menu-bar label. `reservedTextWidth` is the width the text
     /// column occupies regardless of the current string (the widest sizing
     /// candidate, measured with `menuFont`); the actual text draws
-    /// leading-aligned inside it.
+    /// leading-aligned inside it. `flash` (0...1) briefly LERPs the mark's
+    /// tint toward `flashTint` and back — the off-calendar pulse; 0 (the
+    /// default) leaves `colour` untouched, so every existing caller is
+    /// unaffected.
     @MainActor
-    public static func label(t: Double, wink: Double, colour: NSColor,
+    public static func label(t: Double, wink: Double, colour: NSColor, flash: Double = 0,
                              text: String, reservedTextWidth: CGFloat,
                              height: CGFloat = 18) -> NSImage {
+        let strokeColour = flash > 0 ? blend(colour, toward: flashTint, amount: flash) : colour
         let segs = AndeyeLogo.stroke(t: t, wink: wink)
         let logoWidth = (height / AndeyeLogo.aspect).rounded()
         // Tightened 4 → 2 (Martin, 2026-07-08: "closer to the text") — the
@@ -76,7 +86,7 @@ public enum AndeyeLogoImage {
                 path.lineWidth = scale * AndeyeLogo.strokeWidth
                 path.lineCapStyle = .round
                 path.lineJoinStyle = .round
-                colour.setStroke()
+                strokeColour.setStroke()
                 path.stroke()
             }
             // The text, leading-aligned in its reserved column. labelColor
@@ -95,5 +105,18 @@ public enum AndeyeLogoImage {
         }
         image.isTemplate = false
         return image
+    }
+
+    /// Linear component blend, `amount` clamped to 0...1 — same shape as
+    /// `MenuTitle.colour`'s low/high certainty blend, reused here for the
+    /// flash instead of a second bespoke lerp.
+    private static func blend(_ from: NSColor, toward: NSColor, amount: Double) -> NSColor {
+        let f = CGFloat(min(max(amount, 0), 1))
+        let a = from.usingColorSpace(.deviceRGB) ?? from
+        let b = toward.usingColorSpace(.deviceRGB) ?? toward
+        return NSColor(red: a.redComponent + (b.redComponent - a.redComponent) * f,
+                       green: a.greenComponent + (b.greenComponent - a.greenComponent) * f,
+                       blue: a.blueComponent + (b.blueComponent - a.blueComponent) * f,
+                       alpha: 1)
     }
 }

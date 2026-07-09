@@ -2,6 +2,21 @@
 
 ## 2026-07-09
 
+- [x] **Calendar signal v1 — andeye knows what you're supposed to be doing.**
+  Read-only EventKit bridge (event-driven, no polling; permission asked only
+  when the feature is first enabled in Settings), a calendar→task rules
+  ladder shaped exactly like the email one and taught by the same
+  corrections, and a bounded ranker term that nudges both live attribution
+  and the pick-list order toward the current meeting's task (structurally
+  capped below every pin/sticky/URL/email match). The live-matched task
+  wears a clock badge; a mismatch >60 s shows a one-line "Calendar: <event>
+  – Switch" banner in the popover and can pulse the menu-bar logo gently
+  (off by default pending Martin's defaults confirmation); review stacks
+  overlapping a past event get a one-click assign hint. Calendar text never
+  leaves the device. Two agents + integration (the live prior's attributor
+  wiring and pick-list cache invalidation landed at integration). Suite
+  553/0, warning-free build, site builds.
+
 - [x] **Approvals drawer v1 — the review pile stops building.** Per Martin's
   same-morning answers to the spec's questions. Retro auto-acceptance:
   a debounced pass after every learning/pin/rule write re-scores the pending

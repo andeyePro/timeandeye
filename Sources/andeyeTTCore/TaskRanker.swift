@@ -23,11 +23,17 @@ public struct TaskRanker: Sendable {
         self.config = config
     }
 
-    /// Status prior + exponentially-decayed recency + time-of-day affinity.
-    /// Recency carries double weight so an actively-tracked Closed task
-    /// (e.g. Timesheets) outranks dormant Open tasks.
+    /// Status prior + exponentially-decayed recency + time-of-day affinity +
+    /// a live calendar match. Recency carries double weight so an
+    /// actively-tracked Closed task (e.g. Timesheets) outranks dormant Open
+    /// tasks. `calendarMatch` is the current live calendar match (if any) –
+    /// +0.3 for the matched task (+0.15 if tentative), no change for every
+    /// other task and for the no-match case (calendar signal spec §5). The
+    /// 0.3 ceiling keeps the term below recency's 2× weight – a live meeting
+    /// nudges the ranking, it never dominates demonstrably-recent work.
     public func score(_ task: WorkTask, at now: Date, learning: LearningStore? = nil,
-                      calendar: Calendar = Calendar(identifier: .gregorian)) -> Double {
+                      calendar: Calendar = Calendar(identifier: .gregorian),
+                      calendarMatch: (task: TaskRef, tentative: Bool)? = nil) -> Double {
         var statusScore = 0.0
         if let idx = config.statusOrder.firstIndex(of: task.status) {
             statusScore = Double(config.statusOrder.count - idx) / Double(config.statusOrder.count)
@@ -42,7 +48,11 @@ public struct TaskRanker: Sendable {
             todScore = learning.hourAffinity(for: .task(task.ref),
                                              hour: calendar.component(.hour, from: now))
         }
-        var score = statusScore + 2 * recencyScore + todScore
+        var calendarScore = 0.0
+        if let calendarMatch, calendarMatch.task == task.ref {
+            calendarScore = calendarMatch.tentative ? 0.5 : 1.0   // half weight for tentative
+        }
+        var score = statusScore + 2 * recencyScore + todScore + 0.3 * calendarScore
         if let assignee = task.assignee, let me = config.currentUser,
            assignee != me, task.lastConfirmedAt == nil {
             score -= 10   // someone else's task: bottom of the list until tracked
@@ -50,9 +60,12 @@ public struct TaskRanker: Sendable {
         return score
     }
 
-    public func ranked(_ tasks: [WorkTask], at now: Date,
-                       learning: LearningStore? = nil) -> [WorkTask] {
-        tasks.sorted { score($0, at: now, learning: learning) > score($1, at: now, learning: learning) }
+    public func ranked(_ tasks: [WorkTask], at now: Date, learning: LearningStore? = nil,
+                       calendarMatch: (task: TaskRef, tentative: Bool)? = nil) -> [WorkTask] {
+        tasks.sorted {
+            score($0, at: now, learning: learning, calendarMatch: calendarMatch)
+                > score($1, at: now, learning: learning, calendarMatch: calendarMatch)
+        }
     }
 
     /// The "pick a task" ordering: every recently-confirmed task first (most
@@ -60,8 +73,11 @@ public struct TaskRanker: Sendable {
     /// caps — the popover shows the whole scrollable list, so a fixed
     /// recent/likely count is no longer meaningful; recency-first is the only
     /// guarantee worth keeping (your just-used task sits at the top).
-    public func recentThenRanked(_ tasks: [WorkTask], at now: Date,
-                                 learning: LearningStore? = nil) -> [WorkTask] {
+    /// `calendarMatch` flows through to the ranked tail exactly as it does in
+    /// `score()` – it's what makes a live meeting surface its task without a
+    /// separate proposal mechanism (calendar signal spec §5).
+    public func recentThenRanked(_ tasks: [WorkTask], at now: Date, learning: LearningStore? = nil,
+                                 calendarMatch: (task: TaskRef, tentative: Bool)? = nil) -> [WorkTask] {
         // The built-in Unknown sentinel is review-only — never offered as a
         // pick, however it got into the incoming list. Defense-in-depth: the
         // real seeding boundary is AppController never adding it to
@@ -80,7 +96,8 @@ public struct TaskRanker: Sendable {
             .sorted { $0.1 > $1.1 }
             .map(\.0)
         let taken = Set(recent.map(\.ref))
-        let rest = ranked(tasks.filter { !taken.contains($0.ref) }, at: now, learning: learning)
+        let rest = ranked(tasks.filter { !taken.contains($0.ref) }, at: now, learning: learning,
+                          calendarMatch: calendarMatch)
         return recent + rest
     }
 }

@@ -105,6 +105,7 @@ struct ReviewView: View {
                     Text(stack.first.formatted(date: .omitted, time: .shortened)).font(.caption)
                 }
             }
+            calendarHintChip(for: stack, key: key)
             if expandable, expanded.contains(key) {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(stack.segments) { segment in
@@ -117,6 +118,34 @@ struct ReviewView: View {
                     }
                 }
                 .padding(.leading, 20)
+            }
+        }
+    }
+
+    /// The review-queue hint chip (calendar-signal spec §7): a past calendar
+    /// event overlapping the stack's own span. A resolved rule assigns
+    /// straight to its task (same `assignStack` path the pick buttons use —
+    /// teaches the calendar ladder from the acceptance like any other
+    /// correction); no rule yet just selects this one stack and prefills the
+    /// assign bar's filter with the event title, so picking a task is one
+    /// less step than typing it from scratch.
+    @ViewBuilder
+    private func calendarHintChip(for stack: ReviewStack, key: String) -> some View {
+        if let hint = controller.calendarHint(for: stack) {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar").font(.caption2).foregroundStyle(.secondary)
+                if let target = hint.target {
+                    Text("\(hint.eventTitle) → \(controller.name(of: .task(target)))")
+                        .font(.caption2).lineLimit(1).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Assign") { controller.assignStack(stack, to: .task(target)) }
+                        .font(.caption2).buttonStyle(.borderless)
+                } else {
+                    Text("\(hint.eventTitle) → assign").font(.caption2).lineLimit(1).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Assign") { selection = [key]; filter = hint.eventTitle }
+                        .font(.caption2).buttonStyle(.borderless)
+                }
             }
         }
     }

@@ -146,6 +146,11 @@ struct PopoverView: View {
             changeMode = controller.settings.popoverDefaultsToChangeMode
             todayNodes = controller.todaySpentNodes()
             DispatchQueue.main.async { filterFocused = true }
+            // Calendar-signal spec §6: opening the popover — the same click
+            // that already surfaces the mismatch banner below — pauses the
+            // menu-bar flash for this mismatch episode. A no-op outside a
+            // live mismatch.
+            controller.pauseCalendarFlashForEpisode()
         }
         .sheet(item: $commentsFor) { task in
             commentsSheet(task)
@@ -845,6 +850,22 @@ struct PopoverView: View {
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+        // Calendar-signal spec §6: the mismatch banner. Only shows once the
+        // disagreement has held the settle window (controller.calendarMismatchActive) —
+        // a brief walk-in never flashes this either.
+        if controller.calendarMismatchActive, let match = controller.currentCalendarMatch {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar").font(.caption2).foregroundStyle(.secondary)
+                Text("Calendar: \(match.eventTitle)")
+                    .font(.caption).lineLimit(1)
+                Spacer(minLength: 0)
+                Button("Switch") { controller.changeCurrentTask(to: match.task) }
+                    .font(.caption).buttonStyle(.borderless)
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            .help(match.tentative ? "Tentative on your calendar right now" : "On your calendar right now")
+        }
     }
 
     private func gapText(_ gap: IdleGap) -> String {
@@ -1042,6 +1063,13 @@ struct PopoverView: View {
                     // (task override else project flag else non-billable).
                     if controller.isTaskBillable(task) {
                         Image(systemName: "sterlingsign").font(.system(size: 8))
+                    }
+                    // The "now:" badge (calendar-signal spec §5) — shown on
+                    // whichever task the live calendar match resolves to,
+                    // independent of whether you're already tracking it.
+                    if controller.currentCalendarMatch?.task == task.ref {
+                        Image(systemName: "clock").font(.system(size: 8))
+                            .help("On your calendar now: \(controller.currentCalendarMatch?.eventTitle ?? "")")
                     }
                     Text(task.subject).lineLimit(1)
                 }

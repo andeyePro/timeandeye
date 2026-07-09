@@ -76,6 +76,17 @@ only becomes its own slice once you've held it past the Switch Buffer (and never
 below one displayed minute), so glancing at Slack mid-task does not fragment your
 timeline.
 
+Turn on **Calendar** in Settings and a meeting that's live right now nudges
+that slot in the ranking - never enough to beat a pin, a URL match or a
+learned rule, just enough to break a tie among your ordinary tasks. The pick
+list marks the matching task with a small clock; if you're tracking
+something else and the mismatch holds for a minute, the menu-bar mark pulses
+gently and the popover offers a one-line "Calendar: <meeting> - Switch". The
+same matching runs over your calendar history for the Review queue, so an
+old row that overlaps a past meeting gets a one-click assign hint too.
+Corrections teach it a rule the same way email does, and nothing calendar-derived
+ever leaves your Mac.
+
 ### Context rules: see why, un-learn in one click
 
 In the popover, the certainty line grows a "why?" suffix whenever a signal is
@@ -268,6 +279,11 @@ midnight. Day boundaries are marked with the date.
   so andeye never mistakes you for the other party when a message's
   correspondent decides the task; see Auto-tracking and attribution above
   for the rules themselves.
+- **Calendar** - off by default; turning it on asks macOS for read-only
+  calendar access once. Also sets whether the menu bar flashes when you're
+  off-calendar, which calendars to ignore (comma-separated names -
+  birthdays and subscribed holiday calendars are already excluded), and how
+  far back the Review queue looks for a matching past event.
 - **Currency symbol** - shown wherever billable totals render; leave blank
   for your locale's own symbol.
 
