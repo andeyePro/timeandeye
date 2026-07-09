@@ -283,3 +283,23 @@ public struct ReviewSegment: Equatable, Codable, Sendable, Identifiable {
         self.assigned = assigned
     }
 }
+
+public extension Array where Element == ReviewSegment {
+    /// One synthetic signal per DISTINCT surface among the segments whose ids
+    /// are in `ids`, in queue order — what a multi-select review assign
+    /// teaches the attributor from. Every covered surface teaches (the old
+    /// glue taught only the FIRST selected row — approvals-drawer spec §1
+    /// side-bug — so a 40-row assign threw away 39 rows of evidence), while
+    /// rows repeating one surface (same app|title|URL) teach once.
+    func teachingSignals(for ids: Set<UUID>) -> [ActivitySignal] {
+        var seen = Set<String>()
+        var out: [ActivitySignal] = []
+        for s in self where ids.contains(s.id) {
+            let key = "\(s.app)|\(s.windowTitle ?? "")|\(s.tabURL ?? "")"
+            guard seen.insert(key).inserted else { continue }
+            out.append(ActivitySignal(app: s.app, windowTitle: s.windowTitle,
+                                      tabURL: s.tabURL, timestamp: s.start))
+        }
+        return out
+    }
+}

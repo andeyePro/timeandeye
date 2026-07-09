@@ -1380,12 +1380,14 @@ public final class AppController: ObservableObject {
             }
         }
         try? journal.assign(ids, to: target)
-        if let segment = pendingReview.first(where: { ids.contains($0.id) }) {
-            let signal = ActivitySignal(app: segment.app, windowTitle: segment.windowTitle,
-                                        tabURL: segment.tabURL, timestamp: segment.start)
+        // Teach from EVERY distinct surface covered by the selection — the
+        // old first(where:) taught only the first row (approvals-drawer spec
+        // §1 side-bug), throwing away the rest of the evidence.
+        let signals = pendingReview.teachingSignals(for: Set(ids))
+        for signal in signals {
             attributor.assign(signal, target: target, tasks: taskCache)
-            persistAssociations()
         }
+        if !signals.isEmpty { persistAssociations() }
         reloadReview()
     }
 

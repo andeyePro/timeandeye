@@ -78,4 +78,24 @@ func modelsChecks(_ c: Checks) {
         try expectEq(old.title, "")
         try expectEq(old.bundleID, "com.apple.Notes")
     }
+
+    c.check("teachingSignals: every DISTINCT selected surface teaches, repeats teach once, unselected never") {
+        // The approvals-drawer spec §1 side-bug: a 40-row multi-select assign
+        // taught the attributor from only the FIRST row. The teaching set
+        // must cover every selected surface exactly once, in queue order.
+        let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+        let a = ReviewSegment(app: "Chrome", windowTitle: "Gmail", tabURL: "https://mail.google.com",
+                              start: t0, end: t0.addingTimeInterval(60))
+        let b = ReviewSegment(app: "Chrome", windowTitle: "Gmail", tabURL: "https://mail.google.com",
+                              start: t0.addingTimeInterval(120), end: t0.addingTimeInterval(180))
+        let d = ReviewSegment(app: "Xcode", windowTitle: "andeyeTT",
+                              start: t0.addingTimeInterval(240), end: t0.addingTimeInterval(300))
+        let unselected = ReviewSegment(app: "Slack", windowTitle: "general",
+                                       start: t0.addingTimeInterval(360), end: t0.addingTimeInterval(420))
+        let signals = [a, b, d, unselected].teachingSignals(for: [a.id, b.id, d.id])
+        try expectEq(signals.count, 2, "a+b share one surface; d is the second; unselected excluded")
+        try expectEq(signals[0].app, "Chrome")
+        try expectEq(signals[0].timestamp, a.start, "the surface's FIRST row supplies the timestamp")
+        try expectEq(signals[1].app, "Xcode")
+    }
 }
