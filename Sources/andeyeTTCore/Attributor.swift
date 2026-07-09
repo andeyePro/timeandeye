@@ -766,4 +766,13 @@ extension Attributor {
     public func replaceLearning(_ store: LearningStore) {
         learning = store
     }
+
+    /// Undo hook (mirrors `replaceLearning`): wholesale sticky restore, so a
+    /// snapshot-style inverse can put today's session decisions back exactly
+    /// instead of approximating them with a fresh re-assert. Day-rollover
+    /// pruning still applies on the next read, so restoring a snapshot can
+    /// never resurrect yesterday's stickies.
+    public func replaceSessionStickies(_ stickies: [SessionSticky]) {
+        sessionStickies = stickies
+    }
 }

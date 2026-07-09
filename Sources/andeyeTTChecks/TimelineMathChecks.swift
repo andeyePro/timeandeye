@@ -209,6 +209,41 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(TimelineMath.mergeAdjacent([prior, continued]).count, 1)
     }
 
+    c.check("coalescePlan applied-then-restored is byte-for-byte the original journal") {
+        // The 2026-07-09 incident: a comment save fused two slices OUTSIDE
+        // the edit's undo group, so ⌘Z operated on the fused row. The fix
+        // registers a compensating undo built from this plan — so the plan
+        // itself must reconstruct the pre-merge journal EXACTLY.
+        let a = Session(task: .op(1), start: t(0), end: t(300), certainty: 0.9,
+                        pushedToOP: true, comment: "first", opTimeEntryID: "77")
+        let b = Session(task: .op(1), start: t(300), end: t(600), certainty: 0.7,
+                        comment: "second")
+        let c2 = Session(task: .op(2), start: t(600), end: t(900), certainty: 1)
+        let original = [a, b, c2]
+        let merged = TimelineMath.mergeAdjacent(original)
+        let plan = TimelineMath.coalescePlan(original: original, merged: merged)
+        try expectEq(plan.removed, [b], "the absorbed row, exact prior state")
+        try expectEq(plan.rewrites.count, 1)
+        try expectEq(plan.rewrites[0].prior, a, "the survivor as it stood")
+        try expectEq(plan.rewrites[0].merged.end, t(600))
+
+        // Simulate the journal as id→row; forward-apply, then restore.
+        var journal = Dictionary(uniqueKeysWithValues: original.map { ($0.id, $0) })
+        for row in plan.removed { journal[row.id] = nil }
+        for rw in plan.rewrites { journal[rw.merged.id] = rw.merged }
+        try expectEq(journal.count, 2, "merge really happened")
+        for rw in plan.rewrites { journal[rw.prior.id] = rw.prior }
+        for row in plan.removed { journal[row.id] = row }
+        try expectEq(journal, Dictionary(uniqueKeysWithValues: original.map { ($0.id, $0) }),
+                     "exact prior rows — extents, comments, certainty, linkage")
+    }
+
+    c.check("coalescePlan is empty when nothing merges") {
+        let apart = [session(from: 0, to: 300), session(from: 400, to: 600)]
+        let merged = TimelineMath.mergeAdjacent(apart)
+        try expect(TimelineMath.coalescePlan(original: apart, merged: merged).isEmpty)
+    }
+
     c.check("joinComments drops nil/empty, keeps order — the one shared joiner") {
         // mergeAdjacent, foldLive and the live display all join through this;
         // if it drifted from "; " a merged slice would read differently from

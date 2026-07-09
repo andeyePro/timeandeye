@@ -2,6 +2,38 @@
 
 ## 2026-07-09
 
+- [x] **Undo audit: every data action now ⌘Z-able, exactly.** Martin:
+  "check every action can be infinitely undone" (trigger: a comment edit
+  grew a sub-minute slice, the growth fused it into a neighbour, and ⌘Z
+  then operated on the fused row). The fusion half: `coalesceAdjacent` now
+  registers a compensating undo built from a new pure
+  `TimelineMath.coalescePlan` (absorbed originals + each survivor's
+  prior/merged pair), and the timeline save calls it INSIDE the edit's
+  undo group — one ⌘Z restores the exact pre-edit rows, never a fused row
+  (`applyTimelineEdit`'s inverse now also trusts the current row's remote
+  linkage so an un-fused row never points at a deleted backend entry).
+  Registration gaps closed: local-task rename, pin/unpin/pin-edit,
+  Evidence-Card teach/boost and grain commits (single + correspondent
+  fan-out), popover comments (in-flight note only — a copy already posted
+  to the task's feed stays posted), idle-gap claim (one step, and undo
+  re-surfaces the offer), don't-track (slice back AND the suppression
+  unlearned), billing mapping, consolidation, hard-cap prune (undoable
+  until quit — the manuals' "no undo" wording corrected). Partial
+  restores made exact: assign/change/reassign/split/allocate/move undos
+  now restore the attributor wholesale (learning, primes, stickies via new
+  `Attributor.replaceSessionStickies`, displacement history) plus taught
+  calendar rules; removed local tasks return to their original list
+  position; live-start extensions pull the clock back off restored rows
+  via new `SessionTracker.trimSessionStart` (backdate's exact inverse).
+  `UndoStack` confirmed uncapped — "infinite" holds within a session;
+  relaunch starts fresh (retro-acceptance's persistent "Recently cleared —
+  undo" digest is the deliberate exception and survives relaunch). Checks:
+  coalesce-plan round-trip, the incident shape end-to-end (edit + fusion
+  in one group undoes to exact rows), backdate→trim round-trip, 10k-deep
+  uncapped stack. Known non-undoables (by design, reported): duplicate
+  reconcile (remote entries already deleted), unlock-invoice/retry-stuck,
+  live pick/stop (compensators: ← revert, timeline edits).
+
 - [x] **Review queue: sort control + range-select sweep.** Martin,
   mid-backlog: "sort by fields at the top: time, duration, and the ability
   … to select (at least with shift click start and end of selection) so

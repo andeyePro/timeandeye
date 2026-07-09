@@ -1,5 +1,30 @@
 # TODO
 
+## Undo — remaining non-undoables (audit, 2026-07-09)
+
+The infinite-undo audit (CHANGELOG 2026-07-09) closed every local
+registration gap; these stayed open deliberately — each needs a design
+call, not a mechanical fix:
+
+- [ ] Duplicate reconcile (`applyReconcile`) has no undo: the duplicate
+  backend entries are DELETED remotely, so a local restore would re-point
+  sessions at dead entry ids (worse than no undo — later edits would PATCH
+  a 404). A real undo needs the backend entries re-created from the folded
+  comment, i.e. a reconcile journal. The UI confirms per action today.
+- [ ] `unlockInvoice` / `retryStuck` have no undo (re-lock / re-quarantine).
+  Both are deliberate repair gestures behind their own UI; decide whether
+  reversibility is even wanted before wiring it.
+- [ ] Live pick (`userPicked`) and Stop are live-tracking controls, not data
+  edits — ⌘Z doesn't touch them by design (compensators: the popover's ←
+  revert, and the timeline edits every flushed slice). Confirm that stance
+  or fold picks into the stack.
+- [ ] `ingestAIResponse` applies N assignments as N undo steps (each fully
+  undoable); grouping into one step means making the call async (UI ripple).
+- [ ] A comment undone AFTER its slice flushed only clears the in-flight
+  copy; the flushed row keeps it (editable in the timeline). A posted
+  task-feed comment is never retracted — undo must not rewrite a backend's
+  history silently.
+
 ## Time-window polish (Martin, 2026-06-27)
 
 - [x] Window titles (DONE 2026-06-28): the Time window is titled "Timeline" when showing the

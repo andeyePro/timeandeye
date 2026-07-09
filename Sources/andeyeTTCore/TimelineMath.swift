@@ -179,6 +179,48 @@ public enum TimelineMath {
         return out
     }
 
+    /// The exact-restore bookkeeping for one coalesce pass — everything an
+    /// undo needs to put the journal back byte-for-byte: the absorbed
+    /// originals (deleted rows, exact prior state) and each surviving row's
+    /// prior/merged pair. Pure so "undoing a merge restores the exact prior
+    /// rows" is checkable without a journal or a controller (the trigger
+    /// incident: a save fused two slices OUTSIDE the edit's undo group and
+    /// ⌘Z then operated on the fused row instead of restoring the originals).
+    public struct CoalescePlan: Equatable, Sendable {
+        public struct Rewrite: Equatable, Sendable {
+            /// The survivor as it stood before the merge.
+            public var prior: Session
+            /// The survivor as the merge leaves it (same id, wider extent).
+            public var merged: Session
+            public init(prior: Session, merged: Session) {
+                self.prior = prior; self.merged = merged
+            }
+        }
+        /// Absorbed originals — rows the merge deletes, in their exact prior
+        /// state. Restoring them (callers clear remote linkage first when the
+        /// merge deleted their backend entries) plus every rewrite's `prior`
+        /// reconstructs the pre-merge journal exactly.
+        public var removed: [Session]
+        public var rewrites: [Rewrite]
+        public var isEmpty: Bool { removed.isEmpty && rewrites.isEmpty }
+        public init(removed: [Session], rewrites: [Rewrite]) {
+            self.removed = removed; self.rewrites = rewrites
+        }
+    }
+
+    /// Diff a `mergeAdjacent` result against its input: which rows the merge
+    /// deletes and which it rewrites — the compensating-undo plan.
+    public static func coalescePlan(original: [Session], merged: [Session]) -> CoalescePlan {
+        let survivors = Set(merged.map(\.id))
+        let removed = original.filter { !survivors.contains($0.id) }
+        let byID = Dictionary(uniqueKeysWithValues: original.map { ($0.id, $0) })
+        let rewrites: [CoalescePlan.Rewrite] = merged.compactMap { m in
+            guard let prior = byID[m.id], prior != m else { return nil }
+            return CoalescePlan.Rewrite(prior: prior, merged: m)
+        }
+        return CoalescePlan(removed: removed, rewrites: rewrites)
+    }
+
     /// The displayed live block's fold. The journal only coalesces on flush,
     /// so while tracking, journalled same-task slices can butt up against the
     /// live start; the timeline shows them and the live clock as ONE slice.

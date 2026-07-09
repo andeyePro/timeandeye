@@ -310,10 +310,10 @@ midnight. Day boundaries are marked with the date.
   you choose into daily totals. Totals and invoicing history survive exactly
   - only the minute-by-minute detail goes.
 - **Hard cap - strongly discouraged** - deletes your oldest raw slices,
-  double-confirmed and with no undo, until the synced journal is back under a
-  size you pick. Old totals can be lost for good; it's for a genuine
-  iCloud-quota emergency only, since the synced journal is normally tiny (see
-  iCloud footprint above).
+  double-confirmed, until the synced journal is back under a size you pick.
+  ⌘Z brings them back until you quit the app - after that they're gone for
+  good. It's for a genuine iCloud-quota emergency only, since the synced
+  journal is normally tiny (see iCloud footprint above).
 - **Email → task matching** - your own addresses/domains (comma-separated),
   so andeye never mistakes you for the other party when a message's
   correspondent decides the task; see Auto-tracking and attribution above
@@ -349,8 +349,9 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 ### Global (from any app)
 
 - **⌘⇧L** - I'm leaving my desk (away) / I'm back.
-- **⌘Z** - undo the last task switch (fold the current slice back to the previous
-  task).
+- **⌘Z** - undo, as many times as you like: task switches, timeline edits,
+  review sweeps, pins and learned rules, colours, deletes - each press steps
+  one action back. The history lasts until you quit Time&i.
 
 ### Popover
 

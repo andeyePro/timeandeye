@@ -220,6 +220,22 @@ public final class SessionTracker {
                                signal: signal, start: date, end: earliest), at: 0)
     }
 
+    /// The inverse of `backdateSessionStart`: pull the in-flight session's
+    /// start FORWARD to `date`, dropping accumulated spans it no longer
+    /// covers and trimming the one it lands inside. Exists so ⌘Z on a
+    /// live-start extension can put the clock back exactly where it was —
+    /// without it the undo group's journal inverses restore the folded rows
+    /// but the live slice stays stretched over them (an overlap). No-op
+    /// when stopped or when `date` wouldn't actually shrink the slice.
+    public func trimSessionStart(to date: Date) {
+        guard case .tracking = state else { return }
+        spans.removeAll { $0.end <= date }
+        for i in spans.indices where spans[i].start < date {
+            spans[i].start = date
+        }
+        if let cs = currentStart, cs < date { currentStart = date }
+    }
+
     /// Journal everything tracked so far on the current task up to `date` as a
     /// closed slice, then keep tracking the SAME task with a fresh run from
     /// `date`. Lets the timeline materialise the live slice into a real,

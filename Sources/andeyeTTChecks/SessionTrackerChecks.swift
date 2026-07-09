@@ -760,6 +760,30 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(tracker.liveSliceStart, t(40), "a later backdate must not move the start forward")
     }
 
+    c.check("trimSessionStart is backdate's exact inverse — the live half of an extend-undo") {
+        // ⌘Z on a live-start extension: the undo group's journal inverses
+        // restore the folded rows; this is the API that pulls the live clock
+        // back off them. Without it the restored rows sat under a live slice
+        // still stretched over them.
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(100))
+        tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 100)))
+        tracker.backdateSessionStart(to: t(40))
+        try expectEq(tracker.liveSliceStart, t(40))
+        tracker.trimSessionStart(to: t(100))                       // the undo
+        try expectEq(tracker.liveSliceStart, t(100),
+                     "backdate → trim round-trips the live start exactly")
+        // Trimming to a date at-or-before the current start is a no-op.
+        tracker.trimSessionStart(to: t(80))
+        try expectEq(tracker.liveSliceStart, t(100))
+        // And it only ever SHRINKS the live slice — stopped tracker: no-op.
+        tracker.stop(at: t(200))
+        tracker.trimSessionStart(to: t(150))
+        try expectNil(tracker.liveSliceStart)
+    }
+
     c.check("adjustCurrentStart clamps to the previous closed span's end") {
         let (tracker, attributor) = makeTracker()
         attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))

@@ -764,16 +764,34 @@ public final class AppController: ObservableObject {
         let def = LocalTaskDef(name: trimmed, isLeisure: isLeisure, project: project)
         settings.localTasks.append(def)
         mergeLocalTasksIntoCache()
-        registerUndo("add local task \(trimmed)") { [weak self] in
-            self?.removeLocalTask(def.id, undoable: false)
-        }
         // Genuine NEW creation from a user pick: bind the frontmost surface to it
         // now (confirm = soft 0.95 prime + learn) and lift the in-flight span,
         // the same way commitPin does, so attribution doesn't lag a focus cycle.
+        // Snapshot the attributor first so the undo removes the priming too,
+        // not just the task — otherwise ⌘Z left learned weight pointing at a
+        // task that no longer exists.
+        var primeRestore: (() -> Void)?
         if primeToCurrentSurface, let signal = tracker.currentFocusSignal {
+            let savedLearning = attributor.learning
+            let savedPrimed = attributor.primedSurfaces
+            let savedDisplaced = attributor.displacedByCorrection
+            let savedStickies = attributor.sessionStickies
             attributor.confirm(signal, task: .local(def.id), tasks: taskCache)
             persistAssociations()
             tracker.reevaluate()
+            primeRestore = { [weak self] in
+                guard let self else { return }
+                self.attributor.replaceLearning(savedLearning)
+                self.attributor.primedSurfaces = savedPrimed
+                self.attributor.displacedByCorrection = savedDisplaced
+                self.attributor.replaceSessionStickies(savedStickies)
+                self.persistAssociations()
+                self.tracker.reevaluate()
+            }
+        }
+        registerUndo("add local task \(trimmed)") { [weak self] in
+            primeRestore?()
+            self?.removeLocalTask(def.id, undoable: false)
         }
         return .local(def.id)
     }
@@ -785,10 +803,18 @@ public final class AppController: ObservableObject {
     public func updateLocalTask(_ id: UUID, name: String? = nil, project: String? = nil,
                                 isLeisure: Bool? = nil) {
         guard let i = settings.localTasks.firstIndex(where: { $0.id == id }) else { return }
+        let prior = settings.localTasks[i]
         if let name { settings.localTasks[i].name = name }
         if let project { settings.localTasks[i].project = project }
         if let isLeisure { settings.localTasks[i].isLeisure = isLeisure }
+        guard settings.localTasks[i] != prior else { return }   // no-op edit: no undo noise
         mergeLocalTasksIntoCache()
+        registerUndo("edit local task \(prior.name)") { [weak self] in
+            guard let self,
+                  let j = self.settings.localTasks.firstIndex(where: { $0.id == id }) else { return }
+            self.settings.localTasks[j] = prior
+            self.mergeLocalTasksIntoCache()
+        }
     }
 
     /// Distinct local project names already in use, for offering as quick picks
@@ -802,10 +828,14 @@ public final class AppController: ObservableObject {
     }
 
     public func removeLocalTask(_ id: UUID, undoable: Bool = true) {
-        if undoable, let def = settings.localTasks.first(where: { $0.id == id }) {
+        if undoable, let idx = settings.localTasks.firstIndex(where: { $0.id == id }) {
+            let def = settings.localTasks[idx]
             registerUndo("remove local task \(def.name)") { [weak self] in
-                self?.settings.localTasks.append(def)
-                self?.mergeLocalTasksIntoCache()
+                guard let self else { return }
+                // Back at its original position (clamped), not appended —
+                // undo restores the list the user saw, order included.
+                self.settings.localTasks.insert(def, at: min(idx, self.settings.localTasks.count))
+                self.mergeLocalTasksIntoCache()
             }
         }
         settings.localTasks.removeAll { $0.id == id }
@@ -1716,10 +1746,18 @@ public final class AppController: ObservableObject {
     /// reuses the id so editing updates in place instead of duplicating.
     public func commitPin(rule: PinRule, to ref: TaskRef, replacingID: UUID? = nil,
                           priority: Int? = nil) {
+        let savedPins = attributor.pins   // upsert may REPLACE — snapshot, don't just unpin
         let pin = Pin(id: replacingID ?? UUID(), rule: rule, task: ref, priority: priority)
         attributor.upsert(pin)
         persistAssociations()
         tracker.reevaluate()   // lift the live session to 100% now, not on next focus
+        registerUndo(replacingID == nil ? "pin \(name(of: .task(ref)))" : "edit pin") { [weak self] in
+            guard let self else { return }
+            self.attributor.pins = savedPins
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
         objectWillChange.send()
     }
 
@@ -1736,8 +1774,16 @@ public final class AppController: ObservableObject {
     public func unpinCurrentSurface() {
         guard let signal = tracker.currentFocusSignal,
               let pin = attributor.matchingPin(for: signal) else { return }
+        let savedPins = attributor.pins
         attributor.unpin(id: pin.id)
         persistAssociations()
+        registerUndo("unpin \(name(of: .task(pin.task)))") { [weak self] in
+            guard let self else { return }
+            self.attributor.pins = savedPins
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
         objectWillChange.send()
     }
 
@@ -1758,10 +1804,26 @@ public final class AppController: ObservableObject {
         fireNotice = nil
         // Make the popover relabel reversible: ⌘Z relabels back to the task it
         // was on (the inverse is itself a change, marked non-undoable so it
-        // doesn't stack endlessly).
+        // doesn't stack endlessly). The relabel also TEACHES (surface assign +
+        // calendar rule below); the inverse's own re-relabel would only
+        // counter-teach, so snapshot the learned state and restore it after —
+        // ⌘Z leaves the attributor exactly as it stood, not approximately.
         if undoable, case .task(let oldRef) = oldTarget {
+            let savedLearning = attributor.learning
+            let savedPrimed = attributor.primedSurfaces
+            let savedDisplaced = attributor.displacedByCorrection
+            let savedStickies = attributor.sessionStickies
+            let savedCalendarRules = calendarRules
             registerUndo("change to \(name(of: oldTarget))") { [weak self] in
-                self?.changeCurrentTask(to: oldRef, undoable: false)
+                guard let self else { return }
+                self.changeCurrentTask(to: oldRef, undoable: false)
+                self.attributor.replaceLearning(savedLearning)
+                self.attributor.primedSurfaces = savedPrimed
+                self.attributor.displacedByCorrection = savedDisplaced
+                self.attributor.replaceSessionStickies(savedStickies)
+                self.calendarRules = savedCalendarRules
+                self.persistAssociations()
+                self.tracker.reevaluate()
             }
         }
         let now = Date()
@@ -1830,13 +1892,22 @@ public final class AppController: ObservableObject {
         guard let g = pendingGap else { return }
         pendingGap = nil
         Task {
-            await createTimelineSession(Session(task: g.task, start: g.from, end: g.to,
-                                                certainty: 0.95, comment: "worked through idle gap"),
-                                        origin: .manual)
-            // Continue, don't split: merge the claimed gap into the prior
-            // same-task slice it butts up against, so "continue when away"
-            // yields one continuous slice / one OP entry.
-            await coalesceAdjacent(around: g.from)
+            // ONE ⌘Z step for the whole claim: the created slice, the
+            // follow-on merge into the prior same-task slice, and the gap
+            // offer itself (undo re-surfaces it, so the decision is fully
+            // reversible — not just the data).
+            await undoGroup("claim idle gap") {
+                registerUndo("restore idle-gap offer") { [weak self] in
+                    self?.pendingGap = g
+                }
+                await createTimelineSession(Session(task: g.task, start: g.from, end: g.to,
+                                                    certainty: 0.95, comment: "worked through idle gap"),
+                                            origin: .manual)
+                // Continue, don't split: merge the claimed gap into the prior
+                // same-task slice it butts up against, so "continue when away"
+                // yields one continuous slice / one OP entry.
+                await coalesceAdjacent(around: g.from)
+            }
         }
     }
 
@@ -1855,11 +1926,21 @@ public final class AppController: ObservableObject {
     public func commitComment(_ text: String) {
         guard case .tracking(let target, _) = trackerState,
               case .task(let ref) = target else { return }
+        let priorNotes = manualNotes[ref]
         manualNotes[ref, default: []].append((text: text, at: Date()))
         // The timeline's cached fetch composes the live slice's comment from
         // these notes: bump the revision so an open timeline shows the comment
         // the moment it's committed, not on the next 30 s reload.
         journalRevision &+= 1
+        // ⌘Z takes the note back out of the in-flight slice. Once the slice
+        // has FLUSHED the note lives on a journal row (edit it there); and a
+        // copy already posted to the task's activity feed stays posted — an
+        // undo never silently rewrites a backend's history.
+        registerUndo("comment \(name(of: target))") { [weak self] in
+            guard let self else { return }
+            self.manualNotes[ref] = priorNotes
+            self.journalRevision &+= 1
+        }
         // A commented visit is work by attestation: pin it so its slice
         // surfaces however short (Martin, 2026-07-09 — three quick test
         // comments once collapsed into one slice on one task).
@@ -1904,6 +1985,8 @@ public final class AppController: ObservableObject {
             let learningSnapshot = attributor.learning
             let primedSnapshot = attributor.primedSurfaces
             let pinsSnapshot = attributor.pins
+            let stickiesSnapshot = attributor.sessionStickies
+            let calendarSnapshot = calendarRules
             registerUndo("assign \(ids.count) review rows") { [weak self] in
                 guard let self else { return }
                 try? self.journal.assign(ids, to: nil)
@@ -1916,6 +1999,10 @@ public final class AppController: ObservableObject {
                 self.attributor.replaceLearning(learningSnapshot)
                 self.attributor.primedSurfaces = primedSnapshot
                 self.attributor.pins = pinsSnapshot
+                // The assign also wrote stickies and (possibly) a calendar
+                // rule — restore those too, so ⌘Z really is "as it stood".
+                self.attributor.replaceSessionStickies(stickiesSnapshot)
+                self.calendarRules = calendarSnapshot
                 self.persistAssociations()
                 self.reloadReview()
             }
@@ -2440,8 +2527,21 @@ public final class AppController: ObservableObject {
     /// never collide — the rollup carries a freshly-derived id) but creating
     /// first means an interrupted apply never loses time outright.
     public func applyConsolidation(_ plan: JournalPrune.Plan) {
+        // Snapshot the raw originals BEFORE deleting: consolidation is
+        // journal-local (no backend writes), so undo can restore the exact
+        // rows — rollups out, originals back, remote linkage untouched.
+        let originals = plan.deleteIDs.compactMap { try? journal.session(id: $0) }
         for session in plan.create { try? journal.save(session) }
         for id in plan.deleteIDs { try? journal.deleteSession(id) }
+        if !plan.isEmpty {
+            let createdIDs = plan.create.map(\.id)
+            registerUndo("consolidate \(originals.count) slices") { [weak self] in
+                guard let self else { return }
+                for id in createdIDs { try? self.journal.deleteSession(id) }
+                for row in originals { try? self.journal.save(row) }
+                self.updateJournalSummary()
+            }
+        }
         updateJournalSummary()
     }
 
@@ -2455,9 +2555,19 @@ public final class AppController: ObservableObject {
     }
 
     /// Apply a previewed hard-cap plan: permanent deletion, no creates (the
-    /// plan never proposes rollups). The UI double-confirms before this runs.
+    /// plan never proposes rollups). The UI double-confirms before this runs —
+    /// and ⌘Z within the session still brings the rows back (permanence
+    /// starts when the session ends, not the moment the button is clicked).
     public func applyHardCapPrune(_ plan: JournalPrune.Plan) {
+        let originals = plan.deleteIDs.compactMap { try? journal.session(id: $0) }
         for id in plan.deleteIDs { try? journal.deleteSession(id) }
+        if !originals.isEmpty {
+            registerUndo("prune \(originals.count) slices") { [weak self] in
+                guard let self else { return }
+                for row in originals { try? self.journal.save(row) }
+                self.updateJournalSummary()
+            }
+        }
         updateJournalSummary()
     }
 
@@ -2563,23 +2673,19 @@ public final class AppController: ObservableObject {
         let savedPrimes = attributor.primedSurfaces
         let savedLearning = attributor.learning
         let savedDisplaced = attributor.displacedByCorrection
-        var savedSticky: SessionSticky?
-        if case .sessionSticky = u {
-            savedSticky = attributor.stickyMatch(for: signal, now: Date())
-        }
+        let savedStickies = attributor.sessionStickies
         attributor.forget(u, signal: signal)
         persistAssociations()
         tracker.reevaluate()
         registerUndo(forgetUndoLabel(u)) { [weak self] in
             guard let self else { return }
-            if let sticky = savedSticky {
-                self.attributor.assign(signal, target: sticky.target, now: sticky.day)
-            }
             self.attributor.emailRules = savedRules
             self.attributor.primedSurfaces = savedPrimes
             self.attributor.replaceLearning(savedLearning)
-            // After the re-assert above (which may itself capture a fresh
-            // snapshot): the exact pre-forget history, wholesale.
+            // Wholesale snapshot restore (stickies included) — exact, where
+            // the old re-assert-the-sticky path was only an approximation
+            // that itself re-recorded displacement state.
+            self.attributor.replaceSessionStickies(savedStickies)
             self.attributor.displacedByCorrection = savedDisplaced
             self.persistAssociations()
             self.tracker.reevaluate()
@@ -2611,10 +2717,17 @@ public final class AppController: ObservableObject {
         let segment = identity.segments[grainCount - 1]
         guard segment.available else { return }
         if let level = segment.kind.emailMatchLevel {
+            let restore = attributorSnapshotRestore()
             attributor.learnEmailRule(signal, to: ref, level: level, value: segment.emailMatchValue,
                                       pinned: pinned, origin: .card, now: now)
             persistAssociations()
             tracker.reevaluate()
+            // Global ⌘Z covers the commit too, not only the notice's [undo]
+            // (which routes through `forget` and registers its own step).
+            registerUndo("learn rule \(segment.emailMatchValue)") { [weak self] in
+                self?.learnNotice = nil
+                restore()
+            }
             showLearnNotice(rules: [EmailRule(level: level, value: segment.emailMatchValue,
                                               target: ref, pinned: pinned, createdAt: now, origin: .card)],
                             signal: signal)
@@ -2639,12 +2752,19 @@ public final class AppController: ObservableObject {
                                          to ref: TaskRef, pinned: Bool, now: Date = Date()) {
         let values = ContextIdentity.correspondentRuleValues(signal, chosen: chosen)
         guard !values.isEmpty else { return }
+        let restore = attributorSnapshotRestore()
         for value in values {
             attributor.learnEmailRule(signal, to: ref, level: .correspondent, value: value,
                                       pinned: pinned, origin: .card, now: now)
         }
         persistAssociations()
         tracker.reevaluate()
+        // One ⌘Z step for the whole fan-out, same as the notice's [undo].
+        registerUndo(values.count == 1 ? "learn rule \(values[0])"
+                                       : "learn \(values.count) rules") { [weak self] in
+            self?.learnNotice = nil
+            restore()
+        }
         // Fan-out learning must not be silent either — ONE notice covering
         // every rule just written, whose [undo] removes them all.
         showLearnNotice(rules: values.map {
@@ -2760,15 +2880,43 @@ public final class AppController: ObservableObject {
     /// a confirmation): future time on it attributes here. The visible "edit the
     /// weighting" action behind the why-panel.
     public func teachSurface(_ span: FocusSpan, to ref: TaskRef) {
+        let restore = attributorSnapshotRestore()
         attributor.confirm(span.signal, task: ref, tasks: taskCache)
         persistAssociations()
         tracker.reevaluate()
+        registerUndo("unteach \(name(of: .task(ref)))") { restore() }
         objectWillChange.send()
     }
 
     public func boostSurface(_ span: FocusSpan, to ref: TaskRef, weight: Double = 4) {
+        let restore = attributorSnapshotRestore()
         attributor.learnSurface(span.signal, to: ref, weight: weight)
-        persistAssociations(); tracker.reevaluate(); objectWillChange.send()
+        persistAssociations(); tracker.reevaluate()
+        registerUndo("remove boost toward \(name(of: .task(ref)))") { restore() }
+        objectWillChange.send()
+    }
+
+    /// Snapshot the attributor's whole learned state NOW and hand back the
+    /// inverse that restores it — the one shape every teach/boost/grain undo
+    /// shares (rules, primes, learned weights, stickies, displacement
+    /// history; pins have their own snapshot in `commitPin`/`unpin`).
+    private func attributorSnapshotRestore() -> () -> Void {
+        let savedRules = attributor.emailRules
+        let savedPrimes = attributor.primedSurfaces
+        let savedLearning = attributor.learning
+        let savedDisplaced = attributor.displacedByCorrection
+        let savedStickies = attributor.sessionStickies
+        return { [weak self] in
+            guard let self else { return }
+            self.attributor.emailRules = savedRules
+            self.attributor.primedSurfaces = savedPrimes
+            self.attributor.replaceLearning(savedLearning)
+            self.attributor.displacedByCorrection = savedDisplaced
+            self.attributor.replaceSessionStickies(savedStickies)
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
     }
 
     public func pinSurface(_ span: FocusSpan, to ref: TaskRef) {
@@ -2978,6 +3126,30 @@ public final class AppController: ObservableObject {
             : []
 
         await undoGroup("extend \(name(of: .task(ref)))") {
+            // The group's journal inverses restore the folded/trimmed ROWS;
+            // this inverse restores the LIVE side (clock start, banked
+            // elapsed, in-flight note) — without it, undo brought the rows
+            // back under a live slice still stretched over them. Registered
+            // first so it replays last: rows first, then the clock.
+            if newStart != liveStart || !sameTask.isEmpty || !otherTrims.isEmpty {
+                let priorTargetSince = targetSince
+                let priorBanked = bankedElapsed
+                let priorNote = manualNote
+                registerUndo("restore live start") { [weak self] in
+                    guard let self, case .tracking = self.trackerState else { return }
+                    let current = self.tracker.liveSliceStart ?? liveStart
+                    if liveStart < current {
+                        self.tracker.backdateSessionStart(to: liveStart)
+                    } else if liveStart > current {
+                        self.tracker.trimSessionStart(to: liveStart)
+                    }
+                    self.targetSince = priorTargetSince
+                    self.bankedElapsed = priorBanked
+                    self.manualNote = priorNote
+                    self.updateJournalSummary()
+                    self.refreshTitle(force: true)
+                }
+            }
             for s in sameTask { await deleteTimelineSession(s) }
             for trim in otherTrims {
                 if trim.delete { await deleteTimelineSession(trim.session) }
@@ -3046,8 +3218,26 @@ public final class AppController: ObservableObject {
     public func applyTimelineEdit(_ session: Session, undoable: Bool = true) async {
         if undoable,
            let previous = try? journal.session(id: session.id) {
+            // A task-change edit also TEACHES (teachAssociation below);
+            // snapshot so the inverse unlearns it exactly. Same-task edits
+            // restore an identical snapshot — a no-op.
+            let restoreLearning = previous.task != session.task
+                ? attributorSnapshotRestore() : nil
             registerUndo("edit \(name(of: .task(previous.task)))") { [weak self] in
-                await self?.applyTimelineEdit(previous, undoable: false)
+                guard let self else { return }
+                var restore = previous
+                // Trust the CURRENT row's remote linkage over the snapshot's:
+                // a follow-on coalesce in the same undo group may have
+                // absorbed this row (deleting its backend entry) and re-saved
+                // it unlinked — restoring the snapshot's pointer would aim
+                // every later PATCH at a dead entry. When nothing touched the
+                // row, current == snapshot and this is a no-op.
+                if let current = try? self.journal.session(id: previous.id) {
+                    restore.opTimeEntryID = current.opTimeEntryID
+                    restore.pushedToOP = current.pushedToOP
+                }
+                await self.applyTimelineEdit(restore, undoable: false)
+                restoreLearning?()
             }
         }
         var session = session
@@ -3117,11 +3307,18 @@ public final class AppController: ObservableObject {
     /// non-work so similar time stops auto-tracking. Undo restores the slice.
     /// Used to undo e.g. an away stretch you didn't actually work.
     public func markSessionDoNotTrack(_ session: Session) async {
-        if let dominant = dominantSpan(of: session) {
-            attributor.assign(dominant.signal, target: .doNotTrack, tasks: taskCache)
-            persistAssociations()
+        // ONE ⌘Z step restoring BOTH halves: the slice comes back AND the
+        // don't-track teaching is unlearned — previously undo restored the
+        // slice but the surface kept auto-suppressing future tracking.
+        await undoGroup("don't track \(name(of: .task(session.task)))") {
+            if let dominant = dominantSpan(of: session) {
+                let restore = attributorSnapshotRestore()
+                attributor.assign(dominant.signal, target: .doNotTrack, tasks: taskCache)
+                persistAssociations()
+                registerUndo("unlearn don't-track") { restore() }
+            }
+            await deleteTimelineSession(session)
         }
-        await deleteTimelineSession(session)
     }
 
     public func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
@@ -3150,6 +3347,7 @@ public final class AppController: ObservableObject {
                                           undoable: Bool = true) async {
         if undoable {
             let originals = sessions.filter { $0.id != Self.liveSessionID }
+            let restoreLearning = attributorSnapshotRestore()
             registerUndo("reassign \(originals.count) slices") { [weak self] in
                 guard let self else { return }
                 // restore each to its original task
@@ -3158,6 +3356,10 @@ public final class AppController: ObservableObject {
                         (try? self.journal.allSessions())?.filter { $0.id == original.id } ?? [],
                         to: original.task, undoable: false)
                 }
+                // The forward reassign TAUGHT the new association (and the
+                // re-point above taught the old one back); restore the exact
+                // pre-reassign learned state on top of both.
+                restoreLearning()
             }
         }
         for var session in sessions where session.id != Self.liveSessionID {
@@ -3209,6 +3411,8 @@ public final class AppController: ObservableObject {
             return
         }
         await undoGroup("move \(appLabel) → \(name(of: .task(target)))") {
+            let restoreLearning = attributorSnapshotRestore()
+            registerUndo("unteach move") { restoreLearning() }
             for (session, pieces) in work { await replaceSession(session, with: pieces) }
         }
         actionNote = "Moved \(MenuTitle.text(elapsed: movedSeconds, certainty: nil, showPercent: false)) of \(appLabel) → \(name(of: .task(target)))"
@@ -3239,6 +3443,39 @@ public final class AppController: ObservableObject {
             .filter { $0.id != Self.liveCheckpointID }   // never fold the crash-safety row
         let merged = TimelineMath.mergeAdjacent(original)
         guard merged.count != original.count else { return }
+        // Compensating undo, registered BEFORE mutating: the exact prior rows
+        // come back — absorbed originals re-saved (remote linkage cleared,
+        // their backend entries are deleted below; sync re-creates), and each
+        // rewritten survivor restored to its prior extent (its still-live
+        // backend entry PATCHed back). Inside a caller's undoGroup (a timeline
+        // save, an idle-gap claim) this folds into that ONE ⌘Z step, so
+        // undoing an edit whose save fused neighbours restores the pre-edit
+        // rows — not the fused row (the 2026-07-09 comment-edit incident).
+        let plan = TimelineMath.coalescePlan(original: original, merged: merged)
+        registerUndo("merge adjacent slices") { [weak self] in
+            guard let self else { return }
+            for var row in plan.removed {
+                row.opTimeEntryID = nil
+                row.pushedToOP = false   // its entry was deleted; re-push
+                try? self.journal.save(row)
+            }
+            for rewrite in plan.rewrites {
+                let prior = rewrite.prior
+                try? self.journal.update(prior)
+                if let backend = self.backend, backend.owns(prior.task),
+                   let taskID = prior.task.backendTaskID,
+                   let entryID = prior.opTimeEntryID {
+                    try? await backend.updateTimeEntry(
+                        id: entryID, taskID: taskID, start: prior.start,
+                        duration: prior.end.timeIntervalSince(prior.start),
+                        activityID: self.settings.activityOverrides[prior.task]
+                            ?? self.settings.defaultActivityID,
+                        comment: prior.comment)
+                }
+            }
+            self.updateJournalSummary()
+            await self.syncIfEnabled()
+        }
         let survivors = Set(merged.map(\.id))
         for o in original where !survivors.contains(o.id) {
             try? journal.deleteSession(o.id)
@@ -3311,6 +3548,10 @@ public final class AppController: ObservableObject {
         let work = TimelineMath.splitAcross(sessions, reassign: ranges, to: target)
         guard !work.isEmpty else { return }
         await undoGroup("split \(name(of: .task(session.task)))") {
+            // Registered first → replays last: after the rows are restored,
+            // the teaching the moved pieces wrote is unlearned too.
+            let restoreLearning = attributorSnapshotRestore()
+            registerUndo("unteach split") { restoreLearning() }
             for (original, pieces) in work { await replaceSession(original, with: pieces) }
         }
     }
@@ -3334,6 +3575,10 @@ public final class AppController: ObservableObject {
         let plan = SpanAllocation.plan(sessions: sessions, range: (start, end), to: target)
         guard !plan.isEmpty else { return }
         await undoGroup("allocate \(name(of: .task(target)))") {
+            // Registered first → replays last: rows back, then the exact
+            // pre-allocate learned state (both paths below teach).
+            let restoreLearning = attributorSnapshotRestore()
+            registerUndo("unteach allocate") { restoreLearning() }
             for action in plan {
                 switch action {
                 case .repoint(let original):
@@ -3781,8 +4026,13 @@ public final class AppController: ObservableObject {
     /// finance-backend task. Persistence + the criterion-10 reopen ride the
     /// store's change handler.
     public func setFinanceMapping(projectKey: String, backendTaskID: String?) {
-        financeMappings.set(backendTaskID.map(FinanceMapping.init),
-                            forProjectKey: projectKey)
+        let prior = financeMappings.mappings[projectKey]
+        let new = backendTaskID.map(FinanceMapping.init)
+        guard prior != new else { return }
+        registerUndo("billing mapping") { [weak self] in
+            self?.financeMappings.set(prior, forProjectKey: projectKey)
+        }
+        financeMappings.set(new, forProjectKey: projectKey)
     }
 
     /// The cached tasks belonging to a project as DISPLAYED (the pie/legend

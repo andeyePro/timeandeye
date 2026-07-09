@@ -13,8 +13,9 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 ## Global (from any app)
 
 - **⌘⇧L** - I'm leaving my desk (away) / I'm back.
-- **⌘Z** - undo the last task switch (fold the current slice back to the previous
-  task).
+- **⌘Z** - undo, as many times as you like: task switches, timeline edits,
+  review sweeps, pins and learned rules, colours, deletes - each press steps
+  one action back. The history lasts until you quit Time&i.
 
 ## Popover
 

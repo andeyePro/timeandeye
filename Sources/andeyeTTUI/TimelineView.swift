@@ -1387,9 +1387,13 @@ struct TimelineView: View {
                     } else {
                         await controller.applyTimelineEdit(edited)
                     }
+                    // Same-task slices now butting up are fused (no data
+                    // lost) — INSIDE the group, so the fusion's compensating
+                    // undo folds into this edit's own ⌘Z step and undoing
+                    // the save restores the exact pre-edit rows, never a
+                    // fused row.
+                    await controller.coalesceAdjacent(around: edited.start)
                 }
-                // Same-task slices now butting up are fused (no data lost).
-                await controller.coalesceAdjacent(around: edited.start)
             }
             editing = nil
             conflicts = []
