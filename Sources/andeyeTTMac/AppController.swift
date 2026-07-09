@@ -859,7 +859,10 @@ public final class AppController: ObservableObject {
         // next launch's synchronous init.
         Task.detached(priority: .utility) { [weak self] in
             guard let fresh = PowerSettings.displaySleepSeconds() else { return }
-            await MainActor.run {
+            // Inner closure takes its OWN weak capture: referencing the outer
+            // task's captured `self` var from this sendable closure is a
+            // Swift 6 SendableClosureCaptures error (warned since 5.10).
+            await MainActor.run { [weak self] in
                 UserDefaults.standard.set(fresh, forKey: "cachedDisplaySleepSeconds")
                 self?.tracker.setIdleThreshold(fresh)
             }
