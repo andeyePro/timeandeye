@@ -427,7 +427,7 @@ public final class SessionTracker {
             if let p = pendingSwitch, p.target != .doNotTrack {
                 // We're provisionally showing p.target; the open slice is p.from.
                 if best.target == p.from {
-                    revertPendingSwitch()                 // returned within grace
+                    revertPendingSwitch(at: now)          // returned within grace
                 } else if best.target == p.target {
                     state = .tracking(p.target, certainty: best.score)   // hold pending
                 } else if best.score >= config.uncertainBelow {
@@ -438,7 +438,7 @@ public final class SessionTracker {
                     // base. (Committing it here made rapid window-flitting log a
                     // pile of sub-minute slices on whatever the ranker guessed.)
                     let base = p.from
-                    revertPendingSwitch()
+                    revertPendingSwitch(at: now)
                     handleConfidentSwitch(to: best, from: base, at: now)
                 } else {
                     state = .tracking(p.target, certainty: best.score)   // uncertain, hold
@@ -496,22 +496,35 @@ public final class SessionTracker {
     /// switch. Re-tag its spans to the prior task (they become windows in that
     /// slice) and restore the display. UNLESS the excursion was PINNED (a
     /// comment was committed during it — Martin, 2026-07-09: a commented
-    /// visit is work by attestation, however short): pinned excursions keep
-    /// their true target so the flush can surface them as their own slice.
-    private func revertPendingSwitch() {
+    /// visit is work by attestation, however short): a pinned excursion is
+    /// journalled RIGHT NOW as its own slice — waiting for the eventual
+    /// flush left the timeline showing nothing where the user just
+    /// commented (his 02:40 test: the pin fired, the slice appeared only
+    /// at the next flush, which hadn't come when he looked). The emitted
+    /// interval is remembered and carved out of the eventual dominant run.
+    private func revertPendingSwitch(at date: Date = Date()) {
         guard let p = pendingSwitch else { return }
         let pinned = pins.contains { $0.target == p.target && $0.at >= p.since }
-        if !pinned {
-            for i in spans.indices where spans[i].start >= p.since {
-                spans[i].target = p.from
-            }
+        if pinned, case .task(let ref) = p.target {
+            let end = max(date, p.since.addingTimeInterval(1))
+            onSession(Session(task: ref, start: p.since, end: end,
+                              certainty: 0.95, comment: nil))
+            carvedIntervals.append((p.since, end))
+            pins.removeAll { $0.target == p.target && $0.at >= p.since }
+        }
+        for i in spans.indices where spans[i].start >= p.since {
+            spans[i].target = p.from
         }
         pendingSwitch = nil
         pendingNotify = nil
         if case .task = p.from { state = .tracking(p.from, certainty: 0.95) }
-        onDebug(pinned ? "reverted excursion -> \(p.from) (PINNED: excursion keeps its slice)"
+        onDebug(pinned ? "reverted excursion -> \(p.from) (PINNED: slice journalled now)"
                        : "reverted excursion -> \(p.from) (kept as windows)")
     }
+
+    /// Intervals already emitted as pinned mini-slices — the eventual
+    /// dominant flush must not bill them again.
+    private var carvedIntervals: [(start: Date, end: Date)] = []
 
     // MARK: - Comment pins
 
@@ -770,6 +783,22 @@ public final class SessionTracker {
             carved.append(f)
             runs = carved
         }
+        // Intervals ALREADY journalled as pinned mini-slices at revert time:
+        // subtract them from every run (they must not bill twice), and
+        // forget the ones this flush has passed.
+        for c in carvedIntervals where c.start < date {
+            var trimmed: [(target: Target, start: Date, end: Date, pinned: Bool)] = []
+            for run in runs {
+                if run.end <= c.start || run.start >= c.end {
+                    trimmed.append(run)
+                } else {
+                    if run.start < c.start { trimmed.append((run.target, run.start, c.start, run.pinned)) }
+                    if run.end > c.end { trimmed.append((run.target, c.end, run.end, run.pinned)) }
+                }
+            }
+            runs = trimmed
+        }
+        carvedIntervals.removeAll { $0.end <= date }
         runs.sort { $0.start < $1.start }
 
         for run in runs {
