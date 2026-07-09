@@ -65,6 +65,124 @@ func reviewStackChecks(_ c: Checks) {
     }
 }
 
+// MARK: - Review sort + range select (2026-07-09, Martin clearing a backlog:
+// "sort by fields at the top: time, duration, and the ability … to select
+// (at least with shift click start and end of selection) so they can get rid
+// of everything underneath whatever duration or before whatever date").
+// The sort comparators and the range's index math are pure so this CLT-only
+// loop can check them; the drawer just displays `sorted(by:)`'s order and
+// lets AppKit's extended selection pick ranges over it.
+
+func reviewSortAndRangeChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+
+    func seg(_ app: String, _ start: TimeInterval, _ end: TimeInterval,
+             title: String? = nil) -> ReviewSegment {
+        ReviewSegment(app: app, windowTitle: title,
+                      start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
+    }
+
+    // Three stacks with deliberately CROSSED rankings so no two orders can
+    // accidentally agree: A ends latest but is shortest; C ends earliest
+    // but is longest; B sits between on both axes.
+    // A: 500–560 (60s, newest), B: 200–320 (120s), C: 0–180 (180s, oldest).
+    let stacks = [seg("A", 500, 560), seg("B", 200, 320), seg("C", 0, 180)].stacked()
+
+    c.check("newestFirst matches the drawer's historical default (last activity, descending)") {
+        try expectEq(stacks.sorted(by: .newestFirst).map(\.app), ["A", "B", "C"])
+    }
+
+    c.check("oldestFirst is the sweep-before-a-date order (last activity, ascending)") {
+        try expectEq(stacks.sorted(by: .oldestFirst).map(\.app), ["C", "B", "A"])
+    }
+
+    c.check("longest/shortest order by the stack's TOTAL, not its recency") {
+        try expectEq(stacks.sorted(by: .longestFirst).map(\.app), ["C", "B", "A"])
+        try expectEq(stacks.sorted(by: .shortestFirst).map(\.app), ["A", "B", "C"])
+    }
+
+    c.check("time orders key on LAST activity — a recently-active old-starter is not 'old'") {
+        // The sweep guarantee: with oldestFirst, every stack ABOVE the
+        // cutoff row is entirely before it. A surface first touched at t0
+        // but touched again at 900 must rank NEWER than one wholly at
+        // 300–360; keying on `first` would invert that and let a sweep
+        // "before 400" swallow it.
+        let longLived = [seg("Old starter", 0, 60, title: "x"),
+                         seg("Old starter", 840, 900, title: "x")]
+        let wholly = [seg("Wholly old", 300, 360)]
+        let both = (longLived + wholly).stacked().sorted(by: .oldestFirst)
+        try expectEq(both.map(\.app), ["Wholly old", "Old starter"])
+    }
+
+    c.check("a duration tie breaks by recency then id — equal rows never shuffle on reload") {
+        let tied = [seg("Same1", 0, 60), seg("Same2", 100, 160), seg("Twin2", 100, 160)].stacked()
+        try expectEq(tied.sorted(by: .longestFirst).map(\.app), ["Same2", "Twin2", "Same1"],
+                     "all 60s totals: newest first, then id for the exact twins")
+        try expectEq(tied.sorted(by: .shortestFirst).map(\.app), ["Same2", "Twin2", "Same1"],
+                     "same tie-break both directions — flipping the sort never reverses ties")
+    }
+
+    c.check("range endpoints are inclusive, in either direction") {
+        let ids = ["a", "b", "c", "d", "e"]
+        try expectEq(ReviewRangeSelect.range(in: ids, from: "b", to: "d"), ["b", "c", "d"])
+        try expectEq(ReviewRangeSelect.range(in: ids, from: "d", to: "b"), ["b", "c", "d"],
+                     "shift-click above the anchor selects the same range")
+    }
+
+    c.check("anchor == target selects exactly that one row") {
+        try expectEq(ReviewRangeSelect.range(in: ["a", "b"], from: "a", to: "a"), ["a"])
+    }
+
+    c.check("no anchor (or a vanished one) degrades to the clicked row; a vanished target selects nothing") {
+        // The anchor row can be assigned away between clicks — degrading to
+        // the target is the only non-guess.
+        let ids = ["a", "b", "c"]
+        try expectEq(ReviewRangeSelect.range(in: ids, from: nil, to: "b"), ["b"])
+        try expectEq(ReviewRangeSelect.range(in: ids, from: "gone", to: "b"), ["b"])
+        try expectEq(ReviewRangeSelect.range(in: ids, from: "a", to: "gone"), [])
+    }
+
+    c.check("the range follows the CURRENT sort order — same endpoints, different members") {
+        // Martin's two sweeps use the same gesture over different orders:
+        // oldest-first + range-from-top clears before-a-date; shortest-
+        // first + range-from-top clears below-a-duration.
+        let byOldest = stacks.sorted(by: .oldestFirst).map(\.id)
+        let byShortest = stacks.sorted(by: .shortestFirst).map(\.id)
+        let cID = try unwrap(stacks.first { $0.app == "C" }).id
+        let aID = try unwrap(stacks.first { $0.app == "A" }).id
+        let bID = try unwrap(stacks.first { $0.app == "B" }).id
+        try expectEq(ReviewRangeSelect.range(in: byOldest, from: byOldest[0], to: bID),
+                     [cID, bID], "oldest-first: C then B — everything before B's date")
+        try expectEq(ReviewRangeSelect.range(in: byShortest, from: byShortest[0], to: bID),
+                     [aID, bID], "shortest-first: A then B — everything at/below B's duration")
+    }
+
+    c.check("an id-keyed selection resolves to the same stacks after a re-sort") {
+        // The drawer keeps the selection Set across a sort change (it means
+        // "these surfaces", not "these positions") — valid only because
+        // sorting never rewrites ids or stack contents.
+        let picked = Set(stacks.sorted(by: .oldestFirst).prefix(2).map(\.id))
+        let before = stacks.sorted(by: .oldestFirst).filter { picked.contains($0.id) }
+        let after = stacks.sorted(by: .longestFirst).filter { picked.contains($0.id) }
+        try expectEq(Set(before.map(\.app)), Set(after.map(\.app)))
+        try expectEq(before.flatMap(\.segments).map(\.id).sorted { $0.uuidString < $1.uuidString },
+                     after.flatMap(\.segments).map(\.id).sorted { $0.uuidString < $1.uuidString },
+                     "the same underlying segments would be assigned either way")
+    }
+
+    c.check("sorting is a view-order concern only — stacks pass through whole") {
+        for order in ReviewSortOrder.allCases {
+            let sorted = stacks.sorted(by: order)
+            try expectEq(Set(sorted.map(\.id)), Set(stacks.map(\.id)),
+                         "\(order.rawValue) never drops or invents a stack")
+            for s in sorted {
+                let original = try unwrap(stacks.first { $0.id == s.id })
+                try expectEq(s, original, "\(order.rawValue) never rewrites a stack")
+            }
+        }
+    }
+}
+
 // MARK: - RetroAcceptance.plan (approvals-drawer spec §3)
 
 func retroAcceptanceChecks(_ c: Checks) {

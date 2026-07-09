@@ -2,6 +2,28 @@
 
 ## 2026-07-09
 
+- [x] **Review queue: sort control + range-select sweep.** Martin,
+  mid-backlog: "sort by fields at the top: time, duration, and the ability
+  … to select (at least with shift click start and end of selection) so
+  they can get rid of everything underneath whatever duration or before
+  whatever date". A header menu picker orders the stacks newest/oldest (by
+  each stack's LAST activity — so "everything above the cutoff" really is
+  entirely before the date) or longest/shortest (by total time), persisted
+  in settings (`reviewSortOrder`, default newest — the historical order).
+  Comparators are pure Core (`ReviewSort.swift`) with deterministic
+  tie-breaks, checked in `reviewSortAndRangeChecks`. Range selection
+  itself already existed — the drawer's List is NSTableView-backed, so
+  shift-click/⌘-click/⇧↑⇧↓ extended selection came native, and the
+  multi-stack assign path (`assignReview`) already batches the whole
+  selection into ONE undo step and teaches per distinct surface — the sort
+  is what makes a range MEAN "below this duration / before this date".
+  `ReviewRangeSelect.range` encodes the range contract (inclusive
+  endpoints, current display order, vanished-anchor degrades to the
+  clicked row) for the checks and for non-AppKit surfaces later. Selection
+  survives a sort change by surface id (it means "these surfaces", not
+  "these positions"). MANUAL.md + site manual (attribution + keyboard
+  pages) gained the sweep recipe.
+
 - [x] **Fullscreen fix five — the poison bit, found by log.** Martin's
   debug-log paste showed SwiftUI Window scenes ship with `fullScreenNone`
   set, which contradicts `fullScreenAuxiliary`; macOS resolved the

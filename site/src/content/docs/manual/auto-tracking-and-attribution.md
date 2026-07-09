@@ -80,6 +80,12 @@ floor"). Briefer glances stay tracked and journalled as normal - they just
 never queue, however often they repeat - because a moment too brief to
 switch tracking is never worth naming.
 
+Clearing a backlog? Sort the queue from the control at the top - newest,
+oldest, longest or shortest - then click a row and shift-click another to
+select everything between them (⌘-click adds or removes single rows). One
+press of **Do not track**, **Unknown** or a task then clears the whole
+range, and one ⌘Z brings it all back.
+
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of "Do not track" or a guess -
 the time stays tracked with full detail, just off your review queue. It shows

@@ -5,10 +5,17 @@ import andeyeTTMac
 /// The low-certainty review queue: stacked by default (2026-07-06 spec §2/§4,
 /// approvals-drawer v1) — one row per identical surface (app · window title ·
 /// tab URL), not one row per slice. Multi-select rows (click-drag,
-/// shift-click, ⌘-click — native List selection) at the STACK level, then
-/// one-click assign. A stack with more than one slice expands to a read-only
-/// list on click. Assign to any task (fuzzy-filtered), to "Do not track", or
-/// create a new local (non-OpenProject) task on the spot and assign to it.
+/// shift-click range, ⌘-click toggle, ⇧↑/⇧↓ — native List/NSTableView
+/// extended selection) at the STACK level, then one-click assign; a header
+/// sort control (newest/oldest by last activity, longest/shortest by total —
+/// `ReviewSortOrder`, persisted in settings) reorders the stacks so a
+/// shift-click range can sweep everything below a duration or before a date
+/// in one assign (Martin, 2026-07-09). Selection is keyed by surface id, so
+/// changing the sort keeps the same stacks selected — it means "these
+/// surfaces", not "these positions". A stack with more than one slice
+/// expands to a read-only list on click. Assign to any task (fuzzy-filtered),
+/// to "Do not track", or create a new local (non-OpenProject) task on the
+/// spot and assign to it.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
     @State private var selection = Set<String>()
@@ -50,16 +57,29 @@ struct ReviewView: View {
     }
 
     /// The window header: decisions (stacks) up front, per spec §7 — the
-    /// exact slice count stays here for the curious, never in the badge.
+    /// exact slice count stays here for the curious, never in the badge —
+    /// plus the sort control (menu picker, matching Settings' compact
+    /// `.menu` + `.fixedSize()` vocabulary).
     private var header: some View {
         HStack {
             Text("\(controller.pendingDecisionCount) to decide").font(.headline)
             Spacer()
+            Picker("", selection: $controller.settings.reviewSortOrder) {
+                Text("Newest").tag(ReviewSortOrder.newestFirst)
+                Text("Oldest").tag(ReviewSortOrder.oldestFirst)
+                Text("Longest").tag(ReviewSortOrder.longestFirst)
+                Text("Shortest").tag(ReviewSortOrder.shortestFirst)
+            }
+            .pickerStyle(.menu).fixedSize().controlSize(.small)
+            .help("Sort the queue – newest/oldest by last activity, longest/shortest by total time")
             Text("\(totalSlices) slices").font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    private var stacks: [ReviewStack] { controller.reviewStacks() }
+    /// Stacks in the user's chosen order (`ReviewSortOrder`, Core-checked).
+    /// The already-selected ids stay selected across a sort change — the
+    /// Set survives untouched and the List re-highlights by tag.
+    private var stacks: [ReviewStack] { controller.reviewStacks().sorted(by: controller.settings.reviewSortOrder) }
 
     private var totalSlices: Int { stacks.reduce(0) { $0 + $1.segments.count } }
 

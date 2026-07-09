@@ -70,6 +70,9 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 
 ## Review queue
 
+- Click then **⇧-click** - select the whole range between two rows;
+  **⌘-click** - add / remove a single row; **⇧↑ / ⇧↓** - extend the
+  selection by keyboard.
 - **⌘D** - mark the selection as "do not track".
 - **↵** in the task filter - assign the selection to the top task.
 - **⌘⇧C** - copy the AI prompt. **⌘↵** - apply a pasted AI response.

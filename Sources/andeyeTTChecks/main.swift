@@ -127,6 +127,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("Billing", billingChecks),
     ("ColourEngine", colourEngineChecks),
     ("ReviewStack", reviewStackChecks),
+    ("ReviewSortAndRange", reviewSortAndRangeChecks),
     ("RetroAcceptance", retroAcceptanceChecks),
     ("ApprovalsDrawerAcceptance", approvalsDrawerAcceptanceChecks),
     ("UnknownTaskCategory", unknownSweepChecks),

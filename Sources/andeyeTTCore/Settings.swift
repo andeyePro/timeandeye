@@ -77,6 +77,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// tracked switch, so its identity is never worth one, however often it
     /// repeats (see `[ReviewSegment].meetingReviewFloor`). 0 = show all.
     public var reviewFloorSeconds: Double
+    /// How the Review queue's stacks are ordered (newest/oldest by last
+    /// activity, longest/shortest by total time) — persisted so a
+    /// backlog-clearing sort survives reopening the drawer.
+    public var reviewSortOrder: ReviewSortOrder
     public var switchGraceSeconds: Double
     public var sleepGraceSeconds: Double
     /// How long after an idle stop the one-tap "count the gap as <task>" offer
@@ -183,6 +187,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 primeDwellSeconds: Double = 30,
                 minSegmentSeconds: Double = 20,
                 reviewFloorSeconds: Double = 60,
+                reviewSortOrder: ReviewSortOrder = .newestFirst,
                 switchGraceSeconds: Double = 30,
                 sleepGraceSeconds: Double = 60,
                 idleBackfillWindowSeconds: Double = 18 * 3600,
@@ -226,6 +231,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.primeDwellSeconds = primeDwellSeconds
         self.minSegmentSeconds = minSegmentSeconds
         self.reviewFloorSeconds = reviewFloorSeconds
+        self.reviewSortOrder = reviewSortOrder
         self.switchGraceSeconds = switchGraceSeconds
         self.sleepGraceSeconds = sleepGraceSeconds
         self.idleBackfillWindowSeconds = idleBackfillWindowSeconds
@@ -279,6 +285,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         primeDwellSeconds = c.lenient(.primeDwellSeconds, or: defaults.primeDwellSeconds)
         minSegmentSeconds = c.lenient(.minSegmentSeconds, or: defaults.minSegmentSeconds)
         reviewFloorSeconds = c.lenient(.reviewFloorSeconds, or: defaults.reviewFloorSeconds)
+        reviewSortOrder = c.lenient(.reviewSortOrder, or: defaults.reviewSortOrder)
         switchGraceSeconds = c.lenient(.switchGraceSeconds, or: defaults.switchGraceSeconds)
         sleepGraceSeconds = c.lenient(.sleepGraceSeconds, or: defaults.sleepGraceSeconds)
         idleBackfillWindowSeconds = c.lenient(.idleBackfillWindowSeconds, or: defaults.idleBackfillWindowSeconds)
