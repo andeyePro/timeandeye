@@ -29,6 +29,7 @@ struct SettingsView: View {
     @State private var expandedDup: Set<String> = []
     @State private var expandAllDup = false
     @State private var senderProbe = ""
+    @State private var recipeProbe = ""
     @State private var exportPeriod: TimePeriod = .thisWeek
     @State private var exportCopied = false
     @State private var licenseKeyField = ""
@@ -556,6 +557,22 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(height: 160)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+                }
+                Button("What recipes see here") {
+                    recipeProbe = controller.siteRecipeProbeText()
+                }
+                .help("Shows exactly what the site recipes derive from the last-focused page's URL and title — the matched recipe, every field's value or 'not captured', or why nothing applies. Use it on real GitHub/Docs/Xero pages to verify a recipe's extractors.")
+                Text("Focus the page you want to inspect (its window, not this one), then click. Recipes read only the URL and window title Time&i already captures.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !recipeProbe.isEmpty {
+                    ScrollView {
+                        Text(recipeProbe)
+                            .font(.system(.caption2, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 120)
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
                 }
             }

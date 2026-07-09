@@ -80,3 +80,81 @@ public enum RulesLedger {
         return f
     }
 }
+
+/// One task's learned + pinned SITE rules — the ledger's "Sites" segment
+/// (2026-07-09 site-recipes spec §6), duplicated in the small-function style
+/// the calendar spec chose rather than a premature shared generic; the
+/// three-domain protocol refactor is a dedicated later pass.
+public struct SiteRulesLedgerGroup: Equatable, Sendable {
+    public var target: TaskRef
+    public var rows: [SiteRule]
+
+    public init(target: TaskRef, rows: [SiteRule]) {
+        self.target = target
+        self.rows = rows
+    }
+}
+
+public enum SiteRulesLedger {
+    /// Same grouping/sorting contract as `RulesLedger.grouped`: by task,
+    /// pinned-first then most-fired then newest within a group; groups by
+    /// task name. `search` matches the rule's value, its grain label
+    /// ("GitHub repository") or its task's name.
+    public static func grouped(_ rules: [SiteRule], nameOf: (TaskRef) -> String,
+                               search: String = "") -> [SiteRulesLedgerGroup] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered = query.isEmpty ? rules : rules.filter {
+            $0.value.localizedCaseInsensitiveContains(query)
+                || $0.grainLabel.localizedCaseInsensitiveContains(query)
+                || nameOf($0.target).localizedCaseInsensitiveContains(query)
+        }
+        let byTask = Dictionary(grouping: filtered, by: \.target)
+        return byTask.map { target, rows in
+            SiteRulesLedgerGroup(target: target, rows: rows.sorted {
+                if $0.pinned != $1.pinned { return $0.pinned && !$1.pinned }
+                if $0.fireCount != $1.fireCount { return $0.fireCount > $1.fireCount }
+                return $0.createdAt > $1.createdAt
+            })
+        }.sorted { nameOf($0.target).localizedCaseInsensitiveCompare(nameOf($1.target)) == .orderedAscending }
+    }
+
+    /// Plain-text dump for the ledger's "Copy rules" on the Sites segment —
+    /// `RulesLedger.exportText`'s exact shape, site-grain captions.
+    public static func exportText(_ rules: [SiteRule], nameOf: (TaskRef) -> String,
+                                  calendar: Calendar = .current) -> String {
+        let groups = grouped(rules, nameOf: nameOf)
+        guard !groups.isEmpty else { return "No site rules learned or pinned yet.\n" }
+        var out: [String] = []
+        for group in groups {
+            out.append(nameOf(group.target))
+            for rule in group.rows {
+                out.append("  " + exportLine(rule, calendar: calendar))
+            }
+            out.append("")
+        }
+        out.removeLast()
+        return out.joined(separator: "\n") + "\n"
+    }
+
+    private static func exportLine(_ rule: SiteRule, calendar: Calendar) -> String {
+        var parts = ["\(rule.grainLabel): \(rule.value)"]
+        parts.append(rule.pinned ? "pinned" : "learned")
+        if rule.createdAt != .distantPast {
+            parts.append(exportDayFormatter(calendar).string(from: rule.createdAt))
+        }
+        parts.append("fired \(rule.fireCount)×")
+        if let last = rule.lastFired {
+            parts.append("last \(exportDayFormatter(calendar).string(from: last))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func exportDayFormatter(_ calendar: Calendar) -> DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM yyyy"
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }
+}

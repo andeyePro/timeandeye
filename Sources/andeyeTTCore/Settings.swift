@@ -170,6 +170,12 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// The calendar→task specificity ladder (general → specific), the
     /// calendar-side mirror of `emailMatchOrder`.
     public var calendarMatchOrder: [CalendarMatchLevel]
+    /// Site-recipe ids the user has turned OFF in the rules ledger's recipe
+    /// strip (2026-07-09 site-recipes spec §0 Q4: recipes ship enabled — a
+    /// URL/title recipe reads nothing the sensors don't already capture, so
+    /// the toggle is legibility, not new collection). A disabled recipe
+    /// extracts nothing; its rules go dormant (kept, listed greyed).
+    public var siteRecipesDisabled: [String]
 
     public init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
@@ -214,7 +220,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 calendarPreMeetingLeadMinutes: Int = 5,
                 calendarStartAlertEnabled: Bool = true,
                 calendarExcludedNames: [String] = [],
-                calendarMatchOrder: [CalendarMatchLevel] = CalendarMatchLevel.defaultOrder) {
+                calendarMatchOrder: [CalendarMatchLevel] = CalendarMatchLevel.defaultOrder,
+                siteRecipesDisabled: [String] = []) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.reviewThreshold = reviewThreshold
@@ -259,6 +266,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.calendarStartAlertEnabled = calendarStartAlertEnabled
         self.calendarExcludedNames = calendarExcludedNames
         self.calendarMatchOrder = calendarMatchOrder
+        self.siteRecipesDisabled = siteRecipesDisabled
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -332,6 +340,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         let mappedCalendarOrder = rawCalendarOrder.compactMap { CalendarMatchLevel(rawValue: $0) }
         calendarMatchOrder = Set(mappedCalendarOrder) == Set(CalendarMatchLevel.allCases)
             ? mappedCalendarOrder : defaults.calendarMatchOrder
+        siteRecipesDisabled = c.lenient(.siteRecipesDisabled, or: defaults.siteRecipesDisabled)
     }
 }
 

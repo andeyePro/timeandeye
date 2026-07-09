@@ -62,6 +62,7 @@ public struct AttributionExplanation: Equatable, Sendable {
         case opTaskURL           // a work-package URL in the tab
         case opTaskTitle         // a work-package id in the window title / app
         case emailRule           // a learned email correspondent/domain/subject → task rule
+        case siteRule            // a learned site recipe-field/host → task rule
         case pendingPrime        // a just-opened OP task priming the next surface
         case primedSurface       // a remembered surface→task (a past correction)
         case ranked              // learned associations + status/recency priors
@@ -105,10 +106,11 @@ public struct AttributionExplanation: Equatable, Sendable {
     /// The signal features the learner keys on (e.g. "app=chrome",
     /// "title=insurance") — what you'd correct to change the outcome.
     public var features: [String]
-    /// The exact rule/pin that fired, when the source is .emailRule / .pin —
-    /// carried here (with its metadata) so the Evidence Card never re-derives
-    /// them and can never disagree with the decision.
+    /// The exact rule/pin that fired, when the source is .emailRule /
+    /// .siteRule / .pin — carried here (with its metadata) so the Evidence
+    /// Card never re-derives them and can never disagree with the decision.
     public var matchedEmailRule: EmailRule?
+    public var matchedSiteRule: SiteRule?
     public var matchedPin: Pin?
     /// Set only when the source is a correction (`.sessionSticky`) that
     /// displaced a real prior belief — the card's "before your correction:
@@ -117,11 +119,12 @@ public struct AttributionExplanation: Equatable, Sendable {
     public var priorToCorrection: Prior?
     public init(source: Source, chosen: Target?, chosenScore: Double,
                 lines: [Line], features: [String],
-                matchedEmailRule: EmailRule? = nil, matchedPin: Pin? = nil,
-                priorToCorrection: Prior? = nil) {
+                matchedEmailRule: EmailRule? = nil, matchedSiteRule: SiteRule? = nil,
+                matchedPin: Pin? = nil, priorToCorrection: Prior? = nil) {
         self.source = source; self.chosen = chosen; self.chosenScore = chosenScore
         self.lines = lines; self.features = features
-        self.matchedEmailRule = matchedEmailRule; self.matchedPin = matchedPin
+        self.matchedEmailRule = matchedEmailRule; self.matchedSiteRule = matchedSiteRule
+        self.matchedPin = matchedPin
         self.priorToCorrection = priorToCorrection
     }
 }
@@ -167,6 +170,17 @@ public final class Attributor {
     /// The user-editable specificity order the email ladder resolves through
     /// (mirrors the setting; defaults general→specific).
     public var emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder
+    /// Learned/pinned site rules (recipe field / host → task) — the third
+    /// rule domain (2026-07-09 site-recipes spec §5), on the SAME 0.95 rung
+    /// as `emailRules`; the two are host-disjoint (mail hosts never produce
+    /// a SiteContext), so no page can ever match both. Persisted to
+    /// siterules.json by the app, like the other stores.
+    public var siteRules: [SiteRule] = []
+    /// Per-recipe capture toggles, mirrored from the setting (spec §0 Q4:
+    /// recipes ship enabled; the ledger's recipe strip can turn each off). A
+    /// disabled recipe extracts nothing — its rules go dormant (kept, never
+    /// deleted) and it emits no identity segments or learned features.
+    public var disabledSiteRecipes: Set<String> = []
     /// Fires exactly once per rule's lifetime, the moment it wins its FIRST
     /// attribution ever (fireCount 0 → 1) — the popover's First-FIRE toast
     /// hook (2026-07-03 spec §6 "later polish", brought forward: "the user
@@ -176,6 +190,9 @@ public final class Attributor {
     /// `EmailRule` with fireCount reset to 0, not the same rule). Wired in
     /// `AppController` to publish a popover notice.
     public var onFirstFire: ((EmailRule) -> Void)?
+    /// `onFirstFire`'s site-rule twin — same once-per-rule-lifetime
+    /// semantics, driven only by a real `attribute()` win.
+    public var onFirstSiteFire: ((SiteRule) -> Void)?
     /// The live calendar match (2026-07-09 calendar-signal spec §5), set by
     /// the platform layer whenever the bridge's event window or a boundary
     /// crossing changes it. Feeds the ranker's calendar term inside
@@ -247,6 +264,18 @@ public final class Attributor {
         // OP-URL.
         if let rule = emailRuleMatch(signal) {
             recordFire(rule, now: now)
+            var ranked = scored(signal, tasks: tasks, now: now)
+            ranked.removeAll { $0.target == .task(rule.target) }
+            let c = Candidate(target: .task(rule.target), score: Self.inferredCeiling)
+            ranked.insert(c, at: 0)
+            return Attribution(best: c, ranked: ranked)
+        }
+        // A learned site rule (recipe field / host → task) sits on the SAME
+        // rung as an email rule — email is consulted first purely for
+        // determinism; the two are host-disjoint (a mail host never produces
+        // a SiteContext), so no page can ever match both.
+        if let rule = siteRuleMatch(signal) {
+            recordSiteFire(rule, now: now)
             var ranked = scored(signal, tasks: tasks, now: now)
             ranked.removeAll { $0.target == .task(rule.target) }
             let c = Candidate(target: .task(rule.target), score: Self.inferredCeiling)
@@ -390,6 +419,46 @@ public final class Attributor {
         if isFirstFire { onFirstFire?(emailRules[i]) }
     }
 
+    /// The winning site rule covering this signal, if any (nil for non-URL
+    /// surfaces, mail hosts, or when nothing matches). Pure — explain()/
+    /// forgettable() call it too, so the provenance bump lives in
+    /// `recordSiteFire`, driven only by `attribute()` (the real decision).
+    public func siteRuleMatch(_ signal: ActivitySignal) -> SiteRule? {
+        guard !siteRules.isEmpty,
+              let context = SiteRecipes.context(for: signal,
+                                                disabled: disabledSiteRecipes)
+        else { return nil }
+        return SiteMatcher.match(context, rules: siteRules)
+    }
+
+    /// `recordFire`'s site twin.
+    private func recordSiteFire(_ rule: SiteRule, now: Date) {
+        guard let i = siteRules.firstIndex(where: { $0.sameRule(as: rule) }) else { return }
+        let isFirstFire = siteRules[i].fireCount == 0
+        siteRules[i].fireCount += 1
+        siteRules[i].lastFired = now
+        if isFirstFire { onFirstSiteFire?(siteRules[i]) }
+    }
+
+    /// Learn a site rule at an EXPLICIT grain — site rules are only ever
+    /// born from the Evidence Card, the grain footers or the ledger (spec
+    /// §5: no silent rule writes; there is no conservative auto-detect path
+    /// here, unlike `learnEmailRule`'s legacy default). Replaces any
+    /// existing UNPINNED rule with the same recipe+field+value (a pinned
+    /// rule is never silently replaced). `value` is stored lowercased.
+    public func learnSiteRule(recipeID: String?, field: String, value: String,
+                              to task: TaskRef, pinned: Bool = false,
+                              origin: EmailRule.Origin = .card, now: Date = Date()) {
+        let stored = value.lowercased()
+        siteRules.removeAll {
+            $0.recipeID == recipeID && $0.field == field && !$0.pinned
+                && $0.value.caseInsensitiveCompare(stored) == .orderedSame
+        }
+        siteRules.append(SiteRule(recipeID: recipeID, field: field, value: stored,
+                                  target: task, pinned: pinned,
+                                  createdAt: now, origin: origin))
+    }
+
     /// Shared webmail domains carry no task meaning (everyone is @gmail.com), so a
     /// correction there learns the specific CORRESPONDENT, not the domain.
     static let sharedWebmailDomains: Set<String> = [
@@ -451,7 +520,8 @@ public final class Attributor {
         // correct each one individually). Only ranked (learned) beliefs
         // subtract; a displaced pin/prime/sticky isn't a count problem.
         if let displaced, displaced.source == .ranked {
-            learning.learn(signal, target: displaced.target, weight: -1)
+            learning.learn(signal, target: displaced.target, weight: -1,
+                           disabledRecipes: disabledSiteRecipes)
         }
     }
 
@@ -460,7 +530,8 @@ public final class Attributor {
         let surface = Surface(signal: signal)
         primedSurfaces[surface] = task
         if pendingPrime?.surface == surface { pendingPrime = nil }
-        learning.learn(signal, target: .task(task), weight: weight)
+        learning.learn(signal, target: .task(task), weight: weight,
+                       disabledRecipes: disabledSiteRecipes)
     }
 
     /// Review-window or prompt assignment, including "Do not track". Always a
@@ -478,9 +549,11 @@ public final class Attributor {
             primedSurfaces[surface] = nil
         }
         if pendingPrime?.surface == surface { pendingPrime = nil }
-        learning.learn(signal, target: target, weight: 2)
+        learning.learn(signal, target: target, weight: 2,
+                       disabledRecipes: disabledSiteRecipes)
         if let displaced, displaced.source == .ranked {
-            learning.learn(signal, target: displaced.target, weight: -1)   // B9
+            learning.learn(signal, target: displaced.target, weight: -1,
+                           disabledRecipes: disabledSiteRecipes)   // B9
         }
     }
 
@@ -559,7 +632,8 @@ public final class Attributor {
             return [.init(target: .doNotTrack, score: 0, learned: 0, prior: 0)]
         }
         let targets = tasks.map { Target.task($0.ref) } + [.doNotTrack]
-        let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets)
+        let learned = learning.isEmpty ? [:] : learning.scores(for: signal, among: targets,
+                                                               disabledRecipes: disabledSiteRecipes)
         let priors = tasks.map { ranker.score($0, at: now, learning: learning,
                                               calendarMatch: currentCalendarMatch) }
         let maxPrior = max(priors.max() ?? 1, 0.001)
@@ -606,7 +680,8 @@ public final class Attributor {
     /// exactly, so what it explains is what actually happened.
     public func explain(_ signal: ActivitySignal, tasks: [WorkTask],
                         now: Date) -> AttributionExplanation {
-        let feats = LearningStore.features(from: signal).map { "\($0.kind.rawValue)=\($0.value)" }
+        let feats = LearningStore.features(from: signal, disabledRecipes: disabledSiteRecipes)
+            .map { "\($0.kind.rawValue)=\($0.value)" }
         if let pin = matchingPin(for: signal) {
             return .init(source: .pin, chosen: .task(pin.task), chosenScore: 1.0,
                          lines: [], features: feats, matchedPin: pin)
@@ -632,6 +707,11 @@ public final class Attributor {
             return .init(source: .emailRule, chosen: .task(rule.target), chosenScore: Self.inferredCeiling,
                          lines: scoredComponents(signal, tasks: tasks, now: now), features: feats,
                          matchedEmailRule: rule)
+        }
+        if let rule = siteRuleMatch(signal) {
+            return .init(source: .siteRule, chosen: .task(rule.target), chosenScore: Self.inferredCeiling,
+                         lines: scoredComponents(signal, tasks: tasks, now: now), features: feats,
+                         matchedSiteRule: rule)
         }
         let lines = scoredComponents(signal, tasks: tasks, now: now)
         let surface = Surface(signal: signal)
@@ -662,6 +742,7 @@ public final class Attributor {
     /// pinned EmailRule counts as a pin for this purpose.
     public enum Unlearn: Equatable, Sendable {
         case emailRule(EmailRule)
+        case siteRule(SiteRule)
         case primedSurface(Surface)
         case sessionSticky(SessionSticky.Key)
         /// Learned association weight. Weights can't be deleted, only
@@ -681,6 +762,7 @@ public final class Attributor {
         for text in [signal.windowTitle, signal.app].compactMap({ $0 })
         where recognizer.taskRef(inTitle: text) != nil { return nil }
         if let rule = emailRuleMatch(signal) { return rule.pinned ? nil : .emailRule(rule) }
+        if let rule = siteRuleMatch(signal) { return rule.pinned ? nil : .siteRule(rule) }
         let surface = Surface(signal: signal)
         if let pending = pendingPrime, pending.surface == surface { return nil }  // transient
         if primedSurfaces[surface] != nil { return .primedSurface(surface) }
@@ -688,7 +770,8 @@ public final class Attributor {
         // this signal — a pure-prior winner has nothing to un-learn. The
         // dominant association (largest positive counts on the signal's
         // features) is the thing the ranker is being dragged toward.
-        if let dominant = learning.dominantAssociation(for: signal) {
+        if let dominant = learning.dominantAssociation(for: signal,
+                                                       disabledRecipes: disabledSiteRecipes) {
             return .rankedAssociation(dominant)
         }
         return nil
@@ -701,6 +784,8 @@ public final class Attributor {
         switch u {
         case .emailRule(let rule):
             emailRules.removeAll { $0.sameRule(as: rule) }
+        case .siteRule(let rule):
+            siteRules.removeAll { $0.sameRule(as: rule) }
         case .primedSurface(let surface):
             primedSurfaces[surface] = nil
             if pendingPrime?.surface == surface { pendingPrime = nil }
@@ -708,7 +793,9 @@ public final class Attributor {
             sessionStickies.removeAll { $0.key == key }
             displacedByCorrection[key] = nil   // history dies with its correction
         case .rankedAssociation(let target):
-            learning.forget(target: target, features: LearningStore.features(from: signal))
+            learning.forget(target: target,
+                            features: LearningStore.features(from: signal,
+                                                             disabledRecipes: disabledSiteRecipes))
         }
     }
 
@@ -718,6 +805,7 @@ public final class Attributor {
     public func explainWithout(_ u: Unlearn, _ signal: ActivitySignal,
                                tasks: [WorkTask], now: Date) -> AttributionExplanation {
         let savedRules = emailRules
+        let savedSiteRules = siteRules
         let savedPrimes = primedSurfaces
         let savedStickies = sessionStickies
         let savedLearning = learning
@@ -725,6 +813,7 @@ public final class Attributor {
         let savedDisplaced = displacedByCorrection
         defer {
             emailRules = savedRules
+            siteRules = savedSiteRules
             primedSurfaces = savedPrimes
             sessionStickies = savedStickies
             learning = savedLearning
@@ -743,6 +832,7 @@ public final class Attributor {
     public func forgettableWithout(_ u: Unlearn, _ signal: ActivitySignal,
                                    now: Date) -> Unlearn? {
         let savedRules = emailRules
+        let savedSiteRules = siteRules
         let savedPrimes = primedSurfaces
         let savedStickies = sessionStickies
         let savedLearning = learning
@@ -750,6 +840,7 @@ public final class Attributor {
         let savedDisplaced = displacedByCorrection
         defer {
             emailRules = savedRules
+            siteRules = savedSiteRules
             primedSurfaces = savedPrimes
             sessionStickies = savedStickies
             learning = savedLearning

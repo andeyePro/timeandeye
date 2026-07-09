@@ -949,8 +949,12 @@ struct PopoverView: View {
             controller.userPicked(task)
         }
         if let sig {
+            // Any chain with a rule-committable grain gets the footer: email
+            // grains as before, plus recipe fields and the bare host row on
+            // every web page (site-recipes spec §0 Q2 — "this site → task"
+            // one-tap everywhere). App windows still get nothing.
             let identity = controller.identity(of: sig)
-            justPicked = identity.segments.contains { $0.kind.isEmailGrain }
+            justPicked = identity.footerDefaultGrainIndex != nil
                 ? (task, sig, identity) : nil
         } else {
             justPicked = nil
@@ -961,13 +965,14 @@ struct PopoverView: View {
     /// when a learned email rule fired, else a terse source name.
     private func whyGlyph(_ e: AttributionExplanation) -> String {
         if let rule = e.matchedEmailRule { return "✉ \(rule.value.isEmpty ? "any mail" : rule.value)" }
+        if let rule = e.matchedSiteRule { return "◆ \(rule.value)" }
         switch e.source {
         case .sessionSticky: return "categorised today"
         case .primedSurface: return "remembered"
         case .pendingPrime: return "just opened"
         case .ranked: return "learned"
         case .opTaskURL, .opTaskTitle: return "OP task"
-        case .pin, .emailRule, .none: return ""
+        case .pin, .emailRule, .siteRule, .none: return ""
         }
     }
 
@@ -976,7 +981,7 @@ struct PopoverView: View {
     /// it (or picking another task) is "once" — the express path never blocks.
     @ViewBuilder
     private func grainFooter(_ jp: (task: WorkTask, signal: ActivitySignal, identity: ContextIdentity)) -> some View {
-        if let count = jp.identity.cardDefaultGrainIndex, count >= 1, count <= jp.identity.segments.count {
+        if let count = jp.identity.footerDefaultGrainIndex, count >= 1, count <= jp.identity.segments.count {
             let seg = jp.identity.segments[count - 1]
             HStack(spacing: 6) {
                 Text("remember for").font(.caption2).foregroundStyle(.secondary)
@@ -1025,6 +1030,36 @@ struct PopoverView: View {
                     .font(.caption2).lineLimit(1)
                 Spacer()
                 Button { controller.dismissFireNotice() } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
+                    .help("Dismiss")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+        // The site-rule twins (site-recipes spec §6): identical hooks —
+        // nothing durable is ever learned silently, sites included.
+        if let notice = controller.siteLearnNotice, let first = notice.rules.first {
+            HStack(spacing: 6) {
+                Text("◆ \(first.value)"
+                     + (notice.rules.count > 1 ? " +\(notice.rules.count - 1)" : "")
+                     + " → \(notice.taskName)")
+                    .font(.caption2).lineLimit(1)
+                Spacer()
+                Button("Undo") { controller.undoSiteLearnNotice() }
+                    .font(.caption2).buttonStyle(.borderless)
+                Button { controller.dismissSiteLearnNotice() } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
+                    .help("Dismiss")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+        if let notice = controller.siteFireNotice {
+            HStack(spacing: 6) {
+                Text("◆ \(notice.rule.value) matched → \(notice.taskName)")
+                    .font(.caption2).lineLimit(1)
+                Spacer()
+                Button { controller.dismissSiteFireNotice() } label: { Image(systemName: "xmark.circle") }
                     .buttonStyle(.plain).font(.caption2).foregroundStyle(.tertiary)
                     .help("Dismiss")
             }

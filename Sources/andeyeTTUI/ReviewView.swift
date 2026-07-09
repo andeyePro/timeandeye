@@ -305,7 +305,7 @@ struct ReviewView: View {
               let task = controller.taskCache.first(where: { $0.ref == ref }),
               !segments.isEmpty else { return nil }
         let signals = segments.map { controller.signal(for: $0) }
-        if let shared = sharedEmailIdentity(of: signals) {
+        if let shared = sharedRuleIdentity(of: signals) {
             return (task, signals[0], shared)
         }
         let bare = signals.map { signal -> ActivitySignal in
@@ -314,17 +314,30 @@ struct ReviewView: View {
             s.emailSubject = nil
             return s
         }
-        guard let shared = sharedEmailIdentity(of: bare) else { return nil }
-        return (task, bare[0], shared)
+        if let shared = sharedRuleIdentity(of: bare) {
+            return (task, bare[0], shared)
+        }
+        // Disagreeing derived contexts (different repos/documents/paths in
+        // one batch): degrade to the shared `site` grain when every row
+        // shares one non-mail host — the same rule the email footer applies
+        // when a batch only shares the mail system (site-recipes spec §6).
+        let hosts = signals.map { $0.tabURL.flatMap { URL(string: $0)?.host?.lowercased() } }
+        if let host = hosts.first ?? nil, hosts.allSatisfy({ $0 == host }),
+           let chain = ContextIdentity.siteHostChain(of: signals[0]) {
+            return (task, signals[0], chain)
+        }
+        return nil
     }
 
-    /// The one identity every signal agrees on, provided it carries an email
-    /// grain — the footer's "single grain to offer" gate, factored so the
-    /// evidence-bearing pass and the evidence-stripped retry share it.
-    private func sharedEmailIdentity(of signals: [ActivitySignal]) -> ContextIdentity? {
+    /// The one identity every signal agrees on, provided it carries a
+    /// rule-committable grain (an email grain, a ◆ recipe field, or the host
+    /// row of a plain web page) — the footer's "single grain to offer" gate,
+    /// factored so the evidence-bearing pass and the evidence-stripped retry
+    /// share it.
+    private func sharedRuleIdentity(of signals: [ActivitySignal]) -> ContextIdentity? {
         let identities = signals.map { controller.identity(of: $0) }
         guard let shared = identities.first, identities.allSatisfy({ $0 == shared }),
-              shared.segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
+              shared.footerDefaultGrainIndex != nil else { return nil }
         return shared
     }
 
@@ -335,7 +348,7 @@ struct ReviewView: View {
     /// counterparty. Never blocks assigning the next selection.
     @ViewBuilder
     private var grainFooter: some View {
-        if let ja = justAssigned, let count = ja.identity.cardDefaultGrainIndex,
+        if let ja = justAssigned, let count = ja.identity.footerDefaultGrainIndex,
            count >= 1, count <= ja.identity.segments.count {
             let seg = ja.identity.segments[count - 1]
             let choices = ContextIdentity.correspondentChoices(ja.signal)

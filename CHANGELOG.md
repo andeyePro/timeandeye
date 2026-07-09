@@ -2,6 +2,54 @@
 
 ## 2026-07-09
 
+- [x] **Site recipes v1: pluggable page understanding beyond Gmail.**
+  Closes NAIL item (e) per the 2026-07-09 site-recipes spec (§11 v1 cut;
+  §0 questions resolved as the spec's own recommendations). Tier 0 ONLY —
+  every field parses from the URL + window title the sensors already
+  capture; no DOM probe, no new permissions, no Sensors change. New Core
+  model `SiteRecipe` (Codable data: anchored-suffix hosts, a declarative
+  `URLShape` view gate carrying the Gmail staleness lesson, an ordered
+  field list that IS the grain ladder, per-recipe default grain) with
+  three built-ins: GitHub (owner/repo/section/issue-title), Google
+  Docs/Drive (type/document-id-keyed-but-title-displayed/title), Xero
+  (organisation/section/page-title — extractors ASSERTED FROM MEMORY,
+  clearly flagged in code + fixtures, to be verified live via the new
+  Settings ▸ Diagnostics "What recipes see here" row before trusting).
+  `SiteRule`/`SiteMatcher` land as the third rule domain mirroring
+  EmailRule/CalendarRule (deliberately parallel, refactor deferred):
+  most-specific-wins over `["site"] + recipe fields`, pinned-beats-learned,
+  newest-unpinned ties, content fields substring-matched; the reserved
+  recipe-less `site` level makes "this site → task" learnable on EVERY
+  non-mail web page (ambiguous-page policy note, host half). Attributor:
+  `siteRuleMatch` on the SAME 0.95 rung as email rules (host-disjoint by
+  construction — mail hosts never produce a SiteContext), fire provenance
+  + `onFirstSiteFire`, and the full forget/explainWithout/
+  forgettableWithout family with siteRules added to every snapshot.
+  ContextIdentity: recipe pages now chain host + ◆ fields (ghosts for
+  missing values, content quoted last), REPLACING the raw path segments
+  (the old splice-at-1 would have duplicated them; no live callers);
+  recipe-less URLs keep the PinScope chain byte-for-byte. Teach surfaces:
+  Evidence Card ladder + popover/review grain footers commit SiteRules
+  (Remember learned / Always pinned; host-row Always stays the PinScope
+  root pin), footers now offer on any web page and a disagreeing review
+  batch degrades to the shared site grain — review rows gain recipe
+  grains retroactively (derived from stored tabURL/windowTitle, no schema
+  change). Learner: `.recipeField` features ("github.repo=example-repo"),
+  identity fields only, additive decode (unknown feature kinds now land
+  as `.unknown` instead of bricking learning.json); the Xero-T&Cs
+  compliance check extended to recipe'd hosts (screen-observed only).
+  Ledger: "Sites" segment (provenance, row disclosure, per-group bulk
+  forget, Copy rules) + the Recipes toggle strip (default on; off =
+  extracts nothing, rules dormant-not-deleted; `siteRecipesDisabled`
+  setting mirrored into the attributor). Every mutation registers undo
+  via the shared attributor snapshot (post-undo-audit pattern);
+  siterules.json persists beside emailrules.json. Gmail pipeline
+  untouched (migration deliberately deferred). Six new check suites
+  (extraction fixtures incl. staleness/view-gate cases, chain shape,
+  matcher semantics, attributor precedence + un-learn round-trips,
+  feature gating + compliance, ledger grouping/export). UNVERIFIED —
+  suite not run (no Mac in this container).
+
 - [x] **Undo audit: every data action now ⌘Z-able, exactly.** Martin:
   "check every action can be infinitely undone" (trigger: a comment edit
   grew a sub-minute slice, the growth fused it into a neighbour, and ⌘Z

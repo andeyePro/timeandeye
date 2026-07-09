@@ -9,6 +9,27 @@ public struct Feature: Hashable, Codable, Sendable {
         /// unchanged. Inert while capture is off (signals carry nil
         /// correspondents); live the moment it returns.
         case correspondent, correspondentDomain
+        /// A site-recipe identity field, value encoded
+        /// "<recipeID>.<field>=<value>" ("github.repo=example-repo") — the
+        /// correspondent playbook replayed (2026-07-09 site-recipes spec
+        /// §5): additive, inert until a recipe matches, sensor-observed by
+        /// construction (parsed from the URL/title the sensors captured).
+        /// Content fields are never emitted (title tokens already cover
+        /// them; a whole issue title as one feature would never repeat).
+        case recipeField
+        /// A kind this build doesn't know — rows written by a NEWER build
+        /// decode here instead of throwing away the whole learning.json.
+        /// Never emitted by `features(from:)`, so it can never match.
+        case unknown
+
+        /// Tolerant decode: an unknown rawValue (a future kind) maps to
+        /// `.unknown` rather than failing the store's whole decode — the
+        /// additive-migration guarantee the correspondent kinds promised,
+        /// made structural.
+        public init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Kind(rawValue: raw) ?? .unknown
+        }
     }
     public var kind: Kind
     public var value: String
@@ -39,7 +60,8 @@ public struct LearningStore: Codable, Equatable, Sendable {
     public var isEmpty: Bool { totals.isEmpty }
 
     public static func features(from signal: ActivitySignal,
-                                calendar: Calendar = Calendar(identifier: .gregorian)) -> [Feature] {
+                                calendar: Calendar = Calendar(identifier: .gregorian),
+                                disabledRecipes: Set<String> = []) -> [Feature] {
         var out = [Feature(.app, signal.app.lowercased())]
         if let title = signal.windowTitle {
             let tokens = title.lowercased()
@@ -62,12 +84,27 @@ public struct LearningStore: Codable, Equatable, Sendable {
             out += ctx.correspondents.map { Feature(.correspondent, $0) }
             out += ctx.correspondentDomains.map { Feature(.correspondentDomain, $0) }
         }
+        // WHAT the recipe'd page names — the repo/document/organisation the
+        // urlPath grain (host + first segment only) can never reach
+        // (site-recipes spec §5). Identity fields only: content fields never
+        // become features. Fields derive from the signal's own URL/title, so
+        // the compliance invariant above holds on go.xero.com pages too.
+        if let site = SiteRecipes.extract(signal, disabled: disabledRecipes),
+           let recipe = site.recipe {
+            for field in recipe.fields where !field.isContent {
+                if let value = site.values[field.name] {
+                    out.append(Feature(.recipeField,
+                                       "\(recipe.id).\(field.name)=\(value.lowercased())"))
+                }
+            }
+        }
         out.append(Feature(.hourOfDay, String(calendar.component(.hour, from: signal.timestamp))))
         return out
     }
 
-    public mutating func learn(_ signal: ActivitySignal, target: Target, weight: Double = 1) {
-        for f in Self.features(from: signal) {
+    public mutating func learn(_ signal: ActivitySignal, target: Target, weight: Double = 1,
+                               disabledRecipes: Set<String> = []) {
+        for f in Self.features(from: signal, disabledRecipes: disabledRecipes) {
             counts[f, default: [:]][target, default: 0] += weight
         }
         totals[target, default: 0] += weight
@@ -75,9 +112,10 @@ public struct LearningStore: Codable, Equatable, Sendable {
 
     /// A correction teaches harder than a confirmation: subtract from the wrong
     /// target, add double to the right one.
-    public mutating func correct(_ signal: ActivitySignal, from old: Target, to new: Target) {
-        learn(signal, target: old, weight: -1)
-        learn(signal, target: new, weight: 2)
+    public mutating func correct(_ signal: ActivitySignal, from old: Target, to new: Target,
+                                 disabledRecipes: Set<String> = []) {
+        learn(signal, target: old, weight: -1, disabledRecipes: disabledRecipes)
+        learn(signal, target: new, weight: 2, disabledRecipes: disabledRecipes)
     }
 
     /// Targeted un-learn (the Evidence Card's [✕ forget] for a ranked source):
@@ -96,9 +134,10 @@ public struct LearningStore: Codable, Equatable, Sendable {
     }
 
     /// Softmax-normalised scores (sum to 1) over `candidates` for this signal.
-    public func scores(for signal: ActivitySignal, among candidates: [Target]) -> [Target: Double] {
+    public func scores(for signal: ActivitySignal, among candidates: [Target],
+                       disabledRecipes: Set<String> = []) -> [Target: Double] {
         guard !candidates.isEmpty else { return [:] }
-        let feats = Self.features(from: signal)
+        let feats = Self.features(from: signal, disabledRecipes: disabledRecipes)
         var raw: [Target: Double] = [:]
         for t in candidates {
             let total = max(totals[t] ?? 0, 0)
@@ -149,9 +188,10 @@ public struct LearningStore: Codable, Equatable, Sendable {
     /// largest positive count total on the signal's features, nil when nothing
     /// positive is learned on them. Drives `Attributor.forgettable`'s
     /// rankedAssociation case (what a [✕ suppress] would counter-teach).
-    public func dominantAssociation(for signal: ActivitySignal) -> Target? {
+    public func dominantAssociation(for signal: ActivitySignal,
+                                    disabledRecipes: Set<String> = []) -> Target? {
         var sums: [Target: Double] = [:]
-        for f in Self.features(from: signal) {
+        for f in Self.features(from: signal, disabledRecipes: disabledRecipes) {
             for (target, count) in counts[f] ?? [:] where count > 0 {
                 sums[target, default: 0] += count
             }

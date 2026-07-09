@@ -56,7 +56,9 @@ struct EvidenceCardView: View {
             }
         }
         .onAppear {
-            grainCount = max(1, identity.cardDefaultGrainIndex ?? identity.defaultGrainCount)
+            grainCount = max(1, identity.cardDefaultGrainIndex
+                                ?? identity.siteDefaultGrainIndex
+                                ?? identity.defaultGrainCount)
             correspondentChecks = Set(correspondentChoices)   // all checked by default
         }
         .padding(host == .popover ? 6 : 8)
@@ -88,6 +90,9 @@ struct EvidenceCardView: View {
             }
             if let rule = explanation.matchedEmailRule {
                 Text(ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
+            }
+            if let rule = explanation.matchedSiteRule {
+                Text(siteRuleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
             }
             if let pin = explanation.matchedPin {
                 HStack(spacing: 4) {
@@ -138,6 +143,7 @@ struct EvidenceCardView: View {
         case .opTaskURL: return "OpenProject task URL in the tab → \(chosen)"
         case .opTaskTitle: return "OpenProject id in the title → \(chosen)"
         case .emailRule: return "a learned rule fired → \(chosen)"
+        case .siteRule: return "a learned site rule fired → \(chosen)"
         case .pendingPrime: return "a just-opened OP task primed it → \(chosen)"
         case .primedSurface: return "remembered from a past correction → \(chosen)"
         case .ranked: return "learned associations + priors → \(chosen)"
@@ -147,6 +153,15 @@ struct EvidenceCardView: View {
 
     private func ruleProvenance(_ rule: EmailRule) -> String {
         var parts = ["✉ \(rule.value.isEmpty ? "any mail" : rule.value)"]
+        if rule.createdAt != .distantPast {
+            parts.append("learned \(rule.createdAt.formatted(date: .abbreviated, time: .omitted))")
+        }
+        parts.append("fired \(rule.fireCount)×")
+        return parts.joined(separator: " · ")
+    }
+
+    private func siteRuleProvenance(_ rule: SiteRule) -> String {
+        var parts = ["◆ \(rule.grainLabel.lowercased()) \(rule.value)"]
         if rule.createdAt != .distantPast {
             parts.append("learned \(rule.createdAt.formatted(date: .abbreviated, time: .omitted))")
         }
@@ -188,6 +203,7 @@ struct EvidenceCardView: View {
         case .sessionSticky: return "categorised earlier today"
         case .opTaskURL, .opTaskTitle: return "OP page"
         case .emailRule: return "learned rule"
+        case .siteRule: return "learned site rule"
         case .pendingPrime: return "just-opened OP task"
         case .primedSurface: return "past correction"
         case .ranked: return "learned"
@@ -327,8 +343,8 @@ struct EvidenceCardView: View {
                         if seg.shared {
                             Text("shared").font(.caption2).foregroundStyle(.orange)
                         }
-                        if let conflict = conflict(for: seg), conflict.target != task.ref {
-                            Text("replaces \(controller.name(of: .task(conflict.target)))")
+                        if let conflict = conflictTarget(for: seg), conflict != task.ref {
+                            Text("replaces \(controller.name(of: .task(conflict)))")
                                 .font(.caption2).foregroundStyle(.orange)
                         }
                     }
@@ -391,9 +407,23 @@ struct EvidenceCardView: View {
         .padding(.leading, 14)
     }
 
-    private func conflict(for segment: ContextIdentity.Segment) -> EmailRule? {
-        guard let level = segment.kind.emailMatchLevel else { return nil }
-        return controller.conflictingRule(level: level, value: segment.emailMatchValue)
+    /// The task an existing UNPINNED rule at this grain already points to —
+    /// the "replaces X" warning, for email AND site grains alike.
+    private func conflictTarget(for segment: ContextIdentity.Segment) -> TaskRef? {
+        if let level = segment.kind.emailMatchLevel {
+            return controller.conflictingRule(level: level, value: segment.emailMatchValue)?.target
+        }
+        let host = signal.tabURL.flatMap { URL(string: $0)?.host?.lowercased() }
+        if case .recipeField(let field) = segment.kind, let host,
+           let recipe = SiteRecipes.recipe(forHost: host) {
+            return controller.conflictingSiteRule(recipeID: recipe.id, field: field,
+                                                  value: segment.value)?.target
+        }
+        if segment.kind == .urlHost, let host {
+            return controller.conflictingSiteRule(recipeID: nil, field: SiteRule.siteField,
+                                                  value: host)?.target
+        }
+        return nil
     }
 
     private func commit(_ task: WorkTask, pinned: Bool?) {

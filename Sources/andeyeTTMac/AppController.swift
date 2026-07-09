@@ -253,6 +253,12 @@ public final class AppController: ObservableObject {
             try? settingsStore.save(settings)
             Notifier.enabled = settings.systemNotifications
             attributor.emailMatchOrder = settings.emailMatchOrder
+            attributor.disabledSiteRecipes = Set(settings.siteRecipesDisabled)
+            // A toggled recipe changes what extracts (and which rules are
+            // dormant) RIGHT NOW — re-evaluate the live session at once.
+            if oldValue.siteRecipesDisabled != settings.siteRecipesDisabled {
+                tracker.reevaluate()
+            }
             if oldValue.ownEmailEntries != settings.ownEmailEntries { pushOwnEmail() }
             // The review floor gates queue ADMISSION at reload time, so a
             // changed floor re-filters the live queue immediately — no
@@ -316,6 +322,9 @@ public final class AppController: ObservableObject {
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
     private let pinsStore: JSONFileStore<[Pin]>
     private let emailRulesStore: JSONFileStore<[EmailRule]>
+    /// Site rules (2026-07-09 site-recipes spec §5): siterules.json beside
+    /// emailrules.json — a new file, no migration.
+    private let siteRulesStore: JSONFileStore<[SiteRule]>
     /// The calendar→task ladder (mirrors `emailRules` exactly): learned from
     /// corrections, editable rule ladder — see `teachCalendarRule`. Kept on
     /// the Mac side rather than on `Attributor` (unlike `emailRules`)
@@ -425,6 +434,7 @@ public final class AppController: ObservableObject {
         primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
         pinsStore = JSONFileStore<[Pin]>(url: dir.appendingPathComponent("pins.json"))
         emailRulesStore = JSONFileStore<[EmailRule]>(url: dir.appendingPathComponent("emailrules.json"))
+        siteRulesStore = JSONFileStore<[SiteRule]>(url: dir.appendingPathComponent("siterules.json"))
         calendarRulesStore = JSONFileStore<[CalendarRule]>(url: dir.appendingPathComponent("calendarrules.json"))
         billingStore = JSONFileStore<BillableRules>(url: dir.appendingPathComponent("billing.json"))
         billing = (try? billingStore.load().flatMap { $0 }) ?? BillableRules()
@@ -478,8 +488,12 @@ public final class AppController: ObservableObject {
             attributor.primedSurfaces = primed
         }
         attributor.emailMatchOrder = loadedSettings.emailMatchOrder
+        attributor.disabledSiteRecipes = Set(loadedSettings.siteRecipesDisabled)
         if let rules = (try? emailRulesStore.load()).flatMap({ $0 }) {
             attributor.emailRules = rules
+        }
+        if let rules = (try? siteRulesStore.load()).flatMap({ $0 }) {
+            attributor.siteRules = rules
         }
         if let calRules = (try? calendarRulesStore.load()).flatMap({ $0 }) {
             calendarRules = calRules
@@ -1684,6 +1698,8 @@ public final class AppController: ObservableObject {
         // always closes out a leftover learn/fire notice from the one before.
         learnNotice = nil
         fireNotice = nil
+        siteLearnNotice = nil
+        siteFireNotice = nil
         tracker.confirm(task: task.ref, at: Date())
         // Re-emit the unchanged surface so span accrual restarts immediately
         // (B1's other half): after a manual stop the sensor's dedup key
@@ -1704,6 +1720,7 @@ public final class AppController: ObservableObject {
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
         try? emailRulesStore.save(attributor.emailRules)
+        try? siteRulesStore.save(attributor.siteRules)
         try? calendarRulesStore.save(calendarRules)
         scheduleRetroPass()
     }
@@ -1802,6 +1819,8 @@ public final class AppController: ObservableObject {
         // reassign counts as the next pick too.
         learnNotice = nil
         fireNotice = nil
+        siteLearnNotice = nil
+        siteFireNotice = nil
         // Make the popover relabel reversible: ⌘Z relabels back to the task it
         // was on (the inverse is itself a change, marked non-undoable so it
         // doesn't stack endlessly). The relabel also TEACHES (surface assign +
@@ -2661,6 +2680,15 @@ public final class AppController: ObservableObject {
         }
     }
 
+    /// `conflictingRule`'s site twin — mirrors `learnSiteRule`'s own
+    /// replacement filter (same recipe+field+value, unpinned).
+    public func conflictingSiteRule(recipeID: String?, field: String, value: String) -> SiteRule? {
+        attributor.siteRules.first {
+            $0.recipeID == recipeID && $0.field == field && !$0.pinned
+                && $0.value.caseInsensitiveCompare(value) == .orderedSame
+        }
+    }
+
     /// The Evidence Card's [✕ forget] / [✕ suppress]: remove exactly what `u`
     /// names, with a full undo (R2 — one action, never a leap of faith). State
     /// is small enough to snapshot wholesale rather than deriving a bespoke
@@ -2670,6 +2698,7 @@ public final class AppController: ObservableObject {
     /// round trip is exact.
     public func forget(_ u: Attributor.Unlearn, signal: ActivitySignal) {
         let savedRules = attributor.emailRules
+        let savedSiteRules = attributor.siteRules
         let savedPrimes = attributor.primedSurfaces
         let savedLearning = attributor.learning
         let savedDisplaced = attributor.displacedByCorrection
@@ -2680,6 +2709,7 @@ public final class AppController: ObservableObject {
         registerUndo(forgetUndoLabel(u)) { [weak self] in
             guard let self else { return }
             self.attributor.emailRules = savedRules
+            self.attributor.siteRules = savedSiteRules
             self.attributor.primedSurfaces = savedPrimes
             self.attributor.replaceLearning(savedLearning)
             // Wholesale snapshot restore (stickies included) — exact, where
@@ -2697,6 +2727,7 @@ public final class AppController: ObservableObject {
     private func forgetUndoLabel(_ u: Attributor.Unlearn) -> String {
         switch u {
         case .emailRule(let rule): return "forget rule \(rule.value)"
+        case .siteRule(let rule): return "forget rule \(rule.value)"
         case .primedSurface: return "forget remembered surface"
         case .sessionSticky: return "forget today's categorisation"
         case .rankedAssociation(let target): return "suppress learning toward \(name(of: target))"
@@ -2705,17 +2736,24 @@ public final class AppController: ObservableObject {
 
     /// The Evidence Card's Remember (0.95, learned) / Always (1.0, pinned)
     /// commit at the grain the user selected: an email-flavoured grain
-    /// (including the system row) writes an `EmailRule`; a plain PinScope
-    /// grain writes a `Pin` when pinned (Remember there is today's soft prime
-    /// + learned association, already applied by the caller's own pick — see
-    /// `PopoverView`/`TimelineView`). This is what replaces the retired
-    /// silent `learnEmailRule` call in `confirm`/`assign` (2026-07-03 spec
-    /// §5.2/§5.4).
+    /// (including the system row) writes an `EmailRule`; a ◆ recipe-field
+    /// grain writes a `SiteRule` (Remember learned, Always PINNED — still
+    /// 0.95, mirroring the card's pinned-EmailRule convention); the host row
+    /// on a non-mail page writes the recipe-less `site`-level SiteRule on
+    /// Remember (the policy note's "one correction generalises the whole
+    /// host") while its Always stays the existing PinScope root pin (1.0,
+    /// standing law) — 2026-07-09 site-recipes spec §6. A plain PinScope
+    /// path grain writes a `Pin` when pinned (Remember there is today's soft
+    /// prime + learned association, already applied by the caller's own pick
+    /// — see `PopoverView`/`TimelineView`). This is what replaces the
+    /// retired silent `learnEmailRule` call in `confirm`/`assign`
+    /// (2026-07-03 spec §5.2/§5.4).
     public func commitGrain(_ identity: ContextIdentity, grainCount: Int, signal: ActivitySignal,
                             to ref: TaskRef, pinned: Bool, now: Date = Date()) {
         guard grainCount >= 1, grainCount <= identity.segments.count else { return }
         let segment = identity.segments[grainCount - 1]
         guard segment.available else { return }
+        let host = signal.tabURL.flatMap { URL(string: $0)?.host?.lowercased() }
         if let level = segment.kind.emailMatchLevel {
             let restore = attributorSnapshotRestore()
             attributor.learnEmailRule(signal, to: ref, level: level, value: segment.emailMatchValue,
@@ -2732,11 +2770,41 @@ public final class AppController: ObservableObject {
                                               target: ref, pinned: pinned, createdAt: now, origin: .card)],
                             signal: signal)
             objectWillChange.send()
+        } else if case .recipeField(let field) = segment.kind, let host,
+                  let recipe = SiteRecipes.recipe(forHost: host,
+                                                  disabled: attributor.disabledSiteRecipes) {
+            commitSiteRule(recipeID: recipe.id, field: field, value: segment.value,
+                           signal: signal, to: ref, pinned: pinned, now: now)
+        } else if segment.kind == .urlHost, !pinned, let host {
+            commitSiteRule(recipeID: nil, field: SiteRule.siteField, value: host,
+                           signal: signal, to: ref, pinned: false, now: now)
         } else if pinned, let id = PinScope.identity(of: signal) {
             let prefix = Array(id.segments.prefix(grainCount))
             guard !prefix.isEmpty else { return }
             commitPin(kind: id.kind, prefix: prefix, to: ref)
         }
+    }
+
+    /// The site half of `commitGrain` — same undo + notice shape as the
+    /// email branch: one snapshot-restore ⌘Z step, one First-LEARN notice
+    /// whose [undo] forgets exactly the rule written.
+    private func commitSiteRule(recipeID: String?, field: String, value: String,
+                                signal: ActivitySignal, to ref: TaskRef,
+                                pinned: Bool, now: Date) {
+        let restore = attributorSnapshotRestore()
+        attributor.learnSiteRule(recipeID: recipeID, field: field, value: value,
+                                 to: ref, pinned: pinned, origin: .card, now: now)
+        persistAssociations()
+        tracker.reevaluate()
+        registerUndo("learn rule \(value.lowercased())") { [weak self] in
+            self?.siteLearnNotice = nil
+            restore()
+        }
+        showSiteLearnNotice(rules: [SiteRule(recipeID: recipeID, field: field,
+                                             value: value.lowercased(), target: ref,
+                                             pinned: pinned, createdAt: now, origin: .card)],
+                            signal: signal)
+        objectWillChange.send()
     }
 
     /// `commitGrain`'s multi-correspondent sibling (2026-07-03 spec §5.5,
@@ -2836,7 +2904,56 @@ public final class AppController: ObservableObject {
                 self.fireNotice = nil
             }
         }
+        attributor.onFirstSiteFire = { [weak self] rule in
+            guard let self else { return }
+            let notice = SiteFireNotice(rule: rule, taskName: self.name(of: .task(rule.target)))
+            self.siteFireNotice = notice
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.noticeDismissSeconds) { [weak self] in
+                guard let self, self.siteFireNotice == notice else { return }
+                self.siteFireNotice = nil
+            }
+        }
     }
+
+    // MARK: - Site-rule notices (site-recipes spec §6 — identical hooks:
+    // nothing durable is ever learned silently)
+
+    /// `LearnNotice`'s site twin — a parallel struct rather than a
+    /// generalisation, matching the parallel-rule-type call (spec §5).
+    public struct SiteLearnNotice: Equatable, Sendable {
+        public let rules: [SiteRule]
+        public let taskName: String
+        public let signal: ActivitySignal
+    }
+    public struct SiteFireNotice: Equatable, Sendable {
+        public let rule: SiteRule
+        public let taskName: String
+    }
+    @Published public private(set) var siteLearnNotice: SiteLearnNotice?
+    @Published public private(set) var siteFireNotice: SiteFireNotice?
+
+    private func showSiteLearnNotice(rules: [SiteRule], signal: ActivitySignal) {
+        guard let first = rules.first else { return }
+        let notice = SiteLearnNotice(rules: rules, taskName: name(of: .task(first.target)),
+                                     signal: signal)
+        siteLearnNotice = notice
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.noticeDismissSeconds) { [weak self] in
+            guard let self, self.siteLearnNotice == notice else { return }
+            self.siteLearnNotice = nil
+        }
+    }
+
+    /// The site First-LEARN notice's [undo]: forgets exactly the rule(s) it
+    /// named — through `forget(_:signal:)`, so it registers its own ⌘Z step
+    /// like the email twin.
+    public func undoSiteLearnNotice() {
+        guard let notice = siteLearnNotice else { return }
+        siteLearnNotice = nil
+        for rule in notice.rules { forget(.siteRule(rule), signal: notice.signal) }
+    }
+
+    public func dismissSiteLearnNotice() { siteLearnNotice = nil }
+    public func dismissSiteFireNotice() { siteFireNotice = nil }
 
     // MARK: - Rules Ledger (Settings ▸ Context rules…)
 
@@ -2876,6 +2993,56 @@ public final class AppController: ObservableObject {
         RulesLedger.exportText(attributor.emailRules, nameOf: { name(of: .task($0)) })
     }
 
+    // MARK: - Rules Ledger, "Sites" segment (site-recipes spec §6)
+
+    /// Learned + pinned site rules grouped by task — the ledger's Sites
+    /// segment, `rulesLedger`'s exact contract.
+    public func siteRulesLedger(search: String = "") -> [SiteRulesLedgerGroup] {
+        SiteRulesLedger.grouped(attributor.siteRules, nameOf: { name(of: .task($0)) },
+                                search: search)
+    }
+
+    /// Site-row delete (✕) — `deleteRule`'s twin.
+    public func deleteSiteRule(_ rule: SiteRule) {
+        deleteSiteRules([rule])
+    }
+
+    /// Bulk site-rule forget: every rule removed in the SAME undo step,
+    /// exactly `deleteRules`' shape.
+    public func deleteSiteRules(_ rules: [SiteRule]) {
+        guard !rules.isEmpty else { return }
+        let saved = attributor.siteRules
+        attributor.siteRules.removeAll { candidate in rules.contains { $0.sameRule(as: candidate) } }
+        persistAssociations()
+        tracker.reevaluate()
+        let label = rules.count == 1 ? "delete rule \(rules[0].value)" : "delete \(rules.count) rules"
+        registerUndo(label) { [weak self] in
+            guard let self else { return }
+            self.attributor.siteRules = saved
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
+        objectWillChange.send()
+    }
+
+    /// The Sites segment's "Copy rules" export.
+    public func siteRulesExportText() -> String {
+        SiteRulesLedger.exportText(attributor.siteRules, nameOf: { name(of: .task($0)) })
+    }
+
+    /// The Settings ▸ Diagnostics "What recipes see here" dump: what the
+    /// recipe layer derives from the CURRENT focus surface (the pure
+    /// formatter lives in Core — `SiteRecipes.probeText` — so it's checked).
+    /// Shown on demand only; never routed to DebugLog (spec §9).
+    public func siteRecipeProbeText() -> String {
+        guard let signal = tracker.currentFocusSignal else {
+            return "No focused surface yet — focus the page you want to inspect, then reopen Settings."
+        }
+        return SiteRecipes.probeText(for: signal,
+                                     disabled: attributor.disabledSiteRecipes)
+    }
+
     /// Teach the attributor that this window is `ref` (a strong correction, like
     /// a confirmation): future time on it attributes here. The visible "edit the
     /// weighting" action behind the why-panel.
@@ -2898,10 +3065,12 @@ public final class AppController: ObservableObject {
 
     /// Snapshot the attributor's whole learned state NOW and hand back the
     /// inverse that restores it — the one shape every teach/boost/grain undo
-    /// shares (rules, primes, learned weights, stickies, displacement
-    /// history; pins have their own snapshot in `commitPin`/`unpin`).
+    /// shares (email + site rules, primes, learned weights, stickies,
+    /// displacement history; pins have their own snapshot in
+    /// `commitPin`/`unpin`).
     private func attributorSnapshotRestore() -> () -> Void {
         let savedRules = attributor.emailRules
+        let savedSiteRules = attributor.siteRules
         let savedPrimes = attributor.primedSurfaces
         let savedLearning = attributor.learning
         let savedDisplaced = attributor.displacedByCorrection
@@ -2909,6 +3078,7 @@ public final class AppController: ObservableObject {
         return { [weak self] in
             guard let self else { return }
             self.attributor.emailRules = savedRules
+            self.attributor.siteRules = savedSiteRules
             self.attributor.primedSurfaces = savedPrimes
             self.attributor.replaceLearning(savedLearning)
             self.attributor.displacedByCorrection = savedDisplaced

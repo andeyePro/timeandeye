@@ -238,11 +238,23 @@ and recorded rather than fixed blind:
   `deleteRule` now a one-row call into it); "Copy rules" plain-text export
   (`RulesLedger.exportText`, Core + checked) mirroring the timesheet
   export's copy-button/"Copied" pattern. UNVERIFIED — suite not run (no
-  Mac in this container). Still open: site
-  recipes beyond Gmail, candidates ▾ expansion (spec §6 "later polish");
+  Mac in this container). Still open: candidates ▾ expansion (spec §6
+  "later polish");
   screen-share suppression DONE 2026-07-09 ("Quiet while presenting" —
   mic-live/display-mirrored gate on naming banners).
-  (e) not started.
+  (e) DONE 2026-07-09 (this commit) — site recipes v1 per the 2026-07-09
+  site-recipes spec: SiteRecipe/SiteContext model + GitHub/GDocs/Xero
+  Tier 0 built-ins, SiteRule/SiteMatcher third rule domain on the email
+  rung, recipe ContextIdentity chains (replace-not-splice), grain commits
+  from card + both footers, `site` host grain on every web page,
+  `.recipeField` learned features, ledger Sites segment + recipe toggle
+  strip, diagnostics "What recipes see here", six check suites; see
+  CHANGELOG. ⚠️ Xero's URL/title shapes are asserted from memory — verify
+  live with the diagnostics row and fix recipe + fixtures together if
+  they differ. Gmail NOT migrated into the model (spec §11 later, with
+  the pack/update channel, point-and-teach recipes, Tier 1 beyond mail,
+  and the three-domain rule-protocol refactor). UNVERIFIED — suite not
+  run (no Mac in this container).
 
 - [x] BEFORE the FOSS publish: contributor IP mechanism. (DONE 2026-07-02 —
   Martin chose AGPL-3.0 + CLA; LICENSE, CLA.md and the CONTRIBUTING licence

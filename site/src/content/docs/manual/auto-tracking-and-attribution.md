@@ -61,15 +61,16 @@ The card shows, top to bottom:
   domain, subject or the whole mail system), or **Always 📌** (a pinned rule,
   100% and standing law).
 
-Picking a task from the popover's own list on an email surface also offers a
-one-line "remember for..." footer underneath - the same Remember, without
-opening the card. The Review queue offers the same footer under its assign
-bar: queued rows keep the correspondents and subject captured while their
-time accrued, so assigning a batch of low-certainty windows to one task
-offers the identical Remember - at the correspondent, domain or subject
-grain when every row in the batch shares one email context, or at the
-mail-system grain when the batch only shares the mail system. Either place,
-when that context has more than one
+Picking a task from the popover's own list on an email surface or any web
+page also offers a one-line "remember for..." footer underneath - the same
+Remember, without opening the card. The Review queue offers the same footer
+under its assign bar: queued rows keep the correspondents and subject
+captured while their time accrued, so assigning a batch of low-certainty
+windows to one task offers the identical Remember - at the correspondent,
+domain or subject grain when every row in the batch shares one email
+context, at the mail-system grain when the batch only shares the mail
+system, or at the whole-site grain when web rows share only their site.
+Either place, when that context has more than one
 correspondent, checking the correspondent row expands it into a checkbox per
 address, so you choose exactly who the rule should cover, not just the first
 one andeye saw.
@@ -94,14 +95,48 @@ real task, and you can reassign it from the timeline any time you do work out
 what it was. If a later rule makes andeye confident about it on its own, it
 reclaims itself back out of Unknown automatically.
 
-Saving a rule shows a brief "✉ who → task" notice with an Undo, and the first
+Saving a rule shows a brief "who → task" notice with an Undo, and the first
 time a learned rule goes on to fire for real, you're told once more, so a
 decision it makes on your behalf is never silent. Both notices sit in the
 popover, auto-dismiss on their own, and are never a system notification.
 
-Every learned + pinned email rule lives in
-[Settings](/manual/settings/) ▸ Email → task matching ▸ Context rules…,
-listed with its provenance. Click a row for its full detail; forget it there,
-or forget a whole task's rules at once with its group's **Forget all** button -
-either way, one undo (⌘Z) restores everything that click removed. **Copy
-rules** puts the lot on the clipboard as plain text.
+Every learned + pinned rule lives in
+[Settings](/manual/settings/) ▸ Email → task matching ▸ Context rules… - an
+**Email** segment and a **Sites** segment, each listed with its provenance.
+Click a row for its full detail; forget it there, or forget a whole task's
+rules at once with its group's **Forget all** button - either way, one undo
+(⌘Z) restores everything that click removed. **Copy rules** puts the current
+segment's rules on the clipboard as plain text.
+
+## Site rules: whole sites, and the pages inside them
+
+On the web beyond email, andeye reads certain sites' pages into named
+fields, so one correction can cover exactly the right slice of a site.
+Built-in recipes understand:
+
+- **GitHub** - owner, repository, section (issues, pulls, actions...) and
+  the open issue/PR title. "Everything in the example repo → task X" is one
+  Remember at the repository grain.
+- **Google Docs / Drive** - document type, the document itself, and its
+  title. A document rule keys on the document's stable identity, so it
+  survives a rename.
+- **Xero** - the organisation, the app section (invoicing, bank,
+  contacts...) and the page title. One Remember per organisation maps each
+  set of books to its own task.
+
+Every field is parsed from the page's address and window title - the same
+things andeye already watches - so recipes add names and structure, never
+new collection. A field a page doesn't show says "not captured" in the
+Evidence Card, and the card's grain ladder lets you Remember at any field
+(**Always 📌** pins it), exactly like the email ladder.
+
+On sites without a recipe the ladder still offers the site itself: Remember
+on the site row teaches "this whole site → task" in one tap, revisable and
+forgettable like any learned rule; Always on the site row is the classic
+100% pin.
+
+The ledger's Sites segment carries a **Recipes** strip - one checkbox per
+recipe. Turning a recipe off stops it reading anything; rules you taught
+under it stay listed (greyed, dormant) until you turn it back on or forget
+them. To see exactly what the recipes make of the page you're on, use
+[Settings](/manual/settings/) ▸ Diagnostics ▸ **What recipes see here**.

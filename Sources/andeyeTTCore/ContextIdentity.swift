@@ -2,10 +2,12 @@ import Foundation
 
 /// One broad→narrow segment chain for any surface — the shared identity model
 /// behind the Evidence Card's grain ladder, the pin editor's Components strip
-/// and (later) site-recipe fields (2026-07-03 context-rules spec §5.1).
+/// and site-recipe fields (2026-07-03 context-rules spec §5.1; 2026-07-09
+/// site-recipes spec §6).
 ///
 ///   email:   Gmail ▸ harborlane.example ▸ r.naismith@… ▸ "Insurance Renewals"
-///   plain:   github.com ▸ andeyePro ▸ andeyeTT ▸ issues
+///   recipe:  github.com ▸ ◆Aqueum ▸ ◆a private notes repo ▸ ◆issues ▸ ◆"Pin editor loses focus"
+///   plain:   forum.example.com ▸ andeyePro ▸ andeyeTT ▸ issues
 ///   app:     Ghostty ▸ andeyeTT ▸ Attributor.swift
 ///
 /// Email segments follow the user's `emailMatchOrder` ladder, so reordering
@@ -54,20 +56,44 @@ public struct ContextIdentity: Sendable, Equatable {
     ///  • Email surface (a detected mail host, or a signal carrying email
     ///    context): the email ladder levels in `order`, missing fields as
     ///    ghost rows.
+    ///  • A site-recipe page (2026-07-09 site-recipes spec §6): the host
+    ///    root plus one ◆ `recipeField` segment per declared field (ghosts
+    ///    for missing values, content last) — REPLACING the raw path
+    ///    segments, not splicing alongside them: the fields ARE the path,
+    ///    structured (a splice would render `github.com ▸ ◆Aqueum ▸ ◆a private notes repo
+    ///    ▸ Aqueum ▸ a private notes repo`).
     ///  • Anything else: the PinScope identity — host + path segments for a
     ///    URL, app + window-title segments otherwise (title segments share
     ///    `.app`, the kind of the whole app-window identity).
-    /// `recipeFields` is the extension point for site recipes (spec: spliced
-    /// in after the root segment, marked ◆); recipes themselves come later.
+    /// `recipeFields` remains the splice-after-root extension point for
+    /// CALLER-SUPPLIED fields (Tier 1 DOM-sourced values, later) — Tier 0
+    /// URL/title fields come from the internal recipe branch above.
     public static func from(_ signal: ActivitySignal,
                             order: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
-                            recipeFields: [(name: String, value: String)] = []) -> ContextIdentity {
+                            recipeFields: [(name: String, value: String)] = [],
+                            disabledRecipes: Set<String> = []) -> ContextIdentity {
         let ctx = EmailContext.from(signal)
         let host = signal.tabURL.flatMap { URL(string: $0)?.host }
         let detected = EmailSystem.detect(urlHost: host)
         var segments: [Segment]
         if ctx != nil || detected != .unknown {
             segments = emailSegments(ctx: ctx, system: ctx?.system ?? detected, order: order)
+        } else if let site = SiteRecipes.extract(signal, disabled: disabledRecipes),
+                  let recipe = site.recipe {
+            segments = [Segment(kind: .urlHost, value: site.host, display: site.host)]
+            for field in recipe.fields {
+                guard let value = site.values[field.name] else {
+                    segments.append(ghost(.recipeField(field.name)))
+                    continue
+                }
+                // Identity display can come from a sibling field (Docs shows
+                // the human title while the rule keys on the stable doc id);
+                // content displays quote, like the subject row.
+                let display = field.displayVia.flatMap { site.values[$0] } ?? value
+                segments.append(Segment(
+                    kind: .recipeField(field.name), value: value,
+                    display: field.isContent ? "\u{201C}\(display)\u{201D}" : display))
+            }
         } else if let id = PinScope.identity(of: signal) {
             switch id.kind {
             case .url:
@@ -172,6 +198,48 @@ public struct ContextIdentity: Sendable, Equatable {
         }
         return nil
     }
+
+    /// The recipe chain's default grain (site-recipes spec §6): the segment
+    /// for the matched recipe's DECLARED default field (repo, document,
+    /// organisation — email-style conservatism, never the content field),
+    /// falling back to the host row when that field wasn't captured. nil for
+    /// every non-recipe chain (email, plain URL, app window).
+    public var siteDefaultGrainIndex: Int? {
+        guard segments.first?.kind == .urlHost,
+              segments.contains(where: { if case .recipeField = $0.kind { return true }
+                                          return false }),
+              let recipe = SiteRecipes.recipe(forHost: segments[0].value) else { return nil }
+        if let i = segments.firstIndex(where: {
+            $0.kind == .recipeField(recipe.defaultField) && $0.available
+        }) {
+            return i + 1
+        }
+        return 1   // default field not captured — the host row still commits
+    }
+
+    /// The post-pick/post-assign footers' one-line offer grain: email's
+    /// conservative default when the chain carries email grains, the
+    /// recipe's declared default on a recipe chain, else the HOST row on any
+    /// plain URL chain (site-recipes spec §0 Q2 — "this site → task" is
+    /// learnable everywhere). nil on app windows, where no site rule
+    /// applies and the footer stays away.
+    public var footerDefaultGrainIndex: Int? {
+        if let i = cardDefaultGrainIndex { return i }
+        if let i = siteDefaultGrainIndex { return i }
+        return segments.first?.kind == .urlHost ? 1 : nil
+    }
+
+    /// The host-only chain a disagreeing review batch degrades to (site-
+    /// recipes spec §6): when selected rows share a (non-mail) host but
+    /// nothing finer, the shared `site` grain is still worth offering. nil
+    /// for mail hosts (email keeps its own footer path) and URL-less
+    /// signals.
+    public static func siteHostChain(of signal: ActivitySignal) -> ContextIdentity? {
+        guard let context = SiteRecipes.context(for: signal) else { return nil }
+        return ContextIdentity(segments: [
+            Segment(kind: .urlHost, value: context.host, display: context.host),
+        ])
+    }
 }
 
 /// Multi-correspondent expansion (2026-07-03 spec §5.5, "later polish"): a
@@ -265,8 +333,10 @@ extension ContextIdentity.Segment {
 
 extension Attributor {
     /// The identity chain for a signal, ordered per THIS attributor's
-    /// user-configured email ladder — what the Evidence Card renders.
+    /// user-configured email ladder and honouring its per-recipe toggles —
+    /// what the Evidence Card renders.
     public func identity(of signal: ActivitySignal) -> ContextIdentity {
-        ContextIdentity.from(signal, order: emailMatchOrder)
+        ContextIdentity.from(signal, order: emailMatchOrder,
+                             disabledRecipes: disabledSiteRecipes)
     }
 }

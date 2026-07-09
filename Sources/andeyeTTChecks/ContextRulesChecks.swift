@@ -72,12 +72,16 @@ func contextIdentityChecks(_ c: Checks) {
     }
 
     c.check("a plain URL surface is the PinScope chain: host then path segments") {
-        let sig = ActivitySignal(app: "Google Chrome", windowTitle: "GitHub",
-                                 tabURL: "https://github.com/andeyePro/andeyeTT/issues",
+        // A RECIPE-LESS host deliberately (github.com now builds the ◆ recipe
+        // chain — SiteRecipeChecks own that shape; this check pins the
+        // regression the site-recipes spec §10.3 demands: everything else is
+        // byte-for-byte the pre-recipe chain).
+        let sig = ActivitySignal(app: "Google Chrome", windowTitle: "Forum",
+                                 tabURL: "https://forum.example.com/andeyePro/andeyeTT/issues",
                                  timestamp: t0)
         let id = ContextIdentity.from(sig)
         try expectEq(id.segments.map(\.kind), [.urlHost, .urlPath, .urlPath, .urlPath])
-        try expectEq(id.segments.map(\.value), ["github.com", "andeyePro", "andeyeTT", "issues"])
+        try expectEq(id.segments.map(\.value), ["forum.example.com", "andeyePro", "andeyeTT", "issues"])
         try expectEq(id.segments.map(\.value),
                      PinScope.identity(of: sig)?.segments ?? [],
                      "chain values must equal the pin editor's identity segments")
