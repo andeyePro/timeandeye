@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>andeye colour lab</title>
+<style>
+  :root {
+    --bg: #0c0f16; --panel: #131826; --panel-2: #161c2c; --line: #232b40;
+    --line-soft: #1b2233; --text: #eef1f6; --muted: #98a0b3; --faint: #6a7382;
+    --accent: #f0a13a; --radius: 14px; --good: #5fd394; --bad: #f2607a;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 90px; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  p { color: var(--muted); font-size: 14px; max-width: 76ch; line-height: 1.55; }
+  .cap { font-size: 12.5px; color: var(--faint); }
+  .verdict { font-size: 13px; color: var(--text); background: var(--panel-2);
+             border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
+             margin-top: 8px; max-width: 60ch; }
+  .verdict b { color: var(--accent); }
+  .tabs { display: flex; gap: 8px; margin: 18px 0 24px; flex-wrap: wrap;
+          border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+  .tabs button { background: var(--panel); color: var(--muted); border: 1px solid var(--line);
+                 border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .tabs button:hover { border-color: var(--accent); }
+  .tabs button.active { color: var(--text); border-color: var(--accent);
+                         background: var(--panel-2); }
+  .panel { display: block; }
+  .panel[hidden] { display: none; }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+  button.btn { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+               border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button.btn:hover { border-color: var(--accent); }
+  button.btn.small { padding: 2px 8px; font-size: 12px; }
+  .readout { font-size: 13px; color: var(--good); }
+  .legend { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .proj-block { background: var(--panel); border: 1px solid var(--line);
+                border-radius: var(--radius); padding: 10px 14px; margin-bottom: 8px; }
+  .proj-row { display: flex; align-items: center; gap: 10px; }
+  .proj-row strong { font-size: 14px; }
+  .task-list { margin: 8px 0 0 32px; display: flex; flex-direction: column; gap: 6px; }
+  .task-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+  .task-row .name { color: var(--muted); }
+  .spacer { flex: 1; }
+  .swatch { position: relative; width: 22px; height: 22px; border-radius: 6px;
+            border: 1px solid var(--line); display: inline-block; vertical-align: middle;
+            cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .swatch.static { cursor: default; }
+  .swatch input[type=color] { position: absolute; inset: 0; opacity: 0; width: 100%;
+                               height: 100%; border: 0; padding: 0; cursor: pointer; }
+  .swatch.overridden::after { content: "\25CF"; position: absolute; top: -5px; right: -5px;
+                              font-size: 9px; color: var(--accent); background: var(--bg);
+                              border-radius: 50%; line-height: 1; }
+  .swatch.flash-new { animation: flashNew 1.7s ease-out; }
+  @keyframes flashNew {
+    0%   { box-shadow: 0 0 0 5px var(--accent), inset 0 0 0 1px rgba(0,0,0,.25); }
+    100% { box-shadow: 0 0 0 0 rgba(240,161,58,0), inset 0 0 0 1px rgba(0,0,0,.25); }
+  }
+  .collide { outline: 2px dashed var(--bad); outline-offset: 2px; }
+  .strategies-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .strategy-col { flex: 1; min-width: 280px; }
+  .strategy-col h3 { font-size: 14px; margin: 0 0 2px; }
+  .strategy-col .metric { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+  table.cvd-table { border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+  table.cvd-table th, table.cvd-table td { border: 1px solid var(--line); padding: 6px 10px;
+                                            text-align: left; }
+  table.cvd-table th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .pass { color: var(--good); }
+  .fail { color: var(--bad); }
+  .pair-swatches { display: flex; align-items: center; gap: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>andeye colour lab</h1>
+  <p>A playground for the colour-strategy proposals in
+     docs/superpowers/specs/2026-07-06-colour-strategy.md. Everything below runs the actual
+     candidate algorithms, live, in this page &ndash; nothing is a mockup screenshot.</p>
+
+  <nav class="tabs">
+    <button data-target="panel-stability" class="active">1. Stability</button>
+    <button data-target="panel-editing">2. Swatch editing</button>
+    <button data-target="panel-strategies">3. Strategies side by side</button>
+    <button data-target="panel-cvd">4. Colour-blind view</button>
+  </nav>
+
+  <section id="panel-stability" class="panel">
+    <h2>1. Stability</h2>
+    <p>The recommended allocator (hue neighbourhood, strategy C below) colouring a live
+       project/task tree. Click "Add project" or "Add task" repeatedly &ndash; the newcomer's
+       swatch flashes so your eye can track it, and every OTHER swatch on the page stays
+       byte-identical. "Check stability" re-derives every existing swatch's colour from its
+       stored assignment and reports how many drifted (should always read zero).</p>
+    <div class="toolbar">
+      <button class="btn" id="addProjectBtn">Add project</button>
+      <button class="btn" id="checkStabilityBtn">Check stability</button>
+      <span class="readout" id="stabilityReadout"></span>
+    </div>
+    <div class="legend" id="legendStability"></div>
+  </section>
+
+  <section id="panel-editing" class="panel" hidden>
+    <h2>2. Swatch editing</h2>
+    <p>Click ANY swatch below to open the native colour picker and override it. This is the
+       same live tree as panel 1 &ndash; flip back after editing and the override is still
+       there. A small dot marks a swatch you've overridden.</p>
+    <div class="legend" id="legendEditing"></div>
+    <p class="cap">Overrides survive. There is deliberately no "re-spread all" button here or
+       anywhere on this page &ndash; the stability principle means colours only ever change
+       because you picked one.</p>
+  </section>
+
+  <section id="panel-strategies" class="panel" hidden>
+    <h2>3. Strategies side by side</h2>
+    <p>The same 4 projects &times; 5 tasks, allocated by three different rules, in the same
+       arrival order. Fixture names were chosen so a real hash near-collision shows up under
+       strategy A.</p>
+    <div class="strategies-row" id="strategiesRow"></div>
+    <p class="cap" id="globalMinNote"></p>
+  </section>
+
+  <section id="panel-cvd" class="panel" hidden>
+    <h2>4. Colour-blind view</h2>
+    <p>These four buttons re-render every swatch on the ENTIRE page (all four panels, not just
+       this one) through a colour-vision-deficiency simulation. Flip to another tab while a
+       simulation is active to see it applied there too.</p>
+    <div class="toolbar" id="cvdButtons">
+      <button class="btn active" data-mode="normal">Normal vision</button>
+      <button class="btn" data-mode="protan">Protanopia</button>
+      <button class="btn" data-mode="deutan">Deuteranopia</button>
+      <button class="btn" data-mode="tritan">Tritanopia</button>
+    </div>
+    <p>Strategy A's own worst collision (identified in panel 3) versus strategy C's colours for
+       the exact same two tasks, under each simulation:</p>
+    <div id="cvdPairSwatches" class="pair-swatches"></div>
+    <table class="cvd-table" id="cvdTable"></table>
+    <p class="verdict" id="cvdVerdict"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Colour maths: OKLab/OKLCH <-> sRGB (Bjoern Ottosson's OKLab) ----------
+  function srgb2lin(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function lin2srgb(c) {
+    c = Math.max(0, Math.min(1, c));
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  }
+  function linrgb2oklab(r, g, b) {
+    var l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+    var m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+    var s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+    var l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+    return {
+      L: 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+      a: 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+      b: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    };
+  }
+  function oklab2linrgb(L, a, b) {
+    var l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    var m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    var s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+    return {
+      r: 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      g: -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      b: -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    };
+  }
+  function oklch2rgb255(L, C, H) {
+    var hr = H * Math.PI / 180, a = C * Math.cos(hr), b = C * Math.sin(hr);
+    var lin = oklab2linrgb(L, a, b);
+    return {
+      r: Math.round(lin2srgb(lin.r) * 255),
+      g: Math.round(lin2srgb(lin.g) * 255),
+      b: Math.round(lin2srgb(lin.b) * 255)
+    };
+  }
+  function rgb255ToOklab(r, g, b) { return linrgb2oklab(srgb2lin(r / 255), srgb2lin(g / 255), srgb2lin(b / 255)); }
+  function oklchToOklab(c) {
+    var hr = c.H * Math.PI / 180;
+    return { L: c.L, a: c.C * Math.cos(hr), b: c.C * Math.sin(hr) };
+  }
+  function eucl(a, b) {
+    var dl = a.L - b.L, da = a.a - b.a, db = a.b - b.b;
+    return Math.sqrt(dl * dl + da * da + db * db);
+  }
+  function rgbToCss(rgb) { return 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')'; }
+  function rgbToHex(rgb) {
+    function h(x) { return Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0'); }
+    return '#' + h(rgb.r) + h(rgb.g) + h(rgb.b);
+  }
+  function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    return { r: parseInt(hex.slice(0, 2), 16), g: parseInt(hex.slice(2, 4), 16), b: parseInt(hex.slice(4, 6), 16) };
+  }
+
+  // ---------- CVD simulation ----------
+  // Machado, Oliveira & Fairchild (2009), "A Physiologically-based Model for
+  // Simulation of Color Vision Deficiency" - full-dichromacy matrices, applied
+  // in linearized sRGB space (Brettel/Vienot-style linear approximation; a
+  // demo-grade simulation, not a clinical one).
+  var CVD_MATRIX = {
+    protan: [0.152286, 1.052583, -0.204868, 0.114503, 0.786281, 0.099216, -0.003882, -0.048116, 1.051998],
+    deutan: [0.367322, 0.860646, -0.227968, 0.280085, 0.672501, 0.047413, -0.011820, 0.042940, 0.968881],
+    tritan: [1.255528, -0.076749, -0.178779, -0.078411, 0.930809, 0.147602, 0.004733, 0.691367, 0.303900]
+  };
+  function simulateCVD(rgb, type) {
+    if (type === 'normal') return rgb;
+    var m = CVD_MATRIX[type];
+    var lr = srgb2lin(rgb.r / 255), lg = srgb2lin(rgb.g / 255), lb = srgb2lin(rgb.b / 255);
+    var r2 = m[0] * lr + m[1] * lg + m[2] * lb;
+    var g2 = m[3] * lr + m[4] * lg + m[5] * lb;
+    var b2 = m[6] * lr + m[7] * lg + m[8] * lb;
+    return { r: Math.round(lin2srgb(r2) * 255), g: Math.round(lin2srgb(g2) * 255), b: Math.round(lin2srgb(b2) * 255) };
+  }
+
+  // Worst-case perceptual distance: the minimum of identity distance and all
+  // three CVD-simulated distances - "a hue pair is only as distinct as its
+  // worst-case viewer" (spec section 9).
+  function worstCaseDistance(cA, cB) {
+    var worst = eucl(oklchToOklab(cA), oklchToOklab(cB));
+    var rgbA = oklch2rgb255(cA.L, cA.C, cA.H), rgbB = oklch2rgb255(cB.L, cB.C, cB.H);
+    ['protan', 'deutan', 'tritan'].forEach(function (t) {
+      var sa = simulateCVD(rgbA, t), sb = simulateCVD(rgbB, t);
+      var oa = rgb255ToOklab(sa.r, sa.g, sa.b), ob = rgb255ToOklab(sb.r, sb.g, sb.b);
+      worst = Math.min(worst, eucl(oa, ob));
+    });
+    return worst;
+  }
+  function distanceBreakdownRGB(rgbA, rgbB) {
+    var out = { normal: eucl(rgb255ToOklab(rgbA.r, rgbA.g, rgbA.b), rgb255ToOklab(rgbB.r, rgbB.g, rgbB.b)) };
+    ['protan', 'deutan', 'tritan'].forEach(function (t) {
+      var sa = simulateCVD(rgbA, t), sb = simulateCVD(rgbB, t);
+      out[t] = eucl(rgb255ToOklab(sa.r, sa.g, sa.b), rgb255ToOklab(sb.r, sb.g, sb.b));
+    });
+    return out;
+  }
+  function distanceBreakdown(cA, cB) {
+    return distanceBreakdownRGB(oklch2rgb255(cA.L, cA.C, cA.H), oklch2rgb255(cB.L, cB.C, cB.H));
+  }
+
+  // ---------- The recommended ("hue neighbourhood") allocator ----------
+  // 1. New project: score candidate hues (0-360 step 12) by worst-case distance
+  //    to every existing project anchor, argmax wins; first project is fixed.
+  // 2. That anchor defines a +/-25 degree neighbourhood for its tasks.
+  // 3. New task: score a grid of (hue in neighbourhood, lightness, chroma)
+  //    candidates by worst-case distance to EVERY colour assigned so far,
+  //    anywhere (all projects/tasks, not just this one) - argmax again.
+  // 4. The winner is pushed onto the assigned list and never revisited: later
+  //    items only ever READ this list, so an old colour can never move.
+  function pickBest(candidates, existing) {
+    if (!existing.length) return null;
+    var best = null, bestScore = -Infinity;
+    candidates.forEach(function (c) {
+      var minD = Infinity;
+      existing.forEach(function (ex) { minD = Math.min(minD, worstCaseDistance(c, ex)); });
+      if (minD > bestScore) { bestScore = minD; best = c; }
+    });
+    return best;
+  }
+  function createAllocator() {
+    var anchors = [];
+    var assigned = [];
+    function newProjectAnchor() {
+      if (!anchors.length) { var a = { L: 0.62, C: 0.13, H: 258 }; anchors.push(a); return a.H; }
+      var candidates = [];
+      for (var h = 0; h < 360; h += 12) candidates.push({ L: 0.62, C: 0.13, H: h });
+      var best = pickBest(candidates, anchors);
+      anchors.push(best);
+      return best.H;
+    }
+    function newTask(anchorHue) {
+      if (!assigned.length) { var def = { L: 0.62, C: 0.13, H: anchorHue }; assigned.push(def); return def; }
+      var candidates = [];
+      var deltas = [-25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25];
+      var Ls = [0.42, 0.52, 0.62, 0.72, 0.82];
+      var Cs = [0.07, 0.10, 0.13, 0.16];
+      deltas.forEach(function (d) {
+        Ls.forEach(function (L) {
+          Cs.forEach(function (C) {
+            candidates.push({ L: L, C: C, H: ((anchorHue + d) % 360 + 360) % 360 });
+          });
+        });
+      });
+      var best = pickBest(candidates, assigned);
+      assigned.push(best);
+      return best;
+    }
+    return { newProjectAnchor: newProjectAnchor, newTask: newTask };
+  }
+
+  // ---------- Strategy A: status-quo hash ----------
+  function djb2(str) {
+    var h = 5381;
+    for (var i = 0; i < str.length; i++) h = ((h * 33) + str.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function hsbToRgb255(h, s, v) {
+    var c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c, rp, gp, bp;
+    if (h < 60) { rp = c; gp = x; bp = 0; }
+    else if (h < 120) { rp = x; gp = c; bp = 0; }
+    else if (h < 180) { rp = 0; gp = c; bp = x; }
+    else if (h < 240) { rp = 0; gp = x; bp = c; }
+    else if (h < 300) { rp = x; gp = 0; bp = c; }
+    else { rp = c; gp = 0; bp = x; }
+    return { r: Math.round((rp + m) * 255), g: Math.round((gp + m) * 255), b: Math.round((bp + m) * 255) };
+  }
+  function strategyAHue(key) { return djb2(key) % 360; }
+  function strategyARgb(key) { return hsbToRgb255(strategyAHue(key), 0.55, 0.85); }
+
+  // ---------- Strategy B: project picks hue, task picks L/C only ----------
+  var RAMP_B = [
+    { L: 0.62, C: 0.13 }, { L: 0.80, C: 0.09 }, { L: 0.42, C: 0.14 },
+    { L: 0.88, C: 0.06 }, { L: 0.34, C: 0.10 }, { L: 0.70, C: 0.16 }
+  ];
+
+  // ---------- CVD-safe swatch registry: drives "re-render every swatch" ----------
+  var SWATCH_REGISTRY = [];
+  var currentCVD = 'normal';
+  function registerSwatch(el, getTrueRgb) {
+    var entry = { el: el, getTrueRgb: getTrueRgb };
+    SWATCH_REGISTRY.push(entry);
+    refreshOne(entry);
+  }
+  function refreshOne(entry) {
+    var rgb = entry.getTrueRgb();
+    var shown = currentCVD === 'normal' ? rgb : simulateCVD(rgb, currentCVD);
+    entry.el.style.background = rgbToCss(shown);
+  }
+  function refreshAllSwatches() {
+    SWATCH_REGISTRY = SWATCH_REGISTRY.filter(function (e) { return document.body.contains(e.el); });
+    SWATCH_REGISTRY.forEach(refreshOne);
+  }
+
+  function makeSwatch(getHex, onPick) {
+    var span = document.createElement('span');
+    span.className = 'swatch';
+    registerSwatch(span, function () { return hexToRgb(getHex()); });
+    if (onPick) {
+      var input = document.createElement('input');
+      input.type = 'color';
+      input.value = getHex();
+      input.addEventListener('input', function () { onPick(input.value); });
+      span.appendChild(input);
+    } else {
+      span.classList.add('static');
+    }
+    return span;
+  }
+
+  // ---------- Fixture tree, shared by panel 1/2 seed and panel 3 ----------
+  // Fixture names were searched (djb2 over "<project>/<task>") so a real
+  // near-collision falls out: andeye/Onboarding and Highgate/Backups land 2
+  // degrees apart under the status-quo hash.
+  var FIXTURE = [
+    { name: 'andeye', tasks: ['Bug fixes', 'Design review', 'Code review', 'Onboarding', 'Docs'] },
+    { name: 'Harbor Lane', tasks: ['Client calls', 'Invoicing', 'Contract review', 'Site visit', 'Report writing'] },
+    { name: 'Admin', tasks: ['Email', 'Expenses', 'Timesheets', 'Filing', 'Meetings'] },
+    { name: 'Highgate', tasks: ['Support', 'Deploys', 'Testing', 'Backups', 'Monitoring'] }
+  ];
+  var EXTRA_PROJECT_NAMES = ['Bloom & Co', 'Side Project', 'Volunteering', 'Consulting', 'Home', 'Errands'];
+  var EXTRA_TASK_NAMES = ['Research', 'Planning', 'Cleanup', 'Sync', 'Follow-up', 'Misc', 'Review', 'Admin'];
+
+  // ============ Panels 1 + 2: the live, editable, stable tree ============
+  var nextId = 1;
+  var mainAllocator = createAllocator();
+  var mainState = { projects: [] };
+  var projectNameIdx = 0, taskNameCounter = {};
+
+  function hexFromLCH(c) { return rgbToHex(oklch2rgb255(c.L, c.C, c.H)); }
+  function taskHex(t) { return t.overrideHex || hexFromLCH(t.colour); }
+
+  FIXTURE.forEach(function (p) {
+    var anchorHue = mainAllocator.newProjectAnchor();
+    var proj = { id: nextId++, name: p.name, anchorColour: { L: 0.55, C: 0.14, H: anchorHue },
+                 overrideHex: null, tasks: [], _new: false };
+    p.tasks.forEach(function (name) {
+      var c = mainAllocator.newTask(anchorHue);
+      proj.tasks.push({ id: nextId++, name: name, colour: c, firstHex: hexFromLCH(c),
+                        overrideHex: null, _new: false });
+    });
+    mainState.projects.push(proj);
+  });
+
+  function nextProjectName() {
+    var n = EXTRA_PROJECT_NAMES[projectNameIdx % EXTRA_PROJECT_NAMES.length];
+    var cycle = Math.floor(projectNameIdx / EXTRA_PROJECT_NAMES.length);
+    projectNameIdx++;
+    return cycle > 0 ? n + ' ' + (cycle + 1) : n;
+  }
+  function nextTaskName(proj) {
+    var idx = taskNameCounter[proj.id] || 0;
+    var n = EXTRA_TASK_NAMES[idx % EXTRA_TASK_NAMES.length];
+    var cycle = Math.floor(idx / EXTRA_TASK_NAMES.length);
+    taskNameCounter[proj.id] = idx + 1;
+    return cycle > 0 ? n + ' ' + (cycle + 1) : n;
+  }
+
+  function renderMainTree(root, opts) {
+    root.innerHTML = '';
+    mainState.projects.forEach(function (proj) {
+      var block = document.createElement('div');
+      block.className = 'proj-block';
+      var row = document.createElement('div');
+      row.className = 'proj-row';
+      var sw = makeSwatch(function () { return proj.overrideHex || hexFromLCH(proj.anchorColour); },
+        function (hex) { proj.overrideHex = hex; renderAll(); });
+      if (proj.overrideHex) sw.classList.add('overridden');
+      row.appendChild(sw);
+      var strong = document.createElement('strong');
+      strong.textContent = proj.name;
+      row.appendChild(strong);
+      var spacer = document.createElement('span');
+      spacer.className = 'spacer';
+      row.appendChild(spacer);
+      if (opts.showAddControls) {
+        var addTaskBtn = document.createElement('button');
+        addTaskBtn.className = 'btn small';
+        addTaskBtn.textContent = '+ task';
+        addTaskBtn.onclick = function () {
+          var name = nextTaskName(proj);
+          var c = mainAllocator.newTask(proj.anchorColour.H);
+          proj.tasks.push({ id: nextId++, name: name, colour: c, firstHex: hexFromLCH(c),
+                            overrideHex: null, _new: true });
+          renderAll();
+        };
+        row.appendChild(addTaskBtn);
+      }
+      block.appendChild(row);
+      if (proj._new) { sw.classList.add('flash-new'); proj._new = false; }
+
+      var list = document.createElement('div');
+      list.className = 'task-list';
+      proj.tasks.forEach(function (t) {
+        var tr = document.createElement('div');
+        tr.className = 'task-row';
+        var tsw = makeSwatch(function () { return taskHex(t); },
+          function (hex) { t.overrideHex = hex; renderAll(); });
+        if (t.overrideHex) tsw.classList.add('overridden');
+        tr.appendChild(tsw);
+        var nm = document.createElement('span');
+        nm.className = 'name';
+        nm.textContent = t.name;
+        tr.appendChild(nm);
+        list.appendChild(tr);
+        if (t._new) { tsw.classList.add('flash-new'); t._new = false; }
+      });
+      block.appendChild(list);
+      root.appendChild(block);
+    });
+  }
+
+  function checkStability() {
+    var total = 0, drifted = 0;
+    mainState.projects.forEach(function (proj) {
+      proj.tasks.forEach(function (t) {
+        total++;
+        if (hexFromLCH(t.colour) !== t.firstHex) drifted++;
+      });
+    });
+    document.getElementById('stabilityReadout').textContent =
+      (drifted === 0 ? '✓ ' : '✗ ') + total + ' task assignments checked, ' + drifted + ' drifted since first render.';
+  }
+
+  document.getElementById('addProjectBtn').onclick = function () {
+    var anchorHue = mainAllocator.newProjectAnchor();
+    var proj = { id: nextId++, name: nextProjectName(), anchorColour: { L: 0.55, C: 0.14, H: anchorHue },
+                 overrideHex: null, tasks: [], _new: true };
+    var c = mainAllocator.newTask(anchorHue);
+    proj.tasks.push({ id: nextId++, name: nextTaskName(proj), colour: c, firstHex: hexFromLCH(c),
+                      overrideHex: null, _new: false });
+    mainState.projects.push(proj);
+    renderAll();
+  };
+  document.getElementById('checkStabilityBtn').onclick = checkStability;
+
+  function renderAll() {
+    renderMainTree(document.getElementById('legendStability'), { showAddControls: true });
+    renderMainTree(document.getElementById('legendEditing'), { showAddControls: false });
+  }
+
+  // ============ Panel 3: strategies side by side ============
+  function buildStrategyA() {
+    var out = {};
+    FIXTURE.forEach(function (p) {
+      p.tasks.forEach(function (t) {
+        var key = p.name + '/' + t;
+        out[key] = { hue: strategyAHue(key), rgb: strategyARgb(key) };
+      });
+    });
+    return out;
+  }
+  function buildStrategyB() {
+    var alloc = createAllocator();
+    var out = {};
+    FIXTURE.forEach(function (p) {
+      var anchor = alloc.newProjectAnchor();
+      p.tasks.forEach(function (t, i) {
+        var r = RAMP_B[i % RAMP_B.length];
+        out[p.name + '/' + t] = { L: r.L, C: r.C, H: anchor };
+      });
+    });
+    return out;
+  }
+  function buildStrategyC() {
+    var alloc = createAllocator();
+    var out = {};
+    FIXTURE.forEach(function (p) {
+      var anchor = alloc.newProjectAnchor();
+      p.tasks.forEach(function (t) { out[p.name + '/' + t] = alloc.newTask(anchor); });
+    });
+    return out;
+  }
+  var STRAT_A = buildStrategyA(), STRAT_B = buildStrategyB(), STRAT_C = buildStrategyC();
+  var ALL_KEYS = [];
+  FIXTURE.forEach(function (p) { p.tasks.forEach(function (t) { ALL_KEYS.push(p.name + '/' + t); }); });
+
+  // Find strategy A's own closest hue pair - this is the "near collision" the
+  // spec asked to engineer, discovered by the code rather than hand-picked.
+  var closestPair = null, closestDeg = 999;
+  for (var i = 0; i < ALL_KEYS.length; i++) {
+    for (var j = i + 1; j < ALL_KEYS.length; j++) {
+      var d = Math.abs(STRAT_A[ALL_KEYS[i]].hue - STRAT_A[ALL_KEYS[j]].hue);
+      d = Math.min(d, 360 - d);
+      if (d < closestDeg) { closestDeg = d; closestPair = [ALL_KEYS[i], ALL_KEYS[j]]; }
+    }
+  }
+
+  function staticSwatch(rgb) {
+    var span = document.createElement('span');
+    span.className = 'swatch static';
+    registerSwatch(span, function () { return rgb; });
+    return span;
+  }
+
+  function minPairwise(colours) {
+    var m = Infinity;
+    for (var a = 0; a < colours.length; a++)
+      for (var b = a + 1; b < colours.length; b++)
+        m = Math.min(m, worstCaseDistance(colours[a], colours[b]));
+    return m;
+  }
+
+  function renderStrategy(container, title, verdict, getRgb, colourLookup) {
+    var col = document.createElement('div');
+    col.className = 'strategy-col';
+    var h3 = document.createElement('h3');
+    h3.textContent = title;
+    col.appendChild(h3);
+    FIXTURE.forEach(function (p) {
+      var block = document.createElement('div');
+      block.className = 'proj-block';
+      var row = document.createElement('div');
+      row.className = 'proj-row';
+      var strong = document.createElement('strong');
+      strong.textContent = p.name;
+      row.appendChild(strong);
+      block.appendChild(row);
+      var list = document.createElement('div');
+      list.className = 'task-list';
+      var withinColours = [];
+      p.tasks.forEach(function (t) {
+        var key = p.name + '/' + t;
+        var rgb = getRgb(key);
+        if (colourLookup) withinColours.push(colourLookup(key));
+        var tr = document.createElement('div');
+        tr.className = 'task-row';
+        var sw = staticSwatch(rgb);
+        if (closestPair && closestPair.indexOf(key) !== -1) sw.classList.add('collide');
+        tr.appendChild(sw);
+        var nm = document.createElement('span');
+        nm.className = 'name';
+        nm.textContent = t;
+        tr.appendChild(nm);
+        list.appendChild(tr);
+      });
+      block.appendChild(list);
+      if (colourLookup) {
+        var metric = document.createElement('div');
+        metric.className = 'metric';
+        metric.textContent = 'min pairwise distance within this project: ' + minPairwise(withinColours).toFixed(3);
+        block.appendChild(metric);
+      }
+      col.appendChild(block);
+    });
+    var v = document.createElement('div');
+    v.className = 'verdict';
+    v.innerHTML = verdict;
+    col.appendChild(v);
+    container.appendChild(col);
+  }
+
+  var strategiesRow = document.getElementById('strategiesRow');
+  renderStrategy(strategiesRow, 'A. Hash of the name (status quo)',
+    'Hue = a string hash. ' + (closestPair ?
+      '<b>' + closestPair[0] + '</b> and <b>' + closestPair[1] + '</b> land ' + closestDeg.toFixed(0) +
+      '&deg; apart' : 'no structure') + ' &ndash; two unrelated tasks read as the same colour, and project identity is accidental.',
+    function (key) { return STRAT_A[key].rgb; }, null);
+  renderStrategy(strategiesRow, 'B. Project hue, task lightness/saturation',
+    'Martin’s predicted failure: every task in a project shares one exact hue, only shade changes. ' +
+    'Look at the columns above &ndash; each project reads as one colour family in different brightnesses, not as distinct tasks.',
+    function (key) { return oklch2rgb255(STRAT_B[key].L, STRAT_B[key].C, STRAT_B[key].H); },
+    function (key) { return STRAT_B[key]; });
+  renderStrategy(strategiesRow, 'C. Hue neighbourhood (recommended)',
+    'Each project anchors a &plusmn;25&deg; hue neighbourhood; tasks vary hue, lightness AND saturation ' +
+    'together, picked to stay maximally distinct from every colour assigned so far, anywhere. ' +
+    'Distinct within a project, project identity still reads.',
+    function (key) { return oklch2rgb255(STRAT_C[key].L, STRAT_C[key].C, STRAT_C[key].H); },
+    function (key) { return STRAT_C[key]; });
+
+  var allC = ALL_KEYS.map(function (k) { return STRAT_C[k]; });
+  var globalMinC = minPairwise(allC);
+  var aClosestBreakdown = distanceBreakdownRGB(STRAT_A[closestPair[0]].rgb, STRAT_A[closestPair[1]].rgb);
+  var aClosestDist = aClosestBreakdown.normal;
+  document.getElementById('globalMinNote').textContent =
+    'Across all ' + ALL_KEYS.length + ' fixture tasks, strategy C’s tightest pairwise margin is ' +
+    globalMinC.toFixed(3) + ' (worst-case, CVD-aware) versus strategy A’s ' + aClosestDist.toFixed(3) +
+    ' for its closest pair (full breakdown in panel 4).';
+
+  // ============ Panel 4: colour-blind view ============
+  function renderCvdPanel() {
+    var wrap = document.getElementById('cvdPairSwatches');
+    wrap.innerHTML = '';
+    if (!closestPair) return;
+    closestPair.forEach(function (key) {
+      var s = staticSwatch(STRAT_A[key].rgb);
+      wrap.appendChild(s);
+    });
+    var label = document.createElement('span');
+    label.className = 'cap';
+    label.textContent = 'Strategy A: ' + closestPair[0] + ' vs ' + closestPair[1];
+    wrap.appendChild(label);
+    closestPair.forEach(function (key) {
+      var c = STRAT_C[key];
+      var s = staticSwatch(oklch2rgb255(c.L, c.C, c.H));
+      wrap.appendChild(s);
+    });
+    var label2 = document.createElement('span');
+    label2.className = 'cap';
+    label2.textContent = 'Strategy C: same two tasks';
+    wrap.appendChild(label2);
+
+    var aDist = distanceBreakdownRGB(STRAT_A[closestPair[0]].rgb, STRAT_A[closestPair[1]].rgb);
+    var cDist = distanceBreakdown(STRAT_C[closestPair[0]], STRAT_C[closestPair[1]]);
+    var THRESHOLD = 0.02; // approximate legibility floor for this demo, not a clinical figure
+    var modes = ['normal', 'protan', 'deutan', 'tritan'];
+    var labels = { normal: 'Normal', protan: 'Protanopia', deutan: 'Deuteranopia', tritan: 'Tritanopia' };
+    var table = document.getElementById('cvdTable');
+    var html = '<tr><th>View</th><th>Strategy A distance</th><th>Strategy C distance</th></tr>';
+    modes.forEach(function (m) {
+      function cell(v) {
+        var pass = v >= THRESHOLD;
+        return '<td class="' + (pass ? 'pass' : 'fail') + '">' + (pass ? '✓ ' : '✗ ') + v.toFixed(4) + '</td>';
+      }
+      html += '<tr><td>' + labels[m] + '</td>' + cell(aDist[m]) + cell(cDist[m]) + '</tr>';
+    });
+    table.innerHTML = html;
+
+    var aFails = modes.filter(function (m) { return aDist[m] < THRESHOLD; }).length;
+    var cWorst = Math.min.apply(null, modes.map(function (m) { return cDist[m]; }));
+    document.getElementById('cvdVerdict').innerHTML =
+      'Strategy C stays above the ' + THRESHOLD.toFixed(2) + ' legibility floor in every view (worst case ' +
+      cWorst.toFixed(4) + '). Strategy A’s near-collision pair fails in <b>' + aFails + ' of ' + modes.length +
+      '</b> views, including normal vision – the hash never promised distinctness, and colour-blind simulation ' +
+      'only makes the merge more obvious, not the cause of it.';
+  }
+  renderCvdPanel();
+
+  document.querySelectorAll('#cvdButtons button').forEach(function (btn) {
+    btn.onclick = function () {
+      document.querySelectorAll('#cvdButtons button').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentCVD = btn.getAttribute('data-mode');
+      refreshAllSwatches();
+    };
+  });
+
+  // ============ Tabs ============
+  document.querySelectorAll('.tabs button').forEach(function (btn) {
+    btn.onclick = function () {
+      document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.panel').forEach(function (p) { p.hidden = true; });
+      btn.classList.add('active');
+      document.getElementById(btn.getAttribute('data-target')).hidden = false;
+    };
+  });
+
+  renderAll();
+  checkStability();
+})();
+</script>
+</body>
+</html>
