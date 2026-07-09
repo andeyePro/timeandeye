@@ -222,6 +222,7 @@ public final class AppController: ObservableObject {
             try? settingsStore.save(settings)
             Notifier.enabled = settings.systemNotifications
             attributor.emailMatchOrder = settings.emailMatchOrder
+            if oldValue.ownEmailEntries != settings.ownEmailEntries { pushOwnEmail() }
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
             if oldValue.licenseKey != settings.licenseKey { revalidateLicense() }
             // Local-task edits (rename / project / leisure / add / remove) flow
@@ -874,6 +875,7 @@ public final class AppController: ObservableObject {
             }
             self?.tracker.handle(event)
         }
+        pushOwnEmail()
         DebugLog.write("startUp: AX trusted=\(sensors.accessibilityTrusted) grace=\(settings.switchGraceSeconds)s")
         sensors.start()
         Notifier.requestAuthorization()
@@ -1389,6 +1391,13 @@ public final class AppController: ObservableObject {
         }
         if !signals.isEmpty { persistAssociations() }
         reloadReview()
+    }
+
+    /// Push the settings' own-address list into the capture engine (never
+    /// reported as counterparties). Called at startup and on settings change.
+    private func pushOwnEmail() {
+        let own = EmailSignal.ownEntrySets(settings.ownEmailEntries)
+        sensors.setOwnEmail(addresses: own.addresses, domains: own.domains)
     }
 
     /// The synthetic `ActivitySignal` for a review-queue row — the same

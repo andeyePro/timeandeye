@@ -305,22 +305,20 @@ and recorded rather than fixed blind:
     for everyone without an app release (recipes are data, not code → low risk,
     validation guards). Monitoring for a "new/unknown client" is then free: it's
     the same detect step → gentle "want me to learn your mail here?" nudge.
-- [ ] Email auto-learner — Core engine SHIPPED 2026-06-30; Mac capture SHIPPED
-  2026-06-30, REVERTED SAME DAY (5439a83 — synchronous `NSAppleScript` on the
-  poll thread froze tracking), RE-ENABLED 2026-07-03 (async/deadline-bounded/
-  one-in-flight via `EmailCaptureEngine`, retired `NSAppleScript` for an
-  `osascript` subprocess entirely — see the capture-layer entry below). Needs
-  on-device soak before trust (checks alone didn't catch the 6-30 freeze).
-  Correcting an email's task learns an EmailRule (org domain → company, shared
-  webmail → person); matching mail auto-attributes via the `.emailRule` source
-  through the user's ladder. Settings UI to reorder the ladder SHIPPED
-  2026-07-01 (chevrons in "Email → task matching"). Explicit pin via
-  `from`/`sender`/`subject` + `any` fields in the expression grammar SHIPPED
-  2026-07-01 (PinField multi-valued; bare text now spans correspondents+subject).
-  REMAINING for the full feature: more provider selectors
-  (OWA/Proton/Yahoo/Fastmail) + native clients; validate-on-use / self-heal +
-  recipe pack with background updates; multi-message-thread sender choice;
-  derive own-domains from settings (beyond the "me" heuristic).
+- [ ] Email auto-learner — Core engine SHIPPED 2026-06-30; Mac capture
+  RE-ENABLED 2026-07-03 (`EmailCaptureEngine`: async, deadline-bounded,
+  one-in-flight `osascript` subprocess — the 6-30 `NSAppleScript` freeze can't
+  recur) and soak VERIFIED live 2026-07-09 (313 clean enrichment events).
+  Correcting an email's task learns an EmailRule; matching mail
+  auto-attributes via the `.emailRule` source through the user's reorderable
+  ladder (Settings chevrons, 2026-07-01). Explicit `from`/`sender`/`subject`
+  + `any` pin fields shipped 2026-07-01. Own addresses/domains now come from
+  Settings ▸ Email "My addresses/domains" (2026-07-09) — alternates like
+  martin@example.com no longer appear as correspondents.
+  REMAINING (single list — the two sibling entries below point here): more
+  provider selectors (OWA/Proton/Yahoo/Fastmail) + native clients;
+  validate-on-use / self-heal + recipe pack with background updates;
+  multi-message-thread sender choice.
 - [ ] (b, 2026-06-29) Gmail sender extraction — CHANNEL + RECIPE FOUND, and
   threaded into a live signal 2026-07-03 (see the capture-layer entry below).
   Chrome's renderer AX tree stays off (AXManualAccessibility didn't wake it), so
@@ -332,10 +330,9 @@ and recorded rather than fixed blind:
   cleanly. Foundation shipped: `EmailSystem` (detect + per-system selectors),
   `EmailSignal.Party`/`counterparties`/`domain` (pure, tested),
   `EmailCaptureEngine` (async, `osascript`-subprocess, recipe-driven; the
-  diagnostics probe shares it too). REMAINING to make it a real signal: pick
-  which message's sender in a multi-message thread; derive own-domains from
-  settings/accounts; validate-on-use + recipe store/pack; other providers'
-  selectors (OWA/Proton/Yahoo/Fastmail) + native clients.
+  diagnostics probe shares it too). It IS a live signal since 2026-07-03
+  (soak verified 2026-07-09; list-view stale-DOM capture gated same day).
+  REMAINING: see the auto-learner entry above — one list, not three.
 - [ ] Pin rules — AI "fix this pin": from a pin that should have matched a
   window but didn't, regenerate the AI prompt including the failing rule + that
   window's fields + a free-text complaint, so the model corrects it. Iterative

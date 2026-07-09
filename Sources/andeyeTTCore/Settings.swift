@@ -106,6 +106,13 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// the locale's own symbol (CurrencyDefault.symbol()); ONE override
     /// field, no settings sprawl.
     public var currencySymbolOverride: String?
+    /// The user's OWN email addresses and domains, comma/space separated
+    /// ("martin@example.com, andeye.com") — capture never reports these as
+    /// counterparties. Webmail's "me" heuristic only covers the logged-in
+    /// account; alternate own addresses showed up as correspondents without
+    /// this (seen live 2026-07-09). ONE raw text field, parsed by
+    /// `EmailSignal.ownEntrySets`.
+    public var ownEmailEntries: String
     /// Finance backends auto-post only sessions younger than this many days
     /// (F15): after a long-idle reconnect (lapsed licence, dead Xero grant,
     /// a long holiday) months of billable backlog must NOT flood the books
@@ -143,7 +150,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 licenseKey: String? = nil,
                 journalSyncEnabled: Bool = false,
                 financeAutoPostWindowDays: Double = 14,
-                currencySymbolOverride: String? = nil) {
+                currencySymbolOverride: String? = nil,
+                ownEmailEntries: String = "") {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
         self.colourLow = colourLow
@@ -175,6 +183,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.journalSyncEnabled = journalSyncEnabled
         self.currencySymbolOverride = currencySymbolOverride
         self.financeAutoPostWindowDays = financeAutoPostWindowDays
+        self.ownEmailEntries = ownEmailEntries
     }
 
     /// Tolerant decoding: EVERY field falls back to its default for an absent OR
@@ -223,6 +232,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
             ?? defaults.currencySymbolOverride
         financeAutoPostWindowDays = c.lenient(.financeAutoPostWindowDays,
                                               or: defaults.financeAutoPostWindowDays)
+        ownEmailEntries = c.lenient(.ownEmailEntries, or: defaults.ownEmailEntries)
     }
 }
 

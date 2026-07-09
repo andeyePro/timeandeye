@@ -369,6 +369,10 @@ struct SettingsView: View {
             }
 
             Section("Email → task matching") {
+                TextField("My addresses/domains", text: Binding(
+                    get: { controller.settings.ownEmailEntries },
+                    set: { controller.settings.ownEmailEntries = $0 }))
+                    .help("Comma-separated addresses or domains that are YOU – never treated as a correspondent (e.g. martin@example.com, andeye.com)")
                 Text("When a message matches several rules, the most specific wins. Order is general (top) → specific (bottom); the bottom-most matching level takes precedence.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Context rules…") {

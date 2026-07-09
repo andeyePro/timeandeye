@@ -36,9 +36,23 @@ public final class EmailCaptureEngine {
     private let gate = DispatchQueue(label: "com.andeye.emailCapture.gate")
     private var inFlight = false
     private let deadline: TimeInterval
+    /// The user's own addresses/domains (Settings ▸ Email), never reported as
+    /// counterparties — webmail's "me" heuristic only covers the logged-in
+    /// account, so an alternate own address looked like a correspondent.
+    /// Guarded by `gate`: written from the main thread on settings changes,
+    /// read on the capture queue.
+    private var ownAddresses: Set<String> = []
+    private var ownDomains: Set<String> = []
 
     public init(deadline: TimeInterval = 2.0) {
         self.deadline = deadline
+    }
+
+    public func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
+        gate.sync {
+            ownAddresses = addresses
+            ownDomains = domains
+        }
     }
 
     /// Kick off a capture for `appName`'s active tab, off the calling
@@ -57,7 +71,9 @@ public final class EmailCaptureEngine {
         guard claimed else { completion(nil); return }
         queue.async { [weak self] in
             guard let self else { completion(nil); return }
-            let result = Self.mergedCapture(appName: appName, deadline: self.deadline)
+            let (own, ownD) = self.gate.sync { (self.ownAddresses, self.ownDomains) }
+            let result = Self.mergedCapture(appName: appName, deadline: self.deadline,
+                                            ownAddresses: own, ownDomains: ownD)
             self.gate.sync { self.inFlight = false }
             completion(result)
         }
@@ -71,10 +87,15 @@ public final class EmailCaptureEngine {
         fullCapture(appName: appName, deadline: deadline)
     }
 
-    private static func mergedCapture(appName: String, deadline: TimeInterval) -> Capture? {
+    private static func mergedCapture(appName: String, deadline: TimeInterval,
+                                      ownAddresses: Set<String> = [],
+                                      ownDomains: Set<String> = []) -> Capture? {
         guard let full = fullCapture(appName: appName, deadline: deadline), full.error == nil
         else { return nil }
-        let counterparties = EmailSignal.counterparties(senders: full.senders, recipients: full.recipients)
+        let counterparties = EmailSignal.counterparties(senders: full.senders,
+                                                        recipients: full.recipients,
+                                                        ownAddresses: ownAddresses,
+                                                        ownDomains: ownDomains)
         return Capture(system: full.system, correspondents: counterparties.map(\.email))
     }
 

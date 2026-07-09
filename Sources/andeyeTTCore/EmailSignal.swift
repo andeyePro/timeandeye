@@ -46,6 +46,22 @@ public enum EmailSignal {
         return t
     }
 
+    /// Parse the settings' raw own-email text ("martin@example.com, andeye.com")
+    /// into the address/domain sets `counterparties` filters on: entries with
+    /// an "@" are addresses, the rest are domains; lowercased, trimmed,
+    /// empties dropped. Forgiving on separators (commas, whitespace,
+    /// newlines) — it's a hand-typed field.
+    public static func ownEntrySets(_ raw: String)
+        -> (addresses: Set<String>, domains: Set<String>) {
+        var addresses = Set<String>()
+        var domains = Set<String>()
+        for piece in raw.lowercased().split(whereSeparator: { ", \t\n;".contains($0) }) {
+            let entry = String(piece)
+            if entry.contains("@") { addresses.insert(entry) } else { domains.insert(entry) }
+        }
+        return (addresses, domains)
+    }
+
     /// The domain part of an email address, lowercased (nil if malformed).
     public static func domain(of email: String) -> String? {
         guard let at = email.firstIndex(of: "@") else { return nil }

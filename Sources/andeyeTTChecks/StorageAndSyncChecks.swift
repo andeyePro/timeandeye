@@ -807,6 +807,24 @@ func aiAssistChecks(_ c: Checks) {
         try expectEq(EmailSignal.subject(fromTitle: "No dashes here"), "No dashes here")
     }
 
+    c.check("ownEntrySets parses the hand-typed Settings field (addresses vs domains, forgiving separators)") {
+        // The live 2026-07-09 fault this feeds: martin@example.com (an OWN
+        // alternate address) was reported as a correspondent — the "me"
+        // heuristic only covers the logged-in account.
+        let own = EmailSignal.ownEntrySets("Martin@example.com, andeye.com;  extra@Example.COM\nexample.net")
+        try expectEq(own.addresses, ["martin@example.com", "extra@example.com"])
+        try expectEq(own.domains, ["andeye.com", "example.net"])
+        let empty = EmailSignal.ownEntrySets("   ")
+        try expect(empty.addresses.isEmpty && empty.domains.isEmpty)
+        // And the sets actually filter: the alternate own address never
+        // survives counterparties.
+        let others = EmailSignal.counterparties(
+            senders: [EmailSignal.Party(name: "Martin", email: "martin@example.com")],
+            recipients: [EmailSignal.Party(name: "Rae", email: "r.naismith@harborlane.example")],
+            ownAddresses: own.addresses, ownDomains: own.domains)
+        try expectEq(others.map(\.email), ["r.naismith@harborlane.example"])
+    }
+
     c.check("email match ladder: most-specific level wins, user order re-tunes") {
         let ctx = EmailContext(system: .gmail,
                                correspondents: ["r.naismith@harborlane.example",

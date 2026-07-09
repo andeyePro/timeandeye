@@ -35,6 +35,12 @@ public final class SensorHub {
     private var screenLocked = false
     private let emailCapture = EmailCaptureEngine()
 
+    /// Settings pass-through: the user's own addresses/domains, which capture
+    /// must never report as counterparties.
+    public func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
+        emailCapture.setOwnEmail(addresses: addresses, domains: domains)
+    }
+
     public init() {}
 
     /// Prompts for Accessibility on first run (window titles need it).
