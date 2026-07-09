@@ -808,6 +808,21 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
+    /// The `assigned` column only distinguishes "queued" (0) from "assigned"
+    /// (1), not WHICH target — so the scan decodes every assigned row and
+    /// filters by target value in Swift. Volumes here are the same order as
+    /// the review queue itself (capped per retro pass), so this mirrors
+    /// `pendingReview()`'s own decode-then-return shape rather than adding a
+    /// second queryable column for one caller.
+    public func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] {
+        var out: [ReviewSegment] = []
+        try query("SELECT json FROM review_segments WHERE assigned = 1 ORDER BY start") { stmt in
+            let segment = try self.decoder.decode(ReviewSegment.self, from: self.jsonColumn(stmt, 0))
+            if segment.assigned == target { out.append(segment) }
+        }
+        return out
+    }
+
     // MARK: - Retro-acceptance digests
 
     /// 30-day retention, mirroring the spans table's own prune-on-init.

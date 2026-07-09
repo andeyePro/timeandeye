@@ -138,6 +138,23 @@ func retroAcceptanceChecks(_ c: Checks) {
         let plan = RetroAcceptance.plan(pending: [segment], sessions: [], bar: bar) { _ in nil }
         try expect(plan.clearances.isEmpty && plan.lifts.isEmpty)
     }
+
+    // MARK: - Unknown task category (2026-07-09), §3 retro reclaim
+
+    c.check("an Unknown-assigned segment that now scores confidently reclaims to the real target") {
+        // RetroAcceptance.plan is agnostic to where a segment came from —
+        // "feed it pending + unknown-assigned segments together" (spec) just
+        // means an already-assigned-to-Unknown segment scores exactly like a
+        // still-pending one, and its clearance re-points it to whatever the
+        // NEW confident target is (never back to Unknown).
+        var unknownAssigned = seg("Chrome", 0, 600)
+        unknownAssigned.assigned = .task(WorkTask.unknown.ref)
+        let plan = RetroAcceptance.plan(pending: [unknownAssigned], sessions: [], bar: bar) { _ in
+            (target: .task(.op(5)), score: 0.95)
+        }
+        try expectEq(plan.clearances.map(\.target), [.task(.op(5))],
+                     "reclaims to the real target, not Unknown")
+    }
 }
 
 // MARK: - Spec §8 acceptance shapes 1–2, purely (no Attributor/AppController —
@@ -196,5 +213,57 @@ func approvalsDrawerAcceptanceChecks(_ c: Checks) {
 
         try expectEq(try journal.sessions(needingPushAtOrAbove: bar).map(\.id), [lowSession.id],
                      "the lift makes the session push-eligible through the NORMAL sync path")
+    }
+}
+
+// MARK: - Unknown task category (2026-07-09) — pure planning + guards
+
+func unknownSweepChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    let bar = 0.8
+    let unknownRef = WorkTask.unknown.ref
+
+    func seg(_ start: TimeInterval, _ end: TimeInterval) -> ReviewSegment {
+        ReviewSegment(app: "Chrome", start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
+    }
+    func session(_ certainty: Double, _ start: TimeInterval, _ end: TimeInterval,
+                pushed: Bool = false, task: TaskRef = .op(1)) -> Session {
+        Session(task: task, start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end),
+               certainty: certainty, pushedToOP: pushed)
+    }
+
+    c.check("repoints an overlapping unpushed low-certainty session, unchanged certainty (no lift)") {
+        let segment = seg(0, 600)
+        let low = session(0.4, 0, 600)
+        let repoints = UnknownSweep.sessionsToRepoint(segments: [segment], sessions: [low], bar: bar)
+        try expectEq(repoints.map(\.sessionID), [low.id])
+        try expectEq(repoints.first?.priorTask, .op(1))
+    }
+
+    c.check("a pushed session is never repointed") {
+        let segment = seg(0, 600)
+        let pushed = session(0.4, 0, 600, pushed: true)
+        try expect(UnknownSweep.sessionsToRepoint(segments: [segment], sessions: [pushed], bar: bar).isEmpty)
+    }
+
+    c.check("a session already at/above the bar is never repointed") {
+        let segment = seg(0, 600)
+        let confident = session(0.9, 0, 600)
+        try expect(UnknownSweep.sessionsToRepoint(segments: [segment], sessions: [confident], bar: bar)
+            .isEmpty)
+    }
+
+    c.check("a non-overlapping session is never repointed") {
+        let segment = seg(0, 60)
+        let elsewhere = session(0.4, 1_000, 1_060)
+        try expect(UnknownSweep.sessionsToRepoint(segments: [segment], sessions: [elsewhere], bar: bar)
+            .isEmpty)
+    }
+
+    c.check("sweeping to Unknown never teaches the attributor; every other target does") {
+        try expect(!Target.task(unknownRef).teachesAttributor,
+                   "explicit don't-know, not a correction")
+        try expect(Target.task(.op(1)).teachesAttributor)
+        try expect(Target.doNotTrack.teachesAttributor)
     }
 }

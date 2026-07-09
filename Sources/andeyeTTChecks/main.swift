@@ -127,6 +127,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("ReviewStack", reviewStackChecks),
     ("RetroAcceptance", retroAcceptanceChecks),
     ("ApprovalsDrawerAcceptance", approvalsDrawerAcceptanceChecks),
+    ("UnknownTaskCategory", unknownSweepChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

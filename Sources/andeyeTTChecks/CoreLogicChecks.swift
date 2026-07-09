@@ -270,4 +270,13 @@ func taskRankerChecks(_ c: Checks) {
                     < picks.map(\.subject).firstIndex(of: "ancient")!,
                    "outside the horizon: ranking wins over stale recency")
     }
+
+    c.check("the Unknown sentinel never appears in the pick list, however it got into the input") {
+        let tasks = [task(1, "real", "Open"), WorkTask.unknown,
+                     task(2, "recentReal", "Open", confirmedDaysAgo: 0.1)]
+        let picks = ranker.recentThenRanked(tasks, at: now)
+        try expect(!picks.contains { $0.ref == WorkTask.unknown.ref },
+                   "Unknown is review-only — never a pickable task")
+        try expectEq(picks.count, 2, "the sentinel is dropped, not just re-sorted")
+    }
 }

@@ -99,6 +99,13 @@ public protocol JournalStore {
     func pendingReview() throws -> [ReviewSegment]
     /// nil target = return the segments to the pending queue (undo).
     func assign(_ segmentIDs: [UUID], to target: Target?) throws
+    /// Segments already assigned to `target`, oldest first — the Unknown
+    /// task category's retro-reclaim source: a segment swept to Unknown left
+    /// `pendingReview()`, but the retro pass still needs to find and re-score
+    /// it alongside the queue so a later confident rule can claim it back
+    /// out. Default (below) returns none, so a store/mock that doesn't
+    /// implement it keeps compiling.
+    func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment]
 
     /// Window-level activity detail for the timeline's zoom strip.
     func save(_ span: FocusSpan) throws
@@ -163,6 +170,11 @@ public extension JournalStore {
     func saveRetroDigest(_ digest: RetroDigest) throws {}
     func retroDigests(limit: Int) throws -> [RetroDigest] { [] }
     func deleteRetroDigest(_ id: UUID) throws {}
+
+    /// Default: no assigned-segment lookup, so a store/mock that doesn't
+    /// implement it (or a check double) keeps compiling and behaves as
+    /// "nothing to reclaim".
+    func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] { [] }
 }
 
 /// 30-day retention for retro-acceptance digests — a receipt trail, not an
@@ -325,6 +337,10 @@ public final class InMemoryJournalStore: JournalStore {
         for i in segments.indices where ids.contains(segments[i].id) {
             segments[i].assigned = target
         }
+    }
+
+    public func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] {
+        segments.filter { $0.assigned == target }.sorted { $0.start < $1.start }
     }
 
     public func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {

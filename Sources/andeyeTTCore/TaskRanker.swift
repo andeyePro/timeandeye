@@ -62,6 +62,12 @@ public struct TaskRanker: Sendable {
     /// guarantee worth keeping (your just-used task sits at the top).
     public func recentThenRanked(_ tasks: [WorkTask], at now: Date,
                                  learning: LearningStore? = nil) -> [WorkTask] {
+        // The built-in Unknown sentinel is review-only — never offered as a
+        // pick, however it got into the incoming list. Defense-in-depth: the
+        // real seeding boundary is AppController never adding it to
+        // taskCache, but this keeps the pick list honest even if a caller
+        // (or a future one) feeds it in anyway.
+        let tasks = tasks.filter { $0.ref != WorkTask.unknown.ref }
         // The recent-first block has a HORIZON (reviewer B16): after journal
         // back-fill, every task ever tracked carried a lastConfirmedAt, so
         // ancient one-offs sat above never-tracked "Now" tasks forever. Two

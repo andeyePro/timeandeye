@@ -494,9 +494,16 @@ and recorded rather than fixed blind:
 - [ ] Approvals drawer — parked pending Martin: aging-to-archive (his "not
   so sure"), trust mode (ditto), weekly summary ritual, invoice-range
   approve (spec §4/§5/§6 later scope).
-- [ ] Unknown task category (Martin, 2026-07-09): sweep stacks into a
-  built-in Unknown — time stays tracked with full detail, leaves the queue,
-  re-allocatable from the timeline, retro pass can claim it back out.
+- [x] Unknown task category (Martin, 2026-07-09; DONE same day): built-in
+  sentinel local task (never in the pick list), "Not sure – Unknown" beside
+  Do-not-track in the review assign bar, sweeps re-point overlapping
+  unpushed low-certainty sessions at their CURRENT certainty (no lift, no
+  teaching — an explicit "don't know" is not a correction), hatched grey in
+  the timeline / fixed grey in the pie, and the retro pass scores
+  Unknown-assigned segments alongside the queue so a later confident rule
+  reclaims them automatically (digest says so honestly). Known tradeoff:
+  undoing a retro pass returns reclaimed segments to the visible queue, not
+  back to Unknown.
 - [ ] Timeline drag/shift-click a span → allocate, with Unknown drawn
   clearly differently (Martin, 2026-07-09; queued behind Unknown).
 - [ ] Calendar overlay on the timeline (read-only EventKit) as an aid for

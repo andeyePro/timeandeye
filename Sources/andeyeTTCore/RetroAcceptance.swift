@@ -102,6 +102,39 @@ public enum RetroAcceptance {
     }
 }
 
+/// One session the Unknown sweep re-points — its prior task, for undo.
+public struct UnknownRepoint: Equatable, Sendable {
+    public var sessionID: UUID
+    public var priorTask: TaskRef
+
+    public init(sessionID: UUID, priorTask: TaskRef) {
+        self.sessionID = sessionID
+        self.priorTask = priorTask
+    }
+}
+
+/// Unknown task category (2026-07-09), §4: when a review stack sweeps to
+/// Unknown, its overlapping UNPUSHED low-certainty sessions re-point to the
+/// Unknown task too — otherwise the drawer row would clear while the actual
+/// tracked time kept pointing at the old guessed task. Certainty never
+/// moves: this is tidying (the same time, filed under an honest "don't
+/// know"), not a confidence gain, so it deliberately does NOT reuse
+/// `RetroAcceptance`'s lift-to-max-certainty shape. Pure: the caller
+/// (AppController) applies the repoint through the journal.
+public enum UnknownSweep {
+    /// A session qualifies when it overlaps ANY of the just-swept segments,
+    /// hasn't posted yet, and is still below `bar` (mirrors the retro pass's
+    /// own definition of "low-certainty" — `RetroAcceptance.plan`'s lift
+    /// gate uses the same threshold).
+    public static func sessionsToRepoint(segments: [ReviewSegment], sessions: [Session],
+                                         bar: Double) -> [UnknownRepoint] {
+        sessions.filter { session in
+            !session.pushedToOP && session.certainty < bar
+                && segments.contains { session.start < $0.end && session.end > $0.start }
+        }.map { UnknownRepoint(sessionID: $0.id, priorTask: $0.task) }
+    }
+}
+
 /// Journalled, undoable receipt of one retro-acceptance pass — "Cleared N
 /// items — undo", surviving relaunch (a session-bounded UndoStack entry isn't
 /// enough here: the drawer's own "Recently cleared" section reads this back).

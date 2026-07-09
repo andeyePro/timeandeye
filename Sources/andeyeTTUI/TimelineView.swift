@@ -499,6 +499,7 @@ struct TimelineView: View {
                 slice(session, width: width)
             }
             liveHatch(width: width)
+            unknownHatch(width: width)
         }
         .frame(height: 96)
         .clipped()
@@ -704,6 +705,26 @@ struct TimelineView: View {
         }
     }
 
+    /// Unknown task category §5: every Unknown-assigned slice gets a static
+    /// cross-hatch over its whole width, on top of the fixed-grey fill
+    /// `colour(for:)` already gives it — "swept, not decided", legible at a
+    /// glance and distinct from `liveHatch`'s provisional TAIL (which marks
+    /// only the undecided edge of an otherwise-normal live slice).
+    private func unknownHatch(width: CGFloat) -> some View {
+        ForEach(sessions.filter { $0.task == WorkTask.unknown.ref }) { session in
+            let x0 = xFor(session.start, width: width)
+            let x1 = xFor(session.end, width: width)
+            let w = max(x1 - x0, 3)
+            Hatch(spacing: 5)
+                .stroke(labelColour(for: session.task).opacity(0.5), lineWidth: 1)
+                .frame(width: w, height: 44)
+                .clipShape(SliceShape(zigzag: session.id == AppController.liveSessionID))
+                .position(x: x0 + w / 2, y: 56)
+                // Decorative: clicks pass through to the slice beneath.
+                .allowsHitTesting(false)
+        }
+    }
+
     /// Finder-style slice selection, matching the window strip: ⌘-click toggles
     /// one into the multi-select, ⇧-click extends a contiguous range (by start
     /// time) from the anchor, ⇧⌘ adds that range, and a plain click opens the
@@ -879,12 +900,19 @@ struct TimelineView: View {
 
     /// The editor's task list always contains the slice's current task, even
     /// when the filter would exclude it — otherwise the Picker shows blank for
-    /// the very task you clicked to edit.
+    /// the very task you clicked to edit. The Unknown sentinel is never in
+    /// `taskCache` (it's excluded from every pick list on purpose), so an
+    /// Unknown-assigned slice falls back to the constant directly — the
+    /// Picker still shows "Unknown", and reassigning away from it works
+    /// exactly like any other slice.
     private func editorTasks() -> [WorkTask] {
         var list = filteredTasks()
-        if let t = editTask, !list.contains(where: { $0.ref == t }),
-           let task = controller.taskCache.first(where: { $0.ref == t }) {
-            list.insert(task, at: 0)
+        if let t = editTask, !list.contains(where: { $0.ref == t }) {
+            if let task = controller.taskCache.first(where: { $0.ref == t }) {
+                list.insert(task, at: 0)
+            } else if t == WorkTask.unknown.ref {
+                list.insert(WorkTask.unknown, at: 0)
+            }
         }
         return list
     }

@@ -165,6 +165,23 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expectEq(try s.pendingReview().map(\.id), [seg2.id])
     }
 
+    c.check("reviewSegments(assignedTo:) finds only the matching target, leaving pendingReview") {
+        let s = make()
+        let unknownRef = WorkTask.unknown.ref
+        let toUnknown = ReviewSegment(app: "Mystery", start: t0, end: t0.addingTimeInterval(60))
+        let toReal = ReviewSegment(app: "Chrome", start: t0, end: t0.addingTimeInterval(120))
+        let stillPending = ReviewSegment(app: "Slack", start: t0, end: t0.addingTimeInterval(180))
+        try s.save(toUnknown)
+        try s.save(toReal)
+        try s.save(stillPending)
+        try s.assign([toUnknown.id], to: .task(unknownRef))
+        try s.assign([toReal.id], to: .task(.op(9)))
+        try expectEq(try s.reviewSegments(assignedTo: .task(unknownRef)).map(\.id), [toUnknown.id],
+                     "only the segment assigned to Unknown comes back")
+        try expectEq(try s.pendingReview().map(\.id), [stillPending.id],
+                     "an Unknown-assigned segment is NOT still pending — it left the queue")
+    }
+
     // MARK: Retro-acceptance digests (approvals-drawer §3) — same suite for
     // both stores, so the SQLite table and the in-memory list obey one
     // contract (mirrors the posting-ledger section above).

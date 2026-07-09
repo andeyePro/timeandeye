@@ -111,6 +111,14 @@ correspondent, checking the correspondent row expands it into a checkbox per
 address, so you choose exactly who the rule should cover, not just the first
 one andeye saw.
 
+Can't place a batch at all? The assign bar's **Not sure - Unknown** button
+sweeps it to the built-in Unknown task instead of "Do not track" or a guess -
+the time stays tracked with full detail, just off your review queue. It shows
+up hatched grey on the timeline and in the pie so it's never mistaken for a
+real task, and you can reassign it from the timeline any time you do work out
+what it was. If a later rule makes andeye confident about it on its own, it
+reclaims itself back out of Unknown automatically.
+
 Saving a rule shows a brief "✉ who → task" notice with an Undo, and the first
 time a learned rule goes on to fire for real, you're told once more, so a
 decision it makes on your behalf is never silent. Both notices sit in the

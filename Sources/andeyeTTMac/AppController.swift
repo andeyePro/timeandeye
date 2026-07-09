@@ -1111,6 +1111,9 @@ public final class AppController: ObservableObject {
         switch target {
         case .doNotTrack: return "Do not track"
         case .task(let ref):
+            // The Unknown sentinel is never seeded into taskCache (so it can
+            // never leak into the pick list) — resolve it directly instead.
+            if ref == WorkTask.unknown.ref { return WorkTask.unknown.subject }
             if let t = taskCache.first(where: { $0.ref == ref }) { return t.subject }
             return ref.isRemote ? ref.fallbackLabel : "Leisure"
         }
@@ -1401,6 +1404,12 @@ public final class AppController: ObservableObject {
     }
 
     public func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
+        // Unknown task category §4: sweeping to Unknown also re-points its
+        // overlapping unpushed low-certainty sessions (no lift — tidying,
+        // not a confidence gain), computed BEFORE the segments' own state
+        // changes so the overlap check sees the queue as it stood.
+        let repoints = target == .task(WorkTask.unknown.ref)
+            ? repointSessionsToUnknown(ids) : []
         if undoable {
             let learningSnapshot = attributor.learning
             let primedSnapshot = attributor.primedSurfaces
@@ -1408,6 +1417,12 @@ public final class AppController: ObservableObject {
             registerUndo("assign \(ids.count) review rows") { [weak self] in
                 guard let self else { return }
                 try? self.journal.assign(ids, to: nil)
+                for r in repoints {
+                    if var s = try? self.journal.session(id: r.sessionID) {
+                        s.task = r.priorTask
+                        try? self.journal.update(s)
+                    }
+                }
                 self.attributor.replaceLearning(learningSnapshot)
                 self.attributor.primedSurfaces = primedSnapshot
                 self.attributor.pins = pinsSnapshot
@@ -1416,15 +1431,39 @@ public final class AppController: ObservableObject {
             }
         }
         try? journal.assign(ids, to: target)
-        // Teach from EVERY distinct surface covered by the selection — the
-        // old first(where:) taught only the first row (approvals-drawer spec
-        // §1 side-bug), throwing away the rest of the evidence.
-        let signals = pendingReview.teachingSignals(for: Set(ids))
-        for signal in signals {
-            attributor.assign(signal, target: target, tasks: taskCache)
+        // Sweeping to Unknown is an explicit "don't know", not a correction —
+        // it must never teach the attributor (Target.teachesAttributor is
+        // false only for the Unknown sentinel).
+        if target.teachesAttributor {
+            // Teach from EVERY distinct surface covered by the selection —
+            // the old first(where:) taught only the first row (approvals-
+            // drawer spec §1 side-bug), throwing away the rest of the evidence.
+            let signals = pendingReview.teachingSignals(for: Set(ids))
+            for signal in signals {
+                attributor.assign(signal, target: target, tasks: taskCache)
+            }
+            if !signals.isEmpty { persistAssociations() }
         }
-        if !signals.isEmpty { persistAssociations() }
         reloadReview()
+    }
+
+    /// Unknown task category §4: sessions overlapping the just-swept
+    /// segments, unpushed and still below the push bar, re-point to Unknown
+    /// at their CURRENT certainty. Returns what changed so the caller's undo
+    /// closure can restore each session's prior task.
+    private func repointSessionsToUnknown(_ ids: [UUID]) -> [UnknownRepoint] {
+        let sweptSegments = pendingReview.filter { ids.contains($0.id) }
+        guard !sweptSegments.isEmpty else { return [] }
+        let sessions = ((try? journal.allSessions()) ?? []).filter { $0.id != Self.liveCheckpointID }
+        let repoints = UnknownSweep.sessionsToRepoint(segments: sweptSegments, sessions: sessions,
+                                                      bar: settings.certaintyAutoPushThreshold)
+        for r in repoints {
+            if var s = try? journal.session(id: r.sessionID) {
+                s.task = WorkTask.unknown.ref
+                try? journal.update(s)
+            }
+        }
+        return repoints
     }
 
     /// The drawer's default shape (Martin's stack-by-default choice): every
@@ -1495,7 +1534,15 @@ public final class AppController: ObservableObject {
     /// what a human would see opening that row right now.
     private func runRetroPass() {
         let bar = settings.certaintyAutoPushThreshold
-        let pending = Array(pendingReview.prefix(Self.retroPassCap))
+        // Unknown task category §3: segments already swept to Unknown left
+        // pendingReview(), so they need re-adding here to be reclaimable — a
+        // later confident rule scores them exactly like the pending queue and
+        // claims them back out, "feed it pending + unknown-assigned segments
+        // together" (RetroAcceptance.plan is agnostic to where a segment came
+        // from).
+        let unknownAssigned = (try? journal.reviewSegments(assignedTo: .task(WorkTask.unknown.ref))) ?? []
+        let combined = pendingReview + unknownAssigned
+        let pending = Array(combined.prefix(Self.retroPassCap))
         guard !pending.isEmpty else { return }
         let cache = taskCache
         let attributor = self.attributor
@@ -1515,13 +1562,16 @@ public final class AppController: ObservableObject {
             .filter { $0.id != Self.liveCheckpointID && !$0.pushedToOP }
         let plan = RetroAcceptance.plan(pending: pending, sessions: sessions, bar: bar, score: scoring)
         guard !plan.clearances.isEmpty else { return }
-        applyRetroPlan(plan, bar: bar)
+        applyRetroPlan(plan, bar: bar, reclaimedFrom: Set(unknownAssigned.map(\.id)))
     }
 
     /// Apply a retro-acceptance plan: clear the segments, lift the overlapping
     /// sessions, and journal ONE digest for the whole pass so it can be undone
-    /// as a unit ("Cleared N items – undo").
-    private func applyRetroPlan(_ plan: RetroPlan, bar: Double) {
+    /// as a unit ("Cleared N items – undo"). `reclaimedFrom` names which
+    /// cleared segment ids were previously swept to Unknown (rather than
+    /// still-pending) — display only, so a mixed pass's digest reads
+    /// honestly instead of implying every clearance came from the queue.
+    private func applyRetroPlan(_ plan: RetroPlan, bar: Double, reclaimedFrom: Set<UUID> = []) {
         var idsByTarget: [Target: [UUID]] = [:]
         for clearance in plan.clearances {
             idsByTarget[clearance.target, default: []].append(clearance.segmentID)
@@ -1540,11 +1590,18 @@ public final class AppController: ObservableObject {
             }
         }
         let count = plan.clearances.count
+        let reclaimedCount = plan.clearances.filter { reclaimedFrom.contains($0.segmentID) }.count
+        var reason = "Confidence reached \(Int((bar * 100).rounded()))% or above"
+        if reclaimedCount == count, reclaimedCount > 0 {
+            reason += " (reclaimed from Unknown)"
+        } else if reclaimedCount > 0 {
+            reason += " (\(reclaimedCount) reclaimed from Unknown)"
+        }
         let digest = RetroDigest(
             clearedSegmentIDs: plan.clearances.map(\.segmentID),
             target: dominantRetroTarget(in: plan.clearances),
             count: count,
-            reason: "Confidence reached \(Int((bar * 100).rounded()))% or above",
+            reason: reason,
             priorSessions: priorSessions)
         try? journal.saveRetroDigest(digest)
         reloadReview()
@@ -2187,8 +2244,11 @@ public final class AppController: ObservableObject {
         commitPin(kind: id.kind, prefix: Array(id.segments.prefix(n)), to: ref)
     }
 
-    /// Per-task colour: user override first, stable hash otherwise.
+    /// Per-task colour: the Unknown sentinel first (fixed neutral grey — it
+    /// reads as "undecided", never a real project hue, and isn't user
+    /// recolourable), then a user override, then a stable hash.
     public func colour(for ref: TaskRef) -> NSColor {
+        if ref == WorkTask.unknown.ref { return .systemGray }
         if let hex = settings.taskColours[ref.storageKey], let c = NSColor(hex: hex) {
             return c
         }
@@ -2261,7 +2321,12 @@ public final class AppController: ObservableObject {
                                     certainty: certainty))
         }
         let spans = (try? journal.spans(from: from, to: to)) ?? []
-        return TimeAggregator.byProject(sessions: sessions, tasks: taskCache, spans: spans)
+        // + [WorkTask.unknown]: the sentinel isn't seeded into taskCache (so
+        // it never leaks into the pick list), but grouping/labelling here
+        // needs to resolve it — otherwise Unknown-assigned time would show
+        // as the generic ".local" fallback label instead of "Unknown".
+        return TimeAggregator.byProject(sessions: sessions, tasks: taskCache + [WorkTask.unknown],
+                                        spans: spans)
     }
 
     /// The journalled slices a live-start drag from `liveStart` back to
@@ -2786,6 +2851,10 @@ public final class AppController: ObservableObject {
         let sessions = ((try? journal.resolvedSessions(from: range.start, to: range.end)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
         let resolve: TimesheetExport.NameResolver = { [weak self] ref in
+            // The Unknown sentinel is never in taskCache (excluded from every
+            // pick list on purpose) — resolve it directly so exported time
+            // reads "Unknown", not the generic uncached-local fallback below.
+            if ref == WorkTask.unknown.ref { return (WorkTask.unknown.subject, nil) }
             if let t = self?.taskCache.first(where: { $0.ref == ref }) {
                 return (t.subject, t.project)
             }

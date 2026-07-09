@@ -46,6 +46,17 @@ public enum Target: Hashable, Codable, Sendable {
     case doNotTrack
 }
 
+public extension Target {
+    /// Sweeping to the built-in Unknown task (Unknown task category,
+    /// 2026-07-09) is an explicit "don't know", not a correction — it must
+    /// never teach the attributor (that would let an admission of
+    /// uncertainty masquerade as learned evidence). Every other target — a
+    /// real task or `.doNotTrack` — teaches normally.
+    var teachesAttributor: Bool {
+        self != .task(WorkTask.unknown.ref)
+    }
+}
+
 public struct WorkTask: Equatable, Codable, Sendable, Identifiable {
     /// Stable identity: the backend ref (what pick lists already key by).
     public var id: TaskRef { ref }
@@ -79,6 +90,22 @@ public struct WorkTask: Equatable, Codable, Sendable, Identifiable {
         self.lastConfirmedAt = lastConfirmedAt
         self.assignee = assignee
     }
+}
+
+public extension WorkTask {
+    /// Reserved sentinel identity for the built-in "Unknown" task (Unknown
+    /// task category, 2026-07-09): review-queue time the user can't place is
+    /// swept here — tracked, safe, off the queue, reclaimable — instead of
+    /// sitting in the drawer forever. A fixed `.local` task, NOT a new
+    /// `TaskRef` case (that would ripple through Codable/sync); mirrors
+    /// `AppController.liveCheckpointID`'s sentinel-UUID pattern. Local tasks
+    /// never push to a backend, which is exactly right for Unknown. Kept out
+    /// of `taskCache`'s normal seeding (never returned by `localWorkTasks()`)
+    /// so it can never leak into the pick list or the attributor's candidate
+    /// pool — it is reachable only by direct ref comparison (`name(of:)`,
+    /// `colour(for:)`, the review drawer's dedicated action).
+    static let unknownID = UUID(uuidString: "00000000-0000-0000-0000-000000FACADE")!
+    static let unknown = WorkTask(ref: .local(unknownID), subject: "Unknown", status: "Unknown")
 }
 
 /// One observation from the sensors: what is focused right now.
