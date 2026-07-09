@@ -254,6 +254,10 @@ public final class AppController: ObservableObject {
             Notifier.enabled = settings.systemNotifications
             attributor.emailMatchOrder = settings.emailMatchOrder
             if oldValue.ownEmailEntries != settings.ownEmailEntries { pushOwnEmail() }
+            // The review floor gates queue ADMISSION at reload time, so a
+            // changed floor re-filters the live queue immediately — no
+            // restart, no waiting for the next segment to arrive.
+            if oldValue.reviewFloorSeconds != settings.reviewFloorSeconds { reloadReview() }
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
             if oldValue.licenseKey != settings.licenseKey { revalidateLicense() }
             // Local-task edits (rename / project / leisure / add / remove) flow
@@ -1821,7 +1825,19 @@ public final class AppController: ObservableObject {
     }
 
     private func reloadReview() {
-        pendingReview = (try? journal.pendingReview()) ?? []
+        // Review-queue admission floor (Martin: "extremely little value in
+        // having a user spend time categorising a <1m slice"): filtered HERE,
+        // the ONE place the visible queue materialises, so every consumer —
+        // the drawer's stacks, the badge count, the AI prompt, multi-select
+        // assign — sees the same floored queue, and rows persisted before the
+        // floor existed vanish on the next reload with no migration. The
+        // journal keeps sub-floor rows untouched (the floor thins the drawer,
+        // never the timeline or journal), which is also why the filter can't
+        // live at flush time: a surface that accumulates more brief slices
+        // must re-qualify on a later reload, and a flush-time drop would have
+        // thrown its early slices away for good.
+        pendingReview = ((try? journal.pendingReview()) ?? [])
+            .meetingReviewFloor(settings.reviewFloorSeconds)
         retroDigest = (try? journal.retroDigests(limit: 200)) ?? []
         updateJournalSummary()
     }
@@ -1859,7 +1875,13 @@ public final class AppController: ObservableObject {
         // together" (RetroAcceptance.plan is agnostic to where a segment came
         // from).
         let unknownAssigned = (try? journal.reviewSegments(assignedTo: .task(WorkTask.unknown.ref))) ?? []
-        let combined = pendingReview + unknownAssigned
+        // The re-add obeys the same admission floor as the queue itself
+        // (pendingReview is already floored by reloadReview): a sub-floor
+        // Unknown slice is exactly the kind of row the floor exists to keep
+        // out of circulation, so no path may resurrect it — while an Unknown
+        // surface whose slices total >= the floor stays reclaimable as ever.
+        let combined = (pendingReview + unknownAssigned)
+            .meetingReviewFloor(settings.reviewFloorSeconds)
         let pending = Array(combined.prefix(Self.retroPassCap))
         guard !pending.isEmpty else { return }
         let cache = taskCache

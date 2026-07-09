@@ -178,7 +178,7 @@ struct ReviewView: View {
                 Button("Do not track") { assign(.doNotTrack) }
                     .keyboardShortcut("d", modifiers: .command)
                     .help("Mark the selection as not worked (⌘D)")
-                Button("Not sure – Unknown") { assign(.task(WorkTask.unknown.ref)) }
+                Button("Unknown") { assign(.task(WorkTask.unknown.ref)) }
                     .help("Sweep to Unknown – tracked, safe, off your plate, reclaimable")
             }
             ScrollView(.horizontal, showsIndicators: false) {

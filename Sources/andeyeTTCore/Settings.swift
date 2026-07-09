@@ -71,6 +71,12 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var statusOrder: [String]
     public var primeDwellSeconds: Double
     public var minSegmentSeconds: Double
+    /// A surface only enters the Review queue once its pending slices total
+    /// this many seconds. Below it the time is still tracked and journalled —
+    /// it just never asks for a decision (a <1 m slice isn't worth one; forty
+    /// of them on one window ARE, so the floor is a per-surface total, not
+    /// per-slice — see `[ReviewSegment].meetingReviewFloor`). 0 = show all.
+    public var reviewFloorSeconds: Double
     public var switchGraceSeconds: Double
     public var sleepGraceSeconds: Double
     /// How long after an idle stop the one-tap "count the gap as <task>" offer
@@ -165,6 +171,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
                 primeDwellSeconds: Double = 30,
                 minSegmentSeconds: Double = 20,
+                reviewFloorSeconds: Double = 60,
                 switchGraceSeconds: Double = 30,
                 sleepGraceSeconds: Double = 60,
                 idleBackfillWindowSeconds: Double = 18 * 3600,
@@ -205,6 +212,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.statusOrder = statusOrder
         self.primeDwellSeconds = primeDwellSeconds
         self.minSegmentSeconds = minSegmentSeconds
+        self.reviewFloorSeconds = reviewFloorSeconds
         self.switchGraceSeconds = switchGraceSeconds
         self.sleepGraceSeconds = sleepGraceSeconds
         self.idleBackfillWindowSeconds = idleBackfillWindowSeconds
@@ -255,6 +263,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         statusOrder = c.lenient(.statusOrder, or: defaults.statusOrder)
         primeDwellSeconds = c.lenient(.primeDwellSeconds, or: defaults.primeDwellSeconds)
         minSegmentSeconds = c.lenient(.minSegmentSeconds, or: defaults.minSegmentSeconds)
+        reviewFloorSeconds = c.lenient(.reviewFloorSeconds, or: defaults.reviewFloorSeconds)
         switchGraceSeconds = c.lenient(.switchGraceSeconds, or: defaults.switchGraceSeconds)
         sleepGraceSeconds = c.lenient(.sleepGraceSeconds, or: defaults.sleepGraceSeconds)
         idleBackfillWindowSeconds = c.lenient(.idleBackfillWindowSeconds, or: defaults.idleBackfillWindowSeconds)

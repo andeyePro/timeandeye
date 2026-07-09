@@ -267,3 +267,76 @@ func unknownSweepChecks(_ c: Checks) {
         try expect(Target.doNotTrack.teachesAttributor)
     }
 }
+
+// MARK: - Review-queue admission floor (2026-07-09) — sub-minute slices stay
+// off the queue. Martin: "There is extremely little value in having a user
+// spend time categorising a <1m slice." The floor is a per-SURFACE total,
+// not per-slice: an isolated glance never queues, but many brief glances at
+// one window pool into one decision worth making. Pure logic — the same
+// `meetingReviewFloor` runs at reloadReview (the visible queue) and at the
+// retro pass's unknownAssigned re-add, so these checks cover both paths.
+
+func reviewFloorChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    let floor: TimeInterval = 60
+
+    func seg(_ app: String, _ start: TimeInterval, _ end: TimeInterval,
+             title: String? = nil, assigned: Target? = nil) -> ReviewSegment {
+        ReviewSegment(app: app, windowTitle: title, start: t0.addingTimeInterval(start),
+                      end: t0.addingTimeInterval(end), assigned: assigned)
+    }
+
+    c.check("an isolated 30s segment is dropped — a lone <1m slice never becomes a review row") {
+        try expect(([seg("Mail", 0, 30)]).meetingReviewFloor(floor).isEmpty)
+    }
+
+    c.check("a 90s segment is kept") {
+        let s = seg("Chrome", 0, 90)
+        try expectEq([s].meetingReviewFloor(floor).map(\.id), [s.id])
+    }
+
+    c.check("exactly 60s is kept — the floor is inclusive (>=), like minSegmentSeconds' own gate") {
+        let s = seg("Chrome", 0, 60)
+        try expectEq([s].meetingReviewFloor(floor).map(\.id), [s.id])
+    }
+
+    c.check("sub-minute segments whose surface totals >= the floor are ALL kept") {
+        // Three 30s visits to one window = 90s pending on that surface: one
+        // decision worth making (a stack of 40×30s totalling 20 min even more
+        // so). The floor must ride on the stack's total, never the slice.
+        let a = seg("Chrome", 0, 30, title: "Insurance")
+        let b = seg("Chrome", 100, 130, title: "Insurance")
+        let d = seg("Chrome", 200, 230, title: "Insurance")
+        try expectEq([a, b, d].meetingReviewFloor(floor).map(\.id), [a.id, b.id, d.id],
+                     "per-surface total, not per-slice — order preserved")
+    }
+
+    c.check("totals never pool across distinct surfaces") {
+        // Same app, different windows: two 30s surfaces, both sub-floor —
+        // neither may borrow the other's time (stacked() groups on the full
+        // app|windowTitle|tabURL key, and so does the floor).
+        let a = seg("Chrome", 0, 30, title: "Tab A")
+        let b = seg("Chrome", 100, 130, title: "Tab B")
+        try expect([a, b].meetingReviewFloor(floor).isEmpty)
+    }
+
+    c.check("unknownAssigned re-add respects the same rule over the combined pending+unknown array") {
+        // runRetroPass re-adds Unknown-swept segments alongside the pending
+        // queue and floors the COMBINED array: a sub-floor Unknown slice can
+        // no more re-enter circulation than a pending one, while an Unknown
+        // surface whose slices total >= the floor stays reclaimable.
+        let unknownTarget = Target.task(WorkTask.unknown.ref)
+        let pending = seg("Chrome", 0, 90)
+        let tinyUnknown = seg("Mail", 200, 230, assigned: unknownTarget)
+        let u1 = seg("Slack", 300, 340, assigned: unknownTarget)
+        let u2 = seg("Slack", 400, 440, assigned: unknownTarget)   // 80s Slack total
+        let combined = [pending, tinyUnknown, u1, u2].meetingReviewFloor(floor)
+        try expectEq(combined.map(\.id), [pending.id, u1.id, u2.id],
+                     "the isolated 30s Unknown slice stays out; the 80s Unknown stack stays in")
+    }
+
+    c.check("floor 0 admits everything — the setting's off switch") {
+        let s = seg("Mail", 0, 5)
+        try expectEq([s].meetingReviewFloor(0).map(\.id), [s.id])
+    }
+}

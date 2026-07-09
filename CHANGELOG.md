@@ -2,6 +2,21 @@
 
 ## 2026-07-09
 
+- [x] **Review queue sub-minute floor + "Unknown" button rename.** The
+  drawer stops asking about moments not worth a decision: a surface only
+  enters the Review queue once its uncertain slices total at least
+  `reviewFloorSeconds` (new setting, default 60 s, stepper beside the
+  review-threshold slider; 0 shows everything). The floor is a per-surface
+  total, not per-slice — one 30 s glance never queues, forty 30 s glances
+  at one window still surface as one stack — and it is applied where the
+  visible queue materialises (`reloadReview`) plus the retro pass's
+  unknownAssigned re-add, never at flush time, so sub-minute slices stay
+  tracked/journalled untouched (the timeline keeps them) and re-qualify
+  automatically if their surface accumulates more; existing persisted
+  sub-minute rows vanish on reload with no migration. Assign bar's
+  "Not sure – Unknown" button is now just "Unknown" (Martin: synonyms),
+  manuals aligned. Checks: ReviewFloor suite (7 cases) + pinned default.
+
 - [x] **Calendar signal v1 — andeye knows what you're supposed to be doing.**
   Read-only EventKit bridge (event-driven, no polling; permission asked only
   when the feature is first enabled in Settings), a calendar→task rules

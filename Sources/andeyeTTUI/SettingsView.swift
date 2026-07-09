@@ -102,6 +102,14 @@ struct SettingsView: View {
                      + "· auto-push at \(Int((threshold * 100).rounded()))% and above "
                      + "· in between, andeye journals but neither asks nor posts")
                     .font(.caption).foregroundStyle(.secondary)
+                let reviewFloor = controller.settings.reviewFloorSeconds
+                Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
+                        value: $controller.settings.reviewFloorSeconds, in: 0...600, step: 15)
+                Text(reviewFloor > 0
+                     ? "A window only asks for review once its uncertain slices total "
+                       + "\(Int(reviewFloor.rounded()))s – briefer visits stay tracked, just off the queue"
+                     : "Every uncertain slice asks for review, however brief")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Auto-comment time entries (apps/docs used)",
                        isOn: $controller.settings.autoComment)
                 Text(controller.journalSummary)
