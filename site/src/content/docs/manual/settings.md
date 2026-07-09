@@ -7,9 +7,9 @@ description: Comments, popover defaults, the Switch Buffer, local tasks, your Op
 - **Popover default mode** - "Change to" (default) or "Switch to".
 - **Time button opens** - Timeline / Last viewed / Pie chart.
 - **Switch Buffer** and grace windows, idle and sleep handling.
-- **Review queue floor** - a window only asks for review once its uncertain
-  slices total this many seconds (default 60; 0 shows everything). Briefer
-  visits stay tracked - they just never queue.
+- **Review queue floor** - a visit only asks for review once its slice is
+  at least this many seconds long (default 60; 0 shows everything). Briefer
+  glances stay tracked - they just never queue, however often they repeat.
 - **System notifications**, **lock on leave**, **track leisure to local tasks**.
 - **Idle backfill** - opt-in: when you return from an idle gap, offer to
   claim the gap for the task you were on (off by default; an hours stepper

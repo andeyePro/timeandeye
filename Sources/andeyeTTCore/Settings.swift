@@ -71,11 +71,11 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var statusOrder: [String]
     public var primeDwellSeconds: Double
     public var minSegmentSeconds: Double
-    /// A surface only enters the Review queue once its pending slices total
-    /// this many seconds. Below it the time is still tracked and journalled —
-    /// it just never asks for a decision (a <1 m slice isn't worth one; forty
-    /// of them on one window ARE, so the floor is a per-surface total, not
-    /// per-slice — see `[ReviewSegment].meetingReviewFloor`). 0 = show all.
+    /// A visit only enters the Review queue once its slice is at least this
+    /// many seconds long. Below it the time is still tracked and journalled —
+    /// it just never asks for a decision: a sub-grace visit never becomes a
+    /// tracked switch, so its identity is never worth one, however often it
+    /// repeats (see `[ReviewSegment].meetingReviewFloor`). 0 = show all.
     public var reviewFloorSeconds: Double
     public var switchGraceSeconds: Double
     public var sleepGraceSeconds: Double

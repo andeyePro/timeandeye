@@ -52,16 +52,16 @@ func reviewStackChecks(_ c: Checks) {
         // and the floor runs on every reload — if either path rebuilt rows
         // from just the surface fields, the evidence would silently vanish
         // between queue time and the footer's offer.
-        var a = seg("Mail", 0, 40, title: "Inbox")
+        var a = seg("Mail", 0, 70, title: "Inbox")
         a.correspondents = ["amy@x.co"]
         a.emailSubject = "Renewal"
-        var b = seg("Mail", 100, 140, title: "Inbox")
+        var b = seg("Mail", 100, 170, title: "Inbox")
         b.correspondents = ["bob@y.co"]
         let stack = try unwrap([a, b].stacked().first)
         try expectEq(stack.segments, [a, b],
                      "the stack holds the exact segments — differing per-slice evidence untouched")
         try expectEq([a, b].meetingReviewFloor(60), [a, b],
-                     "the floor filters (80s surface total >= 60s), never rewrites")
+                     "the floor filters (each 70s segment >= 60s), never rewrites")
     }
 }
 
@@ -287,11 +287,15 @@ func unknownSweepChecks(_ c: Checks) {
 
 // MARK: - Review-queue admission floor (2026-07-09) — sub-minute slices stay
 // off the queue. Martin: "There is extremely little value in having a user
-// spend time categorising a <1m slice." The floor is a per-SURFACE total,
-// not per-slice: an isolated glance never queues, but many brief glances at
-// one window pool into one decision worth making. Pure logic — the same
-// `meetingReviewFloor` runs at reloadReview (the visible queue) and at the
-// retro pass's unknownAssigned re-add, so these checks cover both paths.
+// spend time categorising a <1m slice", and — overturning the same-day
+// per-surface pooling — a visit shorter than the switch grace never becomes
+// a tracked switch, so brief glances must not pool into a queue row "even
+// if we visited it 1,000,000 times": the floor is per-SEGMENT. Contiguous
+// same-surface time is already one segment when it reaches the queue
+// (queueReview extends the pending segment), so only NON-contiguous brief
+// glances vanish. Pure logic — the same `meetingReviewFloor` runs at
+// reloadReview (the visible queue) and at the retro pass's unknownAssigned
+// re-add, so these checks cover both paths.
 
 func reviewFloorChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
@@ -317,39 +321,39 @@ func reviewFloorChecks(_ c: Checks) {
         try expectEq([s].meetingReviewFloor(floor).map(\.id), [s.id])
     }
 
-    c.check("sub-minute segments whose surface totals >= the floor are ALL kept") {
-        // Three 30s visits to one window = 90s pending on that surface: one
-        // decision worth making (a stack of 40×30s totalling 20 min even more
-        // so). The floor must ride on the stack's total, never the slice.
+    c.check("NON-contiguous brief glances never pool into a queue row — however many") {
+        // Martin: a sub-grace visit never becomes a tracked switch, so its
+        // identity is never worth asking about "even if we visited it
+        // 1,000,000 times". Three separated 30s visits to one window must
+        // NOT sum to a 90s decision.
         let a = seg("Chrome", 0, 30, title: "Insurance")
         let b = seg("Chrome", 100, 130, title: "Insurance")
         let d = seg("Chrome", 200, 230, title: "Insurance")
-        try expectEq([a, b, d].meetingReviewFloor(floor).map(\.id), [a.id, b.id, d.id],
-                     "per-surface total, not per-slice — order preserved")
+        try expect([a, b, d].meetingReviewFloor(floor).isEmpty,
+                   "per-segment, never per-surface pooling")
     }
 
-    c.check("totals never pool across distinct surfaces") {
-        // Same app, different windows: two 30s surfaces, both sub-floor —
-        // neither may borrow the other's time (stacked() groups on the full
-        // app|windowTitle|tabURL key, and so does the floor).
-        let a = seg("Chrome", 0, 30, title: "Tab A")
-        let b = seg("Chrome", 100, 130, title: "Tab B")
-        try expect([a, b].meetingReviewFloor(floor).isEmpty)
+    c.check("a long visit qualifies alongside a vanishing glance") {
+        // Contiguous same-surface time reaches the queue as ONE extended
+        // segment, so a genuine 90s visit is a single ≥floor row; the
+        // separate 30s glance at another window still vanishes.
+        let long = seg("Chrome", 0, 90, title: "Insurance")
+        let glance = seg("Chrome", 200, 230, title: "Tab B")
+        try expectEq([long, glance].meetingReviewFloor(floor).map(\.id), [long.id])
     }
 
     c.check("unknownAssigned re-add respects the same rule over the combined pending+unknown array") {
         // runRetroPass re-adds Unknown-swept segments alongside the pending
-        // queue and floors the COMBINED array: a sub-floor Unknown slice can
+        // queue and floors the COMBINED array: a sub-floor Unknown glance can
         // no more re-enter circulation than a pending one, while an Unknown
-        // surface whose slices total >= the floor stays reclaimable.
+        // segment that is itself ≥floor stays reclaimable.
         let unknownTarget = Target.task(WorkTask.unknown.ref)
         let pending = seg("Chrome", 0, 90)
         let tinyUnknown = seg("Mail", 200, 230, assigned: unknownTarget)
-        let u1 = seg("Slack", 300, 340, assigned: unknownTarget)
-        let u2 = seg("Slack", 400, 440, assigned: unknownTarget)   // 80s Slack total
-        let combined = [pending, tinyUnknown, u1, u2].meetingReviewFloor(floor)
-        try expectEq(combined.map(\.id), [pending.id, u1.id, u2.id],
-                     "the isolated 30s Unknown slice stays out; the 80s Unknown stack stays in")
+        let bigUnknown = seg("Slack", 300, 380, assigned: unknownTarget)
+        let combined = [pending, tinyUnknown, bigUnknown].meetingReviewFloor(floor)
+        try expectEq(combined.map(\.id), [pending.id, bigUnknown.id],
+                     "the 30s Unknown glance stays out; the 80s Unknown segment stays reclaimable")
     }
 
     c.check("floor 0 admits everything — the setting's off switch") {

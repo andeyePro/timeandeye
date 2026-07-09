@@ -68,11 +68,11 @@ correspondent, checking the correspondent row expands it into a checkbox per
 address, so you choose exactly who the rule should cover, not just the first
 one andeye saw.
 
-The queue only asks about moments worth a decision: a window appears once
-its uncertain slices total at least a minute (tunable in Settings, "Review
-queue floor"). Briefer visits stay tracked and journalled as normal - they
-just never queue - and repeat visits to the same window pool towards its
-total, so many brief glances still surface as one row.
+The queue only asks about moments worth a decision: a visit appears once
+its slice is at least a minute long (tunable in Settings, "Review queue
+floor"). Briefer glances stay tracked and journalled as normal - they just
+never queue, however often they repeat - because a moment too brief to
+switch tracking is never worth naming.
 
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of "Do not track" or a guess -

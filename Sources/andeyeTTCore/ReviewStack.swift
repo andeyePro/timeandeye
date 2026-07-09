@@ -58,24 +58,19 @@ public extension Array where Element == ReviewSegment {
         return stacks.sorted { $0.last > $1.last }
     }
 
-    /// Review-queue admission floor: keep only segments whose SURFACE
-    /// (app|windowTitle|tabURL — the same key `stacked()` groups on) totals
-    /// at least `floor` seconds across this array. Per-slice would be wrong
-    /// in both directions: a lone 30 s glance is not worth a human decision,
-    /// but forty 30 s glances at one window total 20 minutes — one decision
-    /// that IS worth making — so brief slices ride on their surface's total.
-    /// Filtered-out segments are NOT discarded: they stay journalled and
-    /// tracked exactly as before, and re-qualify automatically once their
-    /// surface accumulates enough. A floor of 0 (or below) admits everything.
+    /// Review-queue admission floor: keep only segments that are themselves
+    /// at least `floor` seconds long. Per-SEGMENT deliberately (Martin,
+    /// 2026-07-09, overturning the same-day per-surface pooling): a visit
+    /// shorter than the switch grace never becomes a tracked switch, so its
+    /// identity is never worth a human decision — "even if we visited it
+    /// 1,000,000 times". Contiguous same-surface time is already ONE segment
+    /// by the time it reaches the queue (`queueReview` extends the pending
+    /// segment), so a genuine long visit still qualifies whole; only
+    /// NON-contiguous brief glances vanish. Filtered-out segments stay
+    /// journalled and on the timeline exactly as before — the floor thins
+    /// the queue, never the record. A floor of 0 (or below) admits all.
     func meetingReviewFloor(_ floor: TimeInterval) -> [ReviewSegment] {
         guard floor > 0 else { return self }
-        var totals: [String: TimeInterval] = [:]
-        for segment in self {
-            let key = "\(segment.app)|\(segment.windowTitle ?? "")|\(segment.tabURL ?? "")"
-            totals[key, default: 0] += segment.end.timeIntervalSince(segment.start)
-        }
-        return filter {
-            totals["\($0.app)|\($0.windowTitle ?? "")|\($0.tabURL ?? "")", default: 0] >= floor
-        }
+        return filter { $0.end.timeIntervalSince($0.start) >= floor }
     }
 }

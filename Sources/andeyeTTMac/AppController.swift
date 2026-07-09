@@ -1837,11 +1837,10 @@ public final class AppController: ObservableObject {
         // the drawer's stacks, the badge count, the AI prompt, multi-select
         // assign — sees the same floored queue, and rows persisted before the
         // floor existed vanish on the next reload with no migration. The
-        // journal keeps sub-floor rows untouched (the floor thins the drawer,
-        // never the timeline or journal), which is also why the filter can't
-        // live at flush time: a surface that accumulates more brief slices
-        // must re-qualify on a later reload, and a flush-time drop would have
-        // thrown its early slices away for good.
+        // journal keeps sub-floor rows untouched — the floor thins the
+        // drawer, never the timeline or journal — and a load-time filter
+        // also means a lowered floor setting reveals the rows it had been
+        // hiding, instead of their having been dropped for good at flush.
         pendingReview = ((try? journal.pendingReview()) ?? [])
             .meetingReviewFloor(settings.reviewFloorSeconds)
         retroDigest = (try? journal.retroDigests(limit: 200)) ?? []
@@ -1883,9 +1882,9 @@ public final class AppController: ObservableObject {
         let unknownAssigned = (try? journal.reviewSegments(assignedTo: .task(WorkTask.unknown.ref))) ?? []
         // The re-add obeys the same admission floor as the queue itself
         // (pendingReview is already floored by reloadReview): a sub-floor
-        // Unknown slice is exactly the kind of row the floor exists to keep
+        // Unknown glance is exactly the kind of row the floor exists to keep
         // out of circulation, so no path may resurrect it — while an Unknown
-        // surface whose slices total >= the floor stays reclaimable as ever.
+        // segment that itself meets the floor stays reclaimable as ever.
         let combined = (pendingReview + unknownAssigned)
             .meetingReviewFloor(settings.reviewFloorSeconds)
         let pending = Array(combined.prefix(Self.retroPassCap))

@@ -106,8 +106,8 @@ struct SettingsView: View {
                 Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
                         value: $controller.settings.reviewFloorSeconds, in: 0...600, step: 15)
                 Text(reviewFloor > 0
-                     ? "A window only asks for review once its uncertain slices total "
-                       + "\(Int(reviewFloor.rounded()))s – briefer visits stay tracked, just off the queue"
+                     ? "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review "
+                       + "– briefer glances stay tracked, just never queue"
                      : "Every uncertain slice asks for review, however brief")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Auto-comment time entries (apps/docs used)",
