@@ -67,3 +67,8 @@ midnight. Day boundaries are marked with the date.
   "OpenProject only" filter (⌘⇧O) and a show/hide calendar (⌘⇧C).
 - A donut: projects in the inner ring, tasks in the outer. Hover to highlight,
   click to pin a selection; reassign time to another task from the bar.
+- **Colours**: each project gets its own hue, and its tasks distinct shades
+  around it - picked to stay tellable-apart (including under colour-blind
+  vision) and never reshuffled: once a task has shown its colour, it keeps
+  it. Pick your own in the timeline's slice editor or a local task's
+  Settings row - your pick always wins.

@@ -548,12 +548,17 @@ and recorded rather than fixed blind:
 
 ## Colour strategy (2026-07-06)
 
-- [ ] Colour strategy – stable project/task/window colours (max-distinct
-  project hues, in-spectrum task shades, inherit/fixed with "i" swatch
-  marker, click-swatch editing, colours.json store, Life period with
-  All/Tracked/Untracked) – spec at
-  docs/superpowers/specs/2026-07-06-colour-strategy.md. Awaits Martin's
-  review (7 front-loaded open questions) before any /vs build.
+- [ ] Colour strategy – stable project/task/window colours – spec at
+  docs/superpowers/specs/2026-07-06-colour-strategy.md, lab at
+  sites/previews/colour-lab.html. ENGINE v1 SHIPPED (Martin's "build it",
+  2026-07-09): hue-neighbourhood allocator in Core (`ColourEngine`),
+  first-sight colours.json records, legacy-hash migration snapshot,
+  stable project-anchor ring/legend colour, checks. Remaining per spec:
+  click-swatch editing everywhere (legend, ring-3), inherit/fixed with
+  "i" marker + swatch popover editor, window/surface colour records (pin
+  identity grain), Life period with All/Tracked/Untracked, colours.json
+  sync (whole-record LWW) + iOS PhonePalette sharing the store (until
+  then iOS still hash-derives, so auto colours differ across devices).
 
 ## Hardware-test UI fixes (Martin, 2026-07-06) — Mac verification pending
 

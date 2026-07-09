@@ -566,6 +566,12 @@ struct SpentView: View {
     }
 
     private func colour(project node: TimeAggregator.Node, index: Int) -> Color {
+        // The project's OWN anchor colour (stable record) — never the first
+        // child's colour, which changed with sort order (a direct stability
+        // violation: people build colour-to-project associations).
+        if let anchor = controller.projectColour(containing: node.children.first?.ref) {
+            return Color(nsColor: anchor)
+        }
         if let firstTask = node.children.first, let ref = firstTask.ref {
             return Color(nsColor: controller.colour(for: ref))
         }

@@ -125,6 +125,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("SQLiteSyncStamping", sqliteSyncStampingChecks),
     ("License", licenseChecks),
     ("Billing", billingChecks),
+    ("ColourEngine", colourEngineChecks),
     ("ReviewStack", reviewStackChecks),
     ("RetroAcceptance", retroAcceptanceChecks),
     ("ApprovalsDrawerAcceptance", approvalsDrawerAcceptanceChecks),

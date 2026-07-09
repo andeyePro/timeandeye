@@ -319,6 +319,13 @@ public final class AppController: ObservableObject {
     private let calendarRulesStore: JSONFileStore<[CalendarRule]>
     private var calendarRules: [CalendarRule] = []
     private let billingStore: JSONFileStore<BillableRules>
+    /// Colour assignments (colour-strategy spec): first-sight colour records,
+    /// a user-ownable colours.json beside pins.json. NOT @Published — records
+    /// are appended lazily inside `colour(for:)` DURING view rendering, and
+    /// publishing mid-render is a SwiftUI violation; the returned colour is
+    /// used directly, so no invalidation is needed.
+    private let coloursStore: JSONFileStore<ColourAssignments>
+    private var colourAssignments: ColourAssignments
     private let financeMappingsStore: JSONFileStore<[String: FinanceMapping]>
     /// D6: sourceProjectKey → the finance backend's task. Core-owned;
     /// Settings edits it; the Pro flavour hands it to its finance connector
@@ -428,6 +435,28 @@ public final class AppController: ObservableObject {
         // sentinel is excluded (its pushed flag is a sentinel, not a post).
         _ = try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
                                                    excluding: [Self.liveCheckpointID])
+
+        // Colour records (colour-strategy spec §6). First launch of the new
+        // store (no decodable colours.json yet): every task with ANY journal
+        // time gets its pre-engine hash colour snapshotted as its permanent
+        // assignment — "has time" ≈ "has been seen in the pie", and a colour,
+        // once seen, never changes underneath the user. Tasks never tracked
+        // go through the allocator on first sight instead. User overrides
+        // stay in settings.taskColours untouched (they already win).
+        coloursStore = JSONFileStore<ColourAssignments>(url: dir.appendingPathComponent("colours.json"))
+        if let existing = (try? coloursStore.load()).flatMap({ $0 }) {
+            colourAssignments = existing
+        } else {
+            var snapshot = ColourAssignments()
+            let seen = (try? journal.latestEndByTask(excluding: [Self.liveCheckpointID])) ?? [:]
+            for ref in seen.keys where ref != WorkTask.unknown.ref {
+                ColourEngine.snapshotLegacy(taskKey: ref.storageKey,
+                                            hex: Self.legacyHashColourHex(for: ref),
+                                            in: &snapshot)
+            }
+            colourAssignments = snapshot
+            try? coloursStore.save(snapshot)
+        }
 
         let host = URL(string: loadedSettings.opBaseURL)?.host ?? ""
         let learning = (try? learningStore.load().flatMap { $0 }) ?? LearningStore()
@@ -2607,18 +2636,64 @@ public final class AppController: ObservableObject {
 
     /// Per-task colour: the Unknown sentinel first (fixed neutral grey — it
     /// reads as "undecided", never a real project hue, and isn't user
-    /// recolourable), then a user override, then a stable hash.
+    /// recolourable), then a user override, then the task's persisted colour
+    /// record — allocated by `ColourEngine` (hue-neighbourhood strategy, CVD-
+    /// aware max-distinct) on FIRST SIGHT and stable ever after. The old
+    /// hash fallback survives only as the one-time migration snapshot
+    /// (`legacyHashColourHex`), so pre-engine tasks keep exactly the colour
+    /// they always had.
     public func colour(for ref: TaskRef) -> NSColor {
         if ref == WorkTask.unknown.ref { return .systemGray }
         if let hex = settings.taskColours[ref.storageKey], let c = NSColor(hex: hex) {
             return c
         }
+        if let record = colourAssignments.tasks[ref.storageKey],
+           let c = NSColor(hex: record.hex) {
+            return c
+        }
+        // First sight: allocate within the project's hue neighbourhood and
+        // persist — from here on this task's colour is data, not derivation.
+        let key = taskCache.first(where: { $0.ref == ref }).flatMap { projectKey(for: $0) }
+        let hex = ColourEngine.taskHex(ref.storageKey, projectKey: key,
+                                       in: &colourAssignments)
+        try? coloursStore.save(colourAssignments)
+        return NSColor(hex: hex) ?? .systemGray
+    }
+
+    /// Stable colour for the PROJECT containing `ref`: the project's own
+    /// anchor record (allocated on first sight, like task colours). This is
+    /// what the pie's project ring and legend swatch use — previously they
+    /// borrowed the first child task's colour, so a project's apparent
+    /// colour changed whenever its biggest task or the sort order did.
+    /// nil when the ref is unknown to the cache (caller falls back).
+    public func projectColour(containing ref: TaskRef?) -> NSColor? {
+        guard let ref, ref != WorkTask.unknown.ref,
+              let task = taskCache.first(where: { $0.ref == ref }),
+              let key = projectKey(for: task) else { return nil }
+        let before = colourAssignments.recordCount
+        let record = ColourEngine.projectRecord(key, in: &colourAssignments)
+        if colourAssignments.recordCount != before {
+            try? coloursStore.save(colourAssignments)
+        }
+        return NSColor(hex: record.hex)
+    }
+
+    /// The pre-engine per-task hash colour (djb2 of the ref description →
+    /// HSB hue), kept ONLY so the one-time colours.json migration can
+    /// snapshot what each already-seen task looked like. Never used for new
+    /// allocation.
+    private static func legacyHashColourHex(for ref: TaskRef) -> String {
         var hash: UInt64 = 5381
         for byte in String(describing: ref).utf8 {
             hash = hash &* 33 &+ UInt64(byte)
         }
         let hue = CGFloat(hash % 360) / 360
-        return NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1)
+        let colour = NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1)
+        let rgb = colour.usingColorSpace(.sRGB) ?? colour
+        return String(format: "#%02X%02X%02X",
+                      Int(rgb.redComponent * 255),
+                      Int(rgb.greenComponent * 255),
+                      Int(rgb.blueComponent * 255))
     }
 
     public func setColour(_ colour: NSColor, for ref: TaskRef) {
@@ -3655,6 +3730,12 @@ public final class AppController: ObservableObject {
         guard !mapping.isEmpty else { return }
         billing.migrateProjectKeys(mapping)
         saveBilling()
+        // Colour anchors share the billing key convention (colour-strategy
+        // spec, open question 7), so they migrate on the same trigger — a
+        // project rename after id capture keeps its hue anchor.
+        if colourAssignments.migrateProjectKeys(mapping) > 0 {
+            try? coloursStore.save(colourAssignments)
+        }
     }
 }
 

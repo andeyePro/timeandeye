@@ -2,6 +2,32 @@
 
 ## 2026-07-09
 
+- [x] **Task-colour engine v1 — stable, distinct, colour-blind-aware.** New
+  platform-independent `ColourEngine` (andeyeTTCore) replaces the per-task
+  djb2-hash hue: each project claims the most distinct-from-neighbours free
+  hue on an OKLCH wheel (argmax of minimum pairwise distance, where distance
+  is the WORST CASE across normal vision and protan/deutan/tritan simulation,
+  Machado 2009), and its tasks take shades from a ±25° hue neighbourhood
+  crossed with a lightness/chroma ramp, scored against every colour assigned
+  so far — the colour-lab's recommended "strategy C"
+  (sites/previews/colour-lab.html; spec
+  docs/superpowers/specs/2026-07-06-colour-strategy.md). COLOUR STABILITY is
+  the governing rule: an assignment commits to a new colours.json (JSONFileStore,
+  beside pins.json) at first render and is data from then on — new items never
+  move old colours; hue exhaustion opens a second lightness band instead of
+  squeezing band 1. Auto colours are constrained so the UI's black-or-white
+  label always reaches 4.5:1. One-time migration snapshots the old hash colour
+  for every task with journal time, so an upgrade changes nothing the user has
+  seen; user overrides stay in settings.taskColours, checked first, exactly as
+  before. The pie's project ring/legend now render the project's OWN anchor
+  colour instead of borrowing the first child task's (which changed with sort
+  order). Project records share BillableRules' stable keys and ride the same
+  title→id key migration. New ColourEngine checks suite: determinism,
+  add-N+1-changes-nothing, override-beats-engine (recordless), the lab's
+  engineered hash-collision pair, whole-fixture worst-case-CVD legibility,
+  label contrast, band-2 engagement, round-trip, snapshot permanence, unfiled
+  fallback. iOS PhonePalette still hash-derives (store sync is future work).
+
 - [x] **Windows show over fullscreen apps — proven flag combo.** The Time,
   Review and Settings windows now use `canJoinAllSpaces` +
   `fullScreenAuxiliary` — the exact combination the app's own notification

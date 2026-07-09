@@ -8,7 +8,11 @@ import andeyeTTPhone
 // lives in NowView's toolbar. All geometry comes from Core's PieGeometry;
 // only the SwiftUI drawing lives here.
 
-// MARK: - Colours (mirrors AppController.colour(for:) — override, then hash)
+// MARK: - Colours (override, then the LEGACY hash)
+// The Mac now allocates engine colours (ColourEngine, persisted first-sight
+// records in colours.json); the phone keeps the pre-engine hash until those
+// records ride a sync pipe, so AUTO colours can differ between devices —
+// user overrides (settings.taskColours) agree everywhere.
 
 enum PhonePalette {
     static func colour(for ref: TaskRef, overrides: [String: String]) -> Color {
