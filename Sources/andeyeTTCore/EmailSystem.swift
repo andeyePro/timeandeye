@@ -57,4 +57,28 @@ public enum EmailSystem: String, CaseIterable, Sendable {
     }
 
     public var hasRecipe: Bool { senderSelector != nil }
+
+    /// Whether the tab URL names an OPEN MESSAGE rather than a list/label/
+    /// search surface. Correspondent capture must only run on message views:
+    /// Gmail keeps the last-open conversation's DOM cached when you return to
+    /// a list, so the selectors report the PREVIOUS message's parties against
+    /// the list surface (seen live 2026-07-09: `#inbox` carrying the
+    /// correspondents of the message read a minute earlier) — and a list
+    /// title makes a junk subject ("Inbox (1)"). Gmail message URLs end the
+    /// fragment with a long alphanumeric thread id (`#inbox/FMfcgz…`,
+    /// legacy 16-hex too); list/label/search/settings segments are short
+    /// words. Systems with no known URL shape return true so a future recipe
+    /// isn't silently gated before its classifier is written.
+    public func isMessageView(urlString: String?) -> Bool {
+        switch self {
+        case .gmail:
+            guard let s = urlString, let frag = URL(string: s)?.fragment else { return false }
+            let path = frag.split(separator: "?").first.map(String.init) ?? frag
+            guard let last = path.split(separator: "/").last else { return false }
+            return last.count >= 16
+                && last.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
+        default:
+            return true
+        }
+    }
 }

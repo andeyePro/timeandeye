@@ -180,15 +180,18 @@ public final class EmailCaptureEngine {
     // MARK: - Capture gate (pure)
 
     /// Whether `bundleID`+`tabURL` name a chrome-like browser sitting on a
-    /// KNOWN mail host with a page recipe — the gate for kicking off a
-    /// capture at all. Pure (no AppleScript/Process), so `poll()` pays only
-    /// this check on every non-email focus change. Returns the AppleScript
-    /// application name to target, or nil when there's nothing to capture
-    /// (unsupported browser, no URL, or a recipe-less email system).
+    /// KNOWN mail host with a page recipe, showing an OPEN MESSAGE — the gate
+    /// for kicking off a capture at all. Pure (no AppleScript/Process), so
+    /// `poll()` pays only this check on every non-email focus change. Returns
+    /// the AppleScript application name to target, or nil when there's nothing
+    /// to capture (unsupported browser, no URL, a recipe-less email system, or
+    /// a list/label/search surface — where the DOM still holds the LAST-open
+    /// conversation and the selectors would report stale parties).
     public static func captureTarget(bundleID: String?, tabURL: String?) -> String? {
         guard let bundleID, let appName = chromeAppName(bundleID: bundleID),
-              let urlStr = tabURL, let host = URL(string: urlStr)?.host,
-              EmailSystem.detect(urlHost: host).hasRecipe else { return nil }
+              let urlStr = tabURL, let host = URL(string: urlStr)?.host else { return nil }
+        let system = EmailSystem.detect(urlHost: host)
+        guard system.hasRecipe, system.isMessageView(urlString: urlStr) else { return nil }
         return appName
     }
 
