@@ -480,16 +480,46 @@ public final class SessionTracker {
 
     /// Returned to the prior task within grace: the excursion was not a real
     /// switch. Re-tag its spans to the prior task (they become windows in that
-    /// slice) and restore the display.
+    /// slice) and restore the display. UNLESS the excursion was PINNED (a
+    /// comment was committed during it — Martin, 2026-07-09: a commented
+    /// visit is work by attestation, however short): pinned excursions keep
+    /// their true target so the flush can surface them as their own slice.
     private func revertPendingSwitch() {
         guard let p = pendingSwitch else { return }
-        for i in spans.indices where spans[i].start >= p.since {
-            spans[i].target = p.from
+        let pinned = pins.contains { $0.target == p.target && $0.at >= p.since }
+        if !pinned {
+            for i in spans.indices where spans[i].start >= p.since {
+                spans[i].target = p.from
+            }
         }
         pendingSwitch = nil
         pendingNotify = nil
         if case .task = p.from { state = .tracking(p.from, certainty: 0.95) }
-        onDebug("reverted excursion -> \(p.from) (kept as windows)")
+        onDebug(pinned ? "reverted excursion -> \(p.from) (PINNED: excursion keeps its slice)"
+                       : "reverted excursion -> \(p.from) (kept as windows)")
+    }
+
+    // MARK: - Comment pins
+
+    /// Visits attested by a committed comment: (display target, moment). The
+    /// flush surfaces each pinned visit as its OWN slice — exempt from
+    /// minute dominance, the switch buffer and the grace fold-back — because
+    /// the user just told us that moment was real work on that task.
+    private var pins: [(target: Target, at: Date)] = []
+
+    /// The controller calls this when a comment is committed. `target` is
+    /// what the popover DISPLAYS (during a grace-pending switch that is the
+    /// pending task, which matches the spans being written right now).
+    public func pinCurrentVisit(target: Target, at date: Date = Date()) {
+        guard case .tracking = state, case .task = target else { return }
+        // Close and reopen the in-flight span so the pinned moment is
+        // guaranteed to sit inside a CLOSED span carrying today's target —
+        // a later flush can always find it.
+        let signal = currentSignal
+        endCurrentSpan(at: date)
+        currentSignal = signal
+        currentStart = date
+        pins.append((target, date))
     }
 
     /// Driven by every input tick: commits a held switch / non-work stop and
@@ -670,7 +700,7 @@ public final class SessionTracker {
         let overallStart = clipped.map(\.start).min()!
         let minutes = MinuteResolver.dominantPerMinute(clipped)
 
-        var runs: [(target: Target, start: Date, end: Date)] = []
+        var runs: [(target: Target, start: Date, end: Date, pinned: Bool)] = []
         for (i, minute) in minutes.enumerated() {
             let mStart = max(minute.minuteStart, overallStart)
             let mEnd = min(minute.minuteStart.addingTimeInterval(60), overallEnd)
@@ -679,9 +709,55 @@ public final class SessionTracker {
                 last.end = mEnd
                 runs[runs.count - 1] = last
             } else {
-                runs.append((minute.target, mStart, mEnd))
+                runs.append((minute.target, mStart, mEnd, false))
             }
         }
+
+        // COMMENT PINS: each pinned visit becomes its own FORCED run — the
+        // contiguous same-target span chain around the pin — carved OUT of
+        // whatever dominant run covered that interval. A commented visit is
+        // work by the user's own attestation, however short.
+        var forced: [(target: Target, start: Date, end: Date, pinned: Bool)] = []
+        var futurePins: [(target: Target, at: Date)] = []
+        for pin in pins {
+            guard pin.at <= date else { futurePins.append(pin); continue }
+            guard var chain = clipped.first(where: { $0.target == pin.target
+                && $0.start <= pin.at.addingTimeInterval(1)
+                && $0.end >= pin.at.addingTimeInterval(-1) })
+                .map({ (start: $0.start, end: $0.end) }) else { continue }
+            var grew = true
+            while grew {
+                grew = false
+                for s in clipped where s.target == pin.target {
+                    if s.start <= chain.end.addingTimeInterval(1), s.end > chain.end {
+                        chain.end = s.end; grew = true
+                    }
+                    if s.end >= chain.start.addingTimeInterval(-1), s.start < chain.start {
+                        chain.start = s.start; grew = true
+                    }
+                }
+            }
+            if !forced.contains(where: { $0.target == pin.target
+                && $0.start == chain.start && $0.end == chain.end }) {
+                forced.append((pin.target, chain.start, chain.end, true))
+            }
+        }
+        pins = futurePins
+        for f in forced {
+            var carved: [(target: Target, start: Date, end: Date, pinned: Bool)] = []
+            for run in runs where !run.pinned {
+                if run.end <= f.start || run.start >= f.end || run.target == f.target {
+                    carved.append(run)
+                } else {
+                    if run.start < f.start { carved.append((run.target, run.start, f.start, false)) }
+                    if run.end > f.end { carved.append((run.target, f.end, run.end, false)) }
+                }
+            }
+            carved.append(f)
+            runs = carved
+        }
+        runs.sort { $0.start < $1.start }
+
         for run in runs {
             guard case .task(let ref) = run.target else { continue }   // doNotTrack time is never a session
             // No sub-buffer slices: a run shorter than the Switch Buffer is a
@@ -695,7 +771,9 @@ public final class SessionTracker {
             // started that ran 61–120s and was then switched off is WORK, not a
             // flit — dropping it (the old `>= switchGraceSeconds`) was silent
             // data loss. Default buffer (30s) is unchanged: min(30,60)=30.
-            guard run.end.timeIntervalSince(run.start)
+            // PINNED runs are exempt: the comment is the user saying "this
+            // moment was work" — no floor applies.
+            guard run.pinned || run.end.timeIntervalSince(run.start)
                     >= min(config.switchGraceSeconds, 60) else { continue }
             // Duration-weighted certainty: a brief uncertain patch must not
             // sink a long confident session below the push threshold (min()
@@ -708,8 +786,11 @@ public final class SessionTracker {
                 weighted += span.certainty * d
                 totalDuration += d
             }
-            let certainty = totalDuration > 0 ? weighted / totalDuration : 0
-            let comment = commentText(for: run, in: clipped)
+            // A pinned run is user-attested work: floor its certainty at the
+            // manual-confidence level whatever the attribution scored it.
+            let certainty = max(totalDuration > 0 ? weighted / totalDuration : 0,
+                                run.pinned ? 0.95 : 0)
+            let comment = commentText(for: (run.target, run.start, run.end), in: clipped)
             onSession(Session(task: ref, start: run.start, end: run.end,
                               certainty: certainty, comment: comment))
         }

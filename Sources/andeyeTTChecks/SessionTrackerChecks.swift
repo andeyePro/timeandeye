@@ -918,4 +918,47 @@ func sessionTrackerChecks(_ c: Checks) {
                      "subject-only follow-up clobbered the learned correspondents")
         try expectEq(tracker.currentFocusSignal?.emailSubject, "Re: X")
     }
+
+    c.check("a COMMENT PIN makes a sub-grace excursion its own slice; the same excursion unpinned stays folded") {
+        // Martin, 2026-07-09: three quick test comments on three tasks all
+        // collapsed into one slice on one task. A commented visit is work by
+        // attestation — it must surface however short, despite the grace
+        // fold-back, minute dominance and the switch buffer.
+        func run(pinned: Bool) throws -> [Session] {
+            let (tracker, attributor) = makeTracker()
+            var sessions: [Session] = []
+            tracker.onSession = { sessions.append($0) }
+            attributor.confirm(sig("Ghostty", "andeyeTT", at: 0), task: .op(1))
+            attributor.confirm(sig("Ghostty", "Investment", at: 0), task: .op(2))
+            tracker.start(task: .op(1), at: t(0))
+            tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 0)))
+            // 15 s excursion to op(2), well inside the 30 s grace…
+            tracker.handle(.focus(sig("Ghostty", "Investment", at: 120)))
+            if pinned {
+                // …with a comment committed mid-visit (display = op(2)).
+                tracker.pinCurrentVisit(target: .task(.op(2)), at: t(128))
+            }
+            // …then straight back: the excursion reverts.
+            tracker.handle(.focus(sig("Ghostty", "andeyeTT", at: 135)))
+            tracker.handle(.input(t(200)))
+            tracker.stop(at: t(240))
+            return sessions
+        }
+        let folded = try run(pinned: false)
+        try expectEq(folded.filter { $0.task == .op(2) }.count, 0,
+                     "unpinned sub-grace excursion must stay folded (windows only)")
+        try expectEq(folded.filter { $0.task == .op(1) }.count, 1)
+
+        let attested = try run(pinned: true)
+        let excursion = attested.filter { $0.task == .op(2) }
+        try expectEq(excursion.count, 1, "pinned excursion must surface as its own slice")
+        try expect(excursion[0].end.timeIntervalSince(excursion[0].start) <= 20,
+                   "the pinned slice covers just the short visit")
+        try expect(excursion[0].certainty >= 0.95, "user-attested certainty floor")
+        // The surrounding op(1) time still flushes, split around the pin.
+        try expect(attested.filter { $0.task == .op(1) }
+            .allSatisfy { $0.end <= excursion[0].start.addingTimeInterval(1)
+                       || $0.start >= excursion[0].end.addingTimeInterval(-1) },
+                   "dominant slices must not overlap the carved pinned slice")
+    }
 }

@@ -196,7 +196,23 @@ public final class AppController: ObservableObject {
     /// The speech-bubble note. NOT @Published: binding a TextField to a
     /// published var rebuilds the whole popover on every keystroke and steals
     /// focus ("can't type"). The popover edits a local copy and pushes here.
-    public var manualNote = ""
+    /// Committed comments awaiting their slice, PER TASK (Martin's three
+    /// rapid test comments once all rode one global note onto one slice).
+    /// Each task's note is consumed by ITS slice at flush.
+    public var manualNotes: [TaskRef: String] = [:]
+    /// Display-target shim over `manualNotes` — the live-slice comment the
+    /// timeline editor and legacy paths read/write. Keyed by the task the
+    /// popover currently shows; empty/ignored when not tracking a task.
+    public var manualNote: String {
+        get {
+            guard case .task(let ref) = currentTarget else { return "" }
+            return manualNotes[ref] ?? ""
+        }
+        set {
+            guard case .task(let ref) = currentTarget else { return }
+            if newValue.isEmpty { manualNotes[ref] = nil } else { manualNotes[ref] = newValue }
+        }
+    }
     @Published public var settings: AndeyeSettings {
         didSet {
             try? settingsStore.save(settings)
@@ -594,11 +610,10 @@ public final class AppController: ObservableObject {
         tracker.onSession = { [weak self] session in
             guard let self else { return }
             var s = session
-            // Consume the speech-bubble note HERE, when the slice it belongs to
-            // is actually journalled — not on the display switch — so it
-            // survives transient excursions and lands on the slice it was
-            // written for, even when the slice commits after the grace delay.
-            let note = self.manualNote
+            // Consume THIS TASK's note when its slice is journalled — the
+            // per-task map means a flush order surprise can never hand one
+            // task's comment to another's slice.
+            let note = self.manualNotes.removeValue(forKey: s.task) ?? ""
             // Route the note per the two toggles: 'comment to tracked time'
             // attaches it to the time entry (s.comment, pushed to OP); 'comment
             // to task' also posts it to the task's activity feed, where it is
@@ -608,9 +623,6 @@ public final class AppController: ObservableObject {
                 note: note, autoCommentText: s.comment,
                 autoCommentEnabled: self.settings.autoComment,
                 toTrackedTime: self.settings.commentToTrackedTime)
-            if !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                self.manualNote = ""
-            }
             try? self.journal.save(s)
             // The TASK-feed half no longer rides the flush: commitComment
             // posts it immediately to the DISPLAYED task. Consuming it here
@@ -679,7 +691,7 @@ public final class AppController: ObservableObject {
                 self.targetSince = nil
                 self.visitSolid = false
                 self.bankedElapsed.removeAll()
-                self.manualNote = ""
+                self.manualNotes.removeAll()   // stop flush already consumed them
                 self.taskChangedAt = now
                 self.clearCheckpoint()   // nothing in flight to recover
                 Notifier.notify(symbol: "stop.circle", text: "Stopped", sound: "Basso")
@@ -1283,11 +1295,17 @@ public final class AppController: ObservableObject {
     /// - The tracked-time comment still rides the slice (accumulated into
     ///   manualNote, consumed at flush) — it belongs to the time entry.
     public func commitComment(_ text: String) {
-        manualNote = CommentRouting.accumulateComment(existing: manualNote, adding: text)
-        guard let taskNote = CommentRouting.taskComment(note: text,
-                                                        toTask: settings.commentToTask),
-              case .tracking(let target, _) = trackerState,
+        guard case .tracking(let target, _) = trackerState,
               case .task(let ref) = target else { return }
+        manualNotes[ref] = CommentRouting.accumulateComment(
+            existing: manualNotes[ref] ?? "", adding: text)
+        // A commented visit is work by attestation: pin it so its slice
+        // surfaces however short (Martin, 2026-07-09 — three quick test
+        // comments once collapsed into one slice on one task).
+        tracker.pinCurrentVisit(target: target)
+        guard let taskNote = CommentRouting.taskComment(note: text,
+                                                        toTask: settings.commentToTask)
+        else { return }
         Task { await self.postTaskComment(ref: ref, note: taskNote) }
     }
 
