@@ -93,21 +93,25 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // (~1Hz from the menu clock), so only touch the window when
             // something actually differs — no per-render churn.
             //
-            // THE actual culprit, from Martin's debug-log paste (2026-07-09,
-            // raw behaviours 131841): SwiftUI Window scenes ship with
-            // .fullScreenNone (bit 9) set, and fullScreenNone CONTRADICTS
-            // fullScreenAuxiliary — macOS resolved the conflict against us,
-            // so every flag combination that merely INSERTED bits (three
-            // fixes' worth) still landed the window on the next desktop the
-            // moment it became visible (log: visible true, onActiveSpace
-            // false). The poison bit has to be REMOVED. With it gone,
-            // moveToActiveSpace + fullScreenAuxiliary gives exactly the
-            // behaviour Martin asked for: the window appears on the Space —
-            // fullscreen included — where it was opened, and STAYS there
-            // (no follow-everywhere).
+            // Fullscreen-join history, all evidenced by Martin's log pastes
+            // (2026-07-09): SwiftUI Window scenes ship with .fullScreenNone
+            // set, which poisoned every insert-only fix (raw 131841). With
+            // the poison bit stripped, a clean moveToActiveSpace +
+            // fullScreenAuxiliary (raw 131330) STILL bounced — the log's
+            // "visible true, onActiveSpace false" at display — so
+            // moveToActiveSpace simply never targets a fullscreen Space.
+            // What remains is the one arrangement PROVEN to overlay
+            // fullscreen apps on this machine — the app's own notification
+            // panel's canJoinAllSpaces + fullScreenAuxiliary — which has
+            // never yet run clean (the earlier canJoinAllSpaces attempt
+            // predates the poison-bit discovery). Trade: the windows sit on
+            // every Space while open; Martin accepted "anything if
+            // necessary". If even this bounces, the flags are exonerated
+            // and the next lever is window LEVEL (the panel floats at
+            // .statusBar).
             var behaviours = w.collectionBehavior
-            behaviours.remove([.fullScreenNone, .fullScreenPrimary, .canJoinAllSpaces])
-            behaviours.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+            behaviours.remove([.fullScreenNone, .fullScreenPrimary, .moveToActiveSpace])
+            behaviours.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
             if w.collectionBehavior != behaviours {
                 w.collectionBehavior = behaviours
                 DebugLog.write("window \(windowID ?? w.title): behaviours -> \(w.collectionBehavior.rawValue), level \(w.level.rawValue), visible \(w.isVisible), onActiveSpace \(w.isOnActiveSpace)")
