@@ -92,15 +92,25 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // Idempotent: also called from updateNSView on every re-render
             // (~1Hz from the menu clock), so only touch the window when
             // something actually differs — no per-render churn.
-            if !w.collectionBehavior.contains(.moveToActiveSpace) {
-                w.collectionBehavior.insert(.moveToActiveSpace)
-            }
-            // Joinable to a FULLSCREEN app's Space: without this, opening the
-            // window while a fullscreen app is up makes macOS switch Space
-            // instead — visually jarring AND the frontmost-app change dragged
-            // tracking onto whatever lived on the other Space.
-            if !w.collectionBehavior.contains(.fullScreenAuxiliary) {
-                w.collectionBehavior.insert(.fullScreenAuxiliary)
+            //
+            // canJoinAllSpaces + fullScreenAuxiliary is the EXACT combination
+            // the app's own notification panel uses, and that panel provably
+            // shows over fullscreen apps on Martin's machine — while
+            // moveToActiveSpace(+fullScreenAuxiliary) provably does not: a
+            // window opened over a fullscreen app landed on "the next
+            // non-fullscreen space" (Martin, 2026-07-09, after both a
+            // flag-timing fix and an activation-ordering fix changed
+            // nothing). moveToActiveSpace's "active space" evidently means
+            // the active DESKTOP, so over a fullscreen Space it picks the
+            // adjacent desktop. The trade: these windows now sit on every
+            // Space while open (utility-window semantics — close them and
+            // they're gone), which also delivers the original
+            // "come to my current Space, don't yank me" behaviour for free.
+            let wanted: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            if !w.collectionBehavior.contains(wanted) {
+                w.collectionBehavior.remove(.moveToActiveSpace)
+                w.collectionBehavior.insert(wanted)
+                DebugLog.write("window \(windowID ?? w.title): behaviours -> \(w.collectionBehavior.rawValue), level \(w.level.rawValue), visible \(w.isVisible), onActiveSpace \(w.isOnActiveSpace)")
             }
             // A stable identity for code that recognises this window (the
             // timeline scroll-pan monitor) without a title match.
@@ -156,6 +166,13 @@ enum AndeyeWindows {
             NSApp.activate(ignoringOtherApps: true)
         } else if retriesLeft > 0 {
             DispatchQueue.main.async { activateOnceVisible(retriesLeft - 1) }
+        } else {
+            // Diagnostic, not control flow: if no window ever satisfied the
+            // gate, the Space decision went wrong again — dump every window's
+            // state so the NEXT report comes with data instead of symptoms.
+            for w in NSApp.windows where w.level == .normal {
+                DebugLog.write("activate-gave-up: \(w.identifier?.rawValue ?? w.title) visible \(w.isVisible), onActiveSpace \(w.isOnActiveSpace), behaviours \(w.collectionBehavior.rawValue)")
+            }
         }
     }
 }

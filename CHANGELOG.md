@@ -2,6 +2,17 @@
 
 ## 2026-07-09
 
+- [x] **Windows show over fullscreen apps — proven flag combo.** The Time,
+  Review and Settings windows now use `canJoinAllSpaces` +
+  `fullScreenAuxiliary` — the exact combination the app's own notification
+  panel already uses successfully over fullscreen apps —  instead of
+  `moveToActiveSpace`, whose "active space" resolves to the nearest
+  DESKTOP, landing the window on the next non-fullscreen Space. The
+  windows now sit on every Space while open (utility semantics: close
+  them and they're gone), which also means opening one never yanks you to
+  another Space. Space decisions are logged to the debug log so any
+  remaining failure reports with data.
+
 - [x] **Opening a window over a fullscreen app no longer switches Space —
   activation-order root cause.** The Space switch was never the window's
   doing: `openWindow` is asynchronous, so the immediate `NSApp.activate`

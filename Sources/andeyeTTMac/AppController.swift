@@ -3679,15 +3679,15 @@ func installCrashTraps() {
 /// Diagnostic event log at a world-readable path so remote debugging over the
 /// scoped SSH user works (the agent cannot read Martin's home). Window titles
 /// appear in it; delete the file to clear, toggle by removing write access.
-enum DebugLog {
-    static let path = "/Users/Shared/andeye-debug.log"
+public enum DebugLog {
+    public static let path = "/Users/Shared/andeye-debug.log"
     private static let formatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
         return f
     }()
 
-    static func write(_ message: String) {
+    public static func write(_ message: String) {
         let line = "\(formatter.string(from: Date())) \(message)\n"
         if let handle = FileHandle(forWritingAtPath: path) {
             handle.seekToEndOfFile()
