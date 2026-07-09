@@ -161,6 +161,7 @@ public final class AppController: ObservableObject {
     @Published public private(set) var logoImage = NSImage()
     @Published public private(set) var taskCache: [WorkTask] = [] {
         didSet {
+            invalidatePickList()
             // Keep the finance-mapping store's source-task→project-key
             // snapshot in step with the cache (the connector reads it from
             // the sync context; a live closure into main-actor state would
@@ -186,7 +187,9 @@ public final class AppController: ObservableObject {
     /// moved (D4 detection; empty = books match the journal).
     @Published public private(set) var postingDivergences: [String: Int] = [:]
     @Published public private(set) var journalSummary = ""
-    @Published public private(set) var connectedAs: String?
+    @Published public private(set) var connectedAs: String? {
+        didSet { invalidatePickList() }   // RankingConfig.currentUser input
+    }
     /// The validated licence, or nil for Community (no key / bad key / expired
     /// — `licenseProblem` says which). Pro builds gate paid backends on this.
     @Published public private(set) var license: License?
@@ -215,6 +218,7 @@ public final class AppController: ObservableObject {
     }
     @Published public var settings: AndeyeSettings {
         didSet {
+            invalidatePickList()   // statusOrder / localTasks feed the ranker
             try? settingsStore.save(settings)
             Notifier.enabled = settings.systemNotifications
             attributor.emailMatchOrder = settings.emailMatchOrder
@@ -1095,13 +1099,31 @@ public final class AppController: ObservableObject {
         }
     }
 
+    /// Memoised pick list. SwiftUI bodies call `fullPickList()`/`searchTasks()`
+    /// on every render at several sites (popover switch list, timeline pickers,
+    /// Spent reassign, Review assign bar), and the full ranker sort walks every
+    /// task with learning lookups. The cache is invalidated by `taskCache.didSet`
+    /// (element mutations fire it too, so lastConfirmedAt bumps count), settings
+    /// changes and every learning write; the short TTL covers the ranking's
+    /// time-decay term without a per-render resort.
+    private var pickListCache: (tasks: [WorkTask], at: Date)?
+    private var searchCache: (query: String, basedOn: Date, results: [WorkTask])?
+    private func invalidatePickList() {
+        pickListCache = nil
+        searchCache = nil
+    }
+
     /// The popover / picker ordering: recently-confirmed tasks first (most
     /// recent first), then everything else ranked. The whole list — it's
     /// scrollable and filterable, so there's no recent/likely cap any more.
     public func fullPickList() -> [WorkTask] {
-        TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
-                                         currentUser: connectedAs))
-            .recentThenRanked(taskCache, at: Date(), learning: attributor.learning)
+        let now = Date()
+        if let c = pickListCache, now.timeIntervalSince(c.at) < 5 { return c.tasks }
+        let ranked = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
+                                                      currentUser: connectedAs))
+            .recentThenRanked(taskCache, at: now, learning: attributor.learning)
+        pickListCache = (ranked, now)
+        return ranked
     }
 
     public func userPicked(_ task: WorkTask) {
@@ -1119,6 +1141,7 @@ public final class AppController: ObservableObject {
     }
 
     private func persistAssociations() {
+        invalidatePickList()   // every learning/pin/rule write lands here
         try? learningStore.save(attributor.learning)
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
@@ -1837,10 +1860,15 @@ public final class AppController: ObservableObject {
     /// the words the learner has associated with it (e.g. "voting" finds the task
     /// you always work in a "voting" window, whatever its OP subject says).
     public func searchTasks(_ query: String) -> [WorkTask] {
+        let base = fullPickList()
+        let stamp = pickListCache?.at ?? Date()
+        if let c = searchCache, c.query == query, c.basedOn == stamp { return c.results }
         let learning = attributor.learning
-        return FuzzyMatch.filter(fullPickList(), query: query) {
+        let results = FuzzyMatch.filter(base, query: query) {
             learning.learnedValues(for: .task($0))
         }
+        searchCache = (query, stamp, results)
+        return results
     }
 
     /// Sorted, de-duplicated window (focus-span) edges in [from, to] — the

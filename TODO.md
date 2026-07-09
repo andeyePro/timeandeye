@@ -93,13 +93,13 @@ and recorded rather than fixed blind:
   stalls tracking AND the UI). Fix = move poll() off the main run loop or fetch
   URL/title on a background queue and feed results back as events. Needs
   on-device soak — the email capture revert proves this path bites.
-- [ ] `fullPickList()`/`searchTasks()` (full ranker sort + fuzzy filter) are
-  called inside SwiftUI `body` at several sites (PopoverView switchList,
-  Timeline reassign/editor pickers, Spent reassign row, Review assign bar) —
-  re-ran per render. The 1 Hz republish fix removes the worst trigger; the
-  remaining cost is per-genuine-render. Proper fix: cache the ranked list in
-  @State keyed on journalRevision/taskCache/filter, or one shared TaskPickerBar
-  component (also collapses 4 near-duplicate filter-bar implementations).
+- [x] `fullPickList()`/`searchTasks()` re-ran per SwiftUI render — DONE
+  2026-07-09: memoised in AppController (one cache serves all 6 call sites),
+  invalidated by taskCache/settings/connectedAs didSet + persistAssociations
+  (every learning write), 5 s TTL backstop for the ranking's time-decay term;
+  searchTasks memoises the last (query, base) pair for keystroke renders.
+  TaskPickerBar consolidation of the 4 filter-bar implementations still open
+  as a separate refactor if wanted.
 - [x] Two open timeline windows cross-pan — DONE 2026-07-09: HostWindowAccessor
   resolves the view's actual NSWindow; the scroll monitor gates on the
   INSTANCE (identifier check kept only as the pre-resolution fallback).
