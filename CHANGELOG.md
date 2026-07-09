@@ -2,6 +2,15 @@
 
 ## 2026-07-09
 
+- [x] **Opening a window over a fullscreen app no longer switches Space —
+  activation-order root cause.** The Space switch was never the window's
+  doing: `openWindow` is asynchronous, so the immediate `NSApp.activate`
+  activated a momentarily window-less app and macOS switched to a Space
+  that had its windows. Every open site now defers activation
+  (`AndeyeWindows.activateOnceVisible`) until a normal-level window is
+  actually visible on the current Space — at which point there is nothing
+  to switch away to.
+
 - [x] **Windows join a fullscreen Space before first show.** Opening
   Timeline/Settings/Review over a fullscreen app no longer switches Space:
   the window flags now apply synchronously when the content view lands in

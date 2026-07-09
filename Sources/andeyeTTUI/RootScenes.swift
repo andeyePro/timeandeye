@@ -137,3 +137,25 @@ extension View {
         background(ActiveSpaceWindow(windowID: windowID, title: title))
     }
 }
+
+/// App activation that never yanks the Space. `NSApp.activate` while the app
+/// has no window on the ACTIVE Space makes macOS switch to a Space that does
+/// have its windows — and SwiftUI's `openWindow` is asynchronous, so the old
+/// open-then-activate pairs activated a still-window-less app and switched
+/// away from fullscreen apps regardless of any collectionBehavior flag on the
+/// window itself (Martin, 2026-07-09, after two window-flag fixes weren't it).
+/// Call AFTER `openWindow`: it waits — runloop turns, not wall time — until a
+/// normal-level window is visible on the CURRENT Space (the flags applied at
+/// first attach put it there), then activates; at that point activation has
+/// nothing to switch away to.
+@MainActor
+enum AndeyeWindows {
+    static func activateOnceVisible(_ retriesLeft: Int = 40) {
+        if NSApp.windows.contains(where: {
+            $0.isVisible && $0.isOnActiveSpace && $0.level == .normal }) {
+            NSApp.activate(ignoringOtherApps: true)
+        } else if retriesLeft > 0 {
+            DispatchQueue.main.async { activateOnceVisible(retriesLeft - 1) }
+        }
+    }
+}

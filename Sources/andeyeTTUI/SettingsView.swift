@@ -480,7 +480,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Context rules…") {
                     openWindow(id: "rules")
-                    NSApp.activate(ignoringOtherApps: true)
+                    AndeyeWindows.activateOnceVisible()
                 }
                 .help("Every learned + pinned email rule, with provenance (origin, created, fired, last fired) — forget any of them.")
                 ForEach(Array(controller.settings.emailMatchOrder.enumerated()), id: \.element) { i, level in

@@ -28,6 +28,7 @@ struct TimeContainer: View {
             openSecond: { v in
                 controller.timeWindow2View = v
                 openWindow(id: "time2")
+                AndeyeWindows.activateOnceVisible()
             })
         Group {
             switch view {
