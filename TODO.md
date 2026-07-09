@@ -100,10 +100,9 @@ and recorded rather than fixed blind:
   remaining cost is per-genuine-render. Proper fix: cache the ranked list in
   @State keyed on journalRevision/taskCache/filter, or one shared TaskPickerBar
   component (also collapses 4 near-duplicate filter-bar implementations).
-- [ ] Two open timeline windows cross-pan: the app-global scroll monitor gates
-  on `keyWindow?.identifier == "timeline"`, which both windows share. Gate on
-  the window instance captured at install instead. (Known TODO, now with root
-  cause.)
+- [x] Two open timeline windows cross-pan — DONE 2026-07-09: HostWindowAccessor
+  resolves the view's actual NSWindow; the scroll monitor gates on the
+  INSTANCE (identifier check kept only as the pre-resolution fallback).
 - [x] Spent pie selection is positional (`project(i)`/`task(i,j)`) into a
   re-sorted `nodes` array — a background reload while a wedge is pinned can
   silently retarget the pin to whichever task now sits at that index. Key the
@@ -608,10 +607,11 @@ and recorded rather than fixed blind:
   pattern naming it; check pins the flag incl. nested trees.
 - [x] B16 — DONE 2026-07-08 (window 2, a4d02c9): recent-first block capped at
   two recency half-lives; ancient one-offs rank normally below live Now tasks.
-- [ ] B10 check: comment-source filtering is fixed but unpinned — needs a
-  harness path that closes an other-target span inside a work run.
-- [ ] C10: SensorHub.onEvent should be @MainActor-guarded before the
-  AXObserver (event-driven) refinement lands; today all emitters are main.
+- [x] B10 check — DONE 2026-07-09: the pinned-excursion scenario now asserts
+  the other target's window title never leaks into this task's auto comment.
+- [x] C10 — DONE 2026-07-09: every emitter funnels through SensorHub.emit,
+  which asserts main-thread and hops if a future emitter (the AXObserver
+  refinement) ever calls from elsewhere.
 - [x] C13 — DONE 2026-07-08: ⌘Z monitor token stored and removed at
   willTerminate alongside the Carbon hotkey.
 - [x] C14 — DONE 2026-07-08: init uses last launch's cached display-sleep

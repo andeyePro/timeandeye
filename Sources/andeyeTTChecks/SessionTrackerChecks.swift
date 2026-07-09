@@ -960,6 +960,12 @@ func sessionTrackerChecks(_ c: Checks) {
             .allSatisfy { $0.end <= excursion[0].start.addingTimeInterval(1)
                        || $0.start >= excursion[0].end.addingTimeInterval(-1) },
                    "dominant slices must not overlap the carved pinned slice")
+        // B10 pin: another target's span inside this task's window must not
+        // leak its window title into this task's auto comment (a personal
+        // window title in an OP/Xero entry comment would be a privacy leak).
+        try expect(attested.filter { $0.task == .op(1) }
+            .allSatisfy { !($0.comment ?? "").contains("Investment") },
+                   "op(1)'s comment leaked the excursion's window title")
     }
 
     c.check("rapid MANUAL pick + comment + pick back: the pinned middle survives the relabels (Martin's 02:01 test)") {

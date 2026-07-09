@@ -9,7 +9,24 @@ import andeyeTTCore
 /// Polling design (2 s) keeps the AX surface minimal; event-driven AXObserver
 /// is a future refinement.
 public final class SensorHub {
+    /// Every emitter today runs on the main run loop (Timer poll, workspace/
+    /// distributed notification blocks on .main queues), and the consumer
+    /// (AppController.tracker) is main-actor state — so emission is FUNNELED
+    /// through this trampoline, which asserts main and hops if a future
+    /// emitter (the planned event-driven AXObserver refinement, C10) ever
+    /// calls from elsewhere. The guard exists BEFORE that refinement lands,
+    /// so it can never silently corrupt tracker state from a background
+    /// thread.
     public var onEvent: (SensorEvent) -> Void = { _ in }
+
+    func emit(_ event: SensorEvent) {
+        if Thread.isMainThread {
+            onEvent(event)
+        } else {
+            assertionFailure("SensorHub emitter off the main thread — C10 guard")
+            DispatchQueue.main.async { self.onEvent(event) }
+        }
+    }
     public private(set) var accessibilityTrusted = false
 
     private var pollTimer: Timer?
@@ -32,11 +49,11 @@ public final class SensorHub {
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(forName: NSWorkspace.willSleepNotification,
                               object: nil, queue: .main) { [weak self] _ in
-            self?.onEvent(.willSleep(Date()))
+            self?.emit(.willSleep(Date()))
         }
         workspace.addObserver(forName: NSWorkspace.didWakeNotification,
                               object: nil, queue: .main) { [weak self] _ in
-            self?.onEvent(.didWake(Date()))
+            self?.emit(.didWake(Date()))
         }
 
         // Screen lock/unlock: while locked, the frontmost window is not really
@@ -46,16 +63,16 @@ public final class SensorHub {
         distributed.addObserver(forName: .init("com.apple.screenIsLocked"),
                                 object: nil, queue: .main) { [weak self] _ in
             self?.screenLocked = true
-            self?.onEvent(.screenLocked(Date()))
+            self?.emit(.screenLocked(Date()))
         }
         distributed.addObserver(forName: .init("com.apple.screenIsUnlocked"),
                                 object: nil, queue: .main) { [weak self] _ in
             self?.screenLocked = false
-            self?.onEvent(.screenUnlocked(Date()))
+            self?.emit(.screenUnlocked(Date()))
         }
 
         micMonitor = MicMonitor { [weak self] active in
-            self?.onEvent(.microphone(active: active, at: Date()))
+            self?.emit(.microphone(active: active, at: Date()))
         }
         micMonitor?.start()
 
@@ -96,7 +113,7 @@ public final class SensorHub {
         let anyInput = CGEventType(rawValue: ~0) ?? .null
         let idleSeconds = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: anyInput)
-        onEvent(.input(now.addingTimeInterval(-idleSeconds)))
+        emit(.input(now.addingTimeInterval(-idleSeconds)))
         // Locked: don't sample the frontmost window at all (no window detail
         // should accrue while the Mac is locked).
         if screenLocked { lastSurfaceKey = nil; return }
@@ -120,7 +137,7 @@ public final class SensorHub {
             // The plain signal goes out FIRST and unconditionally — tracking
             // never waits on email capture. Correspondents/subject arrive
             // later, if at all, as a separate .focusEnrichment event.
-            onEvent(.focus(signal))
+            emit(.focus(signal))
             captureEmailIfEligible(signal, bundleID: app.bundleIdentifier)
         }
     }
@@ -147,7 +164,7 @@ public final class SensorHub {
                                               tabURL: signal.tabURL, timestamp: signal.timestamp,
                                               correspondents: correspondents.isEmpty ? nil : correspondents,
                                               emailSubject: subject)
-                self.onEvent(.focusEnrichment(enriched))
+                self.emit(.focusEnrichment(enriched))
             }
         }
     }

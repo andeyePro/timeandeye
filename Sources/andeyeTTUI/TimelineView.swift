@@ -121,6 +121,9 @@ struct TimelineView: View {
     @State private var stripPxPerSec: CGFloat = 2
     @State private var stripPinchBase: CGFloat?
     @State private var scrollMonitor: Any?
+    /// The window actually hosting THIS view — the scroll-pan gate's
+    /// identity (two timeline windows share the "timeline" identifier).
+    @State private var hostWindow: NSWindow?
     /// Live flag (a reference so the scroll-wheel monitor reads it after install)
     /// telling the main-timeline pan to stand down while the cursor is over the
     /// window detail section — otherwise scrolling the strip pans both.
@@ -208,6 +211,10 @@ struct TimelineView: View {
             if let monitor = scrollMonitor { NSEvent.removeMonitor(monitor) }
             scrollMonitor = nil
         }
+        // Resolve the ACTUAL window hosting this view — the scroll-pan gate
+        // compares window instances, because two open timeline windows share
+        // the "timeline" identifier and both panned on either's scroll.
+        .background(HostWindowAccessor { hostWindow = $0 })
     }
 
     // MARK: - Data
@@ -350,12 +357,18 @@ struct TimelineView: View {
         // global monitor (that double-panned, app-wide). onDisappear nils it.
         guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            // Gate on the stable window identifier, not a localizable title
-            // substring. Title kept only as a fallback while the identifier
-            // is being set, so the gate can never silently match nothing.
-            let w = NSApp.keyWindow
-            guard w?.identifier?.rawValue == "timeline"
-                    || w?.title.contains("Timeline") == true else { return event }
+            // Gate on THIS view's window INSTANCE: two open timeline windows
+            // share the "timeline" identifier, so an identifier gate panned
+            // both on either's scroll (the known cross-pan TODO). The
+            // identifier check remains only as a fallback for the instant
+            // before the accessor resolves.
+            if let host = hostWindow {
+                guard NSApp.keyWindow === host else { return event }
+            } else {
+                let w = NSApp.keyWindow
+                guard w?.identifier?.rawValue == "timeline"
+                        || w?.title.contains("Timeline") == true else { return event }
+            }
             // Over the window detail section the inner ScrollViews handle their
             // own scrolling — don't ALSO pan the main bar (that moved both).
             if scrollGate.overDetail { return event }
@@ -1350,5 +1363,22 @@ struct TimelineView: View {
             .padding(.bottom, 2)
         }
         .frame(maxHeight: 320)
+    }
+}
+
+/// Resolves the NSWindow hosting a SwiftUI view (async, once attached).
+/// Used by the timeline's scroll-pan gate to compare WINDOW INSTANCES —
+/// identifiers can't distinguish two open timeline windows.
+private struct HostWindowAccessor: NSViewRepresentable {
+    var onResolve: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in onResolve(view?.window) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { [weak view] in onResolve(view?.window) }
     }
 }
