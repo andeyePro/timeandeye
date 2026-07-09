@@ -2,6 +2,26 @@
 
 ## 2026-07-09
 
+- [x] **The app is now Time&i (bundle timeandeye.app).** Martin's final
+  naming: repo and app name `timeandeye`, human short form **Time&i**
+  (lowercase i), long form **Time andeye**; "andeye" continues as the
+  umbrella brand. In-repo: `make-app.sh` builds/installs
+  `timeandeye.app` (CFBundleName `Time&i`, CFBundleDisplayName
+  `Time andeye`), retires any `/Applications/andeye.app` on install and
+  quits the running copy by bundle id so old and new never coexist;
+  `install-andeye.command` → `install-timeandeye.command`
+  (`timeandeye-build.zip` → `~/Applications/timeandeye.app`, same
+  retirement). Deliberately unchanged: CFBundleIdentifier
+  `com.andeye.mac` and the signing identity (TCC grants key off them),
+  CFBundleExecutable `andeye` (the upgrade quit-wait pgreps it in both
+  old and new builds; nothing user-visible shows it), and the SwiftPM
+  module names (`andeyeTT*`, `andeyeApp` — andeyePro depends on them).
+  Window titles ("Time&i", "Time&i Review", …), Settings/popover copy,
+  the About line (now read from CFBundleName), README, MANUAL, site
+  manual and repo links (github.com/andeyePro/timeandeye) all follow;
+  "andeye" stays in prose where it means the brand, a domain, or an
+  on-disk path (Application Support/andeye, the debug log).
+
 - [x] **Idle stops un-stick themselves.** Coming back within half an hour
   of an idle auto-stop resumes tracking on any returned input — a clearly
   recognised surface wins, a plausible one is next, and otherwise the task

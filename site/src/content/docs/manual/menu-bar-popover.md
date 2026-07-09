@@ -1,9 +1,9 @@
 ---
 title: The menu-bar popover
-description: The everyday andeye surface – current task, elapsed time, the pin chip, and the task list.
+description: The everyday Time&i surface – current task, elapsed time, the pin chip, and the task list.
 ---
 
-Click the andeye icon in the menu bar to open the popover. The icon itself
+Click the Time&i icon in the menu bar to open the popover. The icon itself
 shows the current elapsed time, and a small coloured dot whose colour reflects
 how certain the attribution is (red = uncertain, green = certain).
 

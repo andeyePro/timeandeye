@@ -7,8 +7,8 @@ Something wrong, or just not sure how something works? Here's where to go.
 
 ## Everyone: bugs and ideas on GitHub
 
-andeye is developed in the open at
-[github.com/andeyePro/andeyeTT](https://github.com/andeyePro/andeyeTT). Found
+Time&i is developed in the open at
+[github.com/andeyePro/timeandeye](https://github.com/andeyePro/timeandeye). Found
 a bug, or have an idea for a feature? That's the place, and it's free for
 everyone, no andeyePro subscription needed.
 
@@ -16,8 +16,8 @@ You don't need to be a developer to use it. Here's the walkthrough:
 
 1. **Make a free GitHub account**, if you don't already have one - go to
    [github.com/signup](https://github.com/signup) and follow the prompts.
-2. **Go to the andeyeTT repository**:
-   [github.com/andeyePro/andeyeTT](https://github.com/andeyePro/andeyeTT).
+2. **Go to the timeandeye repository**:
+   [github.com/andeyePro/timeandeye](https://github.com/andeyePro/timeandeye).
 3. **Pick Issues or Discussions**, near the top of the page.
    - Something is broken, or behaving in a way it shouldn't - open an
      **Issue**. Click **New issue** and describe what happened.
@@ -27,7 +27,7 @@ You don't need to be a developer to use it. Here's the walkthrough:
 4. **Write it up.** For a bug, the more detail the better - but even a rough
    description is worth posting. If you can, include:
    - Your macOS version (Apple menu ▸ About This Mac).
-   - Your andeye version (open Settings from the andeye menu - it's shown at
+   - Your Time&i version (open Settings from the Time&i menu - it's shown at
      the top).
    - What you expected to happen.
    - What actually happened instead.

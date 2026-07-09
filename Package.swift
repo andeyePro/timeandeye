@@ -27,7 +27,7 @@ let package = Package(
         // wrappers: Community (below) and the private Pro executable both
         // return AndeyeScenes.body(controller:).
         .target(name: "andeyeTTUI", dependencies: ["andeyeTTCore", "andeyeTTMac"]),
-        // The Community menu-bar app (wrapped into andeye.app by scripts/make-app.sh).
+        // The Community menu-bar app (wrapped into timeandeye.app by scripts/make-app.sh).
         .executableTarget(name: "andeyeApp",
                           dependencies: ["andeyeTTCore", "andeyeTTMac", "andeyeTTUI"]),
         // Check harness instead of a test target: the build Mac has Command

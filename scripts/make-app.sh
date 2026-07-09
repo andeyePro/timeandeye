@@ -1,24 +1,27 @@
 #!/bin/bash
-# Build andeye.app from the SwiftPM executable.
+# Build timeandeye.app (Time&i) from the SwiftPM executable.
 # Run on the Mac, from the repo root:  ./scripts/make-app.sh [output-dir]
 set -euo pipefail
 
 OUT="${1:-.}"
-APP="$OUT/andeye.app"
+APP="$OUT/timeandeye.app"
 # With no output-dir arg we INSTALL into /Applications (where launchers —
 # Raycast, Spotlight — find it) and relaunch. A running instance must quit
 # first: replacing a running bundle in place can kill it mid-execution
 # (the "menu bar icon disappeared" deaths).
 INSTALL=0
 [ $# -eq 0 ] && INSTALL=1
-# Quit a running copy so the bundle swaps cleanly.
+# Quit a running copy so the bundle swaps cleanly. Quit by BUNDLE ID, not by
+# name: the id is shared by the pre-rename andeye.app and today's
+# timeandeye.app, so this targets whichever is running. pgrep matches the
+# executable name, which is "andeye" in both (see CFBundleExecutable below).
 if pgrep -xq andeye; then
     if [ "$INSTALL" = 1 ]; then
         echo "Quitting running app to replace it…"
-        osascript -e 'quit app "andeye"' 2>/dev/null || true
+        osascript -e 'quit app id "com.andeye.mac"' 2>/dev/null || true
         for _ in $(seq 1 10); do pgrep -xq andeye || break; sleep 0.5; done
     else
-        APP="$OUT/andeye+.app"
+        APP="$OUT/timeandeye+.app"
         echo "NOTE: app is running; building to $APP - quit the old one and rename to swap."
     fi
 fi
@@ -30,14 +33,24 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/andeye"
 
+# Naming: bundle/folder = timeandeye, short human name = Time&i (XML-escaped
+# as Time&amp;i below), long human name = Time andeye.
+# CFBundleIdentifier MUST NOT change: TCC grants (Accessibility, Automation,
+# Calendar) key off this identifier plus the stable signing identity — a new
+# id silently revokes every grant.
+# CFBundleExecutable stays "andeye" deliberately: the quit-wait above
+# (pgrep -x andeye) must match BOTH the old andeye.app and this bundle's
+# process during an upgrade, and nothing user-visible shows the executable
+# name (LSUIElement app) — renaming it buys nothing and risks the
+# replace-a-running-bundle deaths.
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key><string>com.andeye.mac</string>
-    <key>CFBundleName</key><string>andeye</string>
-    <key>CFBundleDisplayName</key><string>andeye</string>
+    <key>CFBundleName</key><string>Time&amp;i</string>
+    <key>CFBundleDisplayName</key><string>Time andeye</string>
     <key>CFBundleExecutable</key><string>andeye</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
@@ -45,13 +58,13 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>andeye reads the active browser tab URL to attribute time to the right task.</string>
+    <string>Time&amp;i reads the active browser tab URL to attribute time to the right task.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>andeye observes whether the microphone is in use (call detection); it never records audio.</string>
+    <string>Time&amp;i observes whether the microphone is in use (call detection); it never records audio.</string>
     <key>NSCalendarsUsageDescription</key>
-    <string>andeye reads your calendar (read-only) to guess what you're supposed to be doing right now and to hint at old review-queue rows that overlap a past event. It never creates, edits or deletes anything on your calendar.</string>
+    <string>Time&amp;i reads your calendar (read-only) to guess what you're supposed to be doing right now and to hint at old review-queue rows that overlap a past event. It never creates, edits or deletes anything on your calendar.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>andeye talks to your own backend instance, which may be on your local network.</string>
+    <string>Time&amp;i talks to your own backend instance, which may be on your local network.</string>
     <!-- v0.1: user-entered OP URLs may be plain http on a LAN/NAS; without
          this exception ATS silently blocks every request from a bundled app. -->
     <key>NSAppTransportSecurity</key>
@@ -129,9 +142,17 @@ echo "Built $APP"
 # this the freshly-built app sits in the repo while launchers keep opening the
 # old /Applications copy.
 if [ "$INSTALL" = 1 ]; then
-    DEST="/Applications/andeye.app"
+    DEST="/Applications/timeandeye.app"
+    # Retire the pre-rename bundle: two apps with the same bundle id must
+    # never coexist (duplicate-id confusion is what once mislabelled the
+    # app as "andeye+"), so remove the old copy before installing the new.
+    rm -rf "/Applications/andeye.app"
     rm -rf "$DEST"
     ditto "$APP" "$DEST"          # preserves the signature + bundle structure
+    # Make this copy THE LaunchServices registration for com.andeye.mac, so
+    # its name resolves to the new one and no stale registration lingers.
+    LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+    [ -x "$LSREG" ] && "$LSREG" -f "$DEST" >/dev/null 2>&1 || true
     echo "Installed to $DEST"
     open "$DEST"
     echo "Relaunched from /Applications."

@@ -2,7 +2,7 @@
 
 How to take the current CLT-only SwiftPM build (`scripts/make-app.sh`, ad-hoc /
 self-signed) to a Developer ID signed, CloudKit-entitled, notarised
-`andeye.app` – **without converting the Mac app to an Xcode project**. The
+`timeandeye.app` – **without converting the Mac app to an Xcode project**. The
 short answer up front: the whole Mac pipeline stays `swift build` + `codesign`
 + `notarytool`; the only things that genuinely need Apple's GUI surfaces are
 one-time portal/console clicks, and the only place a real `.xcodeproj` is

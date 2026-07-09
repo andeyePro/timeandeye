@@ -722,7 +722,7 @@ public final class AppController: ObservableObject {
             case .unknownKeyID:
                 licenseProblem = "Licence key was issued by a retired signing key — contact support for a replacement"
             case .unsupportedVersion:
-                licenseProblem = "Licence key needs a newer version of andeye"
+                licenseProblem = "Licence key needs a newer version of Time&i"
             case .wrongProduct:
                 licenseProblem = "That key is for a different andeye app"
             case .revoked:

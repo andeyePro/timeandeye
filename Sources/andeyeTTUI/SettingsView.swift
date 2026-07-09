@@ -11,12 +11,15 @@ struct SettingsView: View {
     @State private var buildCopied = false
 
     /// One verbatim-copyable line for bug reports: marketing version + the
-    /// build-time stamp make-app.sh writes into CFBundleVersion.
+    /// build-time stamp make-app.sh writes into CFBundleVersion. The app name
+    /// comes from the bundle (CFBundleName, "Time&i" — make-app.sh owns it),
+    /// so it can never drift from what the bundle actually says.
     static var buildDetails: String {
         let info = Bundle.main.infoDictionary
+        let name = info?["CFBundleName"] as? String ?? "Time&i"
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "andeye \(version) · build \(build)"
+        return "\(name) \(version) · build \(build)"
     }
     @State private var newLocalName = ""
     @State private var newLocalProject = ""
@@ -100,7 +103,7 @@ struct SettingsView: View {
                 Slider(value: $controller.settings.reviewThreshold, in: 0.0...1.0)
                 Text("Queue for review below \(Int((reviewThreshold * 100).rounded()))% certain "
                      + "· auto-push at \(Int((threshold * 100).rounded()))% and above "
-                     + "· in between, andeye journals but neither asks nor posts")
+                     + "· in between, Time&i journals but neither asks nor posts")
                     .font(.caption).foregroundStyle(.secondary)
                 let reviewFloor = controller.settings.reviewFloorSeconds
                 Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
@@ -395,7 +398,7 @@ struct SettingsView: View {
                 Text("iCloud footprint").font(.callout).bold()
                 Text(controller.journalFootprintSummary.isEmpty ? "Calculating…" : controller.journalFootprintSummary)
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Reality check: a slice is a few hundred bytes – heavy tracking runs to 15–25 MB a year in your private CloudKit database. Nobody gets pushed into a paid iCloud tier by andeye.")
+                Text("Reality check: a slice is a few hundred bytes – heavy tracking runs to 15–25 MB a year in your private CloudKit database. Nobody gets pushed into a paid iCloud tier by Time&i.")
                     .font(.caption2).foregroundStyle(.secondary)
 
                 Divider()
@@ -505,7 +508,7 @@ struct SettingsView: View {
                     set: { on in
                         if on { controller.enableCalendarSignal() } else { controller.disableCalendarSignal() }
                     }))
-                    .help("Read-only — andeye never writes to your calendar. The first time you turn this on, macOS asks you to grant Calendar access.")
+                    .help("Read-only — Time&i never writes to your calendar. The first time you turn this on, macOS asks you to grant Calendar access.")
                 // The rest of the section only EXISTS while the signal is on
                 // (Martin, 2026-07-09: "skip those settings if no calendar")
                 // — a column of disabled knobs for a feature you haven't
@@ -530,7 +533,7 @@ struct SettingsView: View {
                             .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                             .filter { !$0.isEmpty } }))
                         .help("Comma-separated calendar names to ignore (e.g. Holidays, Birthdays) — birthday and subscription calendars are already excluded automatically.")
-                    Text("When on, andeye reads your Mac's calendars (read-only) to guess what you're supposed to be doing right now, nudge the pick list towards it, alert you around meetings, and hint at old review-queue rows that overlap a past event. Nothing calendar-derived ever leaves this Mac.")
+                    Text("When on, Time&i reads your Mac's calendars (read-only) to guess what you're supposed to be doing right now, nudge the pick list towards it, alert you around meetings, and hint at old review-queue rows that overlap a past event. Nothing calendar-derived ever leaves this Mac.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

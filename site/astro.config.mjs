@@ -5,10 +5,10 @@ export default defineConfig({
   site: 'https://andeye.com',
   integrations: [
     starlight({
-      title: 'andeye manual',
-      description: "andeye's user manual – the community macOS menu-bar time tracker.",
+      title: 'Time&i manual',
+      description: "Time&i's user manual – the community macOS menu-bar time tracker.",
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/andeyePro/andeyeTT' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/andeyePro/timeandeye' },
       ],
       components: {
         SiteTitle: './src/components/AndeyeSiteTitle.astro',

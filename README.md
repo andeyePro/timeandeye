@@ -1,6 +1,7 @@
-# andeye
+# Time&i
 
-Automatic time tracking against your project-management tool's tasks. A macOS
+**Time&i** (long form *Time andeye*, repo `timeandeye`) — automatic time
+tracking against your project-management tool's tasks. A macOS
 menu-bar app that watches which window, app or browser tab is active and
 attributes the time to the most likely task, learning from your confirmations
 so prompts reduce over time. Local-first: a SQLite journal on your Mac is the
@@ -19,9 +20,9 @@ Day-to-day usage: **[MANUAL.md](MANUAL.md)**. Status: v0.1 pre-alpha.
 Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/andeyePro/andeyeTT.git
-cd andeyeTT
-./scripts/make-app.sh          # builds release binary, wraps it as andeye.app
+git clone https://github.com/andeyePro/timeandeye.git
+cd timeandeye
+./scripts/make-app.sh          # builds release binary, wraps it as timeandeye.app
 ```
 
 Run the checks (no XCTest needed – plain executable):
@@ -32,12 +33,12 @@ swift run andeyeTTChecks   # expect: TOTAL: N passed, 0 failed
 
 ## First-run setup
 
-1. **Launch**: right-click `andeye.app` → Open (it is ad-hoc signed, not
+1. **Launch**: right-click `timeandeye.app` → Open (it is ad-hoc signed, not
    notarized). A grey dot + `–` appears in the menu bar.
 2. **Accessibility** (window titles): System Settings → Privacy & Security →
-   Accessibility → enable andeye. The app prompts on first launch.
+   Accessibility → enable Time andeye. The app prompts on first launch.
 3. **Automation → browser** (tab URLs): the first time Chrome/Opera/Brave is
-   frontmost, macOS asks "andeye wants to control Google Chrome" → Allow.
+   frontmost, macOS asks "Time andeye wants to control Google Chrome" → Allow.
 4. **Connect OpenProject**: menu-bar dot → Settings → enter your instance URL
    and an API key (OP: Account settings → Access tokens → API). The key is
    stored in an owner-only file in the app's support folder (not the

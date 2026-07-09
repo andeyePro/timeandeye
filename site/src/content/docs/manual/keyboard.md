@@ -1,6 +1,6 @@
 ---
 title: Keyboard
-description: Every andeye shortcut, by surface.
+description: Every Time&i shortcut, by surface.
 ---
 
 Every action can be done with the mouse. The everyday surfaces - the popover and
@@ -26,7 +26,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **↵** in the filter - pick the top task in the list.
 - **⌘↵** - claim the "you were away" idle gap as work.
 - **⌘Y** - open the Time window. **⌘U** - open the Review queue.
-- **⌘,** - Settings. **⌘Q** - quit andeye.
+- **⌘,** - Settings. **⌘Q** - quit Time&i.
 
 ## Evidence Card
 

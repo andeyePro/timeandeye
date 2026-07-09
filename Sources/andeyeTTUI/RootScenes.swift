@@ -29,7 +29,7 @@ public enum AndeyeScenes {
         .menuBarExtraStyle(.window)
 
         // One Time window — timeline or pie, flipped in place (click a preview).
-        Window("andeye Time", id: "time") {
+        Window("Time&i", id: "time") {
             TimeContainer(controller: controller,
                           view: Binding(get: { controller.timeWindowView },
                                         set: { controller.timeWindowView = $0 }),
@@ -39,7 +39,7 @@ public enum AndeyeScenes {
 
         // The optional second Time window (control/right-click a preview), so you
         // can see both views at once.
-        Window("andeye Time · 2nd view", id: "time2") {
+        Window("Time&i · 2nd view", id: "time2") {
             TimeContainer(controller: controller,
                           view: Binding(get: { controller.timeWindow2View },
                                         set: { controller.timeWindow2View = $0 }),
@@ -47,17 +47,17 @@ public enum AndeyeScenes {
         }
         .defaultSize(width: 980, height: 460)
 
-        Window("andeye Review", id: "review") {
+        Window("Time&i Review", id: "review") {
             ReviewView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 640, height: 420)
 
-        Window("andeye Settings", id: "settings") {
+        Window("Time&i Settings", id: "settings") {
             SettingsView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 460, height: 480)
 
-        Window("andeye Context Rules", id: "rules") {
+        Window("Time&i Context Rules", id: "rules") {
             RulesLedgerView(controller: controller).openOnActiveSpace()
         }
         .defaultSize(width: 460, height: 420)

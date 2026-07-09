@@ -165,8 +165,8 @@ and recorded rather than fixed blind:
   options before building); (e) generalise the mechanism beyond Gmail:
   pluggable page recipes for web apps where app/URL/title are insufficient
   (host-as-signal groundwork exists — see the ambiguous-web-page policy
-  note, 6907245). Multi-agent programme; start AFTER the andeyeTT folder
-  rename/vibe reopen.
+  note, 6907245). Multi-agent programme; start AFTER the folder rename to
+  timeandeye (andeyeTT → timeandeye on the Mac) and the vibe reopen.
   Progress: diagnosis written 2026-07-03 (a90fe90, RC1/RC2/RC3 root-caused).
   (a) DONE 2026-07-03, soak VERIFIED live 2026-07-09 — 313 enrichment events
   in the debug log with correct correspondents/subjects on real Gmail
@@ -634,6 +634,12 @@ and recorded rather than fixed blind:
   the accumulation back so you can undo over-pressing. After [+all].
 
  — from Pro coordination (2026-07-07, website side owns)
+
+
+
+
+
+
 
 
 

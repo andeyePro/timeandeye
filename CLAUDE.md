@@ -6,7 +6,9 @@ anything – this file is a map, not a substitute for those.
 
 ## What this is
 
-andeye: a macOS menu-bar app that automatically time-tracks against a
+timeandeye (human short form **Time&i**, long form **Time andeye**; the
+umbrella brand/company stays **andeye**): a macOS menu-bar app that
+automatically time-tracks against a
 project-management backend (OpenProject fully supported, Xero next,
 standalone/no-backend works today too). It watches the active window/app/
 browser tab, attributes time to the most likely task, and learns from
@@ -33,7 +35,7 @@ package, not a module in this one.
 - `andeyeTTUI` – the SwiftUI layer as a library; Community and Pro
   executables are both thin wrappers over it.
 - `andeyeApp` – the Community menu-bar executable, wrapped into
-  `andeye.app` by `scripts/make-app.sh`.
+  `timeandeye.app` by `scripts/make-app.sh`.
 - `andeyeTTChecks` / `andeyeTTIntegration` – the test suites (see below).
 
 ## Build, check, run
@@ -41,7 +43,7 @@ package, not a module in this one.
 ```bash
 rm -rf .build                  # required after any module rename/pull (case-insensitive fs caches by dir name)
 swift run andeyeTTChecks       # the whole suite – expect: TOTAL: N passed, 0 failed
-./scripts/make-app.sh          # build + install andeye.app (macOS 14+, CLT only)
+./scripts/make-app.sh          # build + install timeandeye.app (macOS 14+, CLT only)
 cd ios && xcodegen             # regenerate andeye.xcodeproj after project.yml changes
 ```
 

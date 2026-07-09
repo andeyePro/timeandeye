@@ -12,10 +12,10 @@ the handful of "do not clean this up" rules that will bite you otherwise.
 ## Build and test
 
 ```bash
-git clone https://github.com/andeyePro/andeyeTT.git
-cd andeyeTT
+git clone https://github.com/andeyePro/timeandeye.git
+cd timeandeye
 swift run andeyeTTChecks   # the whole test suite — expect: TOTAL: N passed, 0 failed
-./scripts/make-app.sh          # build + install andeye.app (macOS 14+, CLT only)
+./scripts/make-app.sh          # build + install timeandeye.app (macOS 14+, CLT only)
 ```
 
 The checks are a plain executable (no XCTest) and every PR must keep them

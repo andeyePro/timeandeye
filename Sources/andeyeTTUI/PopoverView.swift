@@ -1163,7 +1163,7 @@ struct PopoverView: View {
                 Image(systemName: "xmark.circle")
             }
             .keyboardShortcut("q", modifiers: .command)
-            .help("Quit andeye (⌘Q)")
+            .help("Quit Time&i (⌘Q)")
         }
         .buttonStyle(.plain)
         .font(.body)
