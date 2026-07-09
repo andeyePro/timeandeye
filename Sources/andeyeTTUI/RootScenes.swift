@@ -73,28 +73,32 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     /// is static, so views that change what they show (the Time window flips
     /// between timeline and pie) set it here instead. Nil = leave the title be.
     var title: String?
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        apply(to: view)
-        return view
-    }
-    func updateNSView(_ nsView: NSView, context: Context) { apply(to: nsView) }
 
-    private func apply(to view: NSView) {
-        let windowID = windowID
-        DispatchQueue.main.async { [weak view] in
-            guard let w = view?.window else { return }
-            // Idempotent: updateNSView runs on every re-render (~1Hz from the
-            // menu clock), so only touch the window when something actually
-            // differs — no per-render churn.
+    /// Applies the window config the moment the view lands in its window —
+    /// synchronously, BEFORE the window is first ordered front. The previous
+    /// deferred (async) apply lost the race: macOS decides the Space
+    /// transition when the window is shown, so behaviours set a runloop later
+    /// changed nothing and opening over a fullscreen app still switched Space
+    /// (Martin, 2026-07-09 — twice).
+    final class SpaceJoiningView: NSView {
+        var windowID: String?
+        var title: String?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            applyToWindow()
+        }
+        func applyToWindow() {
+            guard let w = window else { return }
+            // Idempotent: also called from updateNSView on every re-render
+            // (~1Hz from the menu clock), so only touch the window when
+            // something actually differs — no per-render churn.
             if !w.collectionBehavior.contains(.moveToActiveSpace) {
                 w.collectionBehavior.insert(.moveToActiveSpace)
             }
             // Joinable to a FULLSCREEN app's Space: without this, opening the
             // window while a fullscreen app is up makes macOS switch Space
             // instead — visually jarring AND the frontmost-app change dragged
-            // tracking onto whatever lived on the other Space (Martin,
-            // 2026-07-09).
+            // tracking onto whatever lived on the other Space.
             if !w.collectionBehavior.contains(.fullScreenAuxiliary) {
                 w.collectionBehavior.insert(.fullScreenAuxiliary)
             }
@@ -109,6 +113,22 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 w.title = title
             }
         }
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = SpaceJoiningView()
+        view.windowID = windowID
+        view.title = title
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? SpaceJoiningView else { return }
+        view.windowID = windowID
+        view.title = title
+        // Deferred here (unlike the sync first-attach apply above): re-renders
+        // arrive mid SwiftUI update pass, where touching the window is safer a
+        // runloop later. Only the title/id ever change on this path.
+        DispatchQueue.main.async { [weak view] in view?.applyToWindow() }
     }
 }
 
