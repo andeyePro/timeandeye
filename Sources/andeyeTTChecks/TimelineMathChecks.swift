@@ -275,6 +275,139 @@ func timelineMathChecks(_ c: Checks) {
     }
 }
 
+func spanAllocationChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func t(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+    func session(_ id: UUID = UUID(), from: TimeInterval, to: TimeInterval,
+                task: Int = 1, pushed: Bool = false) -> Session {
+        Session(id: id, task: .op(task), start: t(from), end: t(to), certainty: 1,
+               pushedToOP: pushed)
+    }
+
+    c.check("full-inside session -> a single repoint, carrying the ORIGINAL untouched") {
+        // The payload is the session BEFORE the task change: the caller
+        // re-points it via reassignTimelineSessions, which mutates the task
+        // itself and needs the pre-change value for its own undo record.
+        let s = session(from: 100, to: 500, task: 1)
+        let plan = SpanAllocation.plan(sessions: [s], range: (t(0), t(600)), to: .op(2))
+        try expectEq(plan.count, 1)
+        guard case .repoint(let original) = plan[0] else {
+            throw CheckFailure(description: "expected .repoint, got \(plan[0])")
+        }
+        try expectEq(original.id, s.id)
+        try expectEq(original.task, .op(1))
+        try expectEq(original.start, t(100)); try expectEq(original.end, t(500))
+    }
+
+    c.check("full-inside session already on target -> no action (nothing to do)") {
+        let s = session(from: 100, to: 500, task: 2)
+        let plan = SpanAllocation.plan(sessions: [s], range: (t(0), t(600)), to: .op(2))
+        try expect(plan.isEmpty)
+    }
+
+    c.check("range strictly inside a session -> both-edge split into 3 pieces") {
+        let s = session(from: 0, to: 600, task: 1)
+        let plan = SpanAllocation.plan(sessions: [s], range: (t(120), t(300)), to: .op(2))
+        try expectEq(plan.count, 1)
+        guard case .split(let original, let pieces) = plan[0] else {
+            throw CheckFailure(description: "expected .split, got \(plan[0])")
+        }
+        try expectEq(original.id, s.id)
+        try expectEq(pieces.map(\.task), [.op(1), .op(2), .op(1)])
+        try expectEq(pieces[1].start, t(120)); try expectEq(pieces[1].end, t(300))
+    }
+
+    c.check("session starting before the range, ending inside it -> left-edge split") {
+        // Session [0,300) straddles the range's start edge at 120; the tail
+        // from 120..300 (all inside the range) moves, the head stays.
+        let s = session(from: 0, to: 300, task: 1)
+        let plan = SpanAllocation.plan(sessions: [s], range: (t(120), t(600)), to: .op(2))
+        try expectEq(plan.count, 1)
+        guard case .split(_, let pieces) = plan[0] else {
+            throw CheckFailure(description: "expected .split, got \(plan[0])")
+        }
+        try expectEq(pieces.map(\.task), [.op(1), .op(2)])
+        try expectEq(pieces[0].end, t(120)); try expectEq(pieces[1].start, t(120))
+        try expectEq(pieces[1].end, t(300))
+    }
+
+    c.check("session starting inside the range, ending after it -> right-edge split") {
+        // Session [300,600) straddles the range's end edge at 480; the head
+        // 300..480 moves, the tail stays.
+        let s = session(from: 300, to: 600, task: 1)
+        let plan = SpanAllocation.plan(sessions: [s], range: (t(0), t(480)), to: .op(2))
+        try expectEq(plan.count, 1)
+        guard case .split(_, let pieces) = plan[0] else {
+            throw CheckFailure(description: "expected .split, got \(plan[0])")
+        }
+        try expectEq(pieces.map(\.task), [.op(2), .op(1)])
+        try expectEq(pieces[0].start, t(300)); try expectEq(pieces[0].end, t(480))
+        try expectEq(pieces[1].start, t(480)); try expectEq(pieces[1].end, t(600))
+    }
+
+    c.check("sessions outside the range are absent from the plan") {
+        let before = session(from: -600, to: -60, task: 1)
+        let after = session(from: 700, to: 800, task: 1)
+        let plan = SpanAllocation.plan(sessions: [before, after], range: (t(0), t(600)), to: .op(2))
+        try expect(plan.isEmpty)
+    }
+
+    c.check("pushed session is planned exactly like an unpushed one — no special-casing here") {
+        // The editor's existing policy (quietly re-queue the OP push) lives
+        // in the controller's apply path; the pure plan must not skip or
+        // otherwise treat a pushed session differently.
+        let pushed = session(from: 100, to: 500, task: 1, pushed: true)
+        let plan = SpanAllocation.plan(sessions: [pushed], range: (t(0), t(600)), to: .op(2))
+        try expectEq(plan.count, 1)
+        guard case .repoint(let original) = plan[0] else {
+            throw CheckFailure(description: "expected .repoint, got \(plan[0])")
+        }
+        try expectEq(original.task, .op(1))
+        try expect(original.pushedToOP, "the plan itself doesn't touch pushedToOP either way")
+    }
+
+    c.check("Unknown target plans identically to any other task ref") {
+        let full = session(from: 100, to: 500, task: 1)
+        // Starts before the range: a genuine split, not a second repoint —
+        // exercises both action kinds in the same Unknown-target plan.
+        let straddling = session(from: -100, to: 200, task: 1)
+        let plan = SpanAllocation.plan(sessions: [full, straddling],
+                                       range: (t(0), t(600)), to: WorkTask.unknown.ref)
+        try expectEq(plan.count, 2)
+        var sawRepoint = false
+        var sawSplit = false
+        for action in plan {
+            switch action {
+            case .repoint(let original):
+                sawRepoint = true
+                try expectEq(original.id, full.id)
+            case .split(let original, let pieces):
+                sawSplit = true
+                try expectEq(original.id, straddling.id)
+                try expectEq(pieces.last?.task, WorkTask.unknown.ref)
+            }
+        }
+        try expect(sawRepoint, "the fully-inside session should still plan a repoint")
+        try expect(sawSplit, "the straddling session should still plan a split")
+    }
+
+    c.check("multiple sessions on DIFFERENT tasks are each planned independently") {
+        // A span selection isn't scoped to one slice's task — unlike
+        // splitAndReassign's same-task filter, plan() must handle a range
+        // that crosses sessions belonging to different tasks.
+        let a = session(from: 0, to: 300, task: 1)
+        let b = session(from: 300, to: 600, task: 2)
+        let plan = SpanAllocation.plan(sessions: [a, b], range: (t(0), t(600)), to: .op(3))
+        try expectEq(plan.count, 2)
+        for action in plan {
+            guard case .repoint(let original) = action else {
+                throw CheckFailure(description: "expected both to fully repoint, got \(action)")
+            }
+            try expect(original.task == .op(1) || original.task == .op(2))
+        }
+    }
+}
+
 func timeAggregatorChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
     func t(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }

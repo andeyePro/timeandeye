@@ -2502,6 +2502,11 @@ public final class AppController: ObservableObject {
     /// Teach the attributor the dominant surface→task association inside a
     /// reassigned session, so future time on that window stops mis-filing.
     private func teachAssociation(for session: Session) {
+        // Unknown task category: re-pointing to Unknown is an explicit
+        // "don't know", not a correction — same guard `assignReview` applies
+        // (Target.teachesAttributor), so a span allocated to Unknown via any
+        // of this helper's callers never masquerades as learned evidence.
+        guard Target.task(session.task).teachesAttributor else { return }
         guard let dominant = dominantSpan(of: session) else { return }
         attributor.assign(dominant.signal, target: .task(session.task), tasks: taskCache)
         persistAssociations()
@@ -2707,6 +2712,36 @@ public final class AppController: ObservableObject {
         guard !work.isEmpty else { return }
         await undoGroup("split \(name(of: .task(session.task)))") {
             for (original, pieces) in work { await replaceSession(original, with: pieces) }
+        }
+    }
+
+    /// Timeline span-select "Allocate": the counterpart to `splitAndReassign`
+    /// for an arbitrary TIME RANGE that isn't scoped to one slice's task (a
+    /// shift-drag / shift-click selection on the bar, not bound to any
+    /// slice's edges). Sessions wholly inside the range re-point in place via
+    /// the same whole-slice reassign path the old reassign bar uses; ones
+    /// straddling an edge go through the same split-and-replace path the
+    /// detail strip's window moves already use. One undo step for the whole
+    /// gesture. Teaching and the pushed-session re-queue both ride along for
+    /// free through those two paths — including the Unknown no-teach guard
+    /// in `teachAssociation`, so allocating to Unknown never masquerades as
+    /// learned evidence.
+    public func allocateSpan(from start: Date, to end: Date, target: TaskRef) async {
+        guard end > start else { return }
+        let sessions = ((try? journal.sessions(from: start.addingTimeInterval(-2),
+                                               to: end.addingTimeInterval(2))) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
+        let plan = SpanAllocation.plan(sessions: sessions, range: (start, end), to: target)
+        guard !plan.isEmpty else { return }
+        await undoGroup("allocate \(name(of: .task(target)))") {
+            for action in plan {
+                switch action {
+                case .repoint(let original):
+                    await reassignTimelineSessions([original], to: target)
+                case .split(let original, let pieces):
+                    await replaceSession(original, with: pieces)
+                }
+            }
         }
     }
 

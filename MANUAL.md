@@ -199,7 +199,13 @@ midnight. Day boundaries are marked with the date.
   so each window lands wholly on one task, or **Exact time** (space) keeps the
   time you typed.
 - **Delete**: select slice(s) and press delete/backspace, or use the Delete
-  button on the reassign bar. ⌘-click and ⇧-click multi-select like Finder.
+  button on the reassign bar. ⌘-click and ⇧⌘-click multi-select like Finder.
+- **Allocate a stretch**: shift-drag (or shift-click, then shift-click again to
+  extend) selects a time range, shown as a translucent band with its start and
+  end - it isn't bound to any slice's edges, so it can cut straight through
+  the middle of one. A small bar then offers **Allocate…** (pick a task) or
+  **Unknown**; a slice only partly inside the range is split at its edge, the
+  rest stays as it was. Esc or clicking empty space clears the selection.
 - **Detail strip**: the windows inside the selected slice, with the "why" panel
   described above. Move windows to another task to split/reassign and teach the
   learner.

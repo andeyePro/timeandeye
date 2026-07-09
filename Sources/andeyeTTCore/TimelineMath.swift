@@ -265,3 +265,50 @@ public enum TimelineMath {
         return (start, end)
     }
 }
+
+/// Plan for the timeline's span-select "Allocate" action (drag/shift-click a
+/// TIME RANGE on the bar, not bound to any one slice's edges, then point it at
+/// a task). Unlike `splitAndReassign`'s single-task `sessions` filter, a span
+/// selection can cross sessions on DIFFERENT tasks, so the plan is computed
+/// per session independently. Pure / unit-checkable; the controller applies
+/// each action through the existing reassign/split+replace paths so pushed
+/// sessions, undo and teaching all go through the one already-checked route.
+public enum SpanAllocation {
+    /// One session's fate under the plan.
+    public enum Action: Equatable, Sendable {
+        /// Wholly inside the range: the ORIGINAL (untouched) session, still
+        /// on its old task — the caller re-points it whole via the same
+        /// `reassignTimelineSessions` path a manual reassign uses, which
+        /// mutates the task itself and needs the pre-change value intact for
+        /// its own undo bookkeeping.
+        case repoint(Session)
+        /// Straddles a range edge: replace the original with its split
+        /// pieces, mirroring the detail strip's existing split-and-replace
+        /// path (delete the original, create each piece fresh).
+        case split(original: Session, pieces: [Session])
+    }
+
+    /// `sessions`: every session overlapping the range, any task. Sessions
+    /// the range doesn't touch, or a fully-inside session already on
+    /// `target`, are simply absent from the plan — untouched either way.
+    /// Pushed sessions and the Unknown sentinel target get no special
+    /// treatment here: that policy (quietly re-queue the OP push; never
+    /// teach the attributor) lives in the controller's apply path, not in
+    /// this planning step.
+    public static func plan(sessions: [Session], range: (start: Date, end: Date),
+                           to target: TaskRef) -> [Action] {
+        var out: [Action] = []
+        for session in sessions {
+            guard session.end > range.start, session.start < range.end else { continue }
+            if session.start >= range.start, session.end <= range.end {
+                guard session.task != target else { continue }
+                out.append(.repoint(session))
+            } else {
+                let pieces = TimelineMath.split(session, reassign: [range], to: target)
+                guard pieces.count > 1 || pieces.first?.task != session.task else { continue }
+                out.append(.split(original: session, pieces: pieces))
+            }
+        }
+        return out
+    }
+}

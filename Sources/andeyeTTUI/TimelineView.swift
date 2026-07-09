@@ -15,6 +15,10 @@ import andeyeTTMac
 /// - The live slice supports moving its start (applies immediately).
 /// - The detail strip shows the windows inside the selected slice, joined to
 ///   the bar by connector lines; click a chip for everything recorded.
+/// - Shift-drag (or shift-click, then shift-click again to extend) selects a
+///   time RANGE instead — not bound to any slice's edges — and a small bar
+///   offers Allocate…/Unknown/Cancel; a slice only partly inside the range
+///   is split at its edge (`SpanAllocation.plan` in Core).
 /// A slice: rounded rect, but the live slice gets a zig-zag right edge to
 /// signal "ongoing" while keeping the task's full colour.
 /// Reference holder so the scroll-wheel NSEvent monitor (captured once at
@@ -102,6 +106,20 @@ struct TimelineView: View {
     @State private var pinchAnchor: (date: Date, frac: Double)?
     @State private var drawDraft: (start: Date, end: Date)?
     @State private var edgeOrigin: (start: Date, end: Date)?
+    /// Committed span selection (shift-drag or shift-click-extend) — a TIME
+    /// RANGE, not bound to any slice's edges, driving the Allocate bar.
+    @State private var rangeSelection: (start: Date, end: Date)?
+    /// The fixed end of a shift-extend, seeded by the last plain click (or
+    /// the end of the last shift-drag). A further shift-click extends from
+    /// here, matching a text selection's fixed anchor.
+    @State private var rangeAnchor: Date?
+    /// Live band while a shift-drag is in flight (mirrors `drawDraft`'s role
+    /// for the plain-drag draw gesture).
+    @State private var rangeDraft: (start: Date, end: Date)?
+    /// Which mode THIS drag is in, latched on its first move so a shift key
+    /// released mid-drag doesn't flip it — nil between gestures.
+    @State private var dragIsRange: Bool?
+    @State private var showAllocatePicker = false
     @State private var barWidth: CGFloat = 900
     @State private var selectedSpanIdx = Set<Int>()
     /// Anchor for Finder-style shift-range selection in the window strip.
@@ -153,6 +171,9 @@ struct TimelineView: View {
             .frame(height: 96)
             if !selection.isEmpty && editing == nil {
                 reassignBar
+            }
+            if let range = rangeSelection, editing == nil {
+                allocateBar(range)
             }
             if let session = editing {
                 editor(session)
@@ -314,6 +335,7 @@ struct TimelineView: View {
         sliceFocus = nil
         sliceAnchor = nil
         selectedSpanIdx = []
+        clearRangeSelection()
         clampViewport()
     }
 
@@ -500,6 +522,7 @@ struct TimelineView: View {
             }
             liveHatch(width: width)
             unknownHatch(width: width)
+            rangeSelectionBand(width: width)
         }
         .frame(height: 96)
         .clipped()
@@ -512,15 +535,21 @@ struct TimelineView: View {
         .focused($barFocused)
         // Keyboard navigation over slices. Left/right move the selection to the
         // previous/next slice (by start time); ⇧ extends a contiguous range;
-        // Return opens the editor on the focused slice. Everything else is
-        // ignored so delete/backspace still reach .onDeleteCommand, Esc still
-        // cancels the editor, and typing elsewhere is untouched.
+        // Return opens the editor on the focused slice. Esc clears an active
+        // span selection when there's no editor to cancel instead (that has
+        // its own cancelAction shortcut). Everything else is ignored so
+        // delete/backspace still reach .onDeleteCommand, and typing elsewhere
+        // is untouched.
         .onKeyPress { press in
             let extend = press.modifiers.contains(.shift)
             switch press.key {
             case .leftArrow:  moveSelection(forward: false, extend: extend); return .handled
             case .rightArrow: moveSelection(forward: true,  extend: extend); return .handled
             case .return:     openFocusedEditor(); return .handled
+            case .escape:
+                guard rangeSelection != nil || rangeAnchor != nil || rangeDraft != nil else { return .ignored }
+                clearRangeSelection()
+                return .handled
             default:          return .ignored
             }
         }
@@ -553,18 +582,38 @@ struct TimelineView: View {
             .onEnded { _ in pinchBaseSpan = nil; pinchAnchor = nil })
     }
 
-    /// Drag on empty space draws a new slice, snapping to neighbours.
+    /// Drag on empty space draws a new slice, snapping to neighbours — UNLESS
+    /// shift is held, which latches this drag into span-selection mode
+    /// instead (a plain time RANGE, not snapped to any slice's edges). The
+    /// mode is decided on the drag's first move so releasing shift mid-drag
+    /// doesn't flip it underneath you.
     private func drawGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
+                if dragIsRange == nil { dragIsRange = NSEvent.modifierFlags.contains(.shift) }
                 let a = dateFor(min(value.startLocation.x, value.location.x), width: width)
                 let b = dateFor(max(value.startLocation.x, value.location.x), width: width)
-                drawDraft = (
-                    TimelineMath.snap(a, to: sessions, tolerance: snapTolerance),
-                    TimelineMath.snap(b, to: sessions, tolerance: snapTolerance)
-                )
+                if dragIsRange == true {
+                    rangeDraft = (a, b)
+                } else {
+                    drawDraft = (
+                        TimelineMath.snap(a, to: sessions, tolerance: snapTolerance),
+                        TimelineMath.snap(b, to: sessions, tolerance: snapTolerance)
+                    )
+                }
             }
             .onEnded { _ in
+                defer { dragIsRange = nil }
+                if dragIsRange == true {
+                    guard let draft = rangeDraft else { return }
+                    rangeDraft = nil
+                    guard draft.end.timeIntervalSince(draft.start) >= 60 else { return }
+                    editing = nil
+                    selection = []
+                    rangeSelection = draft
+                    rangeAnchor = draft.end   // further shift-clicks extend from the drag's far edge
+                    return
+                }
                 guard let draft = drawDraft else { return }
                 drawDraft = nil
                 guard draft.end.timeIntervalSince(draft.start) >= 60 else { return }
@@ -576,13 +625,22 @@ struct TimelineView: View {
     /// always works: any open editor / selection is cleared first, then if the
     /// click landed in a real gap a fill is proposed in the SAME click (the old
     /// two-step "first click just dismisses" made gaps feel un-fillable).
+    /// Shift-click instead extends/starts the span selection from the last
+    /// plain click (or drag), same as a shift-click on a slice.
     private func gapClick(at location: CGPoint, width: CGFloat) {
+        let point = dateFor(location.x, width: width)
+        if NSEvent.modifierFlags.contains(.shift) {
+            extendRangeSelection(to: point)
+            return
+        }
         editing = nil
         selection = []
         sliceFocus = nil
         sliceAnchor = nil
         selectedSpanIdx = []
-        let point = dateFor(location.x, width: width)
+        rangeAnchor = point
+        rangeSelection = nil
+        showAllocatePicker = false
         guard point <= liveEdge,
               let gap = TimelineMath.gap(at: point, in: sessions,
                                          within: historyFloor...liveEdge) else { return }
@@ -666,7 +724,12 @@ struct TimelineView: View {
             .overlay { edgeHandles(session, sliceWidth: w) }
             .position(x: x0 + w / 2, y: 56)
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))")
-            .onTapGesture { selectSlice(session, isLive: isLive) }
+            // `.local` here is the SLICE's own frame (0..<w); add its x0 to get
+            // back to a bar-relative x, so a shift-click's date is exactly
+            // where you clicked rather than snapping to the slice's edge.
+            .onTapGesture(coordinateSpace: .local) { location in
+                selectSlice(session, isLive: isLive, atX: x0 + location.x, width: width)
+            }
     }
 
     /// Hatch the "undecided" tail of the live slice: after a confident switch
@@ -725,13 +788,49 @@ struct TimelineView: View {
         }
     }
 
+    /// The span-select highlight: a translucent band over whatever's live
+    /// right now — the in-flight shift-drag, else the committed selection —
+    /// with its time range labelled above. Decorative only (clicks/shift-clicks
+    /// on the slices or gaps beneath still drive the selection), so it never
+    /// blocks the gestures that grow or replace it.
+    @ViewBuilder
+    private func rangeSelectionBand(width: CGFloat) -> some View {
+        if let range = rangeDraft ?? rangeSelection {
+            let x0 = xFor(range.start, width: width)
+            let x1 = xFor(range.end, width: width)
+            let w = max(x1 - x0, 2)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.accentColor.opacity(0.16))
+                .overlay(RoundedRectangle(cornerRadius: 2)
+                    .stroke(Color.accentColor.opacity(0.6), lineWidth: 1))
+                .frame(width: w, height: 78)
+                .position(x: x0 + w / 2, y: 48)
+                .overlay(alignment: .top) {
+                    Text("\(range.start.formatted(date: .omitted, time: .shortened)) – \(range.end.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .padding(.horizontal, 3).padding(.vertical, 1)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 3))
+                        .position(x: x0 + w / 2, y: 6)
+                }
+                .allowsHitTesting(false)
+        }
+    }
+
     /// Finder-style slice selection, matching the window strip: ⌘-click toggles
-    /// one into the multi-select, ⇧-click extends a contiguous range (by start
-    /// time) from the anchor, ⇧⌘ adds that range, and a plain click opens the
-    /// editor (and sets the anchor for a later ⇧-click). The live slice can't
-    /// be batch-selected.
-    private func selectSlice(_ session: Session, isLive: Bool) {
+    /// one into the multi-select, ⇧⌘ extends a contiguous ID range (by start
+    /// time) from the anchor onto that multi-select, and a plain click opens
+    /// the editor (and sets the anchor for a later ⇧⌘-click). The live slice
+    /// can't be batch-selected. Bare ⇧ (no ⌘) is span-select instead — see
+    /// `extendRangeSelection` — so it never reaches the ID-range branch below.
+    private func selectSlice(_ session: Session, isLive: Bool, atX x: CGFloat, width: CGFloat) {
         let flags = NSEvent.modifierFlags
+        // Bare shift (no ⌘) is the span-select modifier — same as a
+        // shift-click on empty space — so it bypasses the ID-based
+        // multi-select/editor entirely.
+        if flags.contains(.shift), !flags.contains(.command) {
+            extendRangeSelection(to: dateFor(x, width: width))
+            return
+        }
         let ids = sessions.filter { $0.id != AppController.liveSessionID }
             .sorted { $0.start < $1.start }.map(\.id)
         if flags.contains(.shift), let anchor = sliceAnchor,
@@ -748,12 +847,46 @@ struct TimelineView: View {
         } else {
             selection = []
             sliceAnchor = isLive ? nil : session.id
+            rangeAnchor = dateFor(x, width: width)
+            rangeSelection = nil
+            showAllocatePicker = false
             openEditor(for: session, isNew: false)
         }
         // Keep the keyboard cursor in step with the mouse and take key focus, so
         // an arrow press right after a click continues from the clicked slice.
         sliceFocus = isLive ? nil : session.id
         barFocused = true
+    }
+
+    /// Shift-click(-drag) span selection: extend from the fixed anchor (the
+    /// last plain click, or the far edge of the last shift-drag) to `date`,
+    /// same shape as a shift-click's Finder-style range-extend. With no prior
+    /// anchor (shift-click out of the blue, nothing clicked yet this
+    /// session), it just seeds one — a real, visible range needs two points.
+    private func extendRangeSelection(to date: Date) {
+        guard let anchor = rangeAnchor else {
+            rangeAnchor = date
+            return
+        }
+        rangeSelection = (min(anchor, date), max(anchor, date))
+        editing = nil
+        selection = []
+    }
+
+    /// Esc, clicking empty space, or completing the allocate/cancel action
+    /// all drop the span selection the same way.
+    private func clearRangeSelection() {
+        dismissRangeBand()
+        rangeAnchor = nil
+    }
+
+    /// Drop just the visible band/picker, leaving the click anchor alone —
+    /// used where a plain click is ALSO about to (re-)seed a fresh anchor of
+    /// its own (opening the editor), so the two writes don't race each other.
+    private func dismissRangeBand() {
+        rangeSelection = nil
+        rangeDraft = nil
+        showAllocatePicker = false
     }
 
     /// Selectable slices in start order (live excluded), matching selectSlice.
@@ -873,6 +1006,53 @@ struct TimelineView: View {
         }
     }
 
+    /// The span-select "Allocate" action: with a time range selected (drawn
+    /// by a shift-drag or shift-click-extend, not bound to any slice's
+    /// edges), point it at a task — or straight at Unknown, no picker
+    /// needed. "Allocate…" opens the same filter+button task picker the
+    /// reassign bar and editor use (`filteredTasks`/`searchTasks`).
+    private func allocateBar(_ range: (start: Date, end: Date)) -> some View {
+        let duration = range.end.timeIntervalSince(range.start)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("\(MenuTitle.text(elapsed: duration, certainty: nil, showPercent: false)) selected")
+                    .font(.caption)
+                Spacer()
+                Button("Allocate…") { showAllocatePicker.toggle() }
+                Button("Unknown") {
+                    Task {
+                        await controller.allocateSpan(from: range.start, to: range.end,
+                                                      target: WorkTask.unknown.ref)
+                    }
+                    clearRangeSelection()
+                }
+                Button("Cancel") { clearRangeSelection() }
+                    .keyboardShortcut(.cancelAction)   // Esc cancels, same as the editor
+            }
+            if showAllocatePicker {
+                HStack {
+                    TextField("type to filter tasks", text: $filter)
+                        .textFieldStyle(.roundedBorder).font(.caption).frame(width: 180)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(filteredTasks(), id: \.ref) { task in
+                                Button(task.subject) {
+                                    Task {
+                                        await controller.allocateSpan(from: range.start, to: range.end,
+                                                                      target: task.ref)
+                                    }
+                                    clearRangeSelection()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+    }
+
     private func filteredTasks() -> [WorkTask] {
         controller.searchTasks(filter)
     }
@@ -931,6 +1111,11 @@ struct TimelineView: View {
         conflicts = []
         selectedSpanIdx = []
         spanAnchor = nil
+        // Drop the visible band/picker (mutually exclusive with the editor) —
+        // but NOT the click anchor: a plain click that opens the editor still
+        // seeds the point a LATER shift-click extends from, same as any other
+        // plain click.
+        dismissRangeBand()
         // Leftover filter text used to hide the clicked slice's own task from
         // the picker (it lists only matches), so the editor opened on a blank
         // task. Clear it on open; the picker also force-includes the current

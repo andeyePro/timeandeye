@@ -79,6 +79,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("SessionTracker", sessionTrackerChecks),
     ("EmailCapture", emailCaptureChecks),
     ("TimelineMath", timelineMathChecks),
+    ("SpanAllocation", spanAllocationChecks),
     ("AndeyeLogo", andeyeLogoChecks),
     ("CommentRouting", commentRoutingChecks),
     ("FuzzyMatch", fuzzyMatchChecks),

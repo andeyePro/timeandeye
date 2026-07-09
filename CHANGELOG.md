@@ -63,6 +63,31 @@
   bridge Mac; the Settings pass (dialogs, field bindings) still wants an
   on-device eyeball.
 
+- [x] **Timeline span-select → Allocate.** Shift-drag (or shift-click, then
+  shift-click again to extend) selects a time RANGE on the bar — not bound to
+  any slice's edges, so it can cut straight through the middle of one — shown
+  as a translucent band with its start/end. A small bar offers Allocate…
+  (the same filter+button task picker as the reassign bar/editor) or straight
+  to Unknown. A plain drag/click still draws/opens as before; bare ⇧ is the
+  new modifier, so the old ⇧-click ID-range-select on a slice moved to ⇧⌘.
+  New `SpanAllocation.plan` (Core, pure, checked) classifies every session
+  overlapping the range as a whole repoint (fully inside) or a split
+  (straddling an edge), reusing the already-checked `TimelineMath.split`;
+  the controller's `allocateSpan` applies each action through
+  `reassignTimelineSessions`/`replaceSession`, so pushed sessions, undo (one
+  step for the whole gesture) and OP re-push all behave exactly as they
+  already do for a manual reassign/split. Fixed a latent gap while at it:
+  `teachAssociation` now guards on `Target.teachesAttributor` before
+  teaching — previously true only by accident (Unknown was never actually
+  reachable from `reassignTimelineSessions`/`replaceSession`'s callers), now
+  it's an explicit rule so Allocate → Unknown can't silently teach the
+  attributor. New checks: `SpanAllocation` (full-inside repoint,
+  already-on-target no-op, both-edge split, left-edge split, right-edge
+  split, out-of-range sessions absent, a pushed session planned exactly like
+  any other, Unknown target no different in the plan, mixed-task sessions
+  each planned independently). UNVERIFIED — no Mac available in this
+  container to build/run the suite.
+
 ## 2026-07-08
 
 - [x] **D6 finance task mapping + criterion-10 reopen — billable OP time can

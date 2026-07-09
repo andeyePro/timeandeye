@@ -504,8 +504,16 @@ and recorded rather than fixed blind:
   reclaims them automatically (digest says so honestly). Known tradeoff:
   undoing a retro pass returns reclaimed segments to the visible queue, not
   back to Unknown.
-- [ ] Timeline drag/shift-click a span → allocate, with Unknown drawn
-  clearly differently (Martin, 2026-07-09; queued behind Unknown).
+- [x] Timeline drag/shift-click a span → allocate (DONE 2026-07-09): shift-drag
+  or shift-click-extend selects a time RANGE (not bound to any slice's edges),
+  shown as a translucent band; a small bar offers Allocate…/Unknown/Cancel.
+  `SpanAllocation.plan` (Core, checked) classifies each overlapping session as
+  a whole repoint or an edge split, reusing `TimelineMath.split` and the
+  existing `reassignTimelineSessions`/`replaceSession` paths so pushed
+  sessions and undo behave exactly as they already do elsewhere; Unknown
+  never teaches (`teachAssociation` now guards on `Target.teachesAttributor`,
+  closing a latent gap where Unknown was never actually reachable from that
+  helper's other callers before).
 - [ ] Calendar overlay on the timeline (read-only EventKit) as an aid for
   old items — PARKED, Martin to say the word (new permission surface).
 
