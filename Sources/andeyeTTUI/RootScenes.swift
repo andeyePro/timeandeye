@@ -90,6 +90,14 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             if !w.collectionBehavior.contains(.moveToActiveSpace) {
                 w.collectionBehavior.insert(.moveToActiveSpace)
             }
+            // Joinable to a FULLSCREEN app's Space: without this, opening the
+            // window while a fullscreen app is up makes macOS switch Space
+            // instead — visually jarring AND the frontmost-app change dragged
+            // tracking onto whatever lived on the other Space (Martin,
+            // 2026-07-09).
+            if !w.collectionBehavior.contains(.fullScreenAuxiliary) {
+                w.collectionBehavior.insert(.fullScreenAuxiliary)
+            }
             // A stable identity for code that recognises this window (the
             // timeline scroll-pan monitor) without a title match.
             if let windowID, w.identifier?.rawValue != windowID {
