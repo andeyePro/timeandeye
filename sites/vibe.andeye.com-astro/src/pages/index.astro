@@ -9,6 +9,19 @@
 // sized to its longest string. All visible copy comes from content/home.md.
 import AndeyeEye from '../components/AndeyeEye.astro';
 import { frontmatter as copy, Content } from '../content/home.md';
+
+// Transcript pacing: the first line lands as the terminal box appears, then
+// one fully-formed line every 450ms – with a longer beat after each tester
+// line so the fail-then-fix moment registers. Delays are cumulative and baked
+// into CSS transition-delay, so the choreography survives even if only the
+// watchdog script runs.
+let t = 0.6;
+const lineDelays = copy.demo.lines.map((l) => {
+  const d = t;
+  t += l.tone ? 0.75 : 0.45;
+  return d;
+});
+const captionDelay = t;
 ---
 <!doctype html>
 <html lang="en">
@@ -265,6 +278,10 @@ import { frontmatter as copy, Content } from '../content/home.md';
   .tline.tone-fail .ttext { color: #d98d86; }
   .tline.tone-pass .ttext { color: #7fc492; }
   .tline.t-you .ttext { color: var(--text); }
+  /* transcript lines arrive fully formed: a quick fade only, no slide – the
+     lines always occupy their space, so the terminal box is full height from
+     the start and never grows */
+  .term-body .tline { transform: none; transition: opacity 0.3s ease; transition-delay: var(--d, 0s); }
 
   .demo-caption {
     margin: 14px 0 0;
@@ -289,8 +306,8 @@ import { frontmatter as copy, Content } from '../content/home.md';
   }
   .what-prose :global(strong) { color: var(--text); font-weight: 800; }
 
-  /* the roles: plan -> build -> test -> review, clickable nodes with one
-     shared fixed-height detail panel underneath */
+  /* the roles: plan -> build -> test -> review – hover previews a role's
+     body, click pins it, all inside one shared fixed-height detail panel */
   #how .lede { max-width: 720px; }
   .flow {
     display: flex;
@@ -443,14 +460,14 @@ import { frontmatter as copy, Content } from '../content/home.md';
         </div>
         <div class="term-body">
           {copy.demo.lines.map((l, i) => (
-            <div class={`tline reveal t-${l.role}${l.tone ? ` tone-${l.tone}` : ''}`} style={`--d:${(0.6 + i * 0.22).toFixed(2)}s`}>
+            <div class={`tline reveal t-${l.role}${l.tone ? ` tone-${l.tone}` : ''}`} style={`--d:${lineDelays[i].toFixed(2)}s`}>
               <span class={`trole r-${l.role}`}>{l.role}</span>
               <span class="ttext">{l.text}</span>
             </div>
           ))}
         </div>
       </div>
-      <p class="demo-caption reveal" style="--d:2.4s">{copy.demo.caption}</p>
+      <p class="demo-caption reveal" style={`--d:${captionDelay.toFixed(2)}s`}>{copy.demo.caption}</p>
     </div>
   </div>
 </header>
@@ -534,7 +551,7 @@ import { frontmatter as copy, Content } from '../content/home.md';
       <h2>{copy.who.h2}</h2>
       <p class="lede">{copy.who.lede}</p>
     </div>
-    <AndeyeEye variant="vibe" weight="stroke" background="#0c0f16" class="who-mark" />
+    <AndeyeEye variant="vibe" weight="fill" background="#0c0f16" class="who-mark" />
   </div>
 </section>
 
@@ -611,22 +628,32 @@ function sub(kind) {
   });
 });
 
-// --- the roles: click a node to pin its body into the shared fixed-height
-// detail panel; click again to let go ---
+// --- the roles: hovering (or focusing) a node previews its body in the
+// shared fixed-height detail panel; clicking pins it. Leaving a hover falls
+// back to whatever is pinned, or the whole-flow summary line. Text is the
+// only thing that changes – the panel never moves. ---
 var flowDetail = document.getElementById('flowDetail').querySelector('p');
 var nodes = Array.prototype.slice.call(document.querySelectorAll('.flow-node'));
 var pinned = -1;
+var hovered = -1;
 function paintFlow() {
+  var shown = hovered !== -1 ? hovered : pinned;
   nodes.forEach(function (n, i) {
     n.classList.toggle('pinned', i === pinned);
     n.setAttribute('aria-pressed', i === pinned ? 'true' : 'false');
   });
-  flowDetail.textContent = pinned === -1 ? COPY.flow.default_line : COPY.flow.bodies[pinned];
+  flowDetail.textContent = shown === -1 ? COPY.flow.default_line : COPY.flow.bodies[shown];
 }
 nodes.forEach(function (n, i) {
   n.addEventListener('click', function () {
     pinned = (pinned === i) ? -1 : i;
     paintFlow();
+  });
+  ['mouseenter', 'focus'].forEach(function (ev) {
+    n.addEventListener(ev, function () { hovered = i; paintFlow(); });
+  });
+  ['mouseleave', 'blur'].forEach(function (ev) {
+    n.addEventListener(ev, function () { if (hovered === i) { hovered = -1; paintFlow(); } });
   });
 });
 

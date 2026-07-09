@@ -1,12 +1,12 @@
 ---
 title: Vibe andeye
-tagline: vibe coding without the slop
+tagline: vibe coding you can actually trust
 description: Adversarial agentic models plan, build, test and review each other's work in a secure sandbox, so you ship code you can trust.
 hero:
   eyebrow: andeye · agentic coding on your own Mac
   h1:
     - vibe coding
-    - without the slop
+    - you can actually trust
   lede: Adversarial agentic models plan, build, test and review each other's work in a secure sandbox – so you ship code you can trust.
   cta_how_label: See how it works
   cta_andeye_label: More from andeye
@@ -40,7 +40,7 @@ flow:
   eyebrow: How it works
   h2: Nobody marks their own homework
   lede: The model that writes the code never judges it. Spec critics, testers and reviewers are separate agents with an incentive to find fault.
-  default_line: Click a role to see its job.
+  default_line: A planner drafts the spec, a critic attacks it, a builder writes the code – and independent testers and reviewers decide when it holds up.
   nodes:
     - label: Plan
       body: A planner turns your idea into a spec with real acceptance criteria – and a spec critic attacks the spec before any code is written.
@@ -64,7 +64,7 @@ sandbox:
 who:
   eyebrow: Who it's for
   h2: For developers first
-  lede: And increasingly for non-coding experts who know exactly what they need – the harness supplies the engineering discipline.
+  lede: Vibe is for developers first – but we'd also welcome feedback from non-coding experts who know exactly what they want.
 status: In development – built on the same open-core values as everything andeye makes.
 footer: andeye Ltd, Scotland
 ---
