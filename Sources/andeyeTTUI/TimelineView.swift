@@ -1356,7 +1356,13 @@ struct TimelineView: View {
             var edited = session
             edited.task = editTask ?? session.task
             edited.start = editStart
-            edited.end = max(editEnd, editStart.addingTimeInterval(60))
+            // The 1-minute hand-edit minimum applies only when the TIMES were
+            // actually edited: a comment-only save must never grow a
+            // sub-minute tracked slice (Martin, 2026-07-09 — editing a 40s
+            // slice's comment silently stretched it to exactly a minute, and
+            // the growth even triggered a neighbour coalesce).
+            let timesEdited = editStart != session.start || editEnd != session.end
+            edited.end = timesEdited ? max(editEnd, editStart.addingTimeInterval(60)) : editEnd
             edited.comment = editComment.isEmpty ? nil : editComment
             let isNew = isNewEditing
             let liveOverlap = overlapping.first { $0.id == AppController.liveSessionID }
