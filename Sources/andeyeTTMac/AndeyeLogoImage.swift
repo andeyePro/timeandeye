@@ -27,10 +27,11 @@ public enum AndeyeLogoImage {
         (text as NSString).size(withAttributes: [.font: menuFont]).width
     }
 
-    /// The off-calendar flash's fixed target tint (calendar-signal spec
-    /// §6) — a warm amber, deliberately distinct from the certainty
-    /// gradient `menuColour` already carries, so a flash reads as "a
-    /// different KIND of signal" at a glance rather than a certainty dip.
+    /// The calendar alerts' fixed target tint (the pre-meeting pulse and
+    /// the meeting-start flash both LERP toward it) — a warm amber,
+    /// deliberately distinct from the certainty gradient `menuColour`
+    /// already carries, so an alert reads as "a different KIND of signal"
+    /// at a glance rather than a certainty dip.
     public static let flashTint = NSColor(hex: "#FF9F0A") ?? .systemOrange
 
     @MainActor
@@ -43,10 +44,10 @@ public enum AndeyeLogoImage {
     /// The full menu-bar label. `reservedTextWidth` is the width the text
     /// column occupies regardless of the current string (the widest sizing
     /// candidate, measured with `menuFont`); the actual text draws
-    /// leading-aligned inside it. `flash` (0...1) briefly LERPs the mark's
-    /// tint toward `flashTint` and back — the off-calendar pulse; 0 (the
-    /// default) leaves `colour` untouched, so every existing caller is
-    /// unaffected.
+    /// leading-aligned inside it. `flash` (0...1) LERPs the mark's tint
+    /// toward `flashTint` — the calendar alerts' pose (quiet pre-meeting
+    /// pulse, violent meeting-start flash); 0 (the default) leaves `colour`
+    /// untouched, so every existing caller is unaffected.
     @MainActor
     public static func label(t: Double, wink: Double, colour: NSColor, flash: Double = 0,
                              text: String, reservedTextWidth: CGFloat,

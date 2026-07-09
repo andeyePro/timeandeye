@@ -120,6 +120,93 @@ public struct CalendarRule: Equatable, Codable, Sendable {
     }
 }
 
+public extension CalendarEvent {
+    /// The identity of one OCCURRENCE for alert deduplication. EventKit gives
+    /// every instance of a recurring series the SAME `eventIdentifier`, so
+    /// `id` alone would let one standup silence every future standup — the
+    /// start time disambiguates occurrences while staying stable across
+    /// re-fetches of the same window.
+    var occurrenceKey: String { "\(id)|\(start.timeIntervalSince1970)" }
+}
+
+/// What the menu-bar mark should be doing about upcoming meetings right now
+/// (calendar signal, Martin's 2026-07-09 alert design): a quiet slow pulse
+/// in the lead-up window, one violent flash at start, silence otherwise.
+public enum CalendarAlertPhase: Equatable, Sendable {
+    case none
+    /// Inside `[start − lead, start)` of an upcoming event: the quiet pulse.
+    case preMeeting(CalendarEvent)
+    /// Inside `[start, start + grace)` of an event that hasn't alerted yet:
+    /// the one-shot violent flash.
+    case starting(CalendarEvent)
+}
+
+/// The time-based meeting alerts' pure decision core — platform-free so the
+/// checks can drive every edge with seeded `CalendarEvent`s (no EventKit, no
+/// clock). The Mac side owns the animations; this owns WHEN.
+public enum CalendarAlerts {
+    /// The start flash only fires within this window after an event's start.
+    /// Launching the app (or waking the Mac) later than this into a meeting
+    /// gives NO retroactive flash — a violent alert about something that
+    /// began ten minutes ago is noise, not help. Landing inside the window
+    /// still flashes: you're only just late, and the flash is still the
+    /// nudge it was designed to be.
+    public static let startGraceSeconds: TimeInterval = 60
+
+    /// The Settings picker's lead-time choices, in minutes (default 5).
+    public static let leadMinuteChoices: [Int] = [1, 2, 5, 10, 15]
+
+    /// Alert-worthy at all: all-day events never alert (an all-day "Annual
+    /// leave" banner has no meaningful start to be late for). Declined
+    /// events never reach here — the bridge drops them at fetch.
+    public static func qualifies(_ event: CalendarEvent) -> Bool { !event.allDay }
+
+    /// The alert phase for `events` at `now`. `leadSeconds` is the
+    /// pre-meeting window (pass 0 when the pre-meeting alert is off — no
+    /// window, no pulse); `alreadyFired` holds the occurrence keys whose
+    /// start flash has fired, so no event alerts twice.
+    ///
+    /// Resolution order: a due start flash beats any pulse (the violent
+    /// flash takes over from the pulse at start; the caller marks it fired
+    /// and re-asks, which is what lets a back-to-back NEXT event's pulse
+    /// resume straight after). Among pulse candidates the soonest start
+    /// wins — back-to-back events each get their own lead-up. A tentative
+    /// invite pulses (you may still need to decide to go) but never gets
+    /// the violent flash: "maybe" shouldn't shout as loud as "yes".
+    public static func phase(events: [CalendarEvent], at now: Date,
+                             leadSeconds: TimeInterval,
+                             alreadyFired: Set<String>) -> CalendarAlertPhase {
+        if let due = events
+            .filter({ qualifies($0) && !$0.tentative
+                && $0.start <= now && now < $0.start.addingTimeInterval(startGraceSeconds)
+                && !alreadyFired.contains($0.occurrenceKey) })
+            .min(by: { $0.start < $1.start }) {
+            return .starting(due)
+        }
+        if leadSeconds > 0, let upcoming = events
+            .filter({ qualifies($0) && $0.start > now
+                && now >= $0.start.addingTimeInterval(-leadSeconds) })
+            .min(by: { $0.start < $1.start }) {
+            return .preMeeting(upcoming)
+        }
+        return .none
+    }
+
+    /// The next instant the phase can change on its own: an event entering
+    /// its lead window, starting, exhausting its start grace, or ending
+    /// (ends kept for the live prior's boundary timer, which shares this).
+    /// nil = nothing ahead — no timer needed until the window refreshes.
+    public static func nextBoundary(events: [CalendarEvent], after now: Date,
+                                    leadSeconds: TimeInterval) -> Date? {
+        events.flatMap {
+            [$0.start.addingTimeInterval(-leadSeconds), $0.start,
+             $0.start.addingTimeInterval(startGraceSeconds), $0.end]
+        }
+        .filter { $0 > now }
+        .min()
+    }
+}
+
 public enum CalendarMatcher {
     /// The winning rule for `event`: the most-specific level (per `order`,
     /// general → specific) that has a matching rule. At one level a pinned

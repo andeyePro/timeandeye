@@ -80,12 +80,17 @@ Turn on **Calendar** in Settings and a meeting that's live right now nudges
 that slot in the ranking - never enough to beat a pin, a URL match or a
 learned rule, just enough to break a tie among your ordinary tasks. The pick
 list marks the matching task with a small clock; if you're tracking
-something else and the mismatch holds for a minute, the menu-bar mark pulses
-gently and the popover offers a one-line "Calendar: <meeting> - Switch". The
-same matching runs over your calendar history for the Review queue, so an
-old row that overlaps a past meeting gets a one-click assign hint too.
-Corrections teach it a rule the same way email does, and nothing calendar-derived
-ever leaves your Mac.
+something else during a meeting, the popover offers a one-line
+"Calendar: <meeting> - Switch". The menu-bar mark also alerts you around
+meetings: it pulses gently through the last few minutes before an event
+starts (five by default - pick the lead time in Settings), then flashes
+hard the moment the event begins before settling back to normal. Both
+alerts can be switched off individually; a meeting already underway when
+andeye starts never flashes after the fact, tentative invites pulse but
+never flash, and all-day events never alert. The same matching runs over
+your calendar history for the Review queue, so an old row that overlaps a
+past meeting gets a one-click assign hint too. Corrections teach it a rule
+the same way email does, and nothing calendar-derived ever leaves your Mac.
 
 ### Context rules: see why, un-learn in one click
 
@@ -302,10 +307,11 @@ midnight. Day boundaries are marked with the date.
   correspondent decides the task; see Auto-tracking and attribution above
   for the rules themselves.
 - **Calendar** - off by default; turning it on asks macOS for read-only
-  calendar access once. Also sets whether the menu bar flashes when you're
-  off-calendar, which calendars to ignore (comma-separated names -
-  birthdays and subscribed holiday calendars are already excluded), and how
-  far back the Review queue looks for a matching past event.
+  calendar access once and reveals the rest of the section: the pre-meeting
+  pulse and its lead time (1-15 minutes), the flash at meeting start, which
+  calendars to ignore (comma-separated names - birthdays and subscribed
+  holiday calendars are already excluded), and how far back the Review
+  queue looks for a matching past event.
 - **Currency symbol** - shown wherever billable totals render; leave blank
   for your locale's own symbol.
 

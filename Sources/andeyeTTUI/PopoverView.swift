@@ -146,11 +146,6 @@ struct PopoverView: View {
             changeMode = controller.settings.popoverDefaultsToChangeMode
             todayNodes = controller.todaySpentNodes()
             DispatchQueue.main.async { filterFocused = true }
-            // Calendar-signal spec §6: opening the popover — the same click
-            // that already surfaces the mismatch banner below — pauses the
-            // menu-bar flash for this mismatch episode. A no-op outside a
-            // live mismatch.
-            controller.pauseCalendarFlashForEpisode()
         }
         .sheet(item: $commentsFor) { task in
             commentsSheet(task)
@@ -852,7 +847,7 @@ struct PopoverView: View {
         }
         // Calendar-signal spec §6: the mismatch banner. Only shows once the
         // disagreement has held the settle window (controller.calendarMismatchActive) —
-        // a brief walk-in never flashes this either.
+        // a brief walk-in never surfaces it.
         if controller.calendarMismatchActive, let match = controller.currentCalendarMatch {
             HStack(spacing: 6) {
                 Image(systemName: "calendar").font(.caption2).foregroundStyle(.secondary)

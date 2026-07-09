@@ -545,6 +545,17 @@ and recorded rather than fixed blind:
   menu-bar flash (ships OFF pending Martin's), review-stack hint chips
   from past events. Later per spec §10: segmented ledger + manual rule
   form, screen-share suppression, iOS glance, next-event lookahead.
+- [x] Calendar defaults confirmed + meeting alerts (Martin's answers,
+  2026-07-09, same day): (a) and (b) verified already held in v1
+  (birthday/subscription calendars excluded by type; the calendar term
+  structurally capped below pin/sticky/URL/email — now pinned by the
+  CalendarPrecedence checks); (c) the off-calendar mismatch flash is
+  SUPERSEDED by time-based alerts: quiet pulse through the lead-up
+  (1/2/5/10/15 min picker, default 5), violent flash at meeting start,
+  both default-ON, no retroactive flash, tentative pulses-only, all-day
+  never alerts, whole Settings subsection hidden while the signal is off;
+  the popover Switch banner stays. Pure scheduling in Core
+  (`CalendarAlerts`), CalendarAlerts check suite.
 
 ## Colour strategy (2026-07-06)
 

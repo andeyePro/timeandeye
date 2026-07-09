@@ -3,6 +3,16 @@
 Status: DESIGN (no code in this commit). Spec date 2026-07-09. Seeds a /vs
 run once Martin has answered the open questions.
 
+Update (same day, post-v1): Martin answered §0. Q1 confirmed as recommended;
+Q2 confirmed (half weight) plus an explicit guard that a pin / high-certainty
+app match beats even a CONFIRMED calendar event (checked as
+CalendarPrecedence). Q3 superseded §6's mismatch-triggered flash with
+TIME-based alerts: a quiet pulse from a configurable lead (default 5 min)
+until the event starts, one violent flash at start, both default-ON, the
+whole Settings subsection hidden while the signal is off; the popover
+mismatch banner stays. See `CalendarAlerts` in CalendarMatch.swift and the
+CalendarAlerts check suite for the shipped alert semantics.
+
 Trigger (Martin, verbatim, 2026-07-09): "I think calendar integration is a
 really obvious thing we should have done before, beyond the evil drawer it
 means you should know in realtime what I'm supposed to be doing, so should

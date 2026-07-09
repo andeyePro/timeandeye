@@ -110,7 +110,7 @@ public final class CalendarBridge {
     /// deliberately a wider bound than `span` itself so a query for one
     /// instant (a zero-length span) still finds the event actually covering
     /// it. `from`/`to` is the caller's lookback window
-    /// (`calendarHintLookbackDays`); all-day and free-marked events are
+    /// (derived from the oldest unresolved review row); all-day and free-marked events are
     /// INCLUDED here even though they're excluded from the live prior (§7 —
     /// "Annual leave" overlapping a queued day is still a legitimate hint).
     public func events(overlapping span: (start: Date, end: Date), from: Date, to: Date) -> [CalendarEvent] {

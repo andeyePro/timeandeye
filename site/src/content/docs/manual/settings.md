@@ -52,9 +52,10 @@ description: Comments, popover defaults, the Switch Buffer, local tasks, your Op
   [Auto-tracking and attribution](/manual/auto-tracking-and-attribution/) for
   the rules themselves.
 - **Calendar** - off by default; turning it on asks macOS for read-only
-  calendar access once. Also sets whether the menu bar flashes when you're
-  off-calendar, which calendars to ignore (comma-separated names -
-  birthdays and subscribed holiday calendars are already excluded), and how
-  far back the Review queue looks for a matching past event.
+  calendar access once and reveals the rest of the section: the pre-meeting
+  pulse and its lead time (1-15 minutes), the flash at meeting start, which
+  calendars to ignore (comma-separated names - birthdays and subscribed
+  holiday calendars are already excluded), and how far back the Review
+  queue looks for a matching past event.
 - **Currency symbol** - shown wherever billable totals render; leave blank
   for your locale's own symbol.

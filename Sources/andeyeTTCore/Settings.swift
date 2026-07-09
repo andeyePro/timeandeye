@@ -141,17 +141,23 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// until the user explicitly turns it on (that flip is what triggers the
     /// one-time permission prompt — see `AppController.enableCalendarSignal`).
     public var calendarSignalEnabled: Bool
-    /// Menu-bar flash when the tracked task disagrees with the live calendar
-    /// match (spec §6). Off by default until Martin confirms the recommended
-    /// defaults from a live look.
-    public var calendarFlashEnabled: Bool
+    /// Pre-meeting alert: the menu-bar mark pulses quietly through the
+    /// lead-up to each calendar event (Martin's 2026-07-09 alert design).
+    /// On by default — inert until `calendarSignalEnabled` is.
+    public var calendarPreMeetingAlertEnabled: Bool
+    /// How many minutes before an event's start the pre-meeting pulse
+    /// begins (`CalendarAlerts.leadMinuteChoices`; default 5).
+    public var calendarPreMeetingLeadMinutes: Int
+    /// Meeting-start alert: one strong, unmissable menu-bar flash the
+    /// moment an event begins. On by default — inert until
+    /// `calendarSignalEnabled` is.
+    public var calendarStartAlertEnabled: Bool
     /// Calendar names to ignore entirely (birthday/subscription calendars
     /// are already excluded by type, unconditionally — this is the user's
     /// own opt-out on top of that).
     public var calendarExcludedNames: [String]
     /// How many days back the Review queue's calendar hint (spec §7) looks
     /// for an overlapping past event.
-    public var calendarHintLookbackDays: Double
     /// The calendar→task specificity ladder (general → specific), the
     /// calendar-side mirror of `emailMatchOrder`.
     public var calendarMatchOrder: [CalendarMatchLevel]
@@ -193,9 +199,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 journalConsolidateAfterYears: Double = 2,
                 journalHardCapMB: Double? = nil,
                 calendarSignalEnabled: Bool = false,
-                calendarFlashEnabled: Bool = false,
+                calendarPreMeetingAlertEnabled: Bool = true,
+                calendarPreMeetingLeadMinutes: Int = 5,
+                calendarStartAlertEnabled: Bool = true,
                 calendarExcludedNames: [String] = [],
-                calendarHintLookbackDays: Double = 90,
                 calendarMatchOrder: [CalendarMatchLevel] = CalendarMatchLevel.defaultOrder) {
         self.opBaseURL = opBaseURL
         self.certaintyAutoPushThreshold = certaintyAutoPushThreshold
@@ -234,9 +241,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.journalConsolidateAfterYears = journalConsolidateAfterYears
         self.journalHardCapMB = journalHardCapMB
         self.calendarSignalEnabled = calendarSignalEnabled
-        self.calendarFlashEnabled = calendarFlashEnabled
+        self.calendarPreMeetingAlertEnabled = calendarPreMeetingAlertEnabled
+        self.calendarPreMeetingLeadMinutes = calendarPreMeetingLeadMinutes
+        self.calendarStartAlertEnabled = calendarStartAlertEnabled
         self.calendarExcludedNames = calendarExcludedNames
-        self.calendarHintLookbackDays = calendarHintLookbackDays
         self.calendarMatchOrder = calendarMatchOrder
     }
 
@@ -294,10 +302,16 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         journalHardCapMB = ((try? c.decodeIfPresent(Double.self, forKey: .journalHardCapMB)) ?? nil)
             ?? defaults.journalHardCapMB
         calendarSignalEnabled = c.lenient(.calendarSignalEnabled, or: defaults.calendarSignalEnabled)
-        calendarFlashEnabled = c.lenient(.calendarFlashEnabled, or: defaults.calendarFlashEnabled)
+        calendarPreMeetingAlertEnabled = c.lenient(.calendarPreMeetingAlertEnabled,
+                                                   or: defaults.calendarPreMeetingAlertEnabled)
+        // Snap to a known picker choice, so a hand-edited/odd value can't
+        // leave the Settings lead-time picker showing no selection.
+        let rawLead = c.lenient(.calendarPreMeetingLeadMinutes, or: defaults.calendarPreMeetingLeadMinutes)
+        calendarPreMeetingLeadMinutes = CalendarAlerts.leadMinuteChoices.contains(rawLead)
+            ? rawLead : defaults.calendarPreMeetingLeadMinutes
+        calendarStartAlertEnabled = c.lenient(.calendarStartAlertEnabled,
+                                              or: defaults.calendarStartAlertEnabled)
         calendarExcludedNames = c.lenient(.calendarExcludedNames, or: defaults.calendarExcludedNames)
-        calendarHintLookbackDays = c.lenient(.calendarHintLookbackDays,
-                                             or: defaults.calendarHintLookbackDays)
         // Same renamed/unknown-level-safe decode as emailMatchOrder above.
         let rawCalendarOrder = ((try? c.decodeIfPresent([String].self, forKey: .calendarMatchOrder)) ?? nil) ?? []
         let mappedCalendarOrder = rawCalendarOrder.compactMap { CalendarMatchLevel(rawValue: $0) }

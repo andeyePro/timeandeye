@@ -133,6 +133,8 @@ let suites: [(String, (Checks) -> Void)] = [
     ("ReviewFloor", reviewFloorChecks),
     ("CalendarMatch", calendarMatchChecks),
     ("CalendarRankerTerm", calendarRankerTermChecks),
+    ("CalendarPrecedence", calendarPrecedenceChecks),
+    ("CalendarAlerts", calendarAlertChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

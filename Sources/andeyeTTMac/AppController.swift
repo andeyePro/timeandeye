@@ -201,13 +201,13 @@ public final class AppController: ObservableObject {
     /// current calendar event resolves to via `calendarRules`, and whether
     /// that event is only tentative. nil when the signal is off, nothing is
     /// live right now, or nothing matched. Drives the pick-list clock badge,
-    /// the ranker boost, and the mismatch banner/flash below.
+    /// the ranker boost, and the mismatch banner below.
     @Published public private(set) var currentCalendarMatch: (task: TaskRef, eventTitle: String, tentative: Bool)? {
         didSet { invalidatePickList() }   // TaskRanker.recentThenRanked's calendarMatch input
     }
     /// True once a live calendar match has disagreed with the tracked task
-    /// for the settle window (§6) — drives the popover banner and gates the
-    /// flash loop.
+    /// for the settle window (§6) — drives the popover's one-line
+    /// "Calendar: <event> – Switch" banner.
     @Published public private(set) var calendarMismatchActive = false
     /// The validated licence, or nil for Community (no key / bad key / expired
     /// — `licenseProblem` says which). Pro builds gate paid backends on this.
@@ -284,15 +284,21 @@ public final class AppController: ObservableObject {
                     invalidatePickList()
                     calendarMismatchSince = nil
                     calendarMismatchActive = false
-                    stopCalendarFlash()
+                    calendarAlertsFired = []
+                    stopCalendarAlertAnimations()
                 }
             }
             if oldValue.calendarExcludedNames != settings.calendarExcludedNames {
                 calendarBridge.setExcludedCalendarNames(settings.calendarExcludedNames)
             }
-            if oldValue.calendarFlashEnabled != settings.calendarFlashEnabled,
-               !settings.calendarFlashEnabled {
-                stopCalendarFlash()
+            // A changed lead time / alert toggle moves the alert boundaries —
+            // reschedule and re-evaluate at once, so e.g. turning the
+            // pre-meeting alert off stops a pulse that is running right now.
+            if oldValue.calendarPreMeetingAlertEnabled != settings.calendarPreMeetingAlertEnabled
+                || oldValue.calendarPreMeetingLeadMinutes != settings.calendarPreMeetingLeadMinutes
+                || oldValue.calendarStartAlertEnabled != settings.calendarStartAlertEnabled {
+                scheduleCalendarBoundaryCheck()
+                updateCalendarAlerts(now: Date())
             }
         }
     }
@@ -378,22 +384,27 @@ public final class AppController: ObservableObject {
     /// ends, not just on the next bridge emission.
     private var calendarBoundaryTimer: Timer?
     /// When the current mismatch (if any) started holding — nil once it
-    /// clears. Compared against the settle window before the banner/flash
-    /// go live (§6 — a brief walk-in shouldn't flash before you've sat down).
+    /// clears. Compared against the settle window before the banner goes
+    /// live (§6 — a brief walk-in shouldn't banner before you've sat down).
     private var calendarMismatchSince: Date?
-    /// "Clicking the menu bar pauses it for that mismatch episode" (§6):
-    /// set the moment the popover opens during a live mismatch, cleared when
-    /// the mismatch itself clears (a NEW episode gets its own fresh flash).
-    private var calendarFlashPausedForEpisode = false
-    private var calendarFlashAnimation: Task<Void, Never>?
+    /// Occurrence keys (`CalendarEvent.occurrenceKey`) whose meeting-start
+    /// flash has already fired — no event alerts twice. Pruned to the
+    /// bridge's rolling window on every emission, so it can't grow without
+    /// bound; deliberately NOT persisted (a relaunch inside the 60 s start
+    /// grace re-flashing once is harmless, and past-grace events never
+    /// flash retroactively anyway — see `CalendarAlerts.startGraceSeconds`).
+    private var calendarAlertsFired: Set<String> = []
+    /// The pre-meeting quiet pulse — a standing loop while the phase is
+    /// `.preMeeting`, cancelled the moment it isn't.
+    private var calendarPulseAnimation: Task<Void, Never>?
+    /// The meeting-start violent flash — a one-shot burst, self-clearing.
+    private var calendarStartFlashAnimation: Task<Void, Never>?
     /// A cheap render-time cache for the review-queue hint (§7) — one
     /// EventKit query per drawer refresh, not one per stack row (mirrors
     /// `pickListCache`'s own 60 s-scale TTL shape).
     private var calendarLookbackCache: (at: Date, events: [CalendarEvent])?
-    /// How long a mismatch must hold before the banner/flash go live.
+    /// How long a mismatch must hold before the banner goes live.
     private static let calendarMismatchSettleSeconds: TimeInterval = 60
-    /// The flash's own cadence — a gentle pulse, not a strobe (§6).
-    private static let calendarFlashIntervalSeconds: TimeInterval = 10
 
     public static func supportDirectory() -> URL {
         AppSupport.directory()
@@ -537,9 +548,10 @@ public final class AppController: ObservableObject {
     /// Current pose of the mark; renderLogo composes these with menuColour.
     private var logoT = 0.0
     private var logoWink = 0.0
-    /// The off-calendar flash's current amount (0...1) — a THIRD, independent
-    /// pose alongside t/wink, driven by its own loop (`calendarFlashAnimation`,
-    /// below) on its own slow cadence, never by `logoAnimation`'s draw-on/wink.
+    /// The calendar alerts' current amount (0...1) — a THIRD, independent
+    /// pose alongside t/wink, driven by its own loops (`calendarPulseAnimation`
+    /// / `calendarStartFlashAnimation`, below) on their own cadences, never
+    /// by `logoAnimation`'s draw-on/wink.
     private var logoFlash = 0.0
     private var logoAnimation: Task<Void, Never>?
     /// The target last shown, so the wink fires exactly when the tracked task
@@ -587,38 +599,63 @@ public final class AppController: ObservableObject {
         }
     }
 
-    /// The off-calendar mismatch's ambient reminder (§6): a gentle pulse —
-    /// never a strobe — every `calendarFlashIntervalSeconds` while the
-    /// mismatch persists. A standing loop, unlike `playWink`'s one-shot: it
-    /// runs until `stopCalendarFlash` cancels it (mismatch clears, the
-    /// signal/toggle turns off, or the episode is paused by opening the
-    /// popover). Skips a beat silently while paused, rather than stopping
-    /// outright, so it resumes on its own cadence if the SAME episode
-    /// somehow un-pauses (defensive; today only a fresh episode clears the
-    /// pause).
-    private func startCalendarFlashIfNeeded() {
-        guard settings.calendarFlashEnabled, settings.calendarSignalEnabled,
-              calendarFlashAnimation == nil else { return }
-        calendarFlashAnimation = Task { @MainActor [weak self] in
+    /// The pre-meeting alert (Martin's 2026-07-09 alert design): a QUIET,
+    /// slow pulse through the lead-up to a meeting — a soft amber swell to
+    /// less than half strength, a few seconds apart, deliberately far
+    /// gentler than the start flash below. A standing loop, unlike
+    /// `playWink`'s one-shot: it runs until `stopCalendarPulse` cancels it
+    /// (the lead window closes at the event's start, the phase changes, or
+    /// the signal turns off).
+    private func startCalendarPulseIfNeeded() {
+        guard calendarPulseAnimation == nil else { return }
+        calendarPulseAnimation = Task { @MainActor [weak self] in
             while let self, !Task.isCancelled {
-                if !self.calendarFlashPausedForEpisode {
-                    for amount in [1.0, 0.0] {
-                        guard !Task.isCancelled else { return }
-                        self.logoFlash = amount
-                        self.renderLogo()
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                    }
+                // One soft swell: up to 0.45, back to 0 — ~1.5 s.
+                for amount in [0.15, 0.3, 0.45, 0.3, 0.15, 0.0] {
+                    guard !Task.isCancelled else { return }
+                    self.logoFlash = amount
+                    self.renderLogo()
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                 }
-                try? await Task.sleep(
-                    nanoseconds: UInt64(Self.calendarFlashIntervalSeconds * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
             }
         }
     }
 
-    private func stopCalendarFlash() {
-        calendarFlashAnimation?.cancel()
-        calendarFlashAnimation = nil
-        calendarFlashPausedForEpisode = false
+    private func stopCalendarPulse() {
+        calendarPulseAnimation?.cancel()
+        calendarPulseAnimation = nil
+        // Don't blank a start flash that's mid-burst — it owns logoFlash now.
+        if logoFlash != 0, calendarStartFlashAnimation == nil { logoFlash = 0; renderLogo() }
+    }
+
+    /// The meeting-start alert: a VIOLENT, unmissable flash — full-strength
+    /// amber alternating at 150 ms for ~3 s (twenty half-cycles), then back
+    /// to normal. One-shot per event occurrence (`calendarAlertsFired`);
+    /// takes over from the pulse, and re-evaluates the phase when done so a
+    /// back-to-back next event's own pulse resumes immediately.
+    private func playCalendarStartFlash() {
+        stopCalendarPulse()
+        calendarStartFlashAnimation?.cancel()
+        calendarStartFlashAnimation = Task { @MainActor [weak self] in
+            for i in 0..<20 {
+                guard let self, !Task.isCancelled else { return }
+                self.logoFlash = i.isMultiple(of: 2) ? 1.0 : 0.0
+                self.renderLogo()
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.logoFlash = 0
+            self.renderLogo()
+            self.calendarStartFlashAnimation = nil
+            self.updateCalendarAlerts(now: Date())
+        }
+    }
+
+    private func stopCalendarAlertAnimations() {
+        calendarStartFlashAnimation?.cancel()
+        calendarStartFlashAnimation = nil
+        stopCalendarPulse()
         if logoFlash != 0 { logoFlash = 0; renderLogo() }
     }
 
@@ -1009,6 +1046,10 @@ public final class AppController: ObservableObject {
 
     private func handleCalendarEvents(_ events: [CalendarEvent]) {
         calendarEventWindow = events
+        // Keep the fired-alerts set bounded: an occurrence that has left the
+        // rolling window can never alert again, so its key is dead weight.
+        let windowKeys = Set(events.map(\.occurrenceKey))
+        calendarAlertsFired.formIntersection(windowKeys)
         recomputeCalendarMatch()
         scheduleCalendarBoundaryCheck()
     }
@@ -1044,19 +1085,63 @@ public final class AppController: ObservableObject {
             tracker.reevaluate()
         }
         updateCalendarMismatch(now: now)
+        updateCalendarAlerts(now: now)
     }
 
-    /// Recomputes exactly when a fetched event's own start/end is next
-    /// crossed — event-driven, not a poll: calendars change on their own
-    /// schedule, and the bridge's 5-minute fallback (+ change/wake
-    /// notifications) already covers new/edited events, so this only needs
-    /// to catch a boundary the CURRENT window already knows about.
+    /// The pre-meeting alert's lead window in seconds — 0 when the alert is
+    /// off, which `CalendarAlerts.phase` reads as "no pulse window at all".
+    private var calendarLeadSeconds: TimeInterval {
+        settings.calendarPreMeetingAlertEnabled
+            ? Double(settings.calendarPreMeetingLeadMinutes) * 60 : 0
+    }
+
+    /// Drives the time-based meeting alerts (Martin's 2026-07-09 design):
+    /// quiet pulse through the lead-up, violent flash at start, nothing
+    /// otherwise. Pure decisions live in `CalendarAlerts` (Core, checked);
+    /// this just starts/stops the animations on phase edges. Re-entered on
+    /// every bridge emission, event boundary, alert-settings change, and
+    /// once more when a start flash finishes (so a back-to-back next
+    /// event's pulse resumes).
+    private func updateCalendarAlerts(now: Date) {
+        guard settings.calendarSignalEnabled else { return }   // teardown already cleared state
+        switch CalendarAlerts.phase(events: calendarEventWindow, at: now,
+                                    leadSeconds: calendarLeadSeconds,
+                                    alreadyFired: calendarAlertsFired) {
+        case .starting(let event):
+            // Marked fired even when the start alert is toggled off: the
+            // decision moment has passed either way, and enabling the toggle
+            // seconds later must not retro-flash a meeting already underway.
+            calendarAlertsFired.insert(event.occurrenceKey)
+            if settings.calendarStartAlertEnabled {
+                playCalendarStartFlash()
+            } else {
+                // No flash — but the phase may now be preMeeting for the
+                // NEXT event; re-evaluate with the key marked.
+                updateCalendarAlerts(now: now)
+            }
+        case .preMeeting:
+            // A running start flash owns the mark until its burst ends (it
+            // re-evaluates on completion) — never dim it into a pulse.
+            guard calendarStartFlashAnimation == nil else { return }
+            startCalendarPulseIfNeeded()
+        case .none:
+            stopCalendarPulse()
+        }
+    }
+
+    /// Recomputes exactly when the next event boundary is crossed — an
+    /// event entering its alert lead window, starting, exhausting its start
+    /// grace, or ending (`CalendarAlerts.nextBoundary`) — event-driven, not
+    /// a poll: calendars change on their own schedule, and the bridge's
+    /// 5-minute fallback (+ change/wake notifications) already covers
+    /// new/edited events, so this only needs to catch a boundary the
+    /// CURRENT window already knows about.
     private func scheduleCalendarBoundaryCheck() {
         calendarBoundaryTimer?.invalidate()
         calendarBoundaryTimer = nil
         let now = Date()
-        let upcoming = calendarEventWindow.flatMap { [$0.start, $0.end] }.filter { $0 > now }
-        guard let next = upcoming.min() else { return }
+        guard let next = CalendarAlerts.nextBoundary(events: calendarEventWindow, after: now,
+                                                     leadSeconds: calendarLeadSeconds) else { return }
         let timer = Timer.scheduledTimer(withTimeInterval: max(next.timeIntervalSince(now), 1),
                                          repeats: false) { [weak self] _ in
             Task { @MainActor in
@@ -1064,14 +1149,18 @@ public final class AppController: ObservableObject {
                 self?.scheduleCalendarBoundaryCheck()
             }
         }
-        timer.tolerance = 5
+        // Tight: the meeting-start flash should land ON the minute, not
+        // coalesced up to 5 s late (the OS may still slip a little; the
+        // 60 s start grace absorbs that).
+        timer.tolerance = 1
         calendarBoundaryTimer = timer
     }
 
     /// The off-calendar mismatch (§6): a live match exists, the tracked
     /// target disagrees with it, and that disagreement has held past the
-    /// settle window. Starts/stops the flash loop on the RISING/FALLING
-    /// edge only — never re-triggers mid-episode.
+    /// settle window. Drives ONLY the popover's "Calendar: <event> –
+    /// Switch" banner — the menu-bar mark alerts on meeting TIME
+    /// (`updateCalendarAlerts`), never on mismatch.
     private func updateCalendarMismatch(now: Date) {
         let mismatched: Bool
         if settings.calendarSignalEnabled, let match = currentCalendarMatch,
@@ -1082,27 +1171,14 @@ public final class AppController: ObservableObject {
         }
         guard mismatched else {
             calendarMismatchSince = nil
-            if calendarMismatchActive {
-                calendarMismatchActive = false
-                calendarFlashPausedForEpisode = false
-                stopCalendarFlash()
-            }
+            if calendarMismatchActive { calendarMismatchActive = false }
             return
         }
         if calendarMismatchSince == nil { calendarMismatchSince = now }
         let held = now.timeIntervalSince(calendarMismatchSince!) >= Self.calendarMismatchSettleSeconds
         if held, !calendarMismatchActive {
             calendarMismatchActive = true
-            startCalendarFlashIfNeeded()
         }
-    }
-
-    /// "Clicking the menu bar pauses it for that mismatch episode" (§6) —
-    /// called from the popover's own `onAppear`. A no-op outside a live
-    /// mismatch, so opening the popover for any other reason does nothing.
-    public func pauseCalendarFlashForEpisode() {
-        guard calendarMismatchActive else { return }
-        calendarFlashPausedForEpisode = true
     }
 
     /// Teach a `CalendarRule` from a correction landing while a calendar
@@ -1133,12 +1209,20 @@ public final class AppController: ObservableObject {
 
     /// The review-queue hint's cached lookback fetch (§7) — one EventKit
     /// query per drawer refresh (60 s TTL, same shape as `fullPickList`'s
-    /// own cache), not one per stack row.
+    /// own cache), not one per stack row. The window is derived, not a
+    /// setting (Martin, 2026-07-09): hints should reach "as far as you have
+    /// evil or unknown tasks" — the oldest unresolved row IS the horizon,
+    /// so a fixed N-days window could only ever be too short or too long.
     private func calendarLookbackEvents() -> [CalendarEvent] {
         guard settings.calendarSignalEnabled else { return [] }
         let now = Date()
         if let cache = calendarLookbackCache, now.timeIntervalSince(cache.at) < 60 { return cache.events }
-        let from = now.addingTimeInterval(-settings.calendarHintLookbackDays * 86_400)
+        let unknownAssigned = (try? journal.reviewSegments(assignedTo: .task(WorkTask.unknown.ref))) ?? []
+        guard let oldest = (pendingReview + unknownAssigned).map(\.start).min() else {
+            calendarLookbackCache = (now, [])
+            return []
+        }
+        let from = min(oldest, now)
         let events = calendarBridge.events(overlapping: (start: from, end: now), from: from, to: now)
         calendarLookbackCache = (now, events)
         return events

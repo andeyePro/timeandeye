@@ -506,21 +506,33 @@ struct SettingsView: View {
                         if on { controller.enableCalendarSignal() } else { controller.disableCalendarSignal() }
                     }))
                     .help("Read-only — andeye never writes to your calendar. The first time you turn this on, macOS asks you to grant Calendar access.")
-                Toggle("Flash the menu bar when off-calendar",
-                       isOn: $controller.settings.calendarFlashEnabled)
-                    .disabled(!controller.settings.calendarSignalEnabled)
-                TextField("Excluded calendars", text: Binding(
-                    get: { controller.settings.calendarExcludedNames.joined(separator: ", ") },
-                    set: { controller.settings.calendarExcludedNames = $0
-                        .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-                        .filter { !$0.isEmpty } }))
-                    .disabled(!controller.settings.calendarSignalEnabled)
-                    .help("Comma-separated calendar names to ignore (e.g. Holidays, Birthdays) — birthday and subscription calendars are already excluded automatically.")
-                Stepper("Review-queue lookback: \(Int(controller.settings.calendarHintLookbackDays)) days",
-                        value: $controller.settings.calendarHintLookbackDays, in: 7...365, step: 7)
-                    .disabled(!controller.settings.calendarSignalEnabled)
-                Text("When on, andeye reads your Mac's calendars (read-only) to guess what you're supposed to be doing right now, nudge the pick list towards it, and hint at old review-queue rows that overlap a past event. Nothing calendar-derived ever leaves this Mac.")
-                    .font(.caption).foregroundStyle(.secondary)
+                // The rest of the section only EXISTS while the signal is on
+                // (Martin, 2026-07-09: "skip those settings if no calendar")
+                // — a column of disabled knobs for a feature you haven't
+                // enabled is noise, not affordance.
+                if controller.settings.calendarSignalEnabled {
+                    Toggle("Alert before meetings",
+                           isOn: $controller.settings.calendarPreMeetingAlertEnabled)
+                        .help("The menu-bar mark pulses gently through the lead-up to each meeting.")
+                    Picker("Alert lead time",
+                           selection: $controller.settings.calendarPreMeetingLeadMinutes) {
+                        ForEach(CalendarAlerts.leadMinuteChoices, id: \.self) { minutes in
+                            Text(minutes == 1 ? "1 minute" : "\(minutes) minutes").tag(minutes)
+                        }
+                    }
+                    .disabled(!controller.settings.calendarPreMeetingAlertEnabled)
+                    Toggle("Flash at meeting start",
+                           isOn: $controller.settings.calendarStartAlertEnabled)
+                        .help("A strong, unmissable menu-bar flash the moment a meeting begins.")
+                    TextField("Excluded calendars", text: Binding(
+                        get: { controller.settings.calendarExcludedNames.joined(separator: ", ") },
+                        set: { controller.settings.calendarExcludedNames = $0
+                            .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty } }))
+                        .help("Comma-separated calendar names to ignore (e.g. Holidays, Birthdays) — birthday and subscription calendars are already excluded automatically.")
+                    Text("When on, andeye reads your Mac's calendars (read-only) to guess what you're supposed to be doing right now, nudge the pick list towards it, alert you around meetings, and hint at old review-queue rows that overlap a past event. Nothing calendar-derived ever leaves this Mac.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             Section("Diagnostics (dev)") {

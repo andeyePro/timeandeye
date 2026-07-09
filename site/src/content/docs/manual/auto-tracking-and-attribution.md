@@ -23,12 +23,18 @@ Turn on **Calendar** in [Settings](/manual/settings/) and a meeting that's
 live right now nudges that slot in the ranking - never enough to beat a pin,
 a URL match or a learned rule, just enough to break a tie among your
 ordinary tasks. The pick list marks the matching task with a small clock; if
-you're tracking something else and the mismatch holds for a minute, the
-menu-bar mark pulses gently and the popover offers a one-line "Calendar:
-<meeting> - Switch". The same matching runs over your calendar history for
-the Review queue, so an old row that overlaps a past meeting gets a
-one-click assign hint too. Corrections teach it a rule the same way email
-does, and nothing calendar-derived ever leaves your Mac.
+you're tracking something else during a meeting, the popover offers a
+one-line "Calendar: <meeting> - Switch". The menu-bar mark also alerts you
+around meetings: it pulses gently through the last few minutes before an
+event starts (five by default - pick the lead time in Settings), then
+flashes hard the moment the event begins before settling back to normal.
+Both alerts can be switched off individually; a meeting already underway
+when andeye starts never flashes after the fact, tentative invites pulse
+but never flash, and all-day events never alert. The same matching runs
+over your calendar history for the Review queue, so an old row that
+overlaps a past meeting gets a one-click assign hint too. Corrections teach
+it a rule the same way email does, and nothing calendar-derived ever leaves
+your Mac.
 
 ## Context rules: see why, un-learn in one click
 

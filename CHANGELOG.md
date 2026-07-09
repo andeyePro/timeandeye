@@ -2,6 +2,31 @@
 
 ## 2026-07-09
 
+- [x] **Calendar defaults confirmed + time-based meeting alerts (Martin's
+  design).** The menu-bar mark now alerts on meeting TIME, replacing v1's
+  off-calendar mismatch flash (which never shipped on): a QUIET slow amber
+  pulse through the lead-up to each event (lead time a Settings picker —
+  1/2/5/10/15 min, default 5) and one VIOLENT unmissable flash (150 ms
+  full-strength alternation for ~3 s) the moment it starts, both ON by
+  default, both riding the existing `AndeyeLogoImage` flash pose. Pure
+  decisions live in Core (`CalendarAlerts.phase`/`nextBoundary`, seeded
+  `CalendarEvent`s, no EventKit): pulse window is exactly
+  [start − lead, start); the start flash fires once per occurrence
+  (`occurrenceKey` = id + start, so recurring instances alert
+  independently) within a 60 s grace — an event already underway at launch
+  never flashes retroactively; tentative invites pulse but never flash;
+  all-day events never alert; back-to-back events each get their own
+  lead-up and flash. The popover's "Calendar: <event> – Switch" banner
+  stays (mismatch settle logic kept, banner-only now); the whole Settings
+  Calendar subsection hides until the signal is on. Martin's other two
+  defaults verified already held in v1: birthday/subscription calendars
+  excluded by type + name opt-outs; the calendar term stays structurally
+  capped below every pin/sticky/URL/email match — now pinned by checks (a
+  1.0 pin and a 0.95 primed surface both beat a CONFIRMED calendar match;
+  ranked winner ≤ 0.9). New CalendarPrecedence + CalendarAlerts suites;
+  `calendarFlashEnabled` removed (lenient decode ignores the stale key).
+  Manuals updated both surfaces.
+
 - [x] **Task-colour engine v1 — stable, distinct, colour-blind-aware.** New
   platform-independent `ColourEngine` (andeyeTTCore) replaces the per-task
   djb2-hash hue: each project claims the most distinct-from-neighbours free
