@@ -96,7 +96,7 @@ func resolvedPostingChecks(_ c: Checks) async {
                      "coverage lifted ⇒ the stranded time finally bills")
     }
 
-    await c.check("FAIL-CLOSED eligibility: a row in an UNKNOWN future state blocks re-posting (A2)") {
+    c.check("FAIL-CLOSED eligibility: a row in an UNKNOWN future state blocks re-posting (A2)") {
         // A newer build (or a synced ledger from one) writes a state this
         // build doesn't know. The row DECODER already
         // reads unknown states as .posted; the eligibility SQL must fail
@@ -413,7 +413,7 @@ func resolvedPostingChecks(_ c: Checks) async {
 
     // MARK: D6 finance mapping + criterion 10 reopen.
 
-    await c.check("D6 store: source-task lookup goes key-table→mappings; set fires the change signal") {
+    c.check("D6 store: source-task lookup goes key-table→mappings; set fires the change signal") {
         let store = FinanceMappingStore(projectKeys: ["42": "op/id:7"])
         try expectNil(store.mapping(forSourceTask: "42"), "known project, no mapping yet")
         try expectNil(store.mapping(forSourceTask: "999"), "unknown task resolves nothing")
