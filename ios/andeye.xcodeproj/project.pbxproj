@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0857891A2B8D3C7060257B53 /* andeyeTTPhone in Frameworks */ = {isa = PBXBuildFile; productRef = 448AC0D2227E8E4158EC1A80 /* andeyeTTPhone */; };
+		0857891A2B8D3C7060257B53 /* timeandeyePhone in Frameworks */ = {isa = PBXBuildFile; productRef = FF8C5FA5ADD867EEF0ECD546 /* timeandeyePhone */; };
 		0E5B1591F718F2F5CDED7A3C /* TimelineCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBE68B8552A1743C12D542D /* TimelineCanvas.swift */; };
 		14F0CBF48DDE5FB9556B6ADF /* NowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEAF23557B6CB84A4225182 /* NowView.swift */; };
 		3215C06CFD87F7D6ED115E53 /* AndeyeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F4C0076152D11D05E6820A /* AndeyeApp.swift */; };
 		420BFD2C67C2307D291C8E87 /* TimeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900D93C474C0E6C2957BAAE4 /* TimeViews.swift */; };
-		B3039E21525B2119C6E2BDAF /* andeyeTTCore in Frameworks */ = {isa = PBXBuildFile; productRef = 223B3066170858758D8C68D3 /* andeyeTTCore */; };
-		FB0BB38B4F7130DFD48CD38A /* andeyeTTStore in Frameworks */ = {isa = PBXBuildFile; productRef = 78CF48ED841CC8092EE2B48A /* andeyeTTStore */; };
+		B3039E21525B2119C6E2BDAF /* timeandeyeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 19D700A090F6D563974EADEE /* timeandeyeCore */; };
+		FB0BB38B4F7130DFD48CD38A /* timeandeyeStore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E89BCF7A0A23056E4737C8A /* timeandeyeStore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,8 +21,8 @@
 		494C01E52FE8E11D665E3476 /* andeye.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = andeye.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		900D93C474C0E6C2957BAAE4 /* TimeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeViews.swift; sourceTree = "<group>"; };
 		B4F4C0076152D11D05E6820A /* AndeyeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AndeyeApp.swift; sourceTree = "<group>"; };
-		BCB09B1C1DFD76D7FA04B649 /* andeyeTT */ = {isa = PBXFileReference; lastKnownFileType = folder; name = andeyeTT; path = ..; sourceTree = SOURCE_ROOT; };
 		DDEAF23557B6CB84A4225182 /* NowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowView.swift; sourceTree = "<group>"; };
+		F9D66575931DA5D2E69A22F6 /* timeandeye */ = {isa = PBXFileReference; lastKnownFileType = folder; name = timeandeye; path = ..; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -30,9 +30,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B3039E21525B2119C6E2BDAF /* andeyeTTCore in Frameworks */,
-				FB0BB38B4F7130DFD48CD38A /* andeyeTTStore in Frameworks */,
-				0857891A2B8D3C7060257B53 /* andeyeTTPhone in Frameworks */,
+				B3039E21525B2119C6E2BDAF /* timeandeyeCore in Frameworks */,
+				FB0BB38B4F7130DFD48CD38A /* timeandeyeStore in Frameworks */,
+				0857891A2B8D3C7060257B53 /* timeandeyePhone in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -50,7 +50,7 @@
 		D3290669F25EF4AAFC736D11 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				BCB09B1C1DFD76D7FA04B649 /* andeyeTT */,
+				F9D66575931DA5D2E69A22F6 /* timeandeye */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -91,9 +91,9 @@
 			);
 			name = andeye;
 			packageProductDependencies = (
-				223B3066170858758D8C68D3 /* andeyeTTCore */,
-				78CF48ED841CC8092EE2B48A /* andeyeTTStore */,
-				448AC0D2227E8E4158EC1A80 /* andeyeTTPhone */,
+				19D700A090F6D563974EADEE /* timeandeyeCore */,
+				5E89BCF7A0A23056E4737C8A /* timeandeyeStore */,
+				FF8C5FA5ADD867EEF0ECD546 /* timeandeyePhone */,
 			);
 			productName = andeye;
 			productReference = 494C01E52FE8E11D665E3476 /* andeye.app */;
@@ -163,7 +163,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.andeye.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.timeandeye.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -301,7 +301,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.andeye.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.timeandeye.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -338,17 +338,17 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		223B3066170858758D8C68D3 /* andeyeTTCore */ = {
+		19D700A090F6D563974EADEE /* timeandeyeCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = andeyeTTCore;
+			productName = timeandeyeCore;
 		};
-		448AC0D2227E8E4158EC1A80 /* andeyeTTPhone */ = {
+		5E89BCF7A0A23056E4737C8A /* timeandeyeStore */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = andeyeTTPhone;
+			productName = timeandeyeStore;
 		};
-		78CF48ED841CC8092EE2B48A /* andeyeTTStore */ = {
+		FF8C5FA5ADD867EEF0ECD546 /* timeandeyePhone */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = andeyeTTStore;
+			productName = timeandeyePhone;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
