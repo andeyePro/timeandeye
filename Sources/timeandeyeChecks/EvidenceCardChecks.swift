@@ -379,6 +379,9 @@ func correctionHistoryChecks(_ c: Checks) {
         let tomorrow = t0.addingTimeInterval(86_400 * 2)   // safely next day in any TZ
         let later = b.explain(sig, tasks: tasks, now: tomorrow)
         try expectNil(later.priorToCorrection, "an expired correction leaves no orphan history")
+        // explain() is a READ (2026-07-10): the store prunes on the next
+        // real decision, not on being looked at.
+        _ = b.attribute(sig, tasks: tasks, now: tomorrow)
         try expect(b.displacedByCorrection.isEmpty, "…and the store pruned with the sticky")
     }
 
@@ -414,5 +417,97 @@ func correctionHistoryChecks(_ c: Checks) {
                                "day-2 correction captures a day-2 snapshot")
         try expectEq(prior.chosen, .task(apple),
                      "…of what the engine believed at day-2, freshly pruned")
+    }
+}
+
+// MARK: - Why-panel truth: recompute vs record (Martin's 2026-07-10 report)
+
+// A slice categorised as one task must never show a BECAUSE naming another
+// task as if it were the reason. `explain()` is a re-derivation from the
+// CURRENT stores; for a journalled slice the stores may have moved on since
+// the decision — the card reconciles via `contradicts(recorded:)` and the
+// matched prime key rides on the explanation so over-broad learning is
+// visible (and forgettable).
+func whyPanelTruthChecks(_ c: Checks) {
+    let host = "op.example.com"
+    let timeAndI = TaskRef.op(223)
+    let chTask = TaskRef.op(300)
+    let tasks = [WorkTask(ref: timeAndI, subject: "Time&I", status: "Now"),
+                 WorkTask(ref: chTask,
+                          subject: "andeye Ltd confirmation statement + director ID verification",
+                          status: "Now")]
+    /// The Companies House email open in Gmail — the window Martin selected
+    /// inside a slice whose journalled outcome was Time&I.
+    let chMail = ActivitySignal(
+        app: "Google Chrome",
+        windowTitle: "Confirmation statement due - martin@example.com - Gmail",
+        tabURL: "https://mail.google.com/mail/u/0/#inbox/CHthread1",
+        timestamp: t0,
+        correspondents: ["noreply@companieshouse.gov.uk"],
+        emailSubject: "Confirmation statement due")
+
+    c.check("THE report: a later correction primes the surface — the re-derivation contradicts the record and says so") {
+        let a = Attributor(instanceHost: host)
+        // The slice was journalled as Time&I. Later that day Martin handled
+        // the email and corrected THAT context to the Companies House task:
+        a.confirm(chMail, task: chTask, tasks: tasks, now: t0.addingTimeInterval(3600))
+        // Next day (sticky dead, the prime persisted), the timeline card
+        // re-explains the old window against today's stores:
+        let e = a.explain(chMail, tasks: tasks, now: t0.addingTimeInterval(86_400 * 2))
+        try expectEq(e.source, .primedSurface,
+                     "\"remembered from a past correction\" — a reason that never fired here")
+        try expectEq(e.chosen, .task(chTask))
+        try expect(e.contradicts(recorded: .task(timeAndI)),
+                   "the record says Time&I: the card must anchor BECAUSE on it")
+        try expect(!e.contradicts(recorded: .task(chTask)),
+                   "no contradiction when the record and the re-derivation agree")
+    }
+
+    c.check("same-day flavour: the correction's sticky also contradicts the record") {
+        let a = Attributor(instanceHost: host)
+        a.confirm(chMail, task: chTask, tasks: tasks, now: t0.addingTimeInterval(3600))
+        let e = a.explain(chMail, tasks: tasks, now: t0.addingTimeInterval(7200))
+        try expectEq(e.source, .sessionSticky)
+        try expect(e.contradicts(recorded: .task(timeAndI)))
+    }
+
+    c.check("the matched prime key rides on the explanation (over-broad learning made visible)") {
+        let a = Attributor(instanceHost: host)
+        a.confirm(chMail, task: chTask, tasks: tasks, now: t0)
+        let e = a.explain(chMail, tasks: tasks, now: t0.addingTimeInterval(86_400 * 2))
+        try expectEq(e.source, .primedSurface)
+        try expectEq(e.matchedSurface, Surface(signal: chMail),
+                     "the exact key that fired is what the card shows and [✕ forget] removes")
+        // Sources that carry their own provenance don't claim a surface key.
+        let ranked = a.explain(ActivitySignal(app: "Ghostty", windowTitle: "zsh", timestamp: t0),
+                               tasks: tasks, now: t0)
+        try expectNil(ranked.matchedSurface)
+    }
+
+    c.check("re-explaining an OLD slice never deletes today's live stickies") {
+        // The drawer/timeline/retro pass all re-explain AT THE SLICE'S OWN
+        // MOMENT. The pruning sticky match treated that historical `now` as
+        // "today" — merely LOOKING at yesterday's slice wiped today's
+        // session stickies out of the store.
+        let a = Attributor(instanceHost: host)
+        a.assign(chMail, target: .task(chTask), tasks: tasks, now: t0)
+        let yesterdaySlice = ActivitySignal(app: "Excel", windowTitle: "Budget.xlsx",
+                                            timestamp: t0.addingTimeInterval(-86_400))
+        _ = a.explain(yesterdaySlice, tasks: tasks, now: t0.addingTimeInterval(-86_400))
+        _ = a.forgettable(for: yesterdaySlice, now: t0.addingTimeInterval(-86_400))
+        try expectEq(a.sessionStickies.count, 1, "reads never prune")
+        let r = a.attribute(chMail, tasks: tasks, now: t0.addingTimeInterval(600))
+        try expectEq(r.best?.target, .task(chTask), "today's categorisation still answers")
+    }
+
+    c.check("a past-moment explain matches the stickies OF that moment's day, none other") {
+        let a = Attributor(instanceHost: host)
+        a.assign(chMail, target: .task(chTask), tasks: tasks, now: t0)
+        // Scored at a moment two days out, today's sticky must not answer —
+        // same visibility the pruning path gave, without the mutation.
+        let e = a.explain(chMail, tasks: tasks, now: t0.addingTimeInterval(86_400 * 2))
+        try expect(e.source != .sessionSticky, "a sticky only speaks for its own day")
+        let sameDay = a.explain(chMail, tasks: tasks, now: t0.addingTimeInterval(600))
+        try expectEq(sameDay.source, .sessionSticky)
     }
 }

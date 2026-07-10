@@ -112,6 +112,13 @@ public struct AttributionExplanation: Equatable, Sendable {
     public var matchedEmailRule: EmailRule?
     public var matchedSiteRule: SiteRule?
     public var matchedPin: Pin?
+    /// The remembered surface that matched, when the source is
+    /// .primedSurface / .pendingPrime — carried so the card can SHOW the
+    /// key that fired: an over-broad prime (e.g. a whole mail tab keyed by
+    /// its URL fragment, or a title-less window keyed by app alone) is
+    /// invisible — and effectively unforgettable — unless the matched key
+    /// is on the card (Martin's 2026-07-10 why-panel report).
+    public var matchedSurface: Surface?
     /// Set only when the source is a correction (`.sessionSticky`) that
     /// displaced a real prior belief — the card's "before your correction:
     /// Apple 71% (learned)" history line. nil when the engine already agreed
@@ -120,12 +127,28 @@ public struct AttributionExplanation: Equatable, Sendable {
     public init(source: Source, chosen: Target?, chosenScore: Double,
                 lines: [Line], features: [String],
                 matchedEmailRule: EmailRule? = nil, matchedSiteRule: SiteRule? = nil,
-                matchedPin: Pin? = nil, priorToCorrection: Prior? = nil) {
+                matchedPin: Pin? = nil, priorToCorrection: Prior? = nil,
+                matchedSurface: Surface? = nil) {
         self.source = source; self.chosen = chosen; self.chosenScore = chosenScore
         self.lines = lines; self.features = features
         self.matchedEmailRule = matchedEmailRule; self.matchedSiteRule = matchedSiteRule
         self.matchedPin = matchedPin
         self.priorToCorrection = priorToCorrection
+        self.matchedSurface = matchedSurface
+    }
+
+    /// An `explain()` is always a RE-DERIVATION from the current stores. For
+    /// a journalled slice that already has a recorded outcome, the stores may
+    /// have moved on since the decision was made — a correction elsewhere can
+    /// prime this slice's surface toward a task that never actually fired
+    /// here (Martin's 2026-07-10 report: a window in a Time&I slice whose
+    /// BECAUSE read "remembered from a past correction → andeye Ltd
+    /// confirmation statement…", a reason learned AFTER the slice was
+    /// decided). True when this re-derivation contradicts the record — the
+    /// why-panel must then anchor BECAUSE on the record and demote this
+    /// explanation to "what today's rules would say".
+    public func contradicts(recorded: Target) -> Bool {
+        chosen != recorded
     }
 }
 
@@ -349,6 +372,21 @@ public final class Attributor {
         }
         let key = Self.stickyKey(for: signal)
         return sessionStickies.last { $0.key == key }
+    }
+
+    /// Non-mutating twin of `stickyMatch` for the READ-ONLY explain paths.
+    /// The review drawer, retro pass and timeline card all re-explain old
+    /// slices AT THEIR OWN MOMENT (`now` = the slice's start) — and the
+    /// pruning variant treated that historical `now` as "today", so merely
+    /// LOOKING at yesterday's slice deleted today's live stickies from the
+    /// store (found investigating Martin's 2026-07-10 why-panel report).
+    /// Reads must never write: this filters without removing; only
+    /// `attribute()` and the correction paths prune.
+    func stickyLookup(for signal: ActivitySignal, now: Date) -> SessionSticky? {
+        let key = Self.stickyKey(for: signal)
+        return sessionStickies.last {
+            $0.key == key && Calendar.current.isDate(now, inSameDayAs: $0.day)
+        }
     }
 
     /// Capture what the engine believed at the moment a correction lands, so
@@ -698,9 +736,13 @@ public final class Attributor {
         return out.sorted { $0.score > $1.score }
     }
 
-    /// Why this signal attributes the way it does — drives the timeline's
-    /// "why was this tracked as X?" panel. Mirrors `attribute()`'s source order
-    /// exactly, so what it explains is what actually happened.
+    /// Why this signal WOULD attribute the way it does against the CURRENT
+    /// stores. Mirrors `attribute()`'s source order exactly — but it is a
+    /// re-derivation, not a record: for a journalled slice, rules learned
+    /// since the decision can make this name a task that never fired there
+    /// (see `AttributionExplanation.contradicts(recorded:)` — the caller
+    /// holding a recorded outcome must reconcile against it). Read-only:
+    /// never bumps fire counts, never prunes stickies.
     public func explain(_ signal: ActivitySignal, tasks: [WorkTask],
                         now: Date) -> AttributionExplanation {
         let feats = LearningStore.features(from: signal, disabledRecipes: disabledSiteRecipes)
@@ -709,7 +751,7 @@ public final class Attributor {
             return .init(source: .pin, chosen: .task(pin.task), chosenScore: 1.0,
                          lines: [], features: feats, matchedPin: pin)
         }
-        if let sticky = stickyMatch(for: signal, now: now) {
+        if let sticky = stickyLookup(for: signal, now: now) {
             return .init(source: .sessionSticky, chosen: sticky.target,
                          chosenScore: Self.inferredCeiling,
                          lines: scoredComponents(signal, tasks: tasks, now: now),
@@ -741,11 +783,11 @@ public final class Attributor {
         if let pending = pendingPrime, pending.surface == surface,
            now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
             return .init(source: .pendingPrime, chosen: .task(pending.task), chosenScore: 0.7,
-                         lines: lines, features: feats)
+                         lines: lines, features: feats, matchedSurface: surface)
         }
         if let primed = primedSurfaces[surface] {
             return .init(source: .primedSurface, chosen: .task(primed), chosenScore: 0.95,
-                         lines: lines, features: feats)
+                         lines: lines, features: feats, matchedSurface: surface)
         }
         return .init(source: lines.isEmpty ? .none : .ranked, chosen: lines.first?.target,
                      chosenScore: lines.first?.score ?? 0, lines: lines, features: feats)
@@ -780,7 +822,8 @@ public final class Attributor {
     /// that actually decided.
     public func forgettable(for signal: ActivitySignal, now: Date) -> Unlearn? {
         if matchingPin(for: signal) != nil { return nil }
-        if let sticky = stickyMatch(for: signal, now: now) { return .sessionSticky(sticky.key) }
+        // Non-mutating lookup, like explain(): a read must never prune.
+        if let sticky = stickyLookup(for: signal, now: now) { return .sessionSticky(sticky.key) }
         if let url = signal.tabURL, recognizer.taskRef(inURL: url) != nil { return nil }
         for text in [signal.windowTitle, signal.app].compactMap({ $0 })
         where recognizer.taskRef(inTitle: text) != nil { return nil }

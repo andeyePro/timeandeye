@@ -13,6 +13,17 @@ import timeandeyeTheme
 struct EvidenceCardView: View {
     enum Host: Equatable { case timeline, popover }
 
+    /// The decision that actually STANDS for this window in the journal —
+    /// the slice's task and certainty, plus the window's own start so the
+    /// re-derived scores use the slice's moment (like the review drawer and
+    /// the retro pass). The timeline passes it; the popover leaves it nil
+    /// (its card explains the LIVE decision, which IS the current stores).
+    struct Recorded: Equatable {
+        var target: Target
+        var certainty: Double
+        var at: Date
+    }
+
     @ObservedObject var controller: AppController
     let signal: ActivitySignal
     let host: Host
@@ -20,6 +31,12 @@ struct EvidenceCardView: View {
     /// window range, the popover switches/relabels the running session. nil
     /// disables the WRONG?/fix section entirely (evidence-only display).
     var onPick: ((WorkTask) -> Void)? = nil
+    /// See `Recorded`. When the re-derived explanation contradicts it,
+    /// BECAUSE anchors on the record and the re-derivation is shown as
+    /// "today's rules would say" — a reason that never fired must not read
+    /// as the reason (Martin's 2026-07-10 report: a window in a Time&I
+    /// slice claimed "remembered from a past correction → andeye Ltd…").
+    var recorded: Recorded? = nil
 
     @State private var filter = ""
     @State private var grainCount = 1
@@ -30,7 +47,14 @@ struct EvidenceCardView: View {
     /// the correspondent row AND `correspondentChoices` has more than one.
     @State private var correspondentChecks: Set<String> = []
 
-    private var explanation: AttributionExplanation { controller.explain(signal) }
+    private var explanation: AttributionExplanation {
+        controller.explain(signal, now: recorded?.at ?? Date())
+    }
+    /// The record disagrees with today's re-derivation — the card must not
+    /// present a reason that never decided this slice as if it had.
+    private var recordContradicted: Bool {
+        recorded.map { explanation.contradicts(recorded: $0.target) } ?? false
+    }
     private var identity: ContextIdentity { controller.identity(of: signal) }
     private var hasEmailGrain: Bool { identity.segments.contains { $0.kind.isEmailGrain } }
     private var unlearn: Attributor.Unlearn? { controller.forgettable(for: signal) }
@@ -78,7 +102,16 @@ struct EvidenceCardView: View {
                 Text("BECAUSE").font(.caption2).bold().foregroundStyle(.secondary)
                 // Wrap rather than truncate — a long task name or email
                 // subject was clipping instead of reading in full.
-                Text(becauseLabel).font(.caption)
+                Text(anchoredBecauseLabel).font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // The stores moved on since this slice was decided (a later
+            // correction primed its surface elsewhere, a rule was learned,
+            // the slice was reassigned): the re-derivation is shown, but
+            // demoted to hypothesis — it is NOT why this time is where it is.
+            if recordContradicted {
+                Text("today's rules would say: \(becauseLabel) – not what decided this slice")
+                    .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             // Keep the story straight after a correction (2026-07-05 report):
@@ -101,6 +134,14 @@ struct EvidenceCardView: View {
                     Text(pin.rule.shortLabel).font(.caption2).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+            // The remembered key a prime matched on — over-broad learning
+            // (a whole window title, an app with no title) is invisible and
+            // effectively unforgettable unless the key is on the card.
+            if let surface = explanation.matchedSurface {
+                Text(surfaceProvenance(surface))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let u = unlearn {
                 VStack(alignment: .leading, spacing: 2) {
@@ -134,6 +175,23 @@ struct EvidenceCardView: View {
                 .animation(nil, value: unlearn)
             }
         }
+    }
+
+    /// The BECAUSE line's text: the record when one exists and today's
+    /// re-derivation contradicts it (the recorded outcome is the only
+    /// truthful "because" the card holds — the original source wasn't
+    /// journalled, so it claims no source); otherwise the explanation.
+    private var anchoredBecauseLabel: String {
+        guard let recorded, recordContradicted else { return becauseLabel }
+        return "this time stands as → \(controller.name(of: recorded.target)) "
+            + pct(recorded.certainty)
+    }
+
+    /// "matched remembered surface: Mail · …" — the exact key that fired.
+    private func surfaceProvenance(_ surface: Surface) -> String {
+        var text = "↺ remembered surface: \(surface.app)"
+        if !surface.detail.isEmpty { text += " · \(surface.detail)" }
+        return text
     }
 
     private var becauseLabel: String {

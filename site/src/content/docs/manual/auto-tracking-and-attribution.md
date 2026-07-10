@@ -47,7 +47,14 @@ The card shows, top to bottom:
 
 - **BECAUSE** - the source that fired (pinned, a learned email rule,
   remembered, learned associations...), with the rule's provenance when one
-  fired (when it was learned, how many times it's fired). If something LEARNED
+  fired (when it was learned, how many times it's fired). A remembered
+  window/site shows the exact remembered key it matched on, so an over-broad
+  memory is visible - and forgettable - at a glance. In the timeline, a
+  window's slice already stands somewhere in your journal; if the rules as
+  they are NOW would file that window differently, BECAUSE gives what the
+  time actually stands as, and today's differing read appears beneath it,
+  marked "today's rules would say" - it is never presented as the reason the
+  slice is where it is. If something LEARNED
   drove the decision, a **✕ forget** (or **✕ suppress** for a learned
   association, which can't be deleted outright, only counter-taught) removes
   exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you

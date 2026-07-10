@@ -45,7 +45,10 @@ func sessionStickyChecks(_ c: Checks) {
         try expectEq(later.source, .emailRule,
                      "tomorrow the durable rule the grain commit taught answers instead")
         try expectEq(later.chosen, .task(.op(2)))
-        try expectEq(a.sessionStickies.count, 0, "expired stickies are pruned")
+        try expectEq(a.sessionStickies.count, 1,
+                     "explain is a READ — looking never prunes the store (2026-07-10)")
+        _ = a.attribute(email(title: "Compose"), tasks: tasks, now: tomorrow)
+        try expectEq(a.sessionStickies.count, 0, "the real decision path prunes expired stickies")
     }
 
     c.check("re-categorising the same email replaces the sticky (last word wins)") {

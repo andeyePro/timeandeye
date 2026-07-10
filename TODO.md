@@ -197,6 +197,17 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Journal the decision SOURCE alongside task+certainty. The why-panel
+  truth fix (2026-07-10) anchors the timeline card's BECAUSE on the slice's
+  recorded outcome, but the journal keeps only WHAT stood (task, certainty),
+  not WHICH source decided it (pin / sticky / rule / prime / ranked) — so
+  the card can say "this time stands as → X" but not name the original
+  firing source, and demotes today's re-derivation to "would say" instead.
+  Recording `AttributionExplanation.Source` (+ matched rule/key) on
+  Session/FocusSpan at flush would let BECAUSE tell the original story
+  verbatim. Codable back-compat via decodeIfPresent; decide whether
+  reassigns overwrite or append to the provenance.
+
 - [ ] Positive fullscreen detector for menu-bar auto-hide users. With the
   System Settings auto-hide preference on, every desktop looks fullscreen
   to the visibleFrame heuristic, so FullscreenPose disables the

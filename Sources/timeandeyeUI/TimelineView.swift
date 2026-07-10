@@ -1621,7 +1621,15 @@ struct TimelineView: View {
                                         target, ranges: [(spans[i].start, spans[i].end)], to: task.ref)
                                 }
                             }
-                        })
+                        },
+                        // The slice's journalled outcome: what this window's
+                        // time actually STANDS as. The card anchors BECAUSE
+                        // on it whenever today's re-derivation disagrees —
+                        // rules learned since tracking must not read as the
+                        // reason (Martin's 2026-07-10 report).
+                        recorded: .init(target: .task(session.task),
+                                        certainty: session.certainty,
+                                        at: spans[i].start))
                     }
                     .frame(width: 372)
                 }

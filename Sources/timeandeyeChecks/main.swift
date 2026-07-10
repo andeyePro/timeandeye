@@ -110,6 +110,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("RulesLedger", rulesLedgerChecks),
     ("RulesLedgerExport", rulesLedgerExportChecks),
     ("CorrectionHistory", correctionHistoryChecks),
+    ("WhyPanelTruth", whyPanelTruthChecks),
     ("TimesheetExport", timesheetExportChecks),
     ("JournalPrune", journalPruneChecks),
     ("HLC", hlcChecks),

@@ -2,6 +2,28 @@
 
 ## 2026-07-10
 
+- [x] **Why-panel truth: BECAUSE anchors on the recorded decision, never on
+  a rule learned later.** Martin: "The BECAUSE 'remembered from a past
+  correction → andeye Ltd confirmation statement + director ID verification'
+  makes no sense to me as the window is in a slice categorised Time&I."
+  Diagnosis: the timeline's Evidence Card re-ran `explain()` against the
+  CURRENT stores — his correction on the Companies House email (made later,
+  while handling that email) had primed its surface toward the CH task, and
+  the card presented that as the reason a slice decided EARLIER was tracked
+  there, though it never fired for it. Fixes: (1) the timeline card now
+  receives the slice's journalled outcome; when the re-derivation contradicts
+  it, BECAUSE reads "this time stands as → …" and the re-derivation is
+  demoted to "today's rules would say: … – not what decided this slice"
+  (`AttributionExplanation.contradicts(recorded:)`); (2) prime matches carry
+  their matched key (`matchedSurface`) and the card shows it ("↺ remembered
+  surface: …"), so over-broad learning is visible and the existing ✕ forget
+  removes exactly it; (3) found en route: `explain()`/`forgettable()` were
+  MUTATING — re-explaining an old slice at its own moment (review drawer,
+  retro pass, timeline card) pruned TODAY's live stickies out of the store;
+  reads now use a non-mutating sticky lookup, only `attribute()`/corrections
+  prune. New `WhyPanelTruth` suite reproduces the report end-to-end; manual
+  updated (both copies). Suite 770/0.
+
 - [x] **Fullscreen fix twelve: the open-grace is scoped to the window being
   opened.** (Entry documents 6c044bb, which landed a minute before this
   line — a concurrent commit raced the changelog edit.) The fix-ten grant
