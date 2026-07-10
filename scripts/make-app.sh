@@ -174,7 +174,13 @@ if [ "$INSTALL" = 1 ]; then
     # also what once mislabelled the app as "andeye+".)
     rm -rf "/Applications/andeye.app" "$HOME/Applications/andeye.app"
     OLDHOME="$HOME/Applications/timeandeye.app"
-    if [ -d "$OLDHOME" ] && ! grep -q "$BUNDLE_ID" "$OLDHOME/Contents/Info.plist" 2>/dev/null; then
+    # Only retire it when its plist EXISTS, is readable, and verifiably lacks
+    # the current id (grep -F: dots in the id must not pattern-match). A
+    # missing/unreadable plist (e.g. a half-finished zip install) proves
+    # nothing about the bundle's identity — deleting on grep FAILURE would
+    # rm a possibly-current install.
+    if [ -d "$OLDHOME" ] && [ -r "$OLDHOME/Contents/Info.plist" ] \
+        && ! grep -qF "$BUNDLE_ID" "$OLDHOME/Contents/Info.plist"; then
         # Pre-rename id under the new folder name; a current-id copy there
         # is the zip install and is left alone.
         rm -rf "$OLDHOME"

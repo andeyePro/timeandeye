@@ -2,6 +2,28 @@
 
 ## 2026-07-10
 
+- [x] **Install scripts: never delete an install on evidence you couldn't
+  read, verify the zip before touching anything, retire duplicates from
+  both locations.** make-app.sh retired `~/Applications/timeandeye.app`
+  whenever grep FAILED to find the current bundle id in its plist — a
+  missing or unreadable plist (e.g. a half-finished zip install) counted
+  as "legacy" and got `rm -rf`'d, and the dotted id was matched as a
+  regex; the retire now requires the plist to exist, be readable, and
+  verifiably lack the id (`grep -qF`). install-timeandeye.command removed
+  the installed app BEFORE checking the zip actually contained
+  `timeandeye.app` — a stale pre-rename zip root left the user with NO
+  install — and leaked its temp dir on the abort paths; the extracted
+  bundle is now verified first and an EXIT trap cleans the scratch dir on
+  every exit. And the installer retired only ~/Applications copies while
+  make-app.sh sweeps both install locations, so a machine that used
+  make-app.sh before switching to zip installs kept a second live
+  com.timeandeye.mac at /Applications — the duplicate-registration state
+  both scripts' comments blame for the "andeye+" mislabel; the installer
+  now retires /Applications/andeye.app and /Applications/timeandeye.app
+  too, best-effort without admin rights (it warns and points at Finder
+  instead of dying when /Applications isn't deletable). shellcheck: no
+  new findings on either script.
+
 - [x] **Email capture review findings closed — flood/garbage/unicode
   verdicts, stale-URL + OWA gates, probe parity, atomic debug log.** Seven
   findings on the recipe-pack/validate-on-use work below. A reply-all

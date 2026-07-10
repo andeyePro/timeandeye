@@ -40,16 +40,36 @@ if pgrep -xq andeye; then
     exit 1
 fi
 
-# Unpack the zip and install at the canonical path in your own account.
+# Unpack the zip and install at the canonical path in your own account. The
+# trap cleans the scratch dir on EVERY exit (including the aborts below).
 TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 ditto -x -k "$SRC" "$TMP"
 NEW="$TMP/timeandeye.app"
-# Retire the pre-rename bundle: a surviving old-identity copy stays
-# LaunchServices-resolvable and lists as a second Time&I in launchers.
+# Verify the extracted bundle BEFORE touching the installed copy: a zip with
+# a different root (e.g. a stale pre-rename build) must abort with the
+# current install intact, not leave you with no app at all.
+if [ ! -d "$NEW" ] || [ ! -f "$NEW/Contents/Info.plist" ]; then
+    echo "The zip at $SRC doesn't contain timeandeye.app — ask Claude for a fresh build."
+    echo "Your installed copy is untouched."
+    read -r -p "Press return to close. "
+    exit 1
+fi
+# Retire duplicates from BOTH install locations: the pre-rename bundles, and
+# a make-app.sh install of the current app at /Applications — any survivor
+# stays LaunchServices-resolvable and lists as a second Time&I in launchers
+# (that duplicate registration is the "andeye+" mislabel, see the header).
+# /Applications may need admin rights this double-click flow doesn't have,
+# so failures warn instead of aborting the install.
 rm -rf "$HOME/Applications/andeye.app"
+for OLD in "/Applications/andeye.app" "/Applications/timeandeye.app"; do
+    if [ -e "$OLD" ] && ! rm -rf "$OLD" 2>/dev/null; then
+        echo "note: couldn't remove $OLD (needs admin) — drag it to the Trash in Finder"
+        echo "      so launchers don't show two copies of Time&I."
+    fi
+done
 rm -rf "$DEST"
 ditto "$NEW" "$DEST"
-rm -rf "$TMP"
 
 # Make this app THE registration for its bundle id, so its name resolves to
 # "Time&I" (not a stray duplicate).
