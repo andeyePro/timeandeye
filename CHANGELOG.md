@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- [x] **iOS companion bundle id is com.timeandeye.ios (finding 10).** The
+  per-app-id decision applied to Time&I's iOS app while no App ID,
+  provisioning or App Store Connect registration exists to migrate — the
+  same free-rename window the Mac id used, which closes permanently at
+  first registration. Regenerate the project on the Mac: `cd ios &&
+  xcodegen`.
+
 - [x] **Id-transition hardening (post-rebrand /code-review, findings 1–6,
   13–14).** Both upgrade paths — scripts/make-app.sh and
   scripts/install-timeandeye.command — now quit BOTH identities guarded by

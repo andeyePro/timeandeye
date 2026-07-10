@@ -4,7 +4,10 @@
 # Requires full Xcode (iOS SDK); the CLT-only loop cannot build iOS.
 name: andeye
 options:
-  bundleIdPrefix: com.andeye
+  # Per-app ids across andeye apps (see CHANGELOG 2026-07-09/10): the iOS
+  # companion is Time&I, so it takes com.timeandeye.* — set BEFORE any App
+  # Store Connect registration exists, while the id is still free to change.
+  bundleIdPrefix: com.timeandeye
   deploymentTarget:
     iOS: "17.0"
 packages:
@@ -25,7 +28,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.andeye.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.timeandeye.ios
         INFOPLIST_KEY_CFBundleDisplayName: andeye
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         # iCloud/CloudKit entitlements land AFTER the Apple org conversion —
