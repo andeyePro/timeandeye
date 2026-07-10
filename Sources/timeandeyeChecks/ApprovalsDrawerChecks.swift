@@ -606,3 +606,155 @@ func reviewSliceDetailChecks(_ c: Checks) {
                      "the sibling's evidence never bleeds into a single-slice teach")
     }
 }
+
+// MARK: - Adjacency certainty boost (Martin, 2026-07-10: "if the same
+// activity is tracked immediately before and after a slice, that should
+// significantly increase the slice's certainty of being the same
+// activity"). Pure arithmetic + reasoning strings: what the assign
+// buttons' order, percentages and hovers ride on. Display/ordering only —
+// nothing here touches journalled certainty, so these checks are the whole
+// behavioural contract.
+
+func adjacencyBoostChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    let alpha = TaskRef.op(1)
+
+    /// A neighbour on the given task at the given gap — the boost only
+    /// reads task + gap, so the timestamps can stay token.
+    func near(_ task: TaskRef, gap: TimeInterval) -> SliceNeighbours.Neighbour {
+        SliceNeighbours.Neighbour(task: task, start: t0, end: t0, gap: gap)
+    }
+
+    c.check("one contiguous same-task side closes 30% of the gap to the ceiling") {
+        // base 0.45, ceiling 0.95: gap 0.5, one side closes 0.3 of it.
+        let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                     neighbours: SliceNeighbours(before: near(alpha, gap: 0)))
+        try expectClose(b.certainty, 0.60)
+        try expectEq(b.reasoning, "follows Alpha (+15%)")
+    }
+
+    c.check("both contiguous same-task sides close 60%") {
+        let n = SliceNeighbours(before: near(alpha, gap: 0), after: near(alpha, gap: 0))
+        let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                     neighbours: n)
+        try expectClose(b.certainty, 0.75)
+        try expectEq(b.reasoning, "both neighbours Alpha (+30%)")
+    }
+
+    c.check("the after side reads 'followed by'") {
+        let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                     neighbours: SliceNeighbours(after: near(alpha, gap: 0)))
+        try expectClose(b.certainty, 0.60)
+        try expectEq(b.reasoning, "followed by Alpha (+15%)")
+    }
+
+    c.check("the boost can never pass the inferred ceiling; a pin's 1.0 passes through untouched") {
+        let n = SliceNeighbours(before: near(alpha, gap: 0), after: near(alpha, gap: 0))
+        // Right at the ceiling: nothing left to close, no reasoning to show.
+        let capped = AdjacencyBoost.apply(base: 0.95, candidate: .task(alpha), name: "Alpha",
+                                          neighbours: n)
+        try expectClose(capped.certainty, 0.95)
+        try expectNil(capped.reasoning)
+        // A pin (1.0) must stay the ONLY 1.0 — and must not be dragged DOWN
+        // to the ceiling either.
+        let pinned = AdjacencyBoost.apply(base: 1.0, candidate: .task(alpha), name: "Alpha",
+                                          neighbours: n)
+        try expectClose(pinned.certainty, 1.0)
+        try expectNil(pinned.reasoning)
+        // Near the ceiling the closed fraction shrinks with the gap.
+        let close = AdjacencyBoost.apply(base: 0.90, candidate: .task(alpha), name: "Alpha",
+                                         neighbours: n)
+        try expectClose(close.certainty, 0.93)
+    }
+
+    c.check("'immediately' decays: full at the 30s switch buffer, zero at 15 min, linear between") {
+        // At the buffer: still full strength.
+        let atBuffer = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                            neighbours: SliceNeighbours(before: near(alpha, gap: 30)))
+        try expectClose(atBuffer.certainty, 0.60)
+        // At 15 min: no boost at all, and no reasoning pretending otherwise.
+        let atLimit = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                           neighbours: SliceNeighbours(before: near(alpha, gap: 900)))
+        try expectClose(atLimit.certainty, 0.45)
+        try expectNil(atLimit.reasoning)
+        // Midway (465s): half strength → 0.3·0.5 of the 0.5 gap = +0.075,
+        // and the reasoning names the gap so the smaller number reads fair.
+        let midway = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                          neighbours: SliceNeighbours(before: near(alpha, gap: 465)))
+        try expectClose(midway.certainty, 0.525)
+        // (+7%: the exact half-point 7.5 lands a hair below it in binary
+        // floating point — a one-point display nuance, not a tuning fact.)
+        try expectEq(midway.reasoning, "follows Alpha (8m gap, +7%)")
+    }
+
+    c.check("two-sided decay averages the sides and hands over continuously to one-sided") {
+        // One side full, the other half-decayed: 0.6·(1+0.5)/2 = 0.45 of the gap.
+        let n = SliceNeighbours(before: near(alpha, gap: 0), after: near(alpha, gap: 465))
+        let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                     neighbours: n)
+        try expectClose(b.certainty, 0.675)
+        try expectEq(b.reasoning, "both neighbours Alpha (gaps up to 8m, +22%)")
+        // One side fully decayed = exactly the one-sided value: no cliff as
+        // a neighbour's gap crosses the 15-min limit.
+        let handover = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                            neighbours: SliceNeighbours(before: near(alpha, gap: 0),
+                                                                        after: near(alpha, gap: 900)))
+        try expectClose(handover.certainty, 0.60)
+    }
+
+    c.check("only the SAME task boosts; .doNotTrack never does") {
+        let other = SliceNeighbours(before: near(.op(2), gap: 0), after: near(.op(2), gap: 0))
+        let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                     neighbours: other)
+        try expectClose(b.certainty, 0.45)
+        try expectNil(b.reasoning)
+        let dnt = AdjacencyBoost.apply(base: 0.45, candidate: .doNotTrack, name: "Do not track",
+                                       neighbours: SliceNeighbours(before: near(alpha, gap: 0)))
+        try expectClose(dnt.certainty, 0.45, "a neighbour is evidence FOR a task, never against tracking")
+    }
+
+    c.check("a defensive negative gap reads as touching, never as negative strength") {
+        try expectClose(AdjacencyBoost.strength(gap: -5), 1.0)
+        try expectClose(AdjacencyBoost.strength(gap: 0), 1.0)
+    }
+
+    c.check("stack aggregation is the MEAN, with an honest slice count in the reasoning") {
+        // Mean, not max: the button answers "how sure are we ALL these
+        // slices are this task" — one strong slice must not oversell.
+        let boosted = AdjacencyBoost(base: 0.45, certainty: 0.60, reasoning: "follows Alpha (+15%)")
+        let plain = AdjacencyBoost(base: 0.50, certainty: 0.50)
+        let agg = AdjacencyBoost.aggregate([boosted, plain])
+        try expectClose(agg.base, 0.475)
+        try expectClose(agg.certainty, 0.55)
+        try expectEq(agg.reasoning, "adjacency on 1 of 2 slices (follows Alpha (+15%))")
+        let all = AdjacencyBoost.aggregate([boosted, boosted])
+        try expectEq(all.reasoning, "adjacency on every slice (follows Alpha (+15%))")
+        let single = AdjacencyBoost.aggregate([boosted])
+        try expectEq(single, boosted, "one slice aggregates to itself, fragment untouched")
+        let none = AdjacencyBoost.aggregate([])
+        try expectClose(none.certainty, 0)
+        try expectNil(none.reasoning)
+    }
+
+    c.check("hover text builds base source + adjacency + result; stacks announce the mean") {
+        let boosted = AdjacencyBoost(base: 0.45, certainty: 0.60, reasoning: "follows Alpha (+15%)")
+        try expectEq(AdjacencyBoost.hoverText(sourceWord: "learned associations + priors",
+                                              boosted, sliceCount: 1),
+                     "learned associations + priors 45% · follows Alpha (+15%) → 60%")
+        let plain = AdjacencyBoost(base: 0.45, certainty: 0.45)
+        try expectEq(AdjacencyBoost.hoverText(sourceWord: "learned associations + priors",
+                                              plain, sliceCount: 1),
+                     "learned associations + priors 45%")
+        try expectEq(AdjacencyBoost.hoverText(sourceWord: "learned associations + priors",
+                                              boosted, sliceCount: 3),
+                     "mean of 3 slices · learned associations + priors 45% · follows Alpha (+15%) → 60%")
+    }
+
+    c.check("button order: descending certainty, original pick-list position breaking ties") {
+        try expectEq(AdjacencyBoost.buttonOrder(certainties: [0.2, 0.9, 0.2, 0.0]),
+                     [1, 0, 2, 3], "the tie between the two 0.2s keeps pick-list order")
+        try expectEq(AdjacencyBoost.buttonOrder(certainties: []), [])
+        try expectEq(AdjacencyBoost.buttonOrder(certainties: [0, 0, 0]), [0, 1, 2],
+                     "an unscored list is untouched — the familiar ranked order survives")
+    }
+}

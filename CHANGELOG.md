@@ -2,6 +2,43 @@
 
 ## 2026-07-10
 
+- [x] **Review drawer: adjacency-based certainty boosts + ranked assign
+  buttons.** Martin's spec: the same activity tracked immediately before
+  and after a slice should significantly raise the slice's certainty of
+  being that activity; one-sided adjacency raises it less; the assign
+  buttons sort by decreasing certainty, carry it as a percentage, and hover
+  with the reasoning build. New pure `AdjacencyBoost`
+  (timeandeyeCore/ReviewDetail.swift): both contiguous same-task sides
+  close 60% of the gap between the base certainty and
+  `Attributor.inferredCeiling` (0.95 — pins stay the only 1.0), one side
+  closes 30%; "immediately" is full-strength up to the 30s switch buffer
+  and decays linearly to zero at 15 min (two-sided averages its sides, so
+  it hands over continuously to one-sided as a neighbour decays). All four
+  constants are documented `static let`s in one place for a one-line
+  retune, and every applied boost is DebugLog'd (base→boosted + reasoning)
+  so they can later be fitted from correction outcomes.
+  `AppController.adjacencyScores` scores a selection with ONE journal range
+  query (per-slice neighbour lookup filters in memory; selections past 120
+  slices score an even sample, and the hover quotes the aggregated count),
+  memoised per segment-id set so keystroke re-renders cost a cache hit.
+  Stacks aggregate by the MEAN of per-slice boosted certainties — the
+  button answers "how sure are we ALL these slices are this task"; a max
+  would let one strong slice oversell. Drawer wiring: the slice detail's
+  certainty line folds the boost in with its reasoning; the assign-bar task
+  buttons sort by descending boosted certainty (stable — unscored tasks
+  keep the ranked pick-list order), show their percentage, and hover with
+  base source + adjacency ("learned associations + priors 45% · follows X
+  (+18%) → 60%"); ↵-on-filter assigns the same top button the bar shows.
+  Display/ordering ONLY — journalled certainty and auto-push semantics are
+  untouched (follow-up parked in TODO.md). Source-word vocabulary moved to
+  Core (`AttributionExplanation.Source.plainWord`) so the detail line and
+  hovers can never drift. New AdjacencyBoost checks: 60/30 gap-closing,
+  ceiling clamp incl. pin pass-through, decay endpoints + midpoint,
+  two-sided→one-sided continuity, same-task requirement, `.doNotTrack`
+  never boosts, negative-gap safety, mean aggregation + honest slice
+  counts, hover text, stable button ordering. Manuals (root MANUAL.md +
+  site auto-tracking page) gained the likelihood-sorted-buttons paragraph.
+
 - [x] **Review drawer: dated rows, full per-slice detail with tracked
   neighbours, per-slice assign, ⌫ = Do not track.** Martin's 2026-07-10
   critique (UI/data slices). Every stack row and expanded slice carries its

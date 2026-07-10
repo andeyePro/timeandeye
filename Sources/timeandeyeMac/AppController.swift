@@ -2153,6 +2153,104 @@ public final class AppController: ObservableObject {
         return SliceNeighbours.around(start: segment.start, end: segment.end, in: sessions)
     }
 
+    /// Memo for `adjacencyScores` — keyed by the segment-id set so the
+    /// assign bar's keystroke re-renders never re-query the journal or
+    /// re-run the ranker. Cleared whenever the review queue reloads.
+    private var adjacencyScoreCache: (key: String, scores: [TaskRef: (certainty: Double, hover: String)])?
+
+    /// A very large multi-stack selection scores an even SAMPLE of its
+    /// slices rather than beachballing the main thread (`explain` runs the
+    /// full ranker per slice); the hover's "mean of N slices" quotes the
+    /// sampled N, so the number shown is always the number aggregated.
+    private static let adjacencyScoreSliceCap = 120
+
+    /// The assign bar's guidance for a slice set (Martin, 2026-07-10):
+    /// per-candidate ADJACENCY-BOOSTED certainty plus the full reasoning
+    /// build for the button's hover. Candidates are every task the ranker
+    /// scored for any slice plus each journal neighbour's task — a
+    /// neighbour the ranker never ranked still deserves a button near the
+    /// top, from base 0 + the adjacency boost alone.
+    ///
+    /// DISPLAY/ORDERING only: journalled certainty and the push path never
+    /// see these numbers (see `AdjacencyBoost`). ONE journal range query
+    /// spans every slice; the per-slice neighbour lookup then filters in
+    /// memory, so a big selection costs one query, not one per slice.
+    public func adjacencyScores(for segments: [ReviewSegment])
+        -> [TaskRef: (certainty: Double, hover: String)] {
+        guard !segments.isEmpty else { return [:] }
+        let key = segments.map { $0.id.uuidString }.sorted().joined(separator: ",")
+        if let cached = adjacencyScoreCache, cached.key == key { return cached.scores }
+
+        let sampled: [ReviewSegment]
+        if segments.count > Self.adjacencyScoreSliceCap {
+            let step = Double(segments.count) / Double(Self.adjacencyScoreSliceCap)
+            sampled = (0..<Self.adjacencyScoreSliceCap).map { segments[Int(Double($0) * step)] }
+        } else {
+            sampled = segments
+        }
+
+        let window: TimeInterval = 30 * 24 * 3600
+        let from = sampled.map(\.start).min()!.addingTimeInterval(-window)
+        let to = sampled.map(\.end).max()!.addingTimeInterval(window)
+        let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+
+        // Each slice's CURRENT read (scored at its own moment, like the
+        // detail line and the retro pass) plus its journal neighbours.
+        let reads = sampled.map { seg in
+            (explanation: explain(seg.signal, now: seg.start),
+             neighbours: SliceNeighbours.around(start: seg.start, end: seg.end, in: sessions))
+        }
+        var candidates = Set<TaskRef>()
+        // The chosen task's source word (first slice that chose it) — every
+        // other candidate is a ranked alternative by definition.
+        var sourceWords: [TaskRef: String] = [:]
+        for read in reads {
+            if case .task(let ref)? = read.explanation.chosen {
+                candidates.insert(ref)
+                if sourceWords[ref] == nil { sourceWords[ref] = read.explanation.source.plainWord }
+            }
+            for line in read.explanation.lines {
+                if case .task(let ref) = line.target { candidates.insert(ref) }
+            }
+            if let before = read.neighbours.before { candidates.insert(before.task) }
+            if let after = read.neighbours.after { candidates.insert(after.task) }
+        }
+
+        var scores: [TaskRef: (certainty: Double, hover: String)] = [:]
+        for ref in candidates {
+            let displayName = name(of: .task(ref))
+            let perSlice = reads.map { read -> AdjacencyBoost in
+                let base: Double
+                if case .task(let chosen)? = read.explanation.chosen, chosen == ref {
+                    base = read.explanation.chosenScore
+                } else {
+                    base = read.explanation.lines.first { $0.target == .task(ref) }?.score ?? 0
+                }
+                return AdjacencyBoost.apply(base: base, candidate: .task(ref),
+                                            name: displayName, neighbours: read.neighbours)
+            }
+            let agg = AdjacencyBoost.aggregate(perSlice)
+            let source = sourceWords[ref] ?? AttributionExplanation.Source.ranked.plainWord
+            scores[ref] = (agg.certainty,
+                           AdjacencyBoost.hoverText(sourceWord: source, agg,
+                                                    sliceCount: sampled.count))
+            // Logged so the AdjacencyBoost constants can later be FITTED
+            // from correction outcomes: pair this line with the assign that
+            // follows to see whether the boost pointed at what the user
+            // actually picked. Memoised above, so one line per selection,
+            // not per keystroke.
+            if agg.boost > 0 {
+                DebugLog.write("adjacency: \(displayName) "
+                               + "\(Int((agg.base * 100).rounded()))%"
+                               + "→\(Int((agg.certainty * 100).rounded()))% "
+                               + "(\(agg.reasoning ?? ""))")
+            }
+        }
+        adjacencyScoreCache = (key, scores)
+        return scores
+    }
+
     private func reloadReview() {
         // Review-queue admission floor (Martin: "extremely little value in
         // having a user spend time categorising a <1m slice"): filtered HERE,
@@ -2167,6 +2265,9 @@ public final class AppController: ObservableObject {
         pendingReview = ((try? journal.pendingReview()) ?? [])
             .meetingReviewFloor(settings.reviewFloorSeconds)
         retroDigest = (try? journal.retroDigests(limit: 200)) ?? []
+        // Assigns and journal writes change both the slice set and its
+        // neighbours — a stale adjacency memo would show yesterday's boosts.
+        adjacencyScoreCache = nil
         updateJournalSummary()
     }
 

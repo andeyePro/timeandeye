@@ -129,6 +129,26 @@ public struct AttributionExplanation: Equatable, Sendable {
     }
 }
 
+public extension AttributionExplanation.Source {
+    /// A plain word for where a certainty comes from — the review drawer's
+    /// shared vocabulary (compressed `EvidenceCardView.becauseLabel`), used
+    /// by the slice detail line and the assign buttons' hover build alike
+    /// so the two can never drift apart.
+    var plainWord: String {
+        switch self {
+        case .pin: return "pinned"
+        case .sessionSticky: return "categorised earlier that day"
+        case .opTaskURL, .opTaskTitle: return "OP page"
+        case .emailRule: return "learned rule"
+        case .siteRule: return "learned site rule"
+        case .pendingPrime: return "just-opened OP task"
+        case .primedSurface: return "past correction"
+        case .ranked: return "learned associations + priors"
+        case .none: return "nothing matched"
+        }
+    }
+}
+
 /// Turns one ActivitySignal into a ranked list of targets.
 /// Source strength order (spec): OP task URL > primed surface > pending prime
 /// > learned associations + priors.

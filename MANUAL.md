@@ -158,6 +158,13 @@ weren't back-to-back). The **assign** button beside a visit scopes the
 assign bar to just that one, so one visit in a stack can go to a different
 task than its siblings.
 
+The assign bar's task buttons are sorted by how likely each task is for the
+selected time, most likely first, and a button that has a likelihood shows
+it as a percentage - hover to see how the number was built. Time tracked to
+the same task immediately before and after a visit raises that task's
+likelihood: strongly when both sides match, less when only one does, fading
+out as the gap to the neighbour grows.
+
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of "Do not track" or a guess -
 the time stays tracked with full detail, just off your review queue. It shows

@@ -9,6 +9,13 @@
   kept, ⌘Z restores; journalled sessions/timeline untouched) AND teaches a
   learned lean toward "not work" for that surface, so future visits tend to
   stop the clock. Both readings are half-true; the label waits on his call.
+- [ ] Adjacency boost beyond the drawer: `AdjacencyBoost` (2026-07-10) is
+  deliberately DISPLAY/ORDERING only — journalled certainty, the retro
+  pass and auto-push never see it. Feeding it into posting semantics would
+  change what auto-pushes without review, so it needs its own decision (and
+  probably the constant-fitting pass first: every applied boost is already
+  DebugLog'd so the 60%/30%/decay constants can be fitted from correction
+  outcomes).
 
 ## Undo — remaining non-undoables (audit, 2026-07-09)
 

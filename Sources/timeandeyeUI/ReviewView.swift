@@ -215,7 +215,7 @@ struct ReviewView: View {
             } else if let subject = segment.emailSubject {
                 Text("✉ \(subject)")
             }
-            Text(certaintyLine(explanation))
+            Text(certaintyLine(explanation, neighbours: neighbours))
             Text("before: \(neighbourText(neighbours.before, before: true))")
             Text("after: \(neighbourText(neighbours.after, before: false))")
         }
@@ -230,30 +230,24 @@ struct ReviewView: View {
         return parts.joined(separator: " · ")
     }
 
-    /// "certainty: <task> 62% (learned)" — the attributor's read of this
-    /// slice as it stands NOW, scored at the slice's own moment (so the
-    /// time-of-day prior matches what actually happened, like the retro
-    /// pass and `explainSpan`).
-    private func certaintyLine(_ e: AttributionExplanation) -> String {
+    /// "certainty: <task> 63% (learned associations + priors 45% · follows
+    /// X (+18%))" — the attributor's read of this slice as it stands NOW,
+    /// scored at the slice's own moment (so the time-of-day prior matches
+    /// what actually happened, like the retro pass and `explainSpan`), with
+    /// the adjacency boost folded in. Display only — the journal's own
+    /// certainty is untouched (see `AdjacencyBoost`).
+    private func certaintyLine(_ e: AttributionExplanation,
+                               neighbours: SliceNeighbours) -> String {
         guard let chosen = e.chosen else { return "certainty: nothing matched yet" }
-        let pct = Int((e.chosenScore * 100).rounded())
-        return "certainty: \(controller.name(of: chosen)) \(pct)% (\(sourceWord(e.source)))"
-    }
-
-    /// A plain word for where the certainty comes from — compressed
-    /// `EvidenceCardView.becauseLabel` vocabulary.
-    private func sourceWord(_ source: AttributionExplanation.Source) -> String {
-        switch source {
-        case .pin: return "pinned"
-        case .sessionSticky: return "categorised earlier that day"
-        case .opTaskURL, .opTaskTitle: return "OP page"
-        case .emailRule: return "learned rule"
-        case .siteRule: return "learned site rule"
-        case .pendingPrime: return "just-opened OP task"
-        case .primedSurface: return "past correction"
-        case .ranked: return "learned associations + priors"
-        case .none: return "nothing matched"
+        let boost = AdjacencyBoost.apply(base: e.chosenScore, candidate: chosen,
+                                         name: controller.name(of: chosen),
+                                         neighbours: neighbours)
+        let pct = Int((boost.certainty * 100).rounded())
+        var why = e.source.plainWord
+        if let adjacency = boost.reasoning {
+            why += " \(Int((boost.base * 100).rounded()))% · \(adjacency)"
         }
+        return "certainty: \(controller.name(of: chosen)) \(pct)% (\(why))"
     }
 
     /// "<task> until Today 14:20 · …12m gap" / "<task> from Yesterday 9:02"
@@ -335,14 +329,21 @@ struct ReviewView: View {
     }
 
     private var assignBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Boosted certainties for the scoped slices (memoised in the
+        // controller, so the per-keystroke re-render costs a cache hit).
+        // Buttons sort by descending certainty, carry their percentage, and
+        // hover with the full build (Martin, 2026-07-10: "sorted by
+        // decreasing certainty, the certainty should be included in the
+        // button, and hovering … should give the reasoning").
+        let scores = controller.adjacencyScores(for: scopedSegments)
+        return VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(sliceAssign != nil ? "Assign slice:" : "Assign \(selection.count):").font(.caption)
                 TextField("type to filter tasks", text: $filter)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                     .frame(width: 180)
-                    .onSubmit { if let t = filteredTasks().first { assign(.task(t.ref)) } }
+                    .onSubmit { if let t = orderedTasks(by: scores).first { assign(.task(t.ref)) } }
                     .help("Filter tasks; ↵ assigns the selection to the top result")
                 Button("Do not track") { assign(.doNotTrack) }
                     .keyboardShortcut("d", modifiers: .command)
@@ -352,7 +353,7 @@ struct ReviewView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(filteredTasks(), id: \.ref) { task in
+                    ForEach(orderedTasks(by: scores), id: \.ref) { task in
                         Button {
                             assign(.task(task.ref))
                         } label: {
@@ -361,8 +362,14 @@ struct ReviewView: View {
                                     Image(systemName: "house").font(.system(size: 8))
                                 }
                                 Text(task.subject)
+                                if let score = scores[task.ref] {
+                                    Text("\(Int((score.certainty * 100).rounded()))%")
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
+                        .help(scores[task.ref]?.hover
+                              ?? "no signal for this selection yet – assigning teaches from it")
                     }
                 }
             }
@@ -388,6 +395,24 @@ struct ReviewView: View {
 
     private func filteredTasks() -> [WorkTask] {
         controller.searchTasks(filter)
+    }
+
+    /// The slices the assign bar is currently about: the one picked slice,
+    /// or every slice of every selected stack — the same scope `assign`
+    /// commits, so the certainties describe exactly what a click would do.
+    private var scopedSegments: [ReviewSegment] {
+        if let id = sliceAssign { return stacks.flatMap(\.segments).filter { $0.id == id } }
+        return selectedStacks.flatMap(\.segments)
+    }
+
+    /// The assign buttons in descending boosted-certainty order; tasks the
+    /// scorer has nothing on keep the familiar ranked pick-list order
+    /// behind the scored ones (`buttonOrder` is a stable sort).
+    private func orderedTasks(by scores: [TaskRef: (certainty: Double, hover: String)]) -> [WorkTask] {
+        let tasks = filteredTasks()
+        let order = AdjacencyBoost.buttonOrder(
+            certainties: tasks.map { scores[$0.ref]?.certainty ?? 0 })
+        return order.map { tasks[$0] }
     }
 
     private var aiSection: some View {
