@@ -83,9 +83,15 @@ public enum EmailSignalProbe {
     /// `EmailCaptureEngine`'s deadline-bounded `osascript` subprocess instead
     /// of the main-thread-bound `NSAppleScript` this probe used until
     /// 2026-07-03 — the diagnostics button shares the same safe engine as
-    /// live capture. Callers on the main thread must still hop to a
-    /// background queue first (this blocks up to the engine's deadline).
-    public static func buildReport() -> String {
+    /// live capture. `ownAddresses`/`ownDomains` are the user's Settings ▸
+    /// Email sets: live capture filters through them, so the probe must too —
+    /// with them empty, a self-only thread would print "healthy (1
+    /// counterparty)" naming the user's own address, the opposite of what
+    /// the same read does in production. Callers on the main thread must
+    /// still hop to a background queue first (this blocks up to the engine's
+    /// deadline).
+    public static func buildReport(ownAddresses: Set<String> = [],
+                                   ownDomains: Set<String> = []) -> String {
         guard AXIsProcessTrusted() else {
             return "Accessibility permission not granted — System Settings ▸ Privacy ▸ Accessibility."
         }
@@ -114,19 +120,29 @@ public enum EmailSignalProbe {
                 }
                 out += "Sender: \(fmt(p.senders))\n"
                 out += "Recipients: \(fmt(p.recipients))\n"
-                let others = EmailSignal.counterparties(senders: p.senders, recipients: p.recipients)
+                if p.unparseable > 0 {
+                    out += "Matched but unparseable nodes: \(p.unparseable)\n"
+                }
+                let others = EmailSignal.counterparties(senders: p.senders,
+                                                        recipients: p.recipients,
+                                                        ownAddresses: ownAddresses,
+                                                        ownDomains: ownDomains)
                 out += "Counterparties (you removed): \(fmt(others))\n"
                 let domains = Set(others.compactMap { EmailSignal.domain(of: $0.email) })
                     .sorted().joined(separator: ", ")
                 out += "Counterparty domains: \(domains.isEmpty ? "(none)" : domains)\n"
-                // The same verdict live capture would reach on this read
-                // (own-address sets aren't threaded into the probe, matching
-                // the counterparty lines above) — shows a redesign symptom
-                // by name before anyone digs through selectors.
+                // The same verdict live capture would reach on this read —
+                // own-address sets threaded in above — shows a redesign
+                // symptom by name before anyone digs through selectors.
                 switch EmailRecipeValidation.validate(senders: p.senders,
-                                                      recipients: p.recipients) {
+                                                      recipients: p.recipients,
+                                                      ownAddresses: ownAddresses,
+                                                      ownDomains: ownDomains,
+                                                      unparseable: p.unparseable) {
                 case .healthy(let ps):
                     out += "Validate-on-use: healthy (\(ps.count) counterpart\(ps.count == 1 ? "y" : "ies"))"
+                case .flooded(let ps):
+                    out += "Validate-on-use: flooded (enriching sender + first \(ps.count); no health strike)"
                 case .selfOnly:
                     out += "Validate-on-use: self-only (recipe fine, no external party)"
                 case .suspect(let fault):

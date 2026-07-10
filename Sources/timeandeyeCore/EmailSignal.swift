@@ -69,26 +69,41 @@ public enum EmailSignal {
         return d.isEmpty ? nil : String(d).lowercased()
     }
 
-    private static let addressPattern = #"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#
+    /// Pragmatic unicode-aware address shape (not full RFC 5321/6531): the
+    /// local part and domain labels accept any letter or digit (`\p{L}\p{N}`),
+    /// so EAI addresses (`杨@example.com`) and IDN domains (`user@bücher.de`)
+    /// pass, and the final label must start with a letter and run ≥2 chars —
+    /// which also admits punycode TLDs (`xn--p1ai`). The capture JS mirrors
+    /// this shape (see `EmailCaptureEngine.jsScript`'s embedding-constrained
+    /// spelling).
+    private static let addressPattern =
+        #"[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}.\-]+\.[\p{L}][\p{L}\p{N}\-]+"#
+    /// Compiled ONCE: `isAddress`/`addresses(in:)` sit on the capture hot
+    /// path (every party of every read), and NSRegularExpression compilation
+    /// is the expensive half. The pattern is a literal, so force-try cannot
+    /// actually throw (the checks suite exercises both immediately).
+    // swiftlint:disable force_try
+    private static let addressRegex = try! NSRegularExpression(pattern: addressPattern)
+    private static let exactAddressRegex =
+        try! NSRegularExpression(pattern: "^(?:\(addressPattern))$")
+    // swiftlint:enable force_try
 
     /// Whether `s` is exactly one well-formed address and nothing else — the
     /// shape test validate-on-use applies to each captured party (a redesigned
     /// selector often yields opaque tokens or display names where addresses
     /// used to be).
     public static func isAddress(_ s: String) -> Bool {
-        guard let re = try? NSRegularExpression(pattern: "^\(addressPattern)$") else { return false }
         let range = NSRange(location: 0, length: (s as NSString).length)
-        return re.firstMatch(in: s, range: range) != nil
+        return exactAddressRegex.firstMatch(in: s, range: range) != nil
     }
 
     /// Every distinct email address in `text`, in first-seen order
     /// (case-insensitively de-duplicated).
     public static func addresses(in text: String) -> [String] {
-        guard let re = try? NSRegularExpression(pattern: addressPattern) else { return [] }
         let ns = text as NSString
         var seen = Set<String>()
         var out: [String] = []
-        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+        for m in addressRegex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             let s = ns.substring(with: m.range)
             if seen.insert(s.lowercased()).inserted { out.append(s) }
         }

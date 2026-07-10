@@ -116,6 +116,18 @@ func emailCaptureChecks(_ c: Checks) {
         try expectEq(EmailSystem.outlookWeb.isMessageView(urlString: nil), false)
     }
 
+    c.check("isMessageView: OWA id params outside /mail/ never classify as messages") {
+        // Calendar, settings and deeplink surfaces on the outlook hosts carry
+        // id-shaped params too — an open message needs the /mail/ route
+        // segment ALONGSIDE the id, or every calendar deeplink would feed
+        // noParties strikes into the mail recipe's health.
+        for url in ["https://outlook.office.com/calendar/deeplink/compose?itemid=AAQkADAwATM3ZmYAZS05NmQ4LWI4ZjMtMDACLTAw",
+                    "https://outlook.office.com/calendar/item/AAQkADAwATM3ZmYAZS05NmQ4LWI4ZjMtMDACLTAwCgAQAJk3",
+                    "https://outlook.office.com/options/general?id=AAQkADAwATM3ZmYAZS05NmQ4"] {
+            try expectEq(EmailSystem.outlookWeb.isMessageView(urlString: url), false, url)
+        }
+    }
+
     c.check("isMessageView: a Proton custom folder whose LABEL is a long id is still a list") {
         // Custom folders route as /u/<n>/<labelId> — one segment after the
         // account index, however id-like it looks. Only a SECOND long
@@ -255,6 +267,38 @@ func emailRecipeHealthChecks(_ c: Checks) {
             .suspect(.garbage))
     }
 
+    // The capture JS pre-filters value-less nodes, so a redesign that swaps
+    // attributes to opaque tokens reaches Swift as EMPTY party lists — only
+    // the JS's matched-but-unparseable count can tell that apart from
+    // selectors matching nothing. Without it, garbage would misreport as
+    // noParties and misdirect diagnosis (and the future re-learn loop).
+    c.check("empty parties WITH unparseable matches -> garbage, not noParties") {
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [], recipients: [], unparseable: 3),
+            .suspect(.garbage))
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [], recipients: [], unparseable: 0),
+            .suspect(.noParties))
+    }
+
+    // EAI local parts and IDN domains are real addresses — an ASCII-only
+    // shape test silently dropped them (and misclassified such reads).
+    c.check("unicode addresses pass the shape test; opaque tokens still fail") {
+        for good in ["杨@example.com", "user@bücher.de", "béatrice@exemple.fr",
+                     "info@пример.рф", "user@example.xn--p1ai",
+                     "a.b+tag@sub.example.co.uk"] {
+            try expect(EmailSignal.isAddress(good), good)
+        }
+        for bad in ["1kX9fzQ", "Rae Naismith", "user@", "@example.com",
+                    "user@nodot", "a b@example.com", "user@example.c"] {
+            try expect(!EmailSignal.isAddress(bad), bad)
+        }
+        // And the verdict pipeline enriches with them, not around them.
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [party("杨", "杨@例子.中国")], recipients: []),
+            .healthy([party("杨", "杨@例子.中国")]))
+    }
+
     // Gmail decorates some chips with opaque hovercard ids while the header
     // chip stays sound — a PARTIAL redesign must not discard the good read.
     c.check("one sound address among garbage chips is still healthy") {
@@ -264,13 +308,26 @@ func emailRecipeHealthChecks(_ c: Checks) {
             .healthy([party("Rae", "rae@harborlane.example")]))
     }
 
-    // A selector that has started matching the LIST surface scrapes one
-    // address per inbox row — far beyond any single message's header. A big
-    // (but plausible) CC list must stay healthy, though.
-    c.check("an implausible flood of counterparties -> suspect(partyFlood); a big CC list is fine") {
-        let flood = (0..<20).map { party("P\($0)", "p\($0)@example.com") }
-        try expectEq(EmailRecipeValidation.validate(senders: flood, recipients: []),
-                     .suspect(.partyFlood))
+    // Implausibly many counterparties can be a selector scraping the LIST
+    // surface — but just as well a legitimate reply-all storm, and either
+    // way the selectors demonstrably resolved addresses. So a flood enriches
+    // with the sender + leading recipients (capped) and NEVER strikes recipe
+    // health; a big (but plausible) CC list stays plain healthy.
+    c.check("a flood of counterparties -> flooded: capped enrichment, sender kept, NO health strike") {
+        let sender = party("S", "sender@example.com")
+        let storm = (0..<20).map { party("P\($0)", "p\($0)@example.com") }
+        let v = EmailRecipeValidation.validate(senders: [sender], recipients: storm)
+        // counterparties() lists senders first, so the cap keeps the sender
+        // (the strong signal) and truncates the recipient tail.
+        try expectEq(v, .flooded([sender] + storm.prefix(
+            EmailRecipeValidation.maxPlausibleCounterparties - 1)))
+        // Health: a flood neither strikes (the selectors plainly work — it
+        // must never drive a re-learn) nor resets an existing streak (its
+        // untrusted tail is not proof of a sound recipe).
+        var h = EmailRecipeHealth().recording(.suspect(.noParties))
+        h = h.recording(v)
+        try expectEq(h.consecutiveFailures, 1, "flooded must leave the streak untouched")
+        try expectEq(h.lastFault, .noParties)
         let cc = (0..<EmailRecipeValidation.maxPlausibleCounterparties)
             .map { party("P\($0)", "p\($0)@example.com") }
         try expectEq(EmailRecipeValidation.validate(

@@ -192,7 +192,13 @@ public enum EmailSystem: String, CaseIterable, Sendable {
             // the item in an `itemid`/`id` query instead (evidence:
             // fordz0/DTNP-Extension getOutlookMessageId, 2026-07-10). Item
             // ids are long base64 — 16 chars screens out short route words.
-            guard let comps = Self.pathComponents(urlString) else { return false }
+            // The `/mail/` segment is required alongside the id: calendar/
+            // settings/deeplink surfaces on the same hosts carry id-shaped
+            // params too (`/calendar/deeplink/compose?itemid=…`), and they
+            // must not classify as open messages (fail closed, as everywhere
+            // in this classifier — the cost is a missed enrichment).
+            guard let comps = Self.pathComponents(urlString),
+                  comps.contains("mail") else { return false }
             if let i = comps.firstIndex(of: "id"), i + 1 < comps.count,
                comps[i + 1].count >= 16 { return true }
             guard let s = urlString, let q = URLComponents(string: s)?.queryItems else { return false }

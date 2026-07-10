@@ -18,16 +18,27 @@ public enum EmailRecipeValidation {
         case noParties
         /// Selectors matched nodes but none carried an address-shaped value —
         /// e.g. the email attribute becoming an opaque token after a redesign.
+        /// Reachable two ways: parties whose captured value fails the address
+        /// shape, and (because the capture JS pre-filters value-less nodes)
+        /// the JS-reported count of MATCHED-but-unparseable nodes — without
+        /// that count, an attribute redesign would misreport as `noParties`
+        /// and send the future re-learn loop hunting for missing selectors
+        /// instead of a moved attribute.
         case garbage
-        /// Implausibly many counterparties for one open message — a selector
-        /// that has started matching the LIST surface scrapes an address per
-        /// inbox row instead of one header.
-        case partyFlood
     }
 
     public enum Verdict: Equatable, Sendable {
         /// The read is trustworthy; enrich the signal with these counterparties.
         case healthy([EmailSignal.Party])
+        /// Implausibly many counterparties for one message header. That can
+        /// be a selector regressed to scraping the LIST surface — but it is
+        /// just as plausibly a legitimate reply-all storm, and either way the
+        /// selectors demonstrably resolved address-shaped parties, so this is
+        /// NOT a recipe-health strike. Enrichment keeps the senders plus the
+        /// leading recipients up to `maxPlausibleCounterparties` (the
+        /// associated list, already capped): the sender is the strong signal
+        /// and survives; a list-scrape's per-row tail cannot flood learning.
+        case flooded([EmailSignal.Party])
         /// The recipe resolved fine but every party is the user (note-to-self,
         /// own-domain-only thread). Nothing to enrich — and explicitly NOT a
         /// recipe failure: absence of a counterparty is not a broken selector,
@@ -40,18 +51,25 @@ public enum EmailRecipeValidation {
     }
 
     /// One sender plus a CC list; even a large meeting thread rarely exceeds
-    /// this. Beyond it the read looks like a list scrape, not a header.
+    /// this. Beyond it the read is `flooded`: enrichment is capped here, but
+    /// (unlike the suspect faults) health is untouched — see `Verdict.flooded`.
     public static let maxPlausibleCounterparties = 12
 
     /// Judge one recipe read. `senders`/`recipients` are the RAW parties the
     /// selectors yielded (pre self-filtering) — the raw set is what tells a
     /// broken recipe (nothing/junk matched) apart from a healthy read whose
-    /// parties all happened to be the user.
+    /// parties all happened to be the user. `unparseable` is the capture JS's
+    /// count of selector-MATCHED nodes that yielded no address-shaped value
+    /// (the JS drops them from the party lists, so only this count can tell
+    /// an attribute redesign apart from selectors matching nothing at all).
     public static func validate(senders: [EmailSignal.Party],
                                 recipients: [EmailSignal.Party],
                                 ownAddresses: Set<String> = [],
-                                ownDomains: Set<String> = []) -> Verdict {
-        guard !(senders.isEmpty && recipients.isEmpty) else { return .suspect(.noParties) }
+                                ownDomains: Set<String> = [],
+                                unparseable: Int = 0) -> Verdict {
+        guard !(senders.isEmpty && recipients.isEmpty) else {
+            return .suspect(unparseable > 0 ? .garbage : .noParties)
+        }
         // Drop garbage per-party, not per-read: Gmail decorates some chips
         // with opaque hovercard ids while the header chip stays sound — a
         // partial redesign must not discard the one good read.
@@ -63,7 +81,11 @@ public enum EmailRecipeValidation {
                                                 ownAddresses: ownAddresses,
                                                 ownDomains: ownDomains)
         guard !others.isEmpty else { return .selfOnly }
-        guard others.count <= maxPlausibleCounterparties else { return .suspect(.partyFlood) }
+        guard others.count <= maxPlausibleCounterparties else {
+            // `counterparties` returns senders first, so the prefix always
+            // keeps the sender(s) and truncates the recipient tail.
+            return .flooded(Array(others.prefix(maxPlausibleCounterparties)))
+        }
         return .healthy(others)
     }
 }
@@ -90,13 +112,19 @@ public struct EmailRecipeHealth: Equatable, Sendable {
     /// Fold one verdict in. `selfOnly` resets the streak just like `healthy`
     /// does — a recipe that cleanly read a self-thread demonstrably works.
     /// Recovery is total (back to 0, fault cleared): transient wobbles must
-    /// never accumulate across healthy reads into a false unhealthy.
+    /// never accumulate across healthy reads into a false unhealthy. A
+    /// `flooded` read leaves the streak UNTOUCHED, deliberately in the
+    /// middle: its parties parsed, so it must never strike toward a re-learn
+    /// of selectors that plainly resolve — but its untrusted tail isn't
+    /// proof of a sound recipe either, so it doesn't erase strikes.
     public func recording(_ verdict: EmailRecipeValidation.Verdict) -> EmailRecipeHealth {
         var next = self
         switch verdict {
         case .healthy, .selfOnly:
             next.consecutiveFailures = 0
             next.lastFault = nil
+        case .flooded:
+            break
         case .suspect(let fault):
             next.consecutiveFailures += 1
             next.lastFault = fault

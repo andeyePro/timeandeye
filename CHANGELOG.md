@@ -2,6 +2,46 @@
 
 ## 2026-07-10
 
+- [x] **Email capture review findings closed — flood/garbage/unicode
+  verdicts, stale-URL + OWA gates, probe parity, atomic debug log.** Seven
+  findings on the recipe-pack/validate-on-use work below. A reply-all
+  storm past the 12-counterparty cap was branded suspect — dropping
+  enrichment the pre-validation code delivered AND striking recipe health
+  toward a pointless re-learn; a new `flooded` verdict now enriches with
+  the sender + leading recipients (capped at 12) and leaves the health
+  streak untouched (its parties parsed, so it must never strike; its
+  untrusted tail is no proof of soundness, so it doesn't reset either).
+  EAI/unicode addresses (`杨@example.com`, IDN domains) failed the
+  ASCII-only shape test and such reads misclassified as noParties: the
+  Swift pattern is now pragmatic-unicode (`\p{L}\p{N}` local part and
+  labels, letter-led final label that still admits punycode), hoisted into
+  static compiled regexes (they compiled per call on the capture hot
+  path), and the capture JS mirrors the shape with negated character
+  classes since backslashes/quotes can't travel the AppleScript embedding
+  — Swift's `isAddress` stays the strict gate. The JS's `if(em)`
+  pre-filter had made the `garbage` verdict unreachable from live paths
+  (an attribute redesign — addresses swapped for opaque tokens — reported
+  as noParties, misleading diagnosis and the future re-learn loop): the JS
+  now reports the count of matched-but-unparseable nodes as a third
+  record-separated field, and validation turns empty-parties-with-count
+  into `garbage`. `fullCapture` re-gates `isMessageView` on the
+  freshly-read URL — the user can navigate message → inbox between
+  poll-time gating and the capture running, and a navigated-away read is
+  now an error-path no-op, never a health event. The OWA message-view gate
+  accepted any ≥16-char id/itemid param anywhere on the outlook hosts, so
+  calendar/settings/deeplink tabs classified as open messages and fed
+  noParties strikes; it now requires the /mail/ route segment alongside
+  the id. The diagnostics probe validated with EMPTY own-address sets
+  while live capture threads the user's — a self-only thread printed
+  "healthy (1 counterparty)" naming the user's own address; the Settings
+  sets now travel into `buildReport`, so probe and live verdicts agree.
+  And `DebugLog.write`'s unsynchronised seek-then-write pair — hit from
+  the capture queue (`onRecipeUnhealthy`) and the main thread
+  simultaneously, interleaving lines in the exact artifact pasted for
+  diagnosis — is now a single O_APPEND `write(2)`: atomic per line,
+  lock-free, still signal-handler-tolerant for the crash paths. Suite
+  706/0; release timeandeyeApp builds.
+
 - [x] **Colour anchor repair made deterministic, gated and universal — it
   now runs at every colour read, not just the pie.** Closes six review
   findings on the same-day repair below (whose over-claim is corrected in

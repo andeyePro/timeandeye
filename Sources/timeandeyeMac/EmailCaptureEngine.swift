@@ -24,6 +24,11 @@ public final class EmailCaptureEngine {
         public let system: EmailSystem
         public let senders: [EmailSignal.Party]
         public let recipients: [EmailSignal.Party]
+        /// Selector-MATCHED nodes whose value ladder produced nothing
+        /// address-shaped (counted by the capture JS, which drops them from
+        /// the party lines) — what lets validation call an attribute
+        /// redesign `garbage` instead of misreporting it as `noParties`.
+        public let unparseable: Int
         public let error: String?
     }
 
@@ -105,7 +110,8 @@ public final class EmailCaptureEngine {
                full.error == nil {
                 let verdict = EmailRecipeValidation.validate(
                     senders: full.senders, recipients: full.recipients,
-                    ownAddresses: own, ownDomains: ownD)
+                    ownAddresses: own, ownDomains: ownD,
+                    unparseable: full.unparseable)
                 result = self.apply(verdict, to: full.system)
             }
             self.gate.sync { self.inFlight = false }
@@ -129,7 +135,9 @@ public final class EmailCaptureEngine {
         }
         if crossed { onRecipeUnhealthy?(system, record) }
         switch verdict {
-        case .healthy(let counterparties):
+        case .healthy(let counterparties), .flooded(let counterparties):
+            // A flooded read enriches with the pre-capped list (sender +
+            // leading recipients) — validation already truncated it.
             return Capture(system: system, correspondents: counterparties.map(\.email))
         case .selfOnly:
             return Capture(system: system, correspondents: [])
@@ -152,19 +160,29 @@ public final class EmailCaptureEngine {
             // Surface osascript's own words: "-1743 Not authorized to send
             // Apple events" names a missing Automation grant instantly,
             // where a bare "couldn't read" hid it (2026-07-03 diagnosis).
-            return FullCapture(system: .unknown, senders: [], recipients: [],
+            return FullCapture(system: .unknown, senders: [], recipients: [], unparseable: 0,
                                error: "Couldn't read the active tab URL."
                                    + (urlRead.failure.map { " [\($0)]" } ?? ""))
         }
         let system = EmailSystem.detect(urlHost: host)
         guard let sSel = system.senderSelector, let rSel = system.recipientSelector else {
-            return FullCapture(system: system, senders: [], recipients: [],
+            return FullCapture(system: system, senders: [], recipients: [], unparseable: 0,
                                error: "No recipe for this system yet (host: \(host)).")
+        }
+        // Re-gate on the URL just read: `captureTarget` classified the tab at
+        // POLL time, and the user may have navigated (message → inbox) in the
+        // window before this capture ran. On a list/settings surface the DOM
+        // still holds the last-open conversation, so a read here would score
+        // stale parties into recipe health. An error (never a verdict) keeps
+        // the navigated-away read a no-op.
+        guard system.isMessageView(urlString: urlStr) else {
+            return FullCapture(system: system, senders: [], recipients: [], unparseable: 0,
+                               error: "Tab is not on an open message (navigated away?).")
         }
         let jsRead = runOsascript(jsScript(appName: appName, sender: sSel, recipient: rSel),
                                   deadline: deadline)
         guard let raw = jsRead.out else {
-            return FullCapture(system: system, senders: [], recipients: [],
+            return FullCapture(system: system, senders: [], recipients: [], unparseable: 0,
                                error: "JavaScript execution failed or timed out."
                                    + (jsRead.failure.map { " [\($0)]" } ?? "")
                                    + " (If JS is off: Chrome ▸ View ▸ Developer ▸ "
@@ -174,6 +192,9 @@ public final class EmailCaptureEngine {
         return FullCapture(system: system,
                            senders: parseParties(parts.first ?? ""),
                            recipients: parseParties(parts.count > 1 ? parts[1] : ""),
+                           unparseable: parts.count > 2
+                               ? Int(parts[2].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+                               : 0,
                            error: nil)
     }
 
@@ -182,31 +203,42 @@ public final class EmailCaptureEngine {
     }
 
     /// Read-only JS that dumps `name<TAB>email` lines for the sender selector
-    /// and the recipient selector, separated by a record-separator char.
-    /// Single quotes + fromCharCode → nothing to escape through AppleScript —
-    /// the same constraint the selectors themselves live under (see
-    /// `EmailSystem`'s embedding note). The address is read through a
+    /// and the recipient selector, then the count of matched-but-unparseable
+    /// nodes, the three fields separated by a record-separator char (the
+    /// count is what keeps `EmailRecipeValidation`'s `garbage` fault
+    /// reachable — the per-node `if(em)` filter below would otherwise make
+    /// an attribute redesign indistinguishable from selectors matching
+    /// nothing). Single quotes + fromCharCode → nothing to escape through
+    /// AppleScript — the same constraint the selectors themselves live under
+    /// (see `EmailSystem`'s embedding note). The address is read through a
     /// provider-neutral ladder: Gmail carries it in `email`/
     /// `data-hovercard-id` attributes, OWA/Yahoo in `title`/`data-email`,
     /// Proton in `title`, Fastmail (worst case) only as text — each candidate
     /// value is reduced to its first address-shaped token, so a full "Name
     /// <addr>" title still yields a clean address that survives
     /// `EmailSignal.isAddress`. The regex mirrors `EmailSignal.addressPattern`
-    /// written without backslashes or quotes (the embedding again). Names are
-    /// scrubbed of the protocol's own delimiter chars (tab/LF/CR) because
-    /// textContent-derived names, unlike Gmail's `name` attribute, can
+    /// loosely: backslashes and quotes can't travel (the embedding again), so
+    /// unicode-awareness is spelt with NEGATED classes — anything that isn't
+    /// a delimiter can appear in the local part and domain (EAI/IDN
+    /// addresses included), with `EmailSignal.isAddress` as the strict gate
+    /// on the Swift side. Values are whitespace-normalised before matching,
+    /// and names scrubbed of the protocol's own delimiter chars (tab/LF/CR),
+    /// because textContent-derived values, unlike Gmail's attributes, can
     /// contain them.
     private static func jsScript(appName: String, sender: String, recipient: String) -> String {
-        let js = "(function(){var T=String.fromCharCode(9),L=String.fromCharCode(10),C=String.fromCharCode(13);"
-            + "var re=/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z][A-Za-z]+/;"
-            + "function x(v){var m=(v||'').match(re);return m?m[0]:'';}"
+        let js = "(function(){var T=String.fromCharCode(9),L=String.fromCharCode(10),"
+            + "C=String.fromCharCode(13),R=String.fromCharCode(30),d=0;"
+            + "var re=/[^ <>,;:()@/]+@[^ <>,;:()@/]+[.][^ <>,;:()@/.0-9-][^ <>,;:()@/.]+/;"
+            + "function x(v){var m=(v||'')"
+            + ".split(T).join(' ').split(L).join(' ').split(C).join(' ').match(re);"
+            + "return m?m[0]:'';}"
             + "function g(sel){var a=[];document.querySelectorAll(sel).forEach(function(e){"
             + "var em=x(e.getAttribute('email'))||x(e.getAttribute('data-hovercard-id'))"
             + "||x(e.getAttribute('data-email'))||x(e.getAttribute('title'))||x(e.textContent);"
             + "var nm=(e.getAttribute('name')||e.textContent||'')"
             + ".split(T).join(' ').split(L).join(' ').split(C).join(' ').trim();"
-            + "if(em)a.push(nm+T+em);});return a.join(L);}"
-            + "return g('\(sender)')+String.fromCharCode(30)+g('\(recipient)');})()"
+            + "if(em)a.push(nm+T+em);else d++;});return a.join(L);}"
+            + "return g('\(sender)')+R+g('\(recipient)')+R+d;})()"
         return "tell application \"\(appName)\" to execute active tab of front window javascript \"\(js)\""
     }
 

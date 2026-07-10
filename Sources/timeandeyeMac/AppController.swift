@@ -3888,8 +3888,13 @@ public final class AppController: ObservableObject {
     /// so it blocks up to a couple of seconds — run off the main actor via
     /// `Task.detached`; only the clipboard write needs to be back on main.
     public func probeEmailSender() async -> String {
+        // The probe's verdict must be the one LIVE capture would reach, so
+        // the settings' own-address sets travel with it (without them a
+        // self-only thread reports "healthy", naming the user's own address).
+        let own = EmailSignal.ownEntrySets(settings.ownEmailEntries)
         let probe = await Task.detached(priority: .utility) {
-            EmailSignalProbe.buildReport()
+            EmailSignalProbe.buildReport(ownAddresses: own.addresses,
+                                         ownDomains: own.domains)
         }.value
         // Tracker-side ground truth: what the pin editor would see right
         // now. When the browser probe above succeeds but the grain ladder
@@ -4461,15 +4466,24 @@ public enum DebugLog {
         return f
     }()
 
+    /// Concurrency-safe by construction, not by lock: writers arrive from the
+    /// main thread (window ticks) AND background queues (the email-capture
+    /// engine's unhealthy seam, the crash handlers), and a seek-then-write
+    /// pair interleaves under contention — corrupting the very artifact
+    /// pasted for diagnosis. O_APPEND makes the kernel do the seek+write
+    /// atomically per call, one write(2) per line; no dispatch queue, so the
+    /// signal-handler path stays as safe as it ever was (open/write/close
+    /// are async-signal-safe; a queue hop is not). 0644 keeps the file
+    /// world-readable for the scoped SSH user (see the type doc).
     public static func write(_ message: String) {
         let line = "\(formatter.string(from: Date())) \(message)\n"
-        if let handle = FileHandle(forWritingAtPath: path) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            try? handle.close()
-        } else {
-            FileManager.default.createFile(atPath: path, contents: Data(line.utf8))
+        let fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard fd >= 0 else { return }
+        let bytes = Array(line.utf8)
+        bytes.withUnsafeBufferPointer { buf in
+            _ = Darwin.write(fd, buf.baseAddress, buf.count)
         }
+        close(fd)
     }
 }
 
