@@ -75,6 +75,64 @@ public extension Array where Element == ReviewSegment {
     }
 }
 
+/// The drawer's unified click-to-select model (Martin, 2026-07-10: "just
+/// click the individual item to toggle a blue highlight on it, with the
+/// header and left margin doing the same for a whole group"). The selection
+/// IS a set of slice ids — there is no separate "group selected" state: a
+/// stack reads selected exactly when every one of its slices is, so a
+/// selection can freely mix lone slices with whole groups and the assign
+/// bar's certainty aggregates over the SAME per-slice list either way.
+/// Pure set maths so the CLT-only loop can check it; the drawer just
+/// renders membership.
+public enum ReviewSelection {
+    /// Clicking a slice row: toggle its highlight.
+    public static func toggleSlice(_ id: UUID, in selection: Set<UUID>) -> Set<UUID> {
+        var s = selection
+        if s.contains(id) { s.remove(id) } else { s.insert(id) }
+        return s
+    }
+
+    /// A stack is selected when EVERY slice in it is — the header and left
+    /// margin highlight rides on this, never on separate group state.
+    public static func isStackSelected(_ stack: ReviewStack, in selection: Set<UUID>) -> Bool {
+        !stack.segments.isEmpty && stack.segments.allSatisfy { selection.contains($0.id) }
+    }
+
+    /// Clicking a stack's header or left margin: a fully-selected stack
+    /// deselects whole; anything less (none or PART of it selected)
+    /// completes the group — a group click means "all of this", so a
+    /// partial selection is finished, never cleared.
+    public static func toggleStack(_ stack: ReviewStack, in selection: Set<UUID>) -> Set<UUID> {
+        var s = selection
+        if isStackSelected(stack, in: selection) {
+            for segment in stack.segments { s.remove(segment.id) }
+        } else {
+            for segment in stack.segments { s.insert(segment.id) }
+        }
+        return s
+    }
+
+    /// Shift-click sweep (absorbing the old stack-level range select): add
+    /// every slice of the covered stacks to the selection. Additive — a
+    /// sweep extends what's already highlighted, it never clears it.
+    public static func selecting(_ stacks: [ReviewStack], in selection: Set<UUID>) -> Set<UUID> {
+        selection.union(stacks.flatMap(\.segments).map(\.id))
+    }
+
+    /// Drop ids of slices assigned away meanwhile, so counts and certainty
+    /// aggregates recalculate over what actually remains.
+    public static func pruned(_ selection: Set<UUID>, to stacks: [ReviewStack]) -> Set<UUID> {
+        selection.intersection(stacks.everySliceID)
+    }
+
+    /// The selected slices, enumerated per-slice in queue order — what the
+    /// assign bar scopes to and what its certainty means: group-selected
+    /// slices land in the SAME list as individually-clicked ones.
+    public static func segments(of selection: Set<UUID>, in stacks: [ReviewStack]) -> [ReviewSegment] {
+        stacks.flatMap(\.segments).filter { selection.contains($0.id) }
+    }
+}
+
 public extension Array where Element == ReviewStack {
     /// Expand-all target state (Martin, 2026-07-10: "Could we have an
     /// open-all option?"): every stack id, so ONE header control can open

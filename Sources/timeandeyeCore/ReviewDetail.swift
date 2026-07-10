@@ -141,6 +141,50 @@ public struct SliceNeighbours: Equatable, Sendable {
         return SliceNeighbours(before: nearer(session: tracked.before, pending: pendingBefore),
                                after: nearer(session: tracked.after, pending: pendingAfter))
     }
+
+    /// BATCH lookup: both per-slice results (display + adjacency) for many
+    /// slices from ONE preloaded session window, partitioned in memory —
+    /// the expand-all path must never turn into a journal query per slice
+    /// (Martin, 2026-07-10: "intolerably slow"). Callers run a single range
+    /// query spanning every slice and hand the result here; each slice's
+    /// own `around` filters are applied in memory. `pending` may include
+    /// the slices themselves — the edge filters already exclude any
+    /// overlapper, so a slice can never read as its own neighbour.
+    public static func batch(for segments: [ReviewSegment], sessions: [Session],
+                             pending: [ReviewSegment])
+        -> [UUID: (display: SliceNeighbours, adjacency: SliceNeighbours)] {
+        var out: [UUID: (display: SliceNeighbours, adjacency: SliceNeighbours)] = [:]
+        out.reserveCapacity(segments.count)
+        for segment in segments {
+            out[segment.id] = (
+                display: around(start: segment.start, end: segment.end,
+                                in: sessions, pending: pending),
+                adjacency: around(start: segment.start, end: segment.end, in: sessions))
+        }
+        return out
+    }
+}
+
+/// The EXPENSIVE half of a slice's detail disclosure — the ranker's current
+/// read plus both neighbour lookups. The cheap half (timestamps, surface,
+/// email evidence) renders straight off the queue's own `ReviewSegment`;
+/// this half is computed lazily and in batches (see AppController's
+/// `requestSliceDetail`) so opening structure — even Expand all over a big
+/// backlog — costs nothing per row at render time.
+public struct ReviewSliceDetail: Equatable, Sendable {
+    public var explanation: AttributionExplanation
+    /// Nearest neighbour each side for DISPLAY — sessions or other pending
+    /// slices, whichever is nearer.
+    public var display: SliceNeighbours
+    /// Sessions-only neighbours — the only lookup `AdjacencyBoost` may see.
+    public var adjacency: SliceNeighbours
+
+    public init(explanation: AttributionExplanation, display: SliceNeighbours,
+                adjacency: SliceNeighbours) {
+        self.explanation = explanation
+        self.display = display
+        self.adjacency = adjacency
+    }
 }
 
 /// Adjacency-based certainty boost for the review drawer (Martin,

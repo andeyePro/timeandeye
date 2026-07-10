@@ -2,6 +2,36 @@
 
 ## 2026-07-10
 
+- [x] **Review drawer: instant expand-all, and click-to-select replaces
+  the per-slice Assign button.** Martin's live feedback, two calls.
+  (1) *Perf*: Expand all was "intolerably slow" — every open slice
+  disclosure ran its own ±30-day journal range query plus a full ranker
+  `explain`, synchronously, inside EVERY SwiftUI render pass (N open
+  slices = N queries + N explains per keystroke). Opening structure is
+  now free: slice rows render from the queue's own data, and the
+  expensive detail (certainty build + neighbours) is computed lazily per
+  visible disclosure by `AppController.requestSliceDetail` — requests
+  from one render pass coalesce into ONE journal range query spanning
+  the batch, partitioned in memory (`SliceNeighbours.batch`, the
+  `adjacencyScores` shape), with the per-slice explains chunked between
+  main-actor yields; results cache in `sliceDetails` (rows show
+  "assessing…" for the beat until theirs lands) and invalidate by
+  generation on every queue reload. (2) *Selection*: the per-slice
+  **Assign…** button (shipped that morning; rejected — "makes no
+  sense") is gone. Clicking a slice toggles its accent highlight;
+  clicking a stack's header or the strip down its left margin toggles
+  the whole group (`ReviewSelection`, Core-checked: group state IS
+  per-slice membership, a partial group completes rather than clears);
+  shift-clicking a header sweeps every group from the last header
+  clicked (absorbing the 2026-07-09 stack-range sweep — the native
+  List-selection ⌘-click/⇧↑⇧↓ went with the native selection it rode
+  on). A selection freely mixes lone slices and whole groups; the
+  assign bar acts on all of it, its button certainties the
+  `AdjacencyBoost.aggregate` mean over EVERY selected slice; assigning
+  removes exactly those slices, and the remaining groups and scores
+  recalculate. ⌫/⌘D Clear, ⌘Z, ⌘E and the sort control unchanged.
+  Manual (site + root) rewritten to the selection model.
+
 - [x] **Fullscreen fix eleven: the green button makes a Time&I window
   fullscreen again.** The pose flags stripped .fullScreenPrimary
   unconditionally, so the green button could never create the window's

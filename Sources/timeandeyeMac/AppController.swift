@@ -2142,32 +2142,89 @@ public final class AppController: ObservableObject {
         segment.signal
     }
 
-    /// What filled the time immediately before and after a review slice —
-    /// the drawer's per-slice detail disclosure (Martin, 2026-07-10:
-    /// "including what was tracked before and after"). Read-only: a range
-    /// query over the existing journal, no new state. The live-checkpoint
-    /// sentinel is crash-recovery bookkeeping, not history, so it never
-    /// appears as a neighbour.
-    ///
-    /// Two lookups from the one query (Martin's retest, 2026-07-10):
-    /// - `display` also considers the OTHER pending review slices, so a
-    ///   slice flush against another pending slice reads "pending review",
-    ///   not a gap to some distant tracked session ("Every item shows a
-    ///   gap").
-    /// - `adjacency` is attributed sessions ONLY — what `AdjacencyBoost`
-    ///   must be fed: a pending neighbour is evidence of nothing.
-    public func sliceNeighbours(for segment: ReviewSegment)
-        -> (display: SliceNeighbours, adjacency: SliceNeighbours) {
+    // MARK: - Slice detail (lazy + batched — Martin, 2026-07-10: expand-all
+    // was "intolerably slow" because every open disclosure ran its own
+    // ±30-day journal query plus a full ranker explain, synchronously,
+    // inside every SwiftUI render pass)
+
+    /// Computed per-slice detail, keyed by segment id. The drawer RENDERS
+    /// from this cache only — a row whose detail isn't here yet shows a
+    /// placeholder and calls `requestSliceDetail`; opening structure
+    /// (chevrons, Expand all) therefore costs nothing per row.
+    @Published public private(set) var sliceDetails: [UUID: ReviewSliceDetail] = [:]
+    /// Bumped whenever the cache is invalidated (every `reloadReview` —
+    /// assigns and journal writes change both explanations and neighbours),
+    /// so open disclosures re-request against fresh data.
+    @Published public private(set) var sliceDetailGeneration = 0
+    private var sliceDetailQueue: [ReviewSegment] = []
+    private var sliceDetailQueued = Set<UUID>()
+    private var sliceDetailPump: Task<Void, Never>?
+    /// Explains per pump slice-of-work before yielding the main actor — the
+    /// ranker is the hot CPU cost, so it runs in bites the UI stays live
+    /// between.
+    private static let sliceDetailChunk = 8
+
+    /// Ask for a slice's detail (idempotent, cheap). Requests arriving in
+    /// one render pass coalesce into ONE batch: one journal range query
+    /// spanning the lot, partitioned in memory (`SliceNeighbours.batch`),
+    /// then the per-slice ranker explains chunked with yields. Results land
+    /// in `sliceDetails` and re-render the rows as they arrive.
+    public func requestSliceDetail(for segment: ReviewSegment) {
+        guard sliceDetails[segment.id] == nil,
+              !sliceDetailQueued.contains(segment.id) else { return }
+        sliceDetailQueued.insert(segment.id)
+        sliceDetailQueue.append(segment)
+        guard sliceDetailPump == nil else { return }
+        sliceDetailPump = Task { @MainActor [weak self] in
+            // One hop, so every disclosure the same render pass opened
+            // lands in the first batch rather than a batch each.
+            await Task.yield()
+            while let batch = self?.drainSliceDetailQueue(), !batch.isEmpty {
+                await self?.computeSliceDetails(batch)
+            }
+            self?.sliceDetailPump = nil
+        }
+    }
+
+    private func drainSliceDetailQueue() -> [ReviewSegment] {
+        let batch = sliceDetailQueue
+        sliceDetailQueue.removeAll()
+        return batch
+    }
+
+    /// ONE journal range query for the whole batch (the shape
+    /// `adjacencyScores` established), then in-memory partitioning and
+    /// chunked explains. Two lookups per slice from the one query (Martin's
+    /// retest, 2026-07-10): `display` also considers the OTHER pending
+    /// slices so back-to-back pending reads "pending review", not a gap to
+    /// some distant session; `adjacency` is attributed sessions ONLY — the
+    /// only lookup `AdjacencyBoost` may be fed. The live-checkpoint
+    /// sentinel is crash-recovery bookkeeping, never a neighbour.
+    private func computeSliceDetails(_ batch: [ReviewSegment]) async {
+        let generation = sliceDetailGeneration
+        guard let earliest = batch.map(\.start).min(),
+              let latest = batch.map(\.end).max() else { return }
         let window: TimeInterval = 30 * 24 * 3600
-        let sessions = ((try? journal.sessions(from: segment.start.addingTimeInterval(-window),
-                                               to: segment.end.addingTimeInterval(window))) ?? [])
+        let sessions = ((try? journal.sessions(from: earliest.addingTimeInterval(-window),
+                                               to: latest.addingTimeInterval(window))) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
-        let adjacency = SliceNeighbours.around(start: segment.start, end: segment.end,
-                                               in: sessions)
-        let display = SliceNeighbours.around(start: segment.start, end: segment.end,
-                                             in: sessions,
-                                             pending: pendingReview.filter { $0.id != segment.id })
-        return (display, adjacency)
+        // The slices themselves ride along in `pending` — the edge filters
+        // exclude overlappers, so no slice reads as its own neighbour.
+        let neighbours = SliceNeighbours.batch(for: batch, sessions: sessions,
+                                               pending: pendingReview)
+        var done = 0
+        for segment in batch {
+            // Invalidated mid-batch (an assign landed): stop — writing
+            // results computed against the old journal into the new
+            // generation would show stale neighbours. The rows re-request.
+            guard generation == sliceDetailGeneration else { return }
+            guard let n = neighbours[segment.id] else { continue }
+            sliceDetails[segment.id] = ReviewSliceDetail(
+                explanation: explain(segment.signal, now: segment.start),
+                display: n.display, adjacency: n.adjacency)
+            done += 1
+            if done % Self.sliceDetailChunk == 0 { await Task.yield() }
+        }
     }
 
     /// Memo for `adjacencyScores` — keyed by the segment-id set so the
@@ -2290,8 +2347,14 @@ public final class AppController: ObservableObject {
             .meetingReviewFloor(settings.reviewFloorSeconds)
         retroDigest = (try? journal.retroDigests(limit: 200)) ?? []
         // Assigns and journal writes change both the slice set and its
-        // neighbours — a stale adjacency memo would show yesterday's boosts.
+        // neighbours — a stale adjacency memo would show yesterday's boosts,
+        // and the slice-detail cache would show yesterday's neighbours. The
+        // generation bump makes open disclosures re-request lazily.
         adjacencyScoreCache = nil
+        sliceDetails.removeAll()
+        sliceDetailQueue.removeAll()
+        sliceDetailQueued.removeAll()
+        sliceDetailGeneration += 1
         updateJournalSummary()
     }
 

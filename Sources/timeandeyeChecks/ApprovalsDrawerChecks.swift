@@ -493,7 +493,8 @@ func reviewFloorChecks(_ c: Checks) {
 // should reveal 100% of the data you have on it … including what was
 // tracked before and after"). The pure parts: the day classification the
 // drawer's date labels ride on, the neighbour lookup with its gap
-// indication, and per-slice assignment routing.
+// indication (single and BATCHED — the expand-all perf fix), and
+// single-slice assignment routing.
 
 func reviewSliceDetailChecks(_ c: Checks) {
     var cal = Calendar(identifier: .gregorian)
@@ -578,7 +579,7 @@ func reviewSliceDetailChecks(_ c: Checks) {
         try expect(before.isContiguous)
     }
 
-    c.check("per-slice assign routes ONE segment; its stack siblings stay queued as a stack") {
+    c.check("a single-slice selection assigns ONE segment; its stack siblings stay queued as a stack") {
         let journal = InMemoryJournalStore()
         func seg(_ start: TimeInterval, _ end: TimeInterval) -> ReviewSegment {
             ReviewSegment(app: "Excel", windowTitle: "Budget.xlsx",
@@ -586,8 +587,8 @@ func reviewSliceDetailChecks(_ c: Checks) {
         }
         let a = seg(0, 600), b = seg(1000, 1600), d = seg(2000, 2600)
         for s in [a, b, d] { try journal.save(s) }
-        // The drawer's per-slice path: the same journal.assign the stack
-        // path uses, scoped to one id.
+        // The drawer's click-one-slice path: the same journal.assign every
+        // selection shape uses, scoped to one id.
         try journal.assign([b.id], to: .task(.op(7)))
         let remaining = try journal.pendingReview()
         try expectEq(remaining.map(\.id), [a.id, d.id], "only the picked slice left the queue")
@@ -685,15 +686,156 @@ func reviewSliceDetailChecks(_ c: Checks) {
     }
 
     c.check("a pending slice overlapping the slice (incl. itself) is never a neighbour") {
-        // The caller filters the slice's own row out by id, but the edge
-        // filters must exclude any overlapper regardless — a slice must
-        // never read as its own neighbour.
+        // The batch path passes the WHOLE pending queue (each slice's own
+        // row included), so the edge filters must exclude any overlapper —
+        // a slice must never read as its own neighbour.
         let overlapper = pendingSeg("Excel", 900, 1200)
         let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
                                        end: t0.addingTimeInterval(1600),
                                        in: [], pending: [overlapper])
         try expectNil(n.before)
         try expectNil(n.after)
+    }
+
+    // BATCHED lookup (Martin, 2026-07-10: expand-all was "intolerably slow"
+    // — a ±30-day journal query PER SLICE per render). The batch partitions
+    // ONE preloaded window in memory; it must agree exactly with the
+    // per-slice lookups it replaces.
+
+    c.check("batch neighbours match the per-slice lookups, for every slice, both flavours") {
+        let sessions = [session(.op(1), 0, 940), session(.op(2), 1660, 1800)]
+        let s1 = pendingSeg("Excel", 1000, 1600, title: "Budget.xlsx")
+        let s2 = pendingSeg("Mail", 1810, 2400, title: "Inbox")
+        let out = SliceNeighbours.batch(for: [s1, s2], sessions: sessions,
+                                        pending: [s1, s2])
+        for slice in [s1, s2] {
+            let got = try unwrap(out[slice.id])
+            try expectEq(got.adjacency,
+                         SliceNeighbours.around(start: slice.start, end: slice.end,
+                                                in: sessions),
+                         "sessions-only flavour identical — AdjacencyBoost sees the same evidence")
+            try expectEq(got.display,
+                         SliceNeighbours.around(start: slice.start, end: slice.end,
+                                                in: sessions,
+                                                pending: [s1, s2].filter { $0.id != slice.id }),
+                         "display flavour identical, self excluded by the edge filters")
+        }
+    }
+
+    c.check("in the batch, back-to-back slices are each other's pending neighbours — never themselves") {
+        let s1 = pendingSeg("Excel", 0, 600, title: "Budget.xlsx")
+        let s2 = pendingSeg("Excel", 600, 1200, title: "Budget.xlsx")
+        let out = SliceNeighbours.batch(for: [s1, s2], sessions: [], pending: [s1, s2])
+        let first = try unwrap(out[s1.id])
+        try expectNil(first.display.before)
+        try expectEq(try unwrap(first.display.after).start, s2.start,
+                     "s1's after-neighbour is s2, gap 0")
+        let second = try unwrap(out[s2.id])
+        try expectEq(try unwrap(second.display.before).end, s1.end)
+        try expectNil(second.display.after, "never its own neighbour")
+    }
+}
+
+// MARK: - Unified click-to-select (Martin, 2026-07-10, replacing the
+// per-slice Assign button he rejected: "just click the individual item to
+// toggle a blue highlight on it, with the header and left margin doing the
+// same for a whole group … The certainty on the buttons below should refer
+// to all of the selected slices (including those selected as a group)").
+// Pure set logic — the drawer renders membership and nothing else.
+
+func reviewSelectionChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func seg(_ app: String, _ start: TimeInterval, _ end: TimeInterval,
+             title: String? = nil) -> ReviewSegment {
+        ReviewSegment(app: app, windowTitle: title,
+                      start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
+    }
+    // Two stacks: Excel (two slices) + Mail (one slice).
+    let a = seg("Excel", 0, 600, title: "Budget.xlsx")
+    let b = seg("Excel", 1000, 1600, title: "Budget.xlsx")
+    let m = seg("Mail", 2000, 2600, title: "Inbox")
+    let stacks = [a, b, m].stacked()
+
+    c.check("clicking a slice toggles it — on, then off again") {
+        let on = ReviewSelection.toggleSlice(a.id, in: [])
+        try expectEq(on, [a.id])
+        try expectEq(ReviewSelection.toggleSlice(a.id, in: on), [])
+    }
+
+    c.check("clicking a stack's header/margin selects EVERY slice in it; again deselects the group") {
+        let excel = try unwrap(stacks.first { $0.app == "Excel" })
+        let on = ReviewSelection.toggleStack(excel, in: [])
+        try expectEq(on, Set([a.id, b.id]))
+        try expect(ReviewSelection.isStackSelected(excel, in: on))
+        try expectEq(ReviewSelection.toggleStack(excel, in: on), [])
+    }
+
+    c.check("a group click on a PARTIALLY selected stack completes it — never clears it") {
+        // Half the group is highlighted; clicking the header means "all of
+        // this", so the natural reading is completion, not a surprise clear.
+        let excel = try unwrap(stacks.first { $0.app == "Excel" })
+        let partial: Set<UUID> = [a.id]
+        try expect(!ReviewSelection.isStackSelected(excel, in: partial),
+                   "one of two slices is not a selected group")
+        try expectEq(ReviewSelection.toggleStack(excel, in: partial), Set([a.id, b.id]))
+    }
+
+    c.check("group state IS per-slice membership — selecting both slices singly selects the group") {
+        let excel = try unwrap(stacks.first { $0.app == "Excel" })
+        var s = ReviewSelection.toggleSlice(a.id, in: [])
+        s = ReviewSelection.toggleSlice(b.id, in: s)
+        try expect(ReviewSelection.isStackSelected(excel, in: s),
+                   "no separate group flag to fall out of sync")
+    }
+
+    c.check("a selection mixes whole groups and lone slices; the scope enumerates per-slice") {
+        // The assign bar's certainty contract: group-selected slices land
+        // in the SAME per-slice list as individually clicked ones, so the
+        // mean (AdjacencyBoost.aggregate) covers ALL selected slices.
+        let excel = try unwrap(stacks.first { $0.app == "Excel" })
+        var s = ReviewSelection.toggleStack(excel, in: [])
+        s = ReviewSelection.toggleSlice(m.id, in: s)
+        let scoped = ReviewSelection.segments(of: s, in: stacks)
+        try expectEq(Set(scoped.map(\.id)), Set([a.id, b.id, m.id]))
+        let agg = AdjacencyBoost.aggregate(scoped.map { _ in
+            AdjacencyBoost(base: 0.6, certainty: 0.6)
+        })
+        try expectClose(agg.certainty, 0.6)
+        try expectEq(scoped.count, 3, "the mean is over three slices, not 'a stack + a slice'")
+    }
+
+    c.check("assigning removes the slices; pruning + the scope recalculate over what remains") {
+        let excel = try unwrap(stacks.first { $0.app == "Excel" })
+        let all = ReviewSelection.selecting(stacks, in: [])
+        // Slice `a` is assigned away: the queue reloads without it.
+        let remaining = [b, m].stacked()
+        try expectEq(ReviewSelection.pruned(all, to: remaining), Set([b.id, m.id]),
+                     "stale ids never linger in counts or aggregates")
+        try expectEq(ReviewSelection.segments(of: all, in: remaining).map(\.id).count, 2,
+                     "the scope self-prunes even before an explicit prune")
+        // …and the one-slice Excel stack now reads selected from `b` alone.
+        let excelNow = try unwrap(remaining.first { $0.id == excel.id })
+        try expect(ReviewSelection.isStackSelected(excelNow, in: [b.id]))
+    }
+
+    c.check("the shift-click sweep adds every slice of the covered stacks — the old stack range, absorbed") {
+        // Martin's backlog flow survives the model change: sort, click the
+        // top header, shift-click at the cutoff — every stack in between
+        // lands whole in the selection, ADDITIVELY.
+        let ordered = stacks.sorted(by: .oldestFirst)
+        let range = ReviewRangeSelect.range(in: ordered.map(\.id),
+                                            from: ordered.first?.id,
+                                            to: ordered[1].id)
+        let swept = ReviewSelection.selecting(ordered.filter { range.contains($0.id) },
+                                              in: [m.id])
+        try expect(swept.contains(m.id), "a sweep extends the selection, never clears it")
+        try expectEq(swept.count, 3, "both covered stacks' slices plus the prior lone slice")
+    }
+
+    c.check("an empty stack is never 'selected'") {
+        let empty = ReviewStack(segments: [], app: "Ghost", windowTitle: nil, tabURL: nil,
+                                total: 0, first: t0, last: t0)
+        try expect(!ReviewSelection.isStackSelected(empty, in: [a.id]))
     }
 }
 

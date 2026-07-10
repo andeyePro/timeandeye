@@ -141,11 +141,15 @@ floor"). Briefer glances stay tracked and journalled as normal - they just
 never queue, however often they repeat - because a moment too brief to
 switch tracking is never worth naming.
 
+Selecting is one click: click a visit to highlight it, click again to
+deselect; click a row's header - or the strip down its left edge while
+it's open - to select or deselect its whole group. A selection mixes
+freely: whole groups here, single visits there, across any number of rows.
 Clearing a backlog? Sort the queue from the control at the top - newest,
-oldest, longest or shortest - then click a row and shift-click another to
-select everything between them (⌘-click adds or removes single rows). One
-press of **Clear**, **Unknown** or a task then handles the whole range -
-so does ⌫ for Clear - and one ⌘Z brings it all back. **Clear** drops the
+oldest, longest or shortest - then click the top row's header and
+shift-click another to select every group between them. One press of
+**Clear**, **Unknown** or a task then handles everything selected - so
+does ⌫ for Clear - and one ⌘Z brings it all back. **Clear** drops the
 selection from the queue without adding it to timesheets and without
 teaching andeye anything - the quick way past slices not worth naming;
 your timeline and journal keep the time untouched.
@@ -160,15 +164,18 @@ filled the time immediately before and after it (with the gap named when
 they weren't back-to-back; a neighbour that is itself still awaiting review
 shows in italics as *pending review* with its surface, since nothing is
 decided about it yet). **Expand all** in the header (⌘E) opens every stack
-and every visit's detail at once; press it again to collapse. The
-**Assign…** button beside each visit scopes the assign bar to just that
-one, so one visit in a stack can go to a different task than its siblings -
-and once it leaves the stack, the buttons re-score over the visits that
-remain.
+and every visit's detail at once - the certainty and neighbour lines fill
+in a moment later as they're worked out - and pressing it again collapses.
+Because any single visit can be selected on its own, one visit in a stack
+can go to a different task than its siblings: select just it and assign.
+It leaves its group immediately, and the buttons re-score over the visits
+that remain.
 
-The assign bar's task buttons are sorted by how likely each task is for the
-selected time, most likely first, and a button that has a likelihood shows
-it as a percentage - hover to see how the number was built. Time tracked to
+The assign bar's task buttons are sorted by how likely each task is for
+the selected visits - every highlighted visit counts, whether it was
+picked on its own or as part of a group - most likely first, and a button
+that has a likelihood shows it as a percentage - hover to see how the
+number was built. Time tracked to
 the same task immediately before and after a visit raises that task's
 likelihood: strongly when both sides match, less when only one does, fading
 out as the gap to the neighbour grows. Only decided, tracked time counts
@@ -476,9 +483,9 @@ setting, or its project's.
 
 ### Review queue
 
-- Click then **⇧-click** - select the whole range between two rows;
-  **⌘-click** - add / remove a single row; **⇧↑ / ⇧↓** - extend the
-  selection by keyboard.
+- **Click** - select / deselect a visit; a row's header (or its left edge
+  when open) selects / deselects its whole group; **⇧-click** a header -
+  select every group between it and the last header clicked.
 - **⌘D** or **⌫** - **Clear** the selection: drop it from the queue,
   nothing added to timesheets, nothing learned.
 - **⌘E** - expand or collapse every stack and slice detail.

@@ -4,35 +4,37 @@ import timeandeyeMac
 
 /// The low-certainty review queue: stacked by default (2026-07-06 spec §2/§4,
 /// approvals-drawer v1) — one row per identical surface (app · window title ·
-/// tab URL), not one row per slice. Multi-select rows (click-drag,
-/// shift-click range, ⌘-click toggle, ⇧↑/⇧↓ — native List/NSTableView
-/// extended selection) at the STACK level, then one-click assign; a header
-/// sort control (newest/oldest by last activity, longest/shortest by total —
-/// `ReviewSortOrder`, persisted in settings) reorders the stacks so a
-/// shift-click range can sweep everything below a duration or before a date
-/// in one assign (Martin, 2026-07-09). Selection is keyed by surface id, so
-/// changing the sort keeps the same stacks selected — it means "these
-/// surfaces", not "these positions". Every stack expands on click; each
-/// slice inside carries its own disclosure revealing 100% of what's held —
-/// full timestamps, surface, email evidence, current certainty + source,
-/// and what filled the time either side — plus a visible Assign button on
-/// every slice, so one visit in a stack can go somewhere different from its
-/// siblings (Martin, 2026-07-10). A header Expand/Collapse all (⌘E) opens
-/// every stack and slice disclosure at once. Assign to any task
-/// (fuzzy-filtered), Clear (drop from the queue and timesheets, teaching
-/// nothing — Martin's 2026-07-10 naming call), or create a new local
-/// (non-OpenProject) task on the spot and assign to it; ⌫ with rows
-/// selected is Clear too.
+/// tab URL), not one row per slice. Selection is unified click-to-select
+/// (Martin, 2026-07-10, replacing the per-slice Assign button): clicking a
+/// slice toggles its accent highlight; clicking a stack's header or left
+/// margin toggles the whole group; shift-clicking a header sweeps every
+/// group between it and the last header clicked (absorbing the 2026-07-09
+/// stack-range sweep — sort first via the header control, then range). A
+/// selection freely mixes lone slices and whole groups, and the assign bar
+/// below acts on ALL of it: its per-task certainty is the mean over every
+/// selected slice, group-selected ones included. Assigning removes exactly
+/// those slices; their stacks recalculate over what remains. Every stack
+/// expands on its chevron; each slice inside carries its own disclosure
+/// revealing 100% of what's held — full timestamps, surface, email
+/// evidence, current certainty + source, and what filled the time either
+/// side. The cheap fields render straight from the queue; the expensive
+/// ones (certainty build, neighbours) arrive lazily from the controller's
+/// batched cache, so Expand all (⌘E) opens the whole drawer instantly.
+/// Assign to any task (fuzzy-filtered), Clear (drop from the queue and
+/// timesheets, teaching nothing — Martin's 2026-07-10 naming call), or
+/// create a new local (non-OpenProject) task on the spot and assign to it;
+/// ⌫ with a selection is Clear too.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
-    @State private var selection = Set<String>()
+    /// The selection — slice ids only (`ReviewSelection`): a "selected
+    /// group" is just all of its slices being members.
+    @State private var selectedSlices = Set<UUID>()
+    /// The stack whose header was last clicked — the shift-click sweep's
+    /// anchor, in the CURRENT display order.
+    @State private var anchorStack: String?
     @State private var expanded = Set<String>()
     /// Slices whose full-detail disclosure is open (keyed by segment id).
     @State private var sliceDetail = Set<UUID>()
-    /// The one slice the assign bar is scoped to, when the user picked a
-    /// slice's own "assign" instead of selecting stacks — mutually
-    /// exclusive with `selection` (picking either clears the other).
-    @State private var sliceAssign: UUID?
     @State private var aiResponse = ""
     @State private var aiStatus = ""
     @State private var filter = ""
@@ -51,26 +53,21 @@ struct ReviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
-            List(selection: $selection) {
+            List {
                 ForEach(keyedStacks, id: \.key) { entry in
-                    stackRow(entry.stack).tag(entry.key)
+                    stackRow(entry.stack)
                 }
             }
-            // ⌫ with rows selected = the assign bar's Clear (same action,
+            // ⌫ with a selection = the assign bar's Clear (same action,
             // same ⌘Z, same nothing-is-learned semantics) — the List's
             // native delete command, so both backspace and forward-delete
             // route here.
             .onDeleteCommand {
-                guard !selection.isEmpty else { return }
+                guard !scopedSegments.isEmpty else { return }
                 assign(.doNotTrack)
             }
-            // Selecting stacks retires a pending per-slice assign — the bar
-            // must never be ambiguous about what it's about to commit.
-            .onChange(of: selection) { _, new in
-                if !new.isEmpty { sliceAssign = nil }
-            }
 
-            if !selection.isEmpty || sliceAssign != nil {
+            if !scopedSegments.isEmpty {
                 assignBar
             }
             grainFooter
@@ -122,8 +119,25 @@ struct ReviewView: View {
         stacks.map { (surfaceKey($0), $0) }
     }
 
-    private var selectedStacks: [ReviewStack] {
-        keyedStacks.filter { selection.contains($0.key) }.map(\.stack)
+    /// A header or left-margin click: shift extends from the anchor (the
+    /// old stack-range sweep, absorbed — sort first, click the top, shift-
+    /// click at the cutoff); a plain click toggles the whole group
+    /// (`ReviewSelection.toggleStack` — a partial selection completes,
+    /// never clears). Either way this stack becomes the next anchor.
+    private func headerClicked(_ stack: ReviewStack) {
+        if NSEvent.modifierFlags.contains(.shift), anchorStack != nil {
+            let ordered = stacks.map(\.id)
+            let range = ReviewRangeSelect.range(in: ordered, from: anchorStack, to: stack.id)
+            selectedSlices = ReviewSelection.selecting(stacks.filter { range.contains($0.id) },
+                                                       in: selectedSlices)
+        } else {
+            selectedSlices = ReviewSelection.toggleStack(stack, in: selectedSlices)
+        }
+        anchorStack = stack.id
+    }
+
+    private func groupSelected(_ stack: ReviewStack) -> Bool {
+        ReviewSelection.isStackSelected(stack, in: selectedSlices)
     }
 
     /// Core-checked predicate (`isFullyExpanded`): subset semantics, so ids
@@ -147,6 +161,7 @@ struct ReviewView: View {
     private func stackRow(_ stack: ReviewStack) -> some View {
         let key = surfaceKey(stack)
         let multi = stack.segments.count > 1
+        let selected = groupSelected(stack)
         return VStack(alignment: .leading, spacing: 2) {
             HStack {
                 // EVERY stack expands — a single-slice entry opens straight
@@ -175,15 +190,34 @@ struct ReviewView: View {
                     Text(dayTimeText(stack.first)).font(.caption)
                 }
             }
-            calendarHintChip(for: stack, key: key)
+            .padding(2)
+            .background(selected ? Color.accentColor.opacity(0.22) : .clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .contentShape(Rectangle())
+            .onTapGesture { headerClicked(stack) }
+            .help("Click to select or deselect the whole group; "
+                  + "⇧-click to select every group between here and the last one clicked")
+            calendarHintChip(for: stack)
             if expanded.contains(key) {
                 if multi {
-                    VStack(alignment: .leading, spacing: 1) {
-                        ForEach(stack.segments) { segment in
-                            sliceRow(segment)
+                    // The group's LEFT MARGIN — the same whole-group select
+                    // as the header, running the height of the slice list.
+                    HStack(alignment: .top, spacing: 6) {
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(selected ? Color.accentColor
+                                           : Color.secondary.opacity(0.25))
+                            .frame(width: 3)
+                            .frame(width: 12)   // wider hit target than the bar
+                            .contentShape(Rectangle())
+                            .onTapGesture { headerClicked(stack) }
+                            .help("Select or deselect the whole group")
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(stack.segments) { segment in
+                                sliceRow(segment)
+                            }
                         }
                     }
-                    .padding(.leading, 20)
+                    .padding(.leading, 8)
                 } else if let only = stack.segments.first {
                     sliceDetailView(only).padding(.leading, 20)
                 }
@@ -192,15 +226,14 @@ struct ReviewView: View {
     }
 
     /// One slice inside an expanded stack: dated start + duration, its own
-    /// full-detail disclosure, and a per-slice Assign button (the same
-    /// assign bar, scoped to this one slice — Martin, 2026-07-10: "no way
-    /// to assign specific slices within the set to different activities").
-    /// The button is BORDERED and keeps its own tint on purpose: the first
-    /// ship of this affordance was a lowercase borderless "assign" washed
-    /// grey by the row's secondary foreground — it read as metadata, and
-    /// Martin's retest couldn't find it at all.
+    /// full-detail disclosure, and click-to-select (Martin, 2026-07-10,
+    /// replacing the per-slice Assign button he rejected): clicking the row
+    /// toggles its accent highlight, so one visit in a stack can go
+    /// somewhere different from its siblings by selecting just it — the
+    /// assign bar below acts on whatever is highlighted.
     private func sliceRow(_ segment: ReviewSegment) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        let selected = selectedSlices.contains(segment.id)
+        return VStack(alignment: .leading, spacing: 1) {
             HStack {
                 Group {
                     Button {
@@ -214,15 +247,17 @@ struct ReviewView: View {
                     Spacer()
                     Text(durationText(segment.end.timeIntervalSince(segment.start)))
                 }
-                .foregroundStyle(sliceAssign == segment.id ? .primary : .secondary)
-                Button("Assign…") {
-                    sliceAssign = segment.id
-                    selection.removeAll()
-                }
-                .buttonStyle(.bordered).controlSize(.mini)
-                .help("Assign just this slice – pick its task in the bar below")
+                .foregroundStyle(selected ? .primary : .secondary)
             }
             .font(.caption2)
+            .padding(2)
+            .background(selected ? Color.accentColor.opacity(0.22) : .clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedSlices = ReviewSelection.toggleSlice(segment.id, in: selectedSlices)
+            }
+            .help("Click to select or deselect just this slice")
             if sliceDetail.contains(segment.id) {
                 sliceDetailView(segment).padding(.leading, 14)
             }
@@ -237,10 +272,14 @@ struct ReviewView: View {
     /// (nearest of tracked session or another pending slice); the certainty
     /// line's adjacency boost uses the sessions-only lookup — a pending
     /// neighbour is evidence of nothing (Martin, 2026-07-10).
+    ///
+    /// The cheap lines render straight from the segment the queue already
+    /// holds; the certainty + neighbour lines read the controller's LAZY
+    /// batched cache — never computed during render, so Expand all opens a
+    /// big backlog instantly and each visible disclosure's detail fills in
+    /// a beat later (Martin, 2026-07-10: expand was "intolerably slow").
     private func sliceDetailView(_ segment: ReviewSegment) -> some View {
-        let explanation = controller.explain(segment.signal, now: segment.start)
-        let (neighbours, adjacency) = controller.sliceNeighbours(for: segment)
-        return VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 1) {
             Text("\(segment.start.formatted(date: .abbreviated, time: .standard)) – "
                  + "\(segment.end.formatted(date: .abbreviated, time: .standard)) · "
                  + durationText(segment.end.timeIntervalSince(segment.start)))
@@ -251,16 +290,26 @@ struct ReviewView: View {
             } else if let subject = segment.emailSubject {
                 Text("✉ \(subject)")
             }
-            Text(certaintyLine(explanation, neighbours: adjacency))
-            // A pending neighbour renders italic — visually distinct from a
-            // decided, task-named session either side.
-            Text("before: \(neighbourText(neighbours.before, before: true))")
-                .italic(neighbours.before?.isPending == true)
-            Text("after: \(neighbourText(neighbours.after, before: false))")
-                .italic(neighbours.after?.isPending == true)
+            if let detail = controller.sliceDetails[segment.id] {
+                Text(certaintyLine(detail.explanation, neighbours: detail.adjacency))
+                // A pending neighbour renders italic — visually distinct
+                // from a decided, task-named session either side.
+                Text("before: \(neighbourText(detail.display.before, before: true))")
+                    .italic(detail.display.before?.isPending == true)
+                Text("after: \(neighbourText(detail.display.after, before: false))")
+                    .italic(detail.display.after?.isPending == true)
+            } else {
+                Text("assessing…").foregroundStyle(.tertiary)
+            }
         }
         .font(.caption2).foregroundStyle(.secondary)
         .textSelection(.enabled)
+        // Fires when the disclosure appears AND again when the generation
+        // bumps (an assign invalidated the cache) — idempotent and cheap
+        // once the detail is cached.
+        .task(id: "\(segment.id.uuidString)#\(controller.sliceDetailGeneration)") {
+            controller.requestSliceDetail(for: segment)
+        }
     }
 
     private func surfaceLine(_ segment: ReviewSegment) -> String {
@@ -315,7 +364,7 @@ struct ReviewView: View {
     /// assign bar's filter with the event title, so picking a task is one
     /// less step than typing it from scratch.
     @ViewBuilder
-    private func calendarHintChip(for stack: ReviewStack, key: String) -> some View {
+    private func calendarHintChip(for stack: ReviewStack) -> some View {
         if let hint = controller.calendarHint(for: stack) {
             HStack(spacing: 4) {
                 Image(systemName: "calendar").font(.caption2).foregroundStyle(.secondary)
@@ -328,8 +377,13 @@ struct ReviewView: View {
                 } else {
                     Text("\(hint.eventTitle) → assign").font(.caption2).lineLimit(1).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Button("Assign") { selection = [key]; filter = hint.eventTitle }
-                        .font(.caption2).buttonStyle(.borderless)
+                    // No rule yet: select just this group (every slice of
+                    // it) and prefill the filter with the event title.
+                    Button("Assign") {
+                        selectedSlices = ReviewSelection.selecting([stack], in: [])
+                        filter = hint.eventTitle
+                    }
+                    .font(.caption2).buttonStyle(.borderless)
                 }
             }
         }
@@ -379,10 +433,12 @@ struct ReviewView: View {
         // hover with the full build (Martin, 2026-07-10: "sorted by
         // decreasing certainty, the certainty should be included in the
         // button, and hovering … should give the reasoning").
-        let scores = controller.adjacencyScores(for: scopedSegments)
+        let scoped = scopedSegments
+        let scores = controller.adjacencyScores(for: scoped)
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(sliceAssign != nil ? "Assign slice:" : "Assign \(selection.count):").font(.caption)
+                Text("Assign \(scoped.count) \(scoped.count == 1 ? "slice" : "slices"):")
+                    .font(.caption)
                 TextField("type to filter tasks", text: $filter)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
@@ -444,12 +500,15 @@ struct ReviewView: View {
         controller.searchTasks(filter)
     }
 
-    /// The slices the assign bar is currently about: the one picked slice,
-    /// or every slice of every selected stack — the same scope `assign`
-    /// commits, so the certainties describe exactly what a click would do.
+    /// The slices the assign bar is currently about: every selected slice,
+    /// whether clicked singly or as part of a whole-group select — ONE
+    /// per-slice list either way, so the buttons' certainty is the mean
+    /// over all of it (Martin, 2026-07-10) and it is exactly the scope
+    /// `assign` commits. Filtering through the CURRENT stacks also prunes
+    /// ids assigned away meanwhile, so the count and the aggregates always
+    /// describe what a click would actually do.
     private var scopedSegments: [ReviewSegment] {
-        if let id = sliceAssign { return stacks.flatMap(\.segments).filter { $0.id == id } }
-        return selectedStacks.flatMap(\.segments)
+        ReviewSelection.segments(of: selectedSlices, in: stacks)
     }
 
     /// The assign buttons in descending boosted-certainty order; tasks the
@@ -491,35 +550,19 @@ struct ReviewView: View {
         }
     }
 
-    /// Express path stays one-selection-one-assign fast: a single stack
-    /// routes through `assignStack` directly; a multi-stack selection
-    /// flattens to the underlying segment ids and goes through the existing
-    /// `assignReview` path (both teach the attributor from every distinct
-    /// surface covered — approvals-drawer spec §1 side-bug fix).
+    /// One path for every selection shape — a lone slice, a whole group, or
+    /// a mix across stacks: the underlying segment ids go through the
+    /// existing `assignReview`, which teaches the attributor from every
+    /// distinct surface covered (approvals-drawer spec §1 side-bug fix),
+    /// registers ONE app-wide ⌘Z entry, and reloads the queue — so the
+    /// assigned slices leave their stacks immediately and the remaining
+    /// groups (and their button certainties) recalculate.
     private func assign(_ target: Target) {
-        // Per-slice path (Martin, 2026-07-10): the SAME `assignReview`
-        // mechanics the stack path uses, scoped to one segment id — so it
-        // teaches from that slice's own evidence and registers on the
-        // app-wide undo stack exactly like a stack assign.
-        if let id = sliceAssign {
-            let segment = stacks.flatMap(\.segments).first { $0.id == id }
-            sliceAssign = nil
-            guard let segment else { return }   // assigned away meanwhile
-            controller.assignReview([id], to: target)
-            justAssigned = footerContext(for: [segment], target: target)
-            correspondentChecks = justAssigned.map { Set(ContextIdentity.correspondentChoices($0.signal)) } ?? []
-            return
-        }
-        let picked = selectedStacks
-        guard !picked.isEmpty else { return }
-        let assignedSegments = picked.flatMap(\.segments)
-        if picked.count == 1 {
-            controller.assignStack(picked[0], to: target)
-        } else {
-            controller.assignReview(assignedSegments.map(\.id), to: target)
-        }
-        selection.removeAll()
-        justAssigned = footerContext(for: assignedSegments, target: target)
+        let segments = scopedSegments
+        guard !segments.isEmpty else { return }
+        controller.assignReview(segments.map(\.id), to: target)
+        selectedSlices.removeAll()
+        justAssigned = footerContext(for: segments, target: target)
         correspondentChecks = justAssigned.map { Set(ContextIdentity.correspondentChoices($0.signal)) } ?? []
     }
 

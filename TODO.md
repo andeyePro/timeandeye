@@ -2,6 +2,16 @@
 
 ## Review drawer (Martin's critique, 2026-07-10)
 
+- [x] Martin's live drawer feedback, second pass — DONE 2026-07-10:
+  (1) expand-all was "intolerably slow" — per-slice ±30-day journal query
+  + full ranker explain ran synchronously in EVERY render pass for every
+  open disclosure; now structure opens instantly and the expensive detail
+  is lazy, batched (one range query per batch via `SliceNeighbours.batch`)
+  and cached (`AppController.sliceDetails`). (2) The per-slice **Assign…**
+  button (shipped that morning) is replaced by unified click-to-select
+  (`ReviewSelection`): click a slice to toggle its highlight, header/left
+  margin toggles the group, shift-click sweeps stacks; the assign bar and
+  its certainties cover the whole mixed selection.
 - [x] Martin: naming call on the assign bar's **Do not track** button —
   DONE 2026-07-10, his call: **[Clear]** ("drop from this list and don't
   add to timesheets … may be selected because the user can't be bothered

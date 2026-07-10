@@ -137,6 +137,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("UnknownTaskCategory", unknownSweepChecks),
     ("ReviewFloor", reviewFloorChecks),
     ("ReviewSliceDetail", reviewSliceDetailChecks),
+    ("ReviewSelection", reviewSelectionChecks),
     ("ReviewExpansion", reviewExpansionChecks),
     ("AdjacencyBoost", adjacencyBoostChecks),
     ("SiteRecipeExtraction", siteRecipeExtractionChecks),
