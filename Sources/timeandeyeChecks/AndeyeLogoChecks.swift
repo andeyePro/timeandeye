@@ -1,5 +1,5 @@
 import Foundation
-import timeandeyeCore
+import timeandeyeTheme
 
 /// Bounding box of the curves themselves (sampled via `AndeyeLogo.point`),
 /// not the control points — the SVG's control points legitimately roam

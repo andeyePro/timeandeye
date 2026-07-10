@@ -26,9 +26,13 @@ let package = Package(
         // checks it; only the SwiftUI shell in ios/ needs Xcode.
         .target(name: "timeandeyePhone", dependencies: ["timeandeyeCore", "timeandeyeStore"]),
         // macOS-only layer: sensors, app controller, menu-bar glue.
-        .target(name: "timeandeyeMac", dependencies: ["timeandeyeCore", "timeandeyeStore"]),
-        // Shared brand look, SwiftUI-only (see the library product note).
-        .target(name: "timeandeyeTheme", dependencies: ["timeandeyeCore"]),
+        // (Theme dep = the brand-mark geometry AndeyeLogoImage renders.)
+        .target(name: "timeandeyeMac",
+                dependencies: ["timeandeyeCore", "timeandeyeStore", "timeandeyeTheme"]),
+        // Shared brand look (mark geometry + SwiftUI styling). A LEAF on
+        // purpose — no engine dependency, so sibling andeye apps that only
+        // want the brand take just this target (2026-07-10 relocation).
+        .target(name: "timeandeyeTheme"),
         // The whole SwiftUI layer as a LIBRARY, so app flavours are thin
         // wrappers: Community (below) and the private Pro executable both
         // return AndeyeScenes.body(controller:).

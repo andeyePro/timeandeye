@@ -1,8 +1,7 @@
 import SwiftUI
-import timeandeyeCore
 
 /// The andeye eye-mark as a SwiftUI `Shape`: the brand ampersand-eye,
-/// geometry verbatim from `AndeyeLogo` (timeandeyeCore, itself hardcoded
+/// geometry verbatim from `AndeyeLogo` (this module, itself hardcoded
 /// from assets/brand/andeye.svg). `t` reveals the stroke by arc length
 /// (0 nothing … 1 full mark, the "draw-on"); `wink` closes the eyelids
 /// (0 open … 1 shut). Both animate.

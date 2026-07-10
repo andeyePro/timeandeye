@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- [x] **timeandeyeTheme is now a leaf brand target.** `AndeyeLogo` (the
+  mark's geometry, pure Foundation) moved from timeandeyeCore into
+  timeandeyeTheme — the theme's only engine use — so sibling andeye apps
+  wanting just the brand no longer drag the whole engine in.
+  timeandeyeMac gained the theme dependency (AndeyeLogoImage renders the
+  mark); AndeyeMark/checks/site literal-port comments repointed.
+  Coordination note posted for sibling repos (import timeandeyeTheme, not
+  timeandeyeCore, for AndeyeLogo). Suite 798/0; app build clean.
+
 - [x] **Decision provenance journalled — BECAUSE names the original
   decider.** Follow-up to the why-panel truth fix: the journal now records
   WHICH source decided each slice (`SessionProvenance` on Session +

@@ -267,15 +267,14 @@ and recorded rather than fixed blind:
   (Projects API doesn't expose it — verified 2026-07-08); until then locks
   group under the single ref "Xero".
 
-- [ ] Relocate the AndeyeLogo geometry out of timeandeyeCore into
-  timeandeyeTheme (or a leaf brand target): sibling andeye apps that only
-  want the mark currently drag the whole engine in for it. Consumers to
-  repoint: AndeyeMark (timeandeyeTheme), AndeyeLogoImage +
-  AppController (timeandeyeMac), RootScenes (timeandeyeUI), the
-  AndeyeLogoChecks/ThemeChecks suites, and the site's literal-port
-  reference comments (site/src/pages/index.astro,
-  site/src/components/AndeyeSiteTitle.astro). Waits for a quiet window —
-  it's cross-product churn (Mon consumes the theme product too).
+- [x] Relocate the AndeyeLogo geometry out of timeandeyeCore into
+  timeandeyeTheme — DONE 2026-07-10.
+  timeandeyeTheme is now a LEAF (its only Core use was this geometry), so
+  a sibling app wanting just the brand takes just the theme target;
+  timeandeyeMac gained the theme dep (AndeyeLogoImage renders the mark).
+  Consumers repointed exactly as listed; suites 798/0; site literal-port
+  comments updated. Cross-repo: a consumer
+  importing timeandeyeCore for AndeyeLogo now imports timeandeyeTheme.
 
 - [ ] NAIL Chrome/Gmail correspondent categorisation (Martin, 2026-07-03
   02:04 BST, priority — "spin out agents and absolutely nail it, take your

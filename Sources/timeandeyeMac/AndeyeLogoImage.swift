@@ -1,5 +1,6 @@
 import AppKit
 import timeandeyeCore
+import timeandeyeTheme
 
 /// Renders the andeye mark — and, via `label`, the ENTIRE menu-bar item
 /// (mark + elapsed text) — as one NSImage. The drawing-handler NSImage
