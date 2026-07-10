@@ -395,11 +395,19 @@ func unknownSweepChecks(_ c: Checks) {
             .isEmpty)
     }
 
-    c.check("sweeping to Unknown never teaches the attributor; every other target does") {
+    c.check("neither Unknown nor Clear teaches the attributor; a real task does") {
         try expect(!Target.task(unknownRef).teachesAttributor,
                    "explicit don't-know, not a correction")
         try expect(Target.task(.op(1)).teachesAttributor)
-        try expect(Target.doNotTrack.teachesAttributor)
+        // Flipped 2026-07-10 — Martin's Clear decision: "drop from this
+        // list and don't add to timesheets … may be selected because the
+        // user can't be bothered assigning 1m tracks — which the app
+        // should not 'learn' from". The drawer's Clear/⌫/⌘D routes through
+        // assignReview's teachesAttributor gate, so this flag being false
+        // IS the no-sticky/no-learned-lean/no-clock-stop guarantee. The
+        // timeline's "Don't track this" teaches via a separate direct path.
+        try expect(!Target.doNotTrack.teachesAttributor,
+                   "a Clear must never become a learned don't-track lean")
     }
 }
 
@@ -605,6 +613,134 @@ func reviewSliceDetailChecks(_ c: Checks) {
         try expectEq(signals.first?.correspondents, ["amy@x.co"],
                      "the sibling's evidence never bleeds into a single-slice teach")
     }
+
+    // Pending-aware neighbours (Martin's retest, 2026-07-10: "Every item
+    // shows a gap"). Root cause: the lookup only considered attributed
+    // sessions, so a slice flush against ANOTHER pending slice reported a
+    // gap to some distant tracked session. The display overload considers
+    // both and picks whichever is nearest each side.
+
+    func pendingSeg(_ app: String, _ start: TimeInterval, _ end: TimeInterval,
+                    title: String? = nil) -> ReviewSegment {
+        ReviewSegment(app: app, windowTitle: title,
+                      start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
+    }
+
+    c.check("a back-to-back PENDING slice is the neighbour, not a distant tracked session") {
+        // Slice 1000–1600. The only session ended 600s before; a pending
+        // slice ends flush at 1000. His every-item-gap complaint is exactly
+        // this shape — the answer must be the touching pending slice.
+        let far = session(.op(1), 0, 400)
+        let queued = pendingSeg("Excel", 500, 1000, title: "Budget.xlsx")
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600),
+                                       in: [far], pending: [queued])
+        let before = try unwrap(n.before)
+        try expect(before.isPending)
+        try expectNil(before.task, "nothing is decided about a pending neighbour")
+        try expectEq(before.pendingSurface, "Excel – Budget.xlsx")
+        try expectEq(before.gap, 0)
+        try expect(before.isContiguous, "flush pending neighbour = NO gap indicator")
+    }
+
+    c.check("a pending slice wins the AFTER side too, with its real gap") {
+        let queued = pendingSeg("Excel", 1720, 2000)
+        let far = session(.op(1), 3000, 3300)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600),
+                                       in: [far], pending: [queued])
+        let after = try unwrap(n.after)
+        try expect(after.isPending)
+        try expectEq(after.gap, 120)
+    }
+
+    c.check("a nearer tracked session still beats a farther pending slice") {
+        let near = session(.op(2), 500, 990)
+        let farPending = pendingSeg("Excel", 0, 400)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600),
+                                       in: [near], pending: [farPending])
+        let before = try unwrap(n.before)
+        try expectEq(before.task, .op(2))
+        try expect(!before.isPending)
+    }
+
+    c.check("an exact tie goes to the attributed session — a task name informs more") {
+        let tied = session(.op(3), 500, 900)
+        let tiedPending = pendingSeg("Excel", 400, 900)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600),
+                                       in: [tied], pending: [tiedPending])
+        try expectEq(try unwrap(n.before).task, .op(3))
+    }
+
+    c.check("with no pending slices the display lookup matches the sessions-only one") {
+        let sessions = [session(.op(1), 0, 940), session(.op(2), 1660, 1800)]
+        let plain = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                           end: t0.addingTimeInterval(1600), in: sessions)
+        let aware = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                           end: t0.addingTimeInterval(1600),
+                                           in: sessions, pending: [])
+        try expectEq(aware, plain)
+    }
+
+    c.check("a pending slice overlapping the slice (incl. itself) is never a neighbour") {
+        // The caller filters the slice's own row out by id, but the edge
+        // filters must exclude any overlapper regardless — a slice must
+        // never read as its own neighbour.
+        let overlapper = pendingSeg("Excel", 900, 1200)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600),
+                                       in: [], pending: [overlapper])
+        try expectNil(n.before)
+        try expectNil(n.after)
+    }
+}
+
+// MARK: - Expand/collapse-all (Martin's retest, 2026-07-10: "Could we have
+// an open-all option?"). Pure state maths for the drawer's header control:
+// what "open everything" targets, and when the control should read
+// "Collapse all" instead.
+
+func reviewExpansionChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func seg(_ app: String, _ start: TimeInterval, _ end: TimeInterval,
+             title: String? = nil) -> ReviewSegment {
+        ReviewSegment(app: app, windowTitle: title,
+                      start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
+    }
+    // Two stacks: Excel (two slices) + Mail (one slice).
+    let a = seg("Excel", 0, 600, title: "Budget.xlsx")
+    let b = seg("Excel", 1000, 1600, title: "Budget.xlsx")
+    let m = seg("Mail", 2000, 2600, title: "Inbox")
+    let stacks = [a, b, m].stacked()
+
+    c.check("expand-all targets every stack AND every slice disclosure") {
+        try expectEq(stacks.everyStackID.count, 2)
+        try expectEq(stacks.everySliceID, Set([a.id, b.id, m.id]),
+                     "open-all really opens everything, not just the stacks")
+    }
+
+    c.check("fully-expanded flips the control; one closed disclosure flips it back") {
+        try expect(stacks.isFullyExpanded(stacks: stacks.everyStackID,
+                                          slices: stacks.everySliceID))
+        try expect(!stacks.isFullyExpanded(stacks: stacks.everyStackID,
+                                           slices: [a.id, b.id]),
+                   "a single closed slice detail means there is still something to open")
+        try expect(!stacks.isFullyExpanded(stacks: [], slices: stacks.everySliceID))
+    }
+
+    c.check("ids of rows assigned away meanwhile don't wedge the control") {
+        // Assign the Mail stack away: the view's sets still hold its ids.
+        let remaining = [a, b].stacked()
+        try expect(remaining.isFullyExpanded(stacks: stacks.everyStackID,
+                                             slices: stacks.everySliceID),
+                   "subset semantics — stale ids linger harmlessly")
+    }
+
+    c.check("an empty queue is never 'fully expanded' — nothing to collapse") {
+        try expect(![ReviewSegment]().stacked().isFullyExpanded(stacks: [], slices: []))
+    }
 }
 
 // MARK: - Adjacency certainty boost (Martin, 2026-07-10: "if the same
@@ -711,6 +847,38 @@ func adjacencyBoostChecks(_ c: Checks) {
         let dnt = AdjacencyBoost.apply(base: 0.45, candidate: .doNotTrack, name: "Do not track",
                                        neighbours: SliceNeighbours(before: near(alpha, gap: 0)))
         try expectClose(dnt.certainty, 0.45, "a neighbour is evidence FOR a task, never against tracking")
+    }
+
+    c.check("a PENDING neighbour never boosts any candidate — evidence of nothing") {
+        // Martin, 2026-07-10: adjacency boosts ride on ATTRIBUTED sessions
+        // only. The controller feeds AdjacencyBoost the sessions-only
+        // lookup; this pins the defensive layer — even if a pending
+        // neighbour (task nil) ever reached apply, it matches no candidate.
+        let pendingSide = SliceNeighbours.Neighbour(task: nil, start: t0, end: t0, gap: 0,
+                                                    pendingSurface: "Excel – Budget.xlsx")
+        let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
+                                     neighbours: SliceNeighbours(before: pendingSide,
+                                                                 after: pendingSide))
+        try expectClose(b.certainty, 0.45)
+        try expectNil(b.reasoning)
+    }
+
+    c.check("assigning the odd slice away IMPROVES the remaining group's button") {
+        // Martin's retest flow: assign individual slices out of a group,
+        // then assign the rest as one. "If that increases the chances of
+        // all members of a group belonging to one task, the chances for
+        // the group in the assign buttons should improve" — the mean over
+        // the REMAINING slices must rise once the low scorer leaves. (The
+        // controller recomputes because its memo is keyed by the segment-id
+        // set, which shrinks — plus reloadReview clears it on every assign.)
+        let strong = AdjacencyBoost(base: 0.60, certainty: 0.80, reasoning: "both neighbours Alpha (+20%)")
+        let alsoStrong = AdjacencyBoost(base: 0.55, certainty: 0.70, reasoning: "follows Alpha (+15%)")
+        let odd = AdjacencyBoost(base: 0.10, certainty: 0.10)
+        let whole = AdjacencyBoost.aggregate([strong, alsoStrong, odd])
+        let remaining = AdjacencyBoost.aggregate([strong, alsoStrong])
+        try expect(remaining.certainty > whole.certainty,
+                   "the group's certainty must recompute upward once the outlier is assigned away")
+        try expectEq(remaining.reasoning, "adjacency on every slice (both neighbours Alpha (+20%))")
     }
 
     c.check("a defensive negative gap reads as touching, never as negative strength") {

@@ -74,6 +74,8 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - Click then **⇧-click** - select the whole range between two rows;
   **⌘-click** - add / remove a single row; **⇧↑ / ⇧↓** - extend the
   selection by keyboard.
-- **⌘D** or **⌫** - mark the selection as "do not track".
+- **⌘D** or **⌫** - **Clear** the selection: drop it from the queue,
+  nothing added to timesheets, nothing learned.
+- **⌘E** - expand or collapse every stack and slice detail.
 - **↵** in the task filter - assign the selection to the top task.
 - **⌘⇧C** - copy the AI prompt. **⌘↵** - apply a pasted AI response.

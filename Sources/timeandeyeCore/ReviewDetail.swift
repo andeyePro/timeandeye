@@ -27,26 +27,42 @@ public enum RelativeDay: Equatable, Sendable {
     }
 }
 
-/// What the journal tracked immediately before and after a review slice —
+/// What filled the time immediately before and after a review slice —
 /// read-only context for the slice's detail disclosure, with an explicit
-/// gap when the neighbour wasn't back-to-back ("…2h gap"). Neighbours are
-/// SESSIONS (attributed, tracked time); sessions overlapping the slice
-/// itself are its own minutes under another name, so they are never
-/// offered as "before" or "after".
+/// gap when the neighbour wasn't back-to-back ("…2h gap"). A neighbour is
+/// either an attributed SESSION (tracked time, carries its task) or —
+/// via the pending-aware overload — ANOTHER review-queue slice still
+/// awaiting its own decision (Martin's retest, 2026-07-10: "Every item
+/// shows a gap" — back-to-back pending slices were reporting gaps to some
+/// distant tracked session because only sessions were considered).
+/// Sessions overlapping the slice itself are its own minutes under
+/// another name, so they are never offered as "before" or "after".
 public struct SliceNeighbours: Equatable, Sendable {
     public struct Neighbour: Equatable, Sendable {
-        public var task: TaskRef
+        /// The attributed session's task — nil when the neighbour is a
+        /// pending review slice (nothing is decided about it yet).
+        public var task: TaskRef?
         public var start: Date
         public var end: Date
         /// Seconds of untracked daylight between the slice's edge and this
         /// neighbour's nearest edge — 0 when they touch.
         public var gap: TimeInterval
+        /// The pending neighbour's surface ("Excel – Budget.xlsx") — what
+        /// the drawer labels it by instead of a task name. nil for sessions.
+        public var pendingSurface: String?
 
-        public init(task: TaskRef, start: Date, end: Date, gap: TimeInterval) {
+        /// A neighbour that is itself still awaiting review. Display marks
+        /// it distinctly, and `AdjacencyBoost` must never be fed one — a
+        /// pending neighbour is evidence of nothing.
+        public var isPending: Bool { task == nil }
+
+        public init(task: TaskRef?, start: Date, end: Date, gap: TimeInterval,
+                    pendingSurface: String? = nil) {
             self.task = task
             self.start = start
             self.end = end
             self.gap = gap
+            self.pendingSurface = pendingSurface
         }
 
         /// "Immediately" before/after, within the tracker's own switch
@@ -72,6 +88,11 @@ public struct SliceNeighbours: Equatable, Sendable {
     /// session covering more of the adjacent time (later start before,
     /// earlier end after) so the reported neighbour is the one actually
     /// touching the slice.
+    ///
+    /// SESSIONS ONLY — this is the overload `AdjacencyBoost` consumers must
+    /// use: an attributed neighbour is evidence a task continued across the
+    /// slice; a pending neighbour (see the pending-aware overload below) is
+    /// evidence of nothing and must never reach the boost.
     public static func around(start: Date, end: Date, in sessions: [Session]) -> SliceNeighbours {
         let beforeSession = sessions.filter { $0.end <= start }
             .max { ($0.end, $0.start) < ($1.end, $1.start) }
@@ -86,6 +107,39 @@ public struct SliceNeighbours: Equatable, Sendable {
                 Neighbour(task: $0.task, start: $0.start, end: $0.end,
                           gap: max(0, $0.start.timeIntervalSince(end)))
             })
+    }
+
+    /// DISPLAY lookup: the nearest candidate each side, whether an
+    /// attributed session or another PENDING review slice (Martin's retest,
+    /// 2026-07-10: a slice flush against another pending slice must say so,
+    /// not report a gap to some distant tracked session). A tie goes to the
+    /// session — a task name informs more than "pending review". Callers
+    /// pass `pending` without the slice's own row; segments overlapping the
+    /// slice are excluded by the same edge filters sessions get, so even an
+    /// un-filtered self never appears as its own neighbour.
+    public static func around(start: Date, end: Date, in sessions: [Session],
+                              pending: [ReviewSegment]) -> SliceNeighbours {
+        let tracked = around(start: start, end: end, in: sessions)
+        func surface(_ s: ReviewSegment) -> String {
+            "\(s.app)\(s.windowTitle.map { " – \($0)" } ?? "")"
+        }
+        let pendingBefore = pending.filter { $0.end <= start }
+            .max { ($0.end, $0.start) < ($1.end, $1.start) }
+            .map { Neighbour(task: nil, start: $0.start, end: $0.end,
+                             gap: max(0, start.timeIntervalSince($0.end)),
+                             pendingSurface: surface($0)) }
+        let pendingAfter = pending.filter { $0.start >= end }
+            .min { ($0.start, $0.end) < ($1.start, $1.end) }
+            .map { Neighbour(task: nil, start: $0.start, end: $0.end,
+                             gap: max(0, $0.start.timeIntervalSince(end)),
+                             pendingSurface: surface($0)) }
+        func nearer(session: Neighbour?, pending: Neighbour?) -> Neighbour? {
+            guard let session else { return pending }
+            guard let pending else { return session }
+            return pending.gap < session.gap ? pending : session
+        }
+        return SliceNeighbours(before: nearer(session: tracked.before, pending: pendingBefore),
+                               after: nearer(session: tracked.after, pending: pendingAfter))
     }
 }
 
@@ -166,6 +220,10 @@ public struct AdjacencyBoost: Equatable, Sendable {
         guard case .task(let ref) = candidate else {
             return AdjacencyBoost(base: base, certainty: base)
         }
+        // Callers must feed SESSIONS-ONLY neighbours (the two-argument
+        // `SliceNeighbours.around`); defensively, a pending neighbour
+        // (task nil) matches no candidate here either — a slice still
+        // awaiting review is evidence of nothing (Martin, 2026-07-10).
         let before = neighbours.before.flatMap { $0.task == ref ? $0 : nil }
         let after = neighbours.after.flatMap { $0.task == ref ? $0 : nil }
         let sBefore = before.map { strength(gap: $0.gap) } ?? 0

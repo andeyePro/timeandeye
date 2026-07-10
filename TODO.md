@@ -2,13 +2,17 @@
 
 ## Review drawer (Martin's critique, 2026-07-10)
 
-- [ ] Martin: naming call on the assign bar's **Do not track** button ("Do
-  not track sounds like it's going to stop that window from tracking in the
-  future - should that be [Delete]? Does it literally remove those slices?").
-  What it actually does: deletes nothing (queue rows are marked decided and
-  kept, ⌘Z restores; journalled sessions/timeline untouched) AND teaches a
-  learned lean toward "not work" for that surface, so future visits tend to
-  stop the clock. Both readings are half-true; the label waits on his call.
+- [x] Martin: naming call on the assign bar's **Do not track** button —
+  DONE 2026-07-10, his call: **[Clear]** ("drop from this list and don't
+  add to timesheets … may be selected because the user can't be bothered
+  assigning 1m tracks - which the app should not 'learn' from"). Clear
+  (and ⌫/⌘D) still marks rows decided, stays ⌘Z-undoable and leaves the
+  journal/timeline untouched — but no longer teaches
+  (`Target.teachesAttributor` is now false for `.doNotTrack`): no sticky,
+  no learned don't-track lean, no future clock-stop from a clear. Learned
+  associations from past clears stay in the store untouched. The
+  timeline's "Don't track this" keeps its deliberate teach (direct
+  `attributor.assign`, not gated by the flag).
 - [ ] Adjacency boost beyond the drawer: `AdjacencyBoost` (2026-07-10) is
   deliberately DISPLAY/ORDERING only — journalled certainty, the retro
   pass and auto-push never see it. Feeding it into posting semantics would

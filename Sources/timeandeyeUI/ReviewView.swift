@@ -15,11 +15,14 @@ import timeandeyeMac
 /// surfaces", not "these positions". Every stack expands on click; each
 /// slice inside carries its own disclosure revealing 100% of what's held —
 /// full timestamps, surface, email evidence, current certainty + source,
-/// and the journal's neighbours either side — plus a per-slice assign
-/// affordance, so one visit in a stack can go somewhere different from its
-/// siblings (Martin, 2026-07-10). Assign to any task (fuzzy-filtered),
-/// to "Do not track", or create a new local (non-OpenProject) task on the
-/// spot and assign to it; ⌫ with rows selected is "Do not track" too.
+/// and what filled the time either side — plus a visible Assign button on
+/// every slice, so one visit in a stack can go somewhere different from its
+/// siblings (Martin, 2026-07-10). A header Expand/Collapse all (⌘E) opens
+/// every stack and slice disclosure at once. Assign to any task
+/// (fuzzy-filtered), Clear (drop from the queue and timesheets, teaching
+/// nothing — Martin's 2026-07-10 naming call), or create a new local
+/// (non-OpenProject) task on the spot and assign to it; ⌫ with rows
+/// selected is Clear too.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
     @State private var selection = Set<String>()
@@ -53,9 +56,10 @@ struct ReviewView: View {
                     stackRow(entry.stack).tag(entry.key)
                 }
             }
-            // ⌫ with rows selected = the assign bar's "Do not track" (same
-            // action, same ⌘Z) — the List's native delete command, so both
-            // backspace and forward-delete route here.
+            // ⌫ with rows selected = the assign bar's Clear (same action,
+            // same ⌘Z, same nothing-is-learned semantics) — the List's
+            // native delete command, so both backspace and forward-delete
+            // route here.
             .onDeleteCommand {
                 guard !selection.isEmpty else { return }
                 assign(.doNotTrack)
@@ -80,12 +84,17 @@ struct ReviewView: View {
 
     /// The window header: decisions (stacks) up front, per spec §7 — the
     /// exact slice count stays here for the curious, never in the badge —
-    /// plus the sort control (menu picker, matching Settings' compact
-    /// `.menu` + `.fixedSize()` vocabulary).
+    /// plus expand/collapse-all (Martin, 2026-07-10: "Could we have an
+    /// open-all option?") and the sort control (menu picker, matching
+    /// Settings' compact `.menu` + `.fixedSize()` vocabulary).
     private var header: some View {
         HStack {
             Text("\(controller.pendingDecisionCount) to decide").font(.headline)
             Spacer()
+            Button(fullyExpanded ? "Collapse all" : "Expand all") { toggleExpandAll() }
+                .controlSize(.small)
+                .keyboardShortcut("e", modifiers: .command)
+                .help("Open or close every stack and every slice's detail (⌘E)")
             Picker("", selection: $controller.settings.reviewSortOrder) {
                 Text("Newest").tag(ReviewSortOrder.newestFirst)
                 Text("Oldest").tag(ReviewSortOrder.oldestFirst)
@@ -115,6 +124,24 @@ struct ReviewView: View {
 
     private var selectedStacks: [ReviewStack] {
         keyedStacks.filter { selection.contains($0.key) }.map(\.stack)
+    }
+
+    /// Core-checked predicate (`isFullyExpanded`): subset semantics, so ids
+    /// of stacks assigned away meanwhile don't wedge the control on
+    /// "Collapse all". `surfaceKey` and `ReviewStack.id` are the same
+    /// string, so the view's `expanded` set keys match `everyStackID`.
+    private var fullyExpanded: Bool {
+        stacks.isFullyExpanded(stacks: expanded, slices: sliceDetail)
+    }
+
+    private func toggleExpandAll() {
+        if fullyExpanded {
+            expanded.removeAll()
+            sliceDetail.removeAll()
+        } else {
+            expanded = stacks.everyStackID
+            sliceDetail = stacks.everySliceID
+        }
     }
 
     private func stackRow(_ stack: ReviewStack) -> some View {
@@ -165,31 +192,37 @@ struct ReviewView: View {
     }
 
     /// One slice inside an expanded stack: dated start + duration, its own
-    /// full-detail disclosure, and a per-slice assign affordance (the same
+    /// full-detail disclosure, and a per-slice Assign button (the same
     /// assign bar, scoped to this one slice — Martin, 2026-07-10: "no way
     /// to assign specific slices within the set to different activities").
+    /// The button is BORDERED and keeps its own tint on purpose: the first
+    /// ship of this affordance was a lowercase borderless "assign" washed
+    /// grey by the row's secondary foreground — it read as metadata, and
+    /// Martin's retest couldn't find it at all.
     private func sliceRow(_ segment: ReviewSegment) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack {
-                Button {
-                    if sliceDetail.contains(segment.id) { sliceDetail.remove(segment.id) }
-                    else { sliceDetail.insert(segment.id) }
-                } label: {
-                    Image(systemName: sliceDetail.contains(segment.id) ? "chevron.down" : "chevron.right")
+                Group {
+                    Button {
+                        if sliceDetail.contains(segment.id) { sliceDetail.remove(segment.id) }
+                        else { sliceDetail.insert(segment.id) }
+                    } label: {
+                        Image(systemName: sliceDetail.contains(segment.id) ? "chevron.down" : "chevron.right")
+                    }
+                    .buttonStyle(.plain)
+                    Text(dayTimeText(segment.start))
+                    Spacer()
+                    Text(durationText(segment.end.timeIntervalSince(segment.start)))
                 }
-                .buttonStyle(.plain)
-                Text(dayTimeText(segment.start))
-                Spacer()
-                Text(durationText(segment.end.timeIntervalSince(segment.start)))
-                Button("assign") {
+                .foregroundStyle(sliceAssign == segment.id ? .primary : .secondary)
+                Button("Assign…") {
                     sliceAssign = segment.id
                     selection.removeAll()
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered).controlSize(.mini)
                 .help("Assign just this slice – pick its task in the bar below")
             }
             .font(.caption2)
-            .foregroundStyle(sliceAssign == segment.id ? .primary : .secondary)
             if sliceDetail.contains(segment.id) {
                 sliceDetailView(segment).padding(.leading, 14)
             }
@@ -199,11 +232,14 @@ struct ReviewView: View {
     /// Everything held on one slice — full timestamps + duration, the
     /// surface, email evidence when present, the attributor's CURRENT read
     /// (certainty + where it comes from, the Evidence Card's vocabulary),
-    /// and the journal's neighbours either side with an explicit gap when
-    /// they weren't back-to-back.
+    /// and what filled the time either side with an explicit gap when it
+    /// wasn't back-to-back. The before/after lines use the DISPLAY lookup
+    /// (nearest of tracked session or another pending slice); the certainty
+    /// line's adjacency boost uses the sessions-only lookup — a pending
+    /// neighbour is evidence of nothing (Martin, 2026-07-10).
     private func sliceDetailView(_ segment: ReviewSegment) -> some View {
         let explanation = controller.explain(segment.signal, now: segment.start)
-        let neighbours = controller.sliceNeighbours(for: segment)
+        let (neighbours, adjacency) = controller.sliceNeighbours(for: segment)
         return VStack(alignment: .leading, spacing: 1) {
             Text("\(segment.start.formatted(date: .abbreviated, time: .standard)) – "
                  + "\(segment.end.formatted(date: .abbreviated, time: .standard)) · "
@@ -215,9 +251,13 @@ struct ReviewView: View {
             } else if let subject = segment.emailSubject {
                 Text("✉ \(subject)")
             }
-            Text(certaintyLine(explanation, neighbours: neighbours))
+            Text(certaintyLine(explanation, neighbours: adjacency))
+            // A pending neighbour renders italic — visually distinct from a
+            // decided, task-named session either side.
             Text("before: \(neighbourText(neighbours.before, before: true))")
+                .italic(neighbours.before?.isPending == true)
             Text("after: \(neighbourText(neighbours.after, before: false))")
+                .italic(neighbours.after?.isPending == true)
         }
         .font(.caption2).foregroundStyle(.secondary)
         .textSelection(.enabled)
@@ -251,14 +291,18 @@ struct ReviewView: View {
     }
 
     /// "<task> until Today 14:20 · …12m gap" / "<task> from Yesterday 9:02"
-    /// — the tracked neighbour on one side, with the gap named whenever it
-    /// wasn't immediately adjacent; an empty side says so rather than
-    /// vanishing.
+    /// — the neighbour on one side, with the gap named whenever it wasn't
+    /// immediately adjacent; an empty side says so rather than vanishing.
+    /// A neighbour that is itself still awaiting review is labelled
+    /// "pending review" with its surface, never a task name — nothing is
+    /// decided about it yet (Martin's retest, 2026-07-10).
     private func neighbourText(_ n: SliceNeighbours.Neighbour?, before: Bool) -> String {
         guard let n else { return "nothing tracked" }
+        let who = n.task.map { controller.name(of: .task($0)) }
+            ?? "pending review – \(n.pendingSurface ?? "another slice")"
         var text = before
-            ? "\(controller.name(of: .task(n.task))) until \(dayTimeText(n.end))"
-            : "\(controller.name(of: .task(n.task))) from \(dayTimeText(n.start))"
+            ? "\(who) until \(dayTimeText(n.end))"
+            : "\(who) from \(dayTimeText(n.start))"
         if !n.isContiguous { text += " · …\(durationText(n.gap)) gap" }
         return text
     }
@@ -345,9 +389,12 @@ struct ReviewView: View {
                     .frame(width: 180)
                     .onSubmit { if let t = orderedTasks(by: scores).first { assign(.task(t.ref)) } }
                     .help("Filter tasks; ↵ assigns the selection to the top result")
-                Button("Do not track") { assign(.doNotTrack) }
+                // "Clear" (Martin's naming call, 2026-07-10): drop from the
+                // queue, nothing added to timesheets, and — unlike an
+                // assignment — nothing learned (Target.teachesAttributor).
+                Button("Clear") { assign(.doNotTrack) }
                     .keyboardShortcut("d", modifiers: .command)
-                    .help("Mark the selection as not worked (⌘D, or ⌫ with rows selected)")
+                    .help("Drop the selection from the queue – not added to timesheets, nothing is learned (⌘D, or ⌫ with rows selected)")
                 Button("Unknown") { assign(.task(WorkTask.unknown.ref)) }
                     .help("Sweep to Unknown – tracked, safe, off your plate, reclaimable")
             }

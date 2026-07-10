@@ -554,8 +554,11 @@ public final class Attributor {
                        disabledRecipes: disabledSiteRecipes)
     }
 
-    /// Review-window or prompt assignment, including "Do not track". Always a
-    /// SOFT prime (caps at 0.95) — explicit 100 % pinning goes through `pin`.
+    /// Review-window or prompt assignment. Always a SOFT prime (caps at
+    /// 0.95) — explicit 100 % pinning goes through `pin`. `.doNotTrack`
+    /// arrives here only from the timeline's deliberate "Don't track this"
+    /// (`markSessionDoNotTrack`); the review drawer's Clear never teaches,
+    /// so it never calls this (Target.teachesAttributor, 2026-07-10).
     /// A durable email rule is no longer written here either (2026-07-03 spec
     /// §5.4) — see `confirm` (including its `tasks` note).
     public func assign(_ signal: ActivitySignal, target: Target,

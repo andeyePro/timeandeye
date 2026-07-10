@@ -2055,9 +2055,13 @@ public final class AppController: ObservableObject {
             }
         }
         try? journal.assign(ids, to: target)
-        // Sweeping to Unknown is an explicit "don't know", not a correction —
-        // it must never teach the attributor (Target.teachesAttributor is
-        // false only for the Unknown sentinel).
+        // Two targets never teach (Target.teachesAttributor): sweeping to
+        // Unknown is an explicit "don't know", not a correction; and a
+        // Clear (.doNotTrack — the drawer's Clear button/⌫/⌘D) is "can't be
+        // bothered assigning 1m tracks", which the app must not learn from
+        // (Martin, 2026-07-10) — the rows leave the queue and the
+        // journal/timeline stay untouched, but no sticky, no learned
+        // association, no future clock-stop lean.
         if target.teachesAttributor {
             // Teach from EVERY distinct surface covered by the selection —
             // the old first(where:) taught only the first row (approvals-
@@ -2138,19 +2142,32 @@ public final class AppController: ObservableObject {
         segment.signal
     }
 
-    /// What the journal tracked immediately before and after a review slice
-    /// (task + time, with the gap when they weren't back-to-back) — the
-    /// drawer's per-slice detail disclosure (Martin, 2026-07-10: "including
-    /// what was tracked before and after"). Read-only: a range query over
-    /// the existing journal, no new state. The live-checkpoint sentinel is
-    /// crash-recovery bookkeeping, not history, so it never appears as a
-    /// neighbour.
-    public func sliceNeighbours(for segment: ReviewSegment) -> SliceNeighbours {
+    /// What filled the time immediately before and after a review slice —
+    /// the drawer's per-slice detail disclosure (Martin, 2026-07-10:
+    /// "including what was tracked before and after"). Read-only: a range
+    /// query over the existing journal, no new state. The live-checkpoint
+    /// sentinel is crash-recovery bookkeeping, not history, so it never
+    /// appears as a neighbour.
+    ///
+    /// Two lookups from the one query (Martin's retest, 2026-07-10):
+    /// - `display` also considers the OTHER pending review slices, so a
+    ///   slice flush against another pending slice reads "pending review",
+    ///   not a gap to some distant tracked session ("Every item shows a
+    ///   gap").
+    /// - `adjacency` is attributed sessions ONLY — what `AdjacencyBoost`
+    ///   must be fed: a pending neighbour is evidence of nothing.
+    public func sliceNeighbours(for segment: ReviewSegment)
+        -> (display: SliceNeighbours, adjacency: SliceNeighbours) {
         let window: TimeInterval = 30 * 24 * 3600
         let sessions = ((try? journal.sessions(from: segment.start.addingTimeInterval(-window),
                                                to: segment.end.addingTimeInterval(window))) ?? [])
             .filter { $0.id != Self.liveCheckpointID }
-        return SliceNeighbours.around(start: segment.start, end: segment.end, in: sessions)
+        let adjacency = SliceNeighbours.around(start: segment.start, end: segment.end,
+                                               in: sessions)
+        let display = SliceNeighbours.around(start: segment.start, end: segment.end,
+                                             in: sessions,
+                                             pending: pendingReview.filter { $0.id != segment.id })
+        return (display, adjacency)
     }
 
     /// Memo for `adjacencyScores` — keyed by the segment-id set so the
@@ -2196,7 +2213,11 @@ public final class AppController: ObservableObject {
             .filter { $0.id != Self.liveCheckpointID }
 
         // Each slice's CURRENT read (scored at its own moment, like the
-        // detail line and the retro pass) plus its journal neighbours.
+        // detail line and the retro pass) plus its journal neighbours —
+        // the sessions-only lookup, deliberately: adjacency boosts ride on
+        // ATTRIBUTED neighbours only; a pending review slice next door is
+        // evidence of nothing (Martin, 2026-07-10) and must never lift a
+        // button's certainty.
         let reads = sampled.map { seg in
             (explanation: explain(seg.signal, now: seg.start),
              neighbours: SliceNeighbours.around(start: seg.start, end: seg.end, in: sessions))
@@ -2213,8 +2234,11 @@ public final class AppController: ObservableObject {
             for line in read.explanation.lines {
                 if case .task(let ref) = line.target { candidates.insert(ref) }
             }
-            if let before = read.neighbours.before { candidates.insert(before.task) }
-            if let after = read.neighbours.after { candidates.insert(after.task) }
+            // Sessions-only lookup, so task is always present — but stay
+            // honest with the type: a pending neighbour (task nil) could
+            // never nominate a candidate anyway.
+            if let task = read.neighbours.before?.task { candidates.insert(task) }
+            if let task = read.neighbours.after?.task { candidates.insert(task) }
         }
 
         var scores: [TaskRef: (certainty: Double, hover: String)] = [:]

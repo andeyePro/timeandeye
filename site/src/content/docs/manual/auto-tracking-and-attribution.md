@@ -85,8 +85,11 @@ switch tracking is never worth naming.
 Clearing a backlog? Sort the queue from the control at the top - newest,
 oldest, longest or shortest - then click a row and shift-click another to
 select everything between them (⌘-click adds or removes single rows). One
-press of **Do not track**, **Unknown** or a task then clears the whole
-range - so does ⌫ for "Do not track" - and one ⌘Z brings it all back.
+press of **Clear**, **Unknown** or a task then handles the whole range -
+so does ⌫ for Clear - and one ⌘Z brings it all back. **Clear** drops the
+selection from the queue without adding it to timesheets and without
+teaching andeye anything - the quick way past slices not worth naming;
+your timeline and journal keep the time untouched.
 
 Every row is dated - Today, Yesterday or the calendar date - and every row
 expands. A row is one *surface* (an app, window or tab), stacking every
@@ -94,20 +97,26 @@ separate visit to it; the chevron lists those visits, and each visit's own
 chevron reveals everything held on it - exact start and end, duration, app,
 window title and address, any email correspondents and subject, how certain
 andeye currently is about it and where that certainty comes from, and what
-was tracked immediately before and after it (with the gap named when they
-weren't back-to-back). The **assign** button beside a visit scopes the
-assign bar to just that one, so one visit in a stack can go to a different
-task than its siblings.
+filled the time immediately before and after it (with the gap named when
+they weren't back-to-back; a neighbour that is itself still awaiting review
+shows in italics as *pending review* with its surface, since nothing is
+decided about it yet). **Expand all** in the header (⌘E) opens every stack
+and every visit's detail at once; press it again to collapse. The
+**Assign…** button beside each visit scopes the assign bar to just that
+one, so one visit in a stack can go to a different task than its siblings -
+and once it leaves the stack, the buttons re-score over the visits that
+remain.
 
 The assign bar's task buttons are sorted by how likely each task is for the
 selected time, most likely first, and a button that has a likelihood shows
 it as a percentage - hover to see how the number was built. Time tracked to
 the same task immediately before and after a visit raises that task's
 likelihood: strongly when both sides match, less when only one does, fading
-out as the gap to the neighbour grows.
+out as the gap to the neighbour grows. Only decided, tracked time counts
+here - a *pending review* neighbour never changes a likelihood.
 
 Can't place a batch at all? The assign bar's **Unknown** button
-sweeps it to the built-in Unknown task instead of "Do not track" or a guess -
+sweeps it to the built-in Unknown task instead of clearing it or guessing -
 the time stays tracked with full detail, just off your review queue. It shows
 up hatched grey on the timeline and in the pie so it's never mistaken for a
 real task, and you can reassign it from the timeline any time you do work out

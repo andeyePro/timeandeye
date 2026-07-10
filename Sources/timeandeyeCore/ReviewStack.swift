@@ -74,3 +74,23 @@ public extension Array where Element == ReviewSegment {
         return filter { $0.end.timeIntervalSince($0.start) >= floor }
     }
 }
+
+public extension Array where Element == ReviewStack {
+    /// Expand-all target state (Martin, 2026-07-10: "Could we have an
+    /// open-all option?"): every stack id, so ONE header control can open
+    /// the whole drawer rather than the user clicking each chevron.
+    var everyStackID: Set<String> { Set(map(\.id)) }
+
+    /// …and every slice id — open-all opens the slice detail disclosures
+    /// too, not just the stacks, so "open all" really shows everything.
+    var everySliceID: Set<UUID> { Set(flatMap(\.segments).map(\.id)) }
+
+    /// Whether the drawer is already fully open — the header control reads
+    /// "Collapse all" when nothing is left to reveal. Subset, not equality:
+    /// ids of rows assigned away meanwhile linger harmlessly in the view's
+    /// sets and must not stop the control reading the true state. An empty
+    /// queue is never "fully expanded" — there is nothing to collapse.
+    func isFullyExpanded(stacks: Set<String>, slices: Set<UUID>) -> Bool {
+        !isEmpty && everyStackID.isSubset(of: stacks) && everySliceID.isSubset(of: slices)
+    }
+}

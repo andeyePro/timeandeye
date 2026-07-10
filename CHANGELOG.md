@@ -2,6 +2,35 @@
 
 ## 2026-07-10
 
+- [x] **Review drawer retest fixes: open-all, a findable per-slice Assign,
+  pending-review neighbours, and "Do not track" becomes Clear.** Martin's
+  live retest, four calls in one pass. (1) Header **Expand all / Collapse
+  all** (⌘E) opens every stack AND every slice disclosure at once
+  (Core-checked `everyStackID`/`everySliceID`/`isFullyExpanded`, subset
+  semantics so assigned-away ids can't wedge the control). (2) The
+  per-slice assign had shipped that morning but he couldn't find it: a
+  lowercase borderless "assign" washed grey by the row's secondary
+  foreground read as metadata — now a bordered mini **Assign…** button
+  with its own tint on every slice row; a new aggregate check pins that
+  assigning the odd slice away raises the remaining group's mean (the
+  memo is keyed by segment-id set and cleared on every reload, so buttons
+  recompute). (3) "Every item shows a gap": the neighbour arithmetic was
+  exactly his spec (prev.end→start, end→next.start — confirmed), but the
+  lookup consulted attributed sessions only, so a slice flush against
+  ANOTHER pending slice reported a gap to some distant session. New
+  pending-aware `SliceNeighbours.around(start:end:in:pending:)` picks the
+  nearest candidate each side (tie → session); pending neighbours render
+  italic as "pending review – <surface>". Adjacency boosts deliberately
+  stay on the sessions-only lookup — a pending neighbour is evidence of
+  nothing — pinned by checks. (4) His naming decision: the button is
+  **Clear** (⌫/⌘D unchanged), and a Clear NO LONGER TEACHES
+  (`Target.teachesAttributor` false for `.doNotTrack`): no sticky, no
+  learned don't-track lean, no future clock-stop from clearing; past
+  clears' learned associations stay untouched; the timeline's "Don't
+  track this" keeps its deliberate teach. Manuals updated in fresh-reader
+  voice (both `MANUAL.md` and the site's queue + keyboard pages). Checks
+  749/0; release app + site build verified.
+
 - [x] **Undo: duplicate reconcile is reversible (the reconcile journal).**
   `applyReconcile` deletes duplicate entries at the backend, so a naive
   undo would re-point sessions at dead ids (later edits would PATCH a

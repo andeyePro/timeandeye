@@ -47,13 +47,27 @@ public enum Target: Hashable, Codable, Sendable {
 }
 
 public extension Target {
-    /// Sweeping to the built-in Unknown task (Unknown task category,
-    /// 2026-07-09) is an explicit "don't know", not a correction — it must
-    /// never teach the attributor (that would let an admission of
-    /// uncertainty masquerade as learned evidence). Every other target — a
-    /// real task or `.doNotTrack` — teaches normally.
+    /// Whether assigning to this target should teach the attributor.
+    ///
+    /// - Sweeping to the built-in Unknown task (Unknown task category,
+    ///   2026-07-09) is an explicit "don't know", not a correction — it must
+    ///   never teach (that would let an admission of uncertainty masquerade
+    ///   as learned evidence).
+    /// - Clearing (`.doNotTrack` — the review drawer's Clear button/⌫) never
+    ///   teaches either (Martin, 2026-07-10): "drop from this list and don't
+    ///   add to timesheets … may be selected because the user can't be
+    ///   bothered assigning 1m tracks — which the app should not 'learn'
+    ///   from". No sticky, no learned lean toward stopping the clock.
+    ///   Existing learned don't-track associations stay in the store
+    ///   untouched; clears just stop creating new ones. The timeline's own
+    ///   "Don't track this" is a different, deliberate teach-this-surface-
+    ///   is-non-work action and doesn't route through this flag.
+    /// - A real task teaches normally.
     var teachesAttributor: Bool {
-        self != .task(WorkTask.unknown.ref)
+        switch self {
+        case .doNotTrack: return false
+        case .task(let ref): return ref != WorkTask.unknown.ref
+        }
     }
 }
 
