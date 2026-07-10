@@ -2,6 +2,19 @@
 
 ## 2026-07-10
 
+- [x] **Fullscreen fix ten: opening a window you left on a desktop now
+  surfaces it over a fullscreen app first click.** Martin's afternoon
+  report: the popover icons needed several clicks over fullscreen
+  Obsidian. The uncovered case: a window left OPEN on a desktop Space is
+  visible and settled, so neither the hidden-window pose maintenance nor
+  the show-transition grace protects it — and the popover blinds
+  promotion at exactly click time. Every themed-window open (all sites
+  funnel through the activation gate) now posts a synchronous open-grant;
+  each window restarts its open grace and re-applies the
+  fullscreen-capable pose in the click's own runloop turn, ahead of
+  SwiftUI's deferred order-front where macOS decides the Space. Cost: the
+  other themed windows float for the 4s grace too, then settle.
+
 - [x] **Review drawer retest fixes: open-all, a findable per-slice Assign,
   pending-review neighbours, and "Do not track" becomes Clear.** Martin's
   live retest, four calls in one pass. (1) Header **Expand all / Collapse

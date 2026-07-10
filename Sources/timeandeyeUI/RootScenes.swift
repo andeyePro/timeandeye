@@ -100,6 +100,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
         /// window the same cadence regardless of how often SwiftUI renders.
         private var recheck: Timer?
         private var screenObserver: NSObjectProtocol?
+        private var openObserver: NSObjectProtocol?
         /// Fix nine (Martin, 2026-07-10 morning) closed two blind spots:
         /// the popover's menu-bar reveal blinded the heuristic at exactly
         /// open time (fresh windows attached at normal level and macOS
@@ -128,6 +129,10 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(observer)
                 screenObserver = nil
             }
+            if let observer = openObserver {
+                NotificationCenter.default.removeObserver(observer)
+                openObserver = nil
+            }
             guard window != nil else { return }
             pose = FullscreenPose.State(
                 openedAt: ProcessInfo.processInfo.systemUptime)
@@ -148,16 +153,28 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 queue: .main) { [weak self] _ in
                 DispatchQueue.main.async { self?.applyToWindow() }
             }
+            // User-open grant (see AndeyeWindows.openRequested): SYNCHRONOUS
+            // — no queue hop — so a visible desktop-settled window regains
+            // the fullscreen-capable pose in the click's own runloop turn,
+            // before SwiftUI's deferred order-front lets macOS decide the
+            // Space.
+            openObserver = NotificationCenter.default.addObserver(
+                forName: AndeyeWindows.openRequested, object: nil,
+                queue: nil) { [weak self] _ in
+                guard let self, Thread.isMainThread else { return }
+                self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
+                self.applyToWindow()
+            }
         }
         deinit {
             // Backstop only (see viewDidMoveToWindow). deinit may run on
             // any thread; hop the captured timer/observer to main, where
             // they were installed.
             let timer = recheck
-            let observer = screenObserver
+            let observers = [screenObserver, openObserver].compactMap { $0 }
             let cleanup = {
                 timer?.invalidate()
-                if let observer {
+                for observer in observers {
                     NotificationCenter.default.removeObserver(observer)
                 }
             }
@@ -308,7 +325,24 @@ enum AndeyeWindows {
     /// heuristic — the pose logic HOLDS sampling while this is up.
     static var popoverIsOpen = false
 
+    /// Posted synchronously at the start of every themed-window open (all
+    /// open sites funnel through `activateOnceVisible`). A window the user
+    /// left OPEN on a desktop Space is visible + settled, so neither the
+    /// hidden-window maintenance nor the show-transition grace protects it
+    /// — and the popover blinds promotion at exactly click time. Result
+    /// (Martin, 2026-07-10 afternoon): clicking a popover icon over a
+    /// fullscreen app needed several clicks before the window surfaced.
+    /// Every SpaceJoiningView restarts its open grace on this note, in the
+    /// SAME runloop turn as the click — ahead of SwiftUI's deferred
+    /// order-front, so the window is fullscreen-capable when macOS decides
+    /// the Space. A 4s float on windows that weren't the one opened is the
+    /// accepted cost.
+    static let openRequested = Notification.Name("andeyeThemedWindowOpenRequested")
+
     static func activateOnceVisible(_ retriesLeft: Int = 40) {
+        if retriesLeft == 40 {   // the entry call, not a retry turn
+            NotificationCenter.default.post(name: openRequested, object: nil)
+        }
         // Floating counts: over a fullscreen app the themed windows live at
         // .floating (SpaceJoiningView), and a gate that only accepted
         // .normal never fired there — the open finished without activation
