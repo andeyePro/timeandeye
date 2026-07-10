@@ -352,6 +352,13 @@ midnight. Day boundaries are marked with the date.
 
 ## Settings
 
+Settings (⌘,) is organised into categories - a sidebar on the left, the
+selected category's controls on the right: Backend, Tracking, Behaviour,
+Menu bar, Local tasks, Billing, Email & Calendar, Maintenance, Diagnostics,
+About. Press **⌘F** and type to find any setting by its label or a related
+word ("color", "xero", "csv" all work); pick a result to jump to its
+category.
+
 - **Comments** - whether a note goes to the time entry, the task's feed, or both.
 - **Popover default mode** - "Change to" (default) or "Switch to".
 - **Time button opens** - Timeline / Last viewed / Pie chart.

@@ -2,6 +2,20 @@
 
 ## 2026-07-10
 
+- [x] **Settings reorganised into categories with ⌘F search.** The single
+  long scrolling form became a System-Settings-style split view: sidebar
+  categories (Backend, Tracking, Behaviour, Menu bar, Local tasks, Billing,
+  Email & Calendar, Maintenance, Diagnostics, About) with the section bodies
+  moved verbatim; a search field above the sidebar (⌘F focuses it, Esc
+  clears) finds any setting by visible label or synonym ("color", "xero",
+  "csv") and jumps to its category. The index is a pure Core type
+  (`SettingsIA`: categories + item registry + ranked
+  case/diacritic-insensitive search, titles outrank keywords) proven by an
+  11-check suite; conditional sections (Posting health, Billing mappings)
+  stay indexed so search lands on the right category even while hidden.
+  Manuals updated (site settings page restructured to the category IA;
+  MANUAL.md lead-in). Approved at his. Suite 781/0.
+
 
 
 

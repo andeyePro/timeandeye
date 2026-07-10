@@ -44,8 +44,98 @@ struct SettingsView: View {
                 set: { controller.settings.journalHardCapMB = $0 })
     }
 
+    /// Which category the sidebar shows; nil only transiently (a sidebar List
+    /// selection is Optional) — the detail falls back to .backend.
+    @State private var selectedCategory: SettingsIA.Category? = .backend
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
+
     var body: some View {
-        Form {
+        NavigationSplitView {
+            sidebar
+        } detail: {
+            Form {
+                switch selectedCategory ?? .backend {
+                case .backend:       backendSections
+                case .tracking:      trackingSections
+                case .behaviour:     behaviourSections
+                case .menuBar:       menuBarSections
+                case .localTasks:    localTasksSections
+                case .billing:       billingSections
+                case .emailCalendar: emailCalendarSections
+                case .maintenance:   maintenanceSections
+                case .diagnostics:   diagnosticsSections
+                case .about:         aboutSections
+                }
+            }
+            .formStyle(.grouped)
+            .textSelection(.enabled)   // every label copyable, to share text not screenshots
+        }
+        .frame(minWidth: 760, idealWidth: 860, minHeight: 500, idealHeight: 620)
+        // Hidden ⌘F target — focuses the sidebar search from anywhere in the
+        // window (the standard Settings idiom).
+        .background {
+            Button("") { searchFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Sidebar: search on top, then the category list — or, while a query is
+    /// live, the matching settings. Picking a result jumps to its category.
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption).foregroundStyle(.secondary)
+                TextField("Search settings (⌘F)", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .focused($searchFocused)
+                    .onExitCommand { searchText = ""; searchFocused = false }
+            }
+            .padding(6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            .padding([.horizontal, .top], 8)
+            let query = searchText.trimmingCharacters(in: .whitespaces)
+            if query.isEmpty {
+                List(SettingsIA.Category.allCases, selection: $selectedCategory) { cat in
+                    Label(cat.title, systemImage: cat.systemImage).tag(cat)
+                }
+                .listStyle(.sidebar)
+            } else {
+                let hits = SettingsIA.search(query)
+                List {
+                    if hits.isEmpty {
+                        Text("No settings match")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(hits) { hit in
+                        Button {
+                            selectedCategory = hit.category
+                            searchText = ""
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(hit.title)
+                                Text(hit.category.title)
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .listStyle(.sidebar)
+            }
+        }
+        .navigationSplitViewColumnWidth(min: 185, ideal: 205, max: 280)
+    }
+
+    // MARK: - Category forms (section bodies unchanged from the single-page
+    // Settings; the categories + search are the 2026-07-10 IA rework)
+
+    @ViewBuilder private var backendSections: some View {
             Section("OpenProject") {
                 TextField("Instance URL", text: $controller.settings.opBaseURL,
                           prompt: Text("https://op.example.com"))
@@ -94,6 +184,52 @@ struct SettingsView: View {
                 }
             }
 
+            // Posting health (A5): only appears when something needs a human —
+            // quarantined rows (retryable in one click) or posted entries the
+            // journal has since moved away from (re-sync is the coming
+            // amendment feature; for now the drift is at least VISIBLE).
+            let unhealthy = controller.postingHealthReport()
+            if !unhealthy.isEmpty {
+                Section("Posting health") {
+                    ForEach(unhealthy) { item in
+                        HStack {
+                            Text(item.name).font(.caption)
+                            Spacer()
+                            if item.diverged > 0 {
+                                Text("\(item.diverged) drifted from the journal")
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
+                            if item.stuck > 0 {
+                                Text("\(item.stuck) stuck")
+                                    .font(.caption).foregroundStyle(.red)
+                                Button("Retry") {
+                                    controller.retryStuck(backendID: item.id)
+                                }
+                                .font(.caption)
+                            }
+                        }
+                        // Invoice locks: billed time held safe from edits.
+                        // Unlock is per invoice and deliberate — the same
+                        // invoice never re-locks itself.
+                        ForEach(item.lockedInvoices, id: \.ref) { lock in
+                            HStack {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                Text("Invoice \(lock.ref) — \(lock.count) entr\(lock.count == 1 ? "y" : "ies") locked")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Unlock") {
+                                    controller.unlockInvoice(ref: lock.ref, backendID: item.id)
+                                }
+                                .font(.caption)
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+    @ViewBuilder private var trackingSections: some View {
             Section("Auto-push") {
                 let threshold = controller.settings.certaintyAutoPushThreshold
                 Slider(value: $controller.settings.certaintyAutoPushThreshold, in: 0.5...1.01)
@@ -131,7 +267,9 @@ struct SettingsView: View {
                      : "Both off — the note field is hidden.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+    }
 
+    @ViewBuilder private var menuBarSections: some View {
             Section("Menu bar") {
                 TextField("Low-certainty colour (hex)", text: $controller.settings.colourLow)
                     .textFieldStyle(.roundedBorder)
@@ -147,7 +285,9 @@ struct SettingsView: View {
                 Text("The first few letters of what's being tracked appear after the time — \"21m andey\". Set to 0 to hide it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+    }
 
+    @ViewBuilder private var localTasksSections: some View {
             Section("Local tasks (never sent to OpenProject)") {
                 // Fixed column widths shared by header + every row → the columns
                 // line up deterministically (a Grid inside a grouped Form didn't).
@@ -198,7 +338,9 @@ struct SettingsView: View {
                 Text("Editing a task's name or project keeps its id, history and colour. The catch-all is the one task that confident non-work time lands on when \"Track leisure locally\" is on (instead of stopping the clock) — that's all \"leisure\" ever meant. Projects just group tasks in Time Spent. (Restart to apply the catch-all.)")
                     .font(.caption).foregroundStyle(.secondary)
             }
+    }
 
+    @ViewBuilder private var behaviourSections: some View {
             Section("Behaviour") {
                 Stepper("Switch buffer: \(Int(controller.settings.switchGraceSeconds))s",
                         value: $controller.settings.switchGraceSeconds, in: 0...120, step: 5)
@@ -233,7 +375,9 @@ struct SettingsView: View {
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
             }
+    }
 
+    @ViewBuilder private var billingSections: some View {
             Section("Billing") {
                 TextField("Currency symbol", text: Binding(
                     get: { controller.settings.currencySymbolOverride ?? "" },
@@ -243,78 +387,6 @@ struct SettingsView: View {
                     .frame(width: 120)
                 Text("Shown wherever billable totals appear; leave blank for your locale's symbol (\(CurrencyDefault.symbol())). Projects default to non-billable — right-click a project or task in the Time Spent legend to opt it in, or set a per-task override.")
                     .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section("Licence") {
-                if let l = controller.license {
-                    // v2 keys always carry an expiry; a lifetime key's is
-                    // ~200 years out — call that what it is, not a renewal.
-                    let farFuture = l.issued.addingTimeInterval(100 * 365.25 * 86_400)
-                    Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"
-                         + (l.expires > farFuture ? " · lifetime"
-                            : " · renews \(l.expires.formatted(date: .abbreviated, time: .omitted))"))
-                        .font(.caption)
-                } else {
-                    Text("Community (free) — everything you see is fully functional. A licence adds paid backends (Xero…).")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                HStack {
-                    TextField("Paste licence key", text: $licenseKeyField)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Apply") {
-                        controller.settings.licenseKey =
-                            licenseKeyField.isEmpty ? nil : licenseKeyField
-                        licenseKeyField = ""
-                    }
-                    .disabled(licenseKeyField.isEmpty && controller.settings.licenseKey == nil)
-                }
-                if let problem = controller.licenseProblem {
-                    Text(problem).font(.caption).foregroundStyle(.red)
-                }
-            }
-
-            // Posting health (A5): only appears when something needs a human —
-            // quarantined rows (retryable in one click) or posted entries the
-            // journal has since moved away from (re-sync is the coming
-            // amendment feature; for now the drift is at least VISIBLE).
-            let unhealthy = controller.postingHealthReport()
-            if !unhealthy.isEmpty {
-                Section("Posting health") {
-                    ForEach(unhealthy) { item in
-                        HStack {
-                            Text(item.name).font(.caption)
-                            Spacer()
-                            if item.diverged > 0 {
-                                Text("\(item.diverged) drifted from the journal")
-                                    .font(.caption).foregroundStyle(.orange)
-                            }
-                            if item.stuck > 0 {
-                                Text("\(item.stuck) stuck")
-                                    .font(.caption).foregroundStyle(.red)
-                                Button("Retry") {
-                                    controller.retryStuck(backendID: item.id)
-                                }
-                                .font(.caption)
-                            }
-                        }
-                        // Invoice locks: billed time held safe from edits.
-                        // Unlock is per invoice and deliberate — the same
-                        // invoice never re-locks itself.
-                        ForEach(item.lockedInvoices, id: \.ref) { lock in
-                            HStack {
-                                Image(systemName: "lock.fill")
-                                    .font(.caption2).foregroundStyle(.secondary)
-                                Text("Invoice \(lock.ref) — \(lock.count) entr\(lock.count == 1 ? "y" : "ies") locked")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                Spacer()
-                                Button("Unlock") {
-                                    controller.unlockInvoice(ref: lock.ref, backendID: item.id)
-                                }
-                                .font(.caption)
-                            }
-                        }
-                    }
-                }
             }
 
             // Billing mappings (D6): only with a finance backend registered.
@@ -353,7 +425,60 @@ struct SettingsView: View {
                 }
                 .onAppear { Task { await controller.refreshFinanceTaskOptions() } }
             }
+    }
 
+    @ViewBuilder private var aboutSections: some View {
+            Section("Licence") {
+                if let l = controller.license {
+                    // v2 keys always carry an expiry; a lifetime key's is
+                    // ~200 years out — call that what it is, not a renewal.
+                    let farFuture = l.issued.addingTimeInterval(100 * 365.25 * 86_400)
+                    Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"
+                         + (l.expires > farFuture ? " · lifetime"
+                            : " · renews \(l.expires.formatted(date: .abbreviated, time: .omitted))"))
+                        .font(.caption)
+                } else {
+                    Text("Community (free) — everything you see is fully functional. A licence adds paid backends (Xero…).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                HStack {
+                    TextField("Paste licence key", text: $licenseKeyField)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Apply") {
+                        controller.settings.licenseKey =
+                            licenseKeyField.isEmpty ? nil : licenseKeyField
+                        licenseKeyField = ""
+                    }
+                    .disabled(licenseKeyField.isEmpty && controller.settings.licenseKey == nil)
+                }
+                if let problem = controller.licenseProblem {
+                    Text(problem).font(.caption).foregroundStyle(.red)
+                }
+            }
+
+            Section("About") {
+                // .textSelection alone is unreliable inside a grouped macOS
+                // Form (rows swallow the drag), so the copy button is the
+                // guaranteed verbatim path for bug reports.
+                HStack(spacing: 6) {
+                    Text(Self.buildDetails)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(Self.buildDetails, forType: .string)
+                        buildCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { buildCopied = false }
+                    } label: {
+                        Image(systemName: buildCopied ? "checkmark" : "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy the build details")
+                }
+            }
+    }
+
+    @ViewBuilder private var maintenanceSections: some View {
             Section("Maintenance") {
                 HStack {
                     Button(scanning ? "Scanning…" : "Scan for duplicate OpenProject entries") {
@@ -477,7 +602,9 @@ struct SettingsView: View {
                     Text("There is no undo.")
                 }
             }
+    }
 
+    @ViewBuilder private var emailCalendarSections: some View {
             Section("Email → task matching") {
                 TextField("My addresses/domains", text: Binding(
                     get: { controller.settings.ownEmailEntries },
@@ -541,7 +668,9 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+    }
 
+    @ViewBuilder private var diagnosticsSections: some View {
             Section("Diagnostics (dev)") {
                 Button("Probe email sender (front browser)") {
                     Task { senderProbe = await controller.probeEmailSender() }
@@ -576,31 +705,6 @@ struct SettingsView: View {
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
-
-            Section("About") {
-                // .textSelection alone is unreliable inside a grouped macOS
-                // Form (rows swallow the drag), so the copy button is the
-                // guaranteed verbatim path for bug reports.
-                HStack(spacing: 6) {
-                    Text(Self.buildDetails)
-                        .font(.caption).foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(Self.buildDetails, forType: .string)
-                        buildCopied = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { buildCopied = false }
-                    } label: {
-                        Image(systemName: buildCopied ? "checkmark" : "doc.on.doc")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Copy the build details")
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .textSelection(.enabled)   // every label copyable, to share text not screenshots
-        .padding(8)
     }
 
     /// Reorder the email-matching specificity ladder (persists via settings didSet).
