@@ -9,38 +9,41 @@ func andeyeThemeChecks(_ c: Checks) {
     // shape must render the Core geometry into any rect without drift, and
     // the compatibility spelling must stay pointed at the theme value.
 
-    /// Bounding box of the rendered CURVES (sampled), not Path.boundingRect —
-    /// the control points legitimately roam outside the mark's box (same
-    /// reasoning as the AndeyeLogo suite's curveBBox).
-    func sampledBBox(_ path: Path) -> CGRect {
-        var xs: [CGFloat] = [], ys: [CGFloat] = []
+    /// The rendered path's elements as `AndeyeLogo.Cubic`s — cubics verbatim,
+    /// moves/lines degree-elevated to point/line cubics (identical sampled
+    /// geometry) — so the AndeyeLogo suite's `curveBBox` is the one bezier
+    /// evaluator for both suites.
+    func pathCubics(_ path: Path) -> [AndeyeLogo.Cubic] {
+        func pt(_ p: CGPoint) -> AndeyeLogo.Point { .init(Double(p.x), Double(p.y)) }
+        var segs: [AndeyeLogo.Cubic] = []
         var current = CGPoint.zero
         path.forEach { element in
             switch element {
             case .move(let p):
                 current = p
-                xs.append(p.x); ys.append(p.y)
-            case .line(let p):
+                segs.append(.init(pt(p), pt(p), pt(p), pt(p)))
+            case .line(let p), .quadCurve(let p, _):
+                segs.append(.init(pt(current), pt(current), pt(p), pt(p)))
                 current = p
-                xs.append(p.x); ys.append(p.y)
             case .curve(let p, let c1, let c2):
-                for i in 0...48 {
-                    let u = CGFloat(i) / 48, v = 1 - u
-                    let a = v * v * v, b = 3 * v * v * u, d = 3 * v * u * u, e = u * u * u
-                    xs.append(a * current.x + b * c1.x + d * c2.x + e * p.x)
-                    ys.append(a * current.y + b * c1.y + d * c2.y + e * p.y)
-                }
+                segs.append(.init(pt(current), pt(c1), pt(c2), pt(p)))
                 current = p
-            case .quadCurve(let p, _):
-                current = p
-                xs.append(p.x); ys.append(p.y)
             case .closeSubpath:
                 break
             }
         }
-        guard let minX = xs.min(), let maxX = xs.max(),
-              let minY = ys.min(), let maxY = ys.max() else { return .null }
-        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        return segs
+    }
+
+    /// Bounding box of the rendered CURVES (sampled), not Path.boundingRect —
+    /// the control points legitimately roam outside the mark's box (see
+    /// `curveBBox` in the AndeyeLogo suite, which does the sampling).
+    func sampledBBox(_ path: Path) -> CGRect {
+        let segs = pathCubics(path)
+        guard !segs.isEmpty else { return .null }
+        let b = curveBBox(segs)
+        return CGRect(x: b.minX, y: b.minY,
+                      width: b.maxX - b.minX, height: b.maxY - b.minY)
     }
 
     c.check("the path IS the Core geometry, scaled and centred into the rect") {

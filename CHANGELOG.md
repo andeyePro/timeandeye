@@ -2,6 +2,23 @@
 
 ## 2026-07-10
 
+- [x] **iOS companion displays as Time&I; inert bundleIdPrefix dropped;
+  manual catches up; one bezier evaluator in the checks.** ios/project.yml
+  now sets `INFOPLIST_KEY_CFBundleDisplayName: "Time&I"` (the companion
+  installed as "andeye"; apps are <X>&I) and drops `bundleIdPrefix` — the
+  explicit `PRODUCT_BUNDLE_IDENTIFIER` was already the single source and
+  keeps the per-app-id comment; Martin: regenerate with `cd ios &&
+  xcodegen`. Manual (root MANUAL.md + site pages): the Evidence Card's
+  "sees:" line names the correspondent-capture providers (Gmail, Outlook
+  Web, Proton Mail, Yahoo Mail, Fastmail), and the Time window pages say
+  Time&I windows appear over full-screen apps and settle onto the current
+  desktop; site builds clean. ThemeChecks' inline bezier polynomial +
+  duplicated bbox sampler are gone: the rendered SwiftUI path's elements
+  funnel into `AndeyeLogo.Cubic` (moves/lines degree-elevated) and both
+  suites measure through the AndeyeLogo suite's `curveBBox`. TODO.md gains
+  the AndeyeLogo-geometry relocation entry (out of timeandeyeCore into the
+  theme/a leaf brand target; consumers listed; waits for a quiet window).
+
 - [x] **Install scripts: never delete an install on evidence you couldn't
   read, verify the zip before touching anything, retire duplicates from
   both locations.** make-app.sh retired `~/Applications/timeandeye.app`
@@ -285,6 +302,24 @@
   retires old-identity bundles in ~/Applications too (the zip installer's
   location). Stale "the id is shared"/"same bundle id" comments corrected.
   Shim expiry recorded in TODO.md.
+
+- [x] **Review drawer joins the 1Hz fullscreen-level re-check.**
+  (Backfilled entry — documents commit 24e3959, which landed without
+  one.) The float-over-fullscreen level decision rode SwiftUI re-renders,
+  ~1Hz for clock-driven windows but rare for the review drawer, so the
+  drawer never updated its level after attach and stayed evicted from
+  fullscreen Spaces while timeline and settings floated. SpaceJoiningView
+  now owns a 1s timer plus a screen-change observer, giving every window
+  the same re-check cadence regardless of render frequency. Suite 677/0
+  at the time; release build verified over the bridge.
+
+- [x] **Site legal canonicals pinned to andeye.com.** (Backfilled entry —
+  documents commit 47de277, which landed without one.) One privacy policy
+  and one terms doc for ALL andeye apps: the Xero-registered
+  andeye.com/privacy + /terms stay the reference wherever the product
+  site is served, so the legal pages' canonicals are absolute now
+  (Astro.site is time.andeye.com and was silently re-canonicalising them)
+  and both footers link the andeye.com URLs.
 
 ## 2026-07-09
 

@@ -54,7 +54,8 @@ The card shows, top to bottom:
   click.
 - **sees:** - the evidence andeye actually captured: app and site/title
   always, plus the correspondent, domain and subject when the surface is an
-  email. A field it didn't capture shows as "not captured", never hidden.
+  open message in Gmail, Outlook Web, Proton Mail, Yahoo Mail or Fastmail.
+  A field it didn't capture shows as "not captured", never hidden.
 - **Wrong? file as** - search for the right task, then choose how durably to
   fix it: **Once** (today, this thread - today's soft correction, no lasting
   rule), **Remember** (a revisable rule at the grain you pick - correspondent,

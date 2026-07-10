@@ -113,7 +113,8 @@ The card shows, top to bottom:
   click.
 - **sees:** - the evidence andeye actually captured: app and site/title
   always, plus the correspondent, domain and subject when the surface is an
-  email. A field it didn't capture shows as "not captured", never hidden.
+  open message in Gmail, Outlook Web, Proton Mail, Yahoo Mail or Fastmail.
+  A field it didn't capture shows as "not captured", never hidden.
 - **Wrong? file as** - search for the right task, then choose how durably to
   fix it: **Once** (today, this thread - today's soft correction, no lasting
   rule), **Remember** (a revisable rule at the grain you pick - correspondent,
@@ -234,7 +235,9 @@ else. Click the pin button in the popover to open the pin editor.
 
 One window shows your time two ways - a **timeline** and a **pie** - and you flip
 between them in place. The footer pie in the popover opens it on the timeline,
-the pie, or whichever you viewed last, per a Setting.
+the pie, or whichever you viewed last, per a Setting. Like every Time&I
+window, it appears over full-screen apps and settles onto whichever desktop
+you're working on.
 
 ### Switching views
 

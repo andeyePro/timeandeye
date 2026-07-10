@@ -5,7 +5,9 @@ description: The timeline and pie views of your tracked time, and how to edit it
 
 One window shows your time two ways - a **timeline** and a **pie** - and you flip
 between them in place. The footer pie in the popover opens it on the timeline,
-the pie, or whichever you viewed last, per a Setting.
+the pie, or whichever you viewed last, per a Setting. Like every Time&I
+window, it appears over full-screen apps and settles onto whichever desktop
+you're working on.
 
 ## Switching views
 

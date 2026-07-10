@@ -1,20 +1,25 @@
 import Foundation
 import timeandeyeCore
 
-func andeyeLogoChecks(_ c: Checks) {
-    /// Bounding box of the curves themselves (sampled), not the control
-    /// points — the SVG's control points legitimately roam outside the box.
-    func curveBBox(_ segs: [AndeyeLogo.Cubic]) -> (minX: Double, minY: Double,
-                                                   maxX: Double, maxY: Double) {
-        var xs: [Double] = [], ys: [Double] = []
-        for s in segs {
-            for i in 0...48 {
-                let p = AndeyeLogo.point(on: s, at: Double(i) / 48)
-                xs.append(p.x); ys.append(p.y)
-            }
+/// Bounding box of the curves themselves (sampled via `AndeyeLogo.point`),
+/// not the control points — the SVG's control points legitimately roam
+/// outside the box. Shared with the theme suite (`ThemeChecks` funnels the
+/// rendered SwiftUI path's elements into `Cubic`s and calls this), so both
+/// suites measure geometry with the ONE evaluator instead of a duplicated
+/// inline bezier polynomial.
+func curveBBox(_ segs: [AndeyeLogo.Cubic]) -> (minX: Double, minY: Double,
+                                               maxX: Double, maxY: Double) {
+    var xs: [Double] = [], ys: [Double] = []
+    for s in segs {
+        for i in 0...48 {
+            let p = AndeyeLogo.point(on: s, at: Double(i) / 48)
+            xs.append(p.x); ys.append(p.y)
         }
-        return (xs.min() ?? 0, ys.min() ?? 0, xs.max() ?? 0, ys.max() ?? 0)
     }
+    return (xs.min() ?? 0, ys.min() ?? 0, xs.max() ?? 0, ys.max() ?? 0)
+}
+
+func andeyeLogoChecks(_ c: Checks) {
 
     c.check("the mark is the SVG's four cubics, contiguous") {
         let segs = AndeyeLogo.stroke(t: 1)

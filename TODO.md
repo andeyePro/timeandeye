@@ -193,6 +193,16 @@ and recorded rather than fixed blind:
   (Projects API doesn't expose it — verified 2026-07-08); until then locks
   group under the single ref "Xero".
 
+- [ ] Relocate the AndeyeLogo geometry out of timeandeyeCore into
+  timeandeyeTheme (or a leaf brand target): sibling andeye apps that only
+  want the mark currently drag the whole engine in for it. Consumers to
+  repoint: AndeyeMark (timeandeyeTheme), AndeyeLogoImage +
+  AppController (timeandeyeMac), RootScenes (timeandeyeUI), the
+  AndeyeLogoChecks/ThemeChecks suites, and the site's literal-port
+  reference comments (site/src/pages/index.astro,
+  site/src/components/AndeyeSiteTitle.astro). Waits for a quiet window —
+  it's cross-product churn (Mon consumes the theme product too).
+
 - [ ] NAIL Chrome/Gmail correspondent categorisation (Martin, 2026-07-03
   02:04 BST, priority — "spin out agents and absolutely nail it, take your
   time, run focus groups"). Symptoms: Gmail slices keep going to "University Teaching" and the why-panel can't explain why; the components/
