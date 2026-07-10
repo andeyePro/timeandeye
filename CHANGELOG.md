@@ -2,6 +2,19 @@
 
 ## 2026-07-10
 
+- [x] **Fullscreen fix eleven: the green button makes a Time&I window
+  fullscreen again.** The pose flags stripped .fullScreenPrimary
+  unconditionally, so the green button could never create the window's
+  own fullscreen Space — over another app's fullscreen it just zoomed
+  the floating window across everything (Martin's afternoon report).
+  Primary and auxiliary are exclusive: the desktop pose is now a normal
+  primary-fullscreen-capable window (green button works), the
+  fullscreen-capable pose stays an auxiliary overlay (green-buttoning
+  WHILE floating over another app's fullscreen still cannot spawn a
+  Space — an auxiliary-window constraint of macOS; leave the other
+  app's fullscreen first). A window inside its own native fullscreen
+  Space is now left entirely alone by the pose machinery.
+
 - [x] **Fullscreen fix ten: opening a window you left on a desktop now
   surfaces it over a fullscreen app first click.** Martin's afternoon
   report: the popover icons needed several clicks over fullscreen

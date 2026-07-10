@@ -215,6 +215,11 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             }
             wasVisible = visible
             didInitialApply = true
+            // A window that is IN ITS OWN native fullscreen Space (green
+            // button) belongs to macOS: touching flags or level mid-
+            // fullscreen risks breaking the Space or its exit animation.
+            // Leave it entirely alone until it comes back.
+            if w.styleMask.contains(.fullScreen) { return }
             // Fullscreen-look heuristic: menu bar hidden ⇒ visibleFrame
             // reaches the top of the screen. Blind while the menu bar is
             // transiently revealed (popover open, pointer at top) — the
@@ -255,13 +260,23 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // fullScreenAuxiliary + normal level once settled on an ordinary
             // desktop — so windows neither follow the user across Spaces nor
             // squat above other apps in normal use.
+            // The green button needs .fullScreenPrimary to create the
+            // window's OWN fullscreen Space — the unconditional strip left
+            // it zooming over whatever it floated above instead (Martin,
+            // 2026-07-10 afternoon). Primary and auxiliary are exclusive:
+            // the desktop pose is a normal window (primary — green button
+            // works), the fullscreen-capable pose is an auxiliary overlay
+            // (green-buttoning WHILE floating over another app's fullscreen
+            // still can't spawn a Space — macOS constraint of auxiliary
+            // windows; drop out of the other app's fullscreen first).
             var behaviours = w.collectionBehavior
-            behaviours.remove([.fullScreenNone, .fullScreenPrimary, .moveToActiveSpace])
-            behaviours.insert(.fullScreenAuxiliary)
+            behaviours.remove([.fullScreenNone, .moveToActiveSpace])
             if wantFullscreenPose {
-                behaviours.insert(.canJoinAllSpaces)
+                behaviours.remove(.fullScreenPrimary)
+                behaviours.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
             } else {
-                behaviours.remove(.canJoinAllSpaces)
+                behaviours.remove([.canJoinAllSpaces, .fullScreenAuxiliary])
+                behaviours.insert(.fullScreenPrimary)
             }
             if w.collectionBehavior != behaviours {
                 w.collectionBehavior = behaviours
