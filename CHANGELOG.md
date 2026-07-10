@@ -2,6 +2,20 @@
 
 ## 2026-07-10
 
+- [x] **Live-attribution adjacency prior.** His decision ("the
+  running timer IS a sound prior without outcome data"): while the clock
+  runs on a task, that task's candidate for an ambiguous surface is lifted
+  by the drawer's one-sided adjacency maths (`AdjacencyBoost.live`, same
+  constants — 30% of the gap to the 0.95 ceiling, full ≤30s decaying to
+  zero at 15min), fed from `SessionTracker.liveContinuity` (the COMMITTED
+  slice's task during a provisional switch, never the display guess;
+  stopped clocks carry no prior). Only the ranked fallback is touched —
+  pins, stickies, backend URLs/titles and learned rules return before it.
+  This deliberately shapes journalled certainty and auto-push, per his
+  explicit call; every applied boost DebugLogs ("live-adjacency …") so the
+  shared constants can be fitted from corrections (TODO). 9-check
+  LiveAdjacency suite; manuals updated. Suite 790/0.
+
 - [x] **Settings reorganised into categories with ⌘F search.** The single
   long scrolling form became a System-Settings-style split view: sidebar
   categories (Backend, Tracking, Behaviour, Menu bar, Local tasks, Billing,

@@ -193,11 +193,13 @@ public struct ReviewSliceDetail: Equatable, Sendable {
 /// of being the same activity. If an activity is adjacent only on one side
 /// that should also increase its certainty").
 ///
-/// DISPLAY/ORDERING guidance ONLY: nothing here mutates journalled
-/// certainty, teaches the attributor, or changes what auto-pushes — the
-/// boost ranks and annotates the drawer's assign buttons and the slice
-/// detail line. Feeding it into posting semantics would be a deliberate
-/// separate decision (tracked in TODO.md).
+/// The drawer's use (`apply`) is DISPLAY/ORDERING guidance: it ranks and
+/// annotates the assign buttons and the slice detail line without touching
+/// what those slices journalled. The LIVE variant (`live`) is different by
+/// Martin's explicit decision (2026-07-10, his): it feeds the
+/// attributor's ranked path, so it DOES shape live certainty — what
+/// journals, queues and auto-pushes. Same constants for both; every
+/// applied boost is logged so corrections can fit them.
 public struct AdjacencyBoost: Equatable, Sendable {
     // MARK: - Tuning constants
     // All in ONE place so a retune is a one-line edit. Every applied boost
@@ -308,6 +310,26 @@ public struct AdjacencyBoost: Equatable, Sendable {
         return AdjacencyBoost(base: base,
                               certainty: min(ceiling, base + boost),
                               reasoning: reasoning)
+    }
+
+    /// LIVE one-sided prior (Martin, 2026-07-10, his): the clock
+    /// RUNNING on a task is itself evidence that an ambiguous surface is a
+    /// continuation of it — his pushback on parking this until outcome data
+    /// existed ("the running timer IS a sound prior"; corrections only tune
+    /// the constants). Same maths and reasoning text as a journal
+    /// before-neighbour at `gap` seconds, so live and drawer boosts can
+    /// never drift apart. Only the running task's own candidate is lifted;
+    /// non-task targets (do-not-track) never boost.
+    public static func live(base: Double, candidate: Target, name: String,
+                            running: Target, gap: TimeInterval,
+                            ceiling: Double = Attributor.inferredCeiling) -> AdjacencyBoost {
+        guard candidate == running, case .task(let ref) = running else {
+            return AdjacencyBoost(base: base, certainty: base)
+        }
+        let neighbour = SliceNeighbours.Neighbour(
+            task: ref, start: .distantPast, end: .distantPast, gap: max(0, gap))
+        return apply(base: base, candidate: candidate, name: name,
+                     neighbours: SliceNeighbours(before: neighbour), ceiling: ceiling)
     }
 
     /// Stack/selection aggregation: the MEAN of the per-slice boosted

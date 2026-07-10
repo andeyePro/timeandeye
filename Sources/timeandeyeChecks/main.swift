@@ -152,6 +152,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("CalendarPrecedence", calendarPrecedenceChecks),
     ("CalendarAlerts", calendarAlertChecks),
     ("SettingsIA", settingsIAChecks),
+    ("LiveAdjacency", liveAdjacencyChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

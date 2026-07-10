@@ -280,6 +280,19 @@ public final class SessionTracker {
             && $0.at <= span.end.addingTimeInterval(1) }
     }
 
+    /// The running clock as an attribution prior (Martin, 2026-07-10, his
+    /// 228/240). While tracking a real task, its continuity is evidence for
+    /// an ambiguous surface. During a provisional switch the prior backs the
+    /// COMMITTED slice's task (`pendingSwitch.from`), not the display target
+    /// — boosting a not-yet-committed guess would entrench it with its own
+    /// echo. Stopped clocks carry no prior (the resume ladder owns that).
+    private func liveContinuity(at now: Date) -> Attributor.Continuity? {
+        guard case .tracking(let displayTarget, _) = state else { return nil }
+        let committed = pendingSwitch.map(\.from) ?? displayTarget
+        guard case .task = committed else { return nil }
+        return .init(target: committed, lastActive: lastInput ?? currentStart ?? now)
+    }
+
     /// Re-evaluate the current surface against the attributor WITHOUT splitting
     /// the open span — used when an association changes mid-session (e.g. the
     /// user just pinned this window) so the live certainty/target reflect it
@@ -288,7 +301,9 @@ public final class SessionTracker {
     public func reevaluate() {
         guard case .tracking(let displayTarget, _) = state,
               let signal = currentSignal,
-              let best = attributor.attribute(signal, tasks: tasks(), now: signal.timestamp).best,
+              let best = attributor.attribute(signal, tasks: tasks(),
+                                              now: signal.timestamp,
+                                              continuity: liveContinuity(at: signal.timestamp)).best,
               best.score >= config.uncertainBelow else { return }
         if best.target != displayTarget {
             for i in spans.indices where !isPinned(spans[i]) {
@@ -414,10 +429,16 @@ public final class SessionTracker {
             }
             endCurrentSpan(at: now)
         }
-        let attribution = attributor.attribute(signal, tasks: tasks(), now: now)
+        let attribution = attributor.attribute(signal, tasks: tasks(), now: now,
+                                               continuity: liveContinuity(at: now))
         currentSignal = signal
         currentStart = now
         onDebug("focus \(signal.app)|\(signal.windowTitle ?? "-") -> best \(String(describing: attribution.best)) state \(state)")
+        if let boost = attributor.lastLiveBoost, let why = boost.reasoning {
+            // Logged so the shared adjacency constants can be fitted from
+            // corrections later — pair this with the decision that followed.
+            onDebug("live-adjacency \(why) base \(boost.base) -> \(boost.certainty)")
+        }
 
         switch state {
         case .stopped:

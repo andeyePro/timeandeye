@@ -267,7 +267,32 @@ public final class Attributor {
     /// out here. 1.0 is reserved for "the user told me outright" (a pin).
     public static let inferredCeiling = 0.95
 
-    public func attribute(_ signal: ActivitySignal, tasks: [WorkTask], now: Date) -> Attribution {
+    /// What the clock is running on, as an attribution prior (Martin,
+    /// 2026-07-10, his): the tracker passes the COMMITTED task of the
+    /// open slice and when activity last fed it, and `attribute` lifts that
+    /// task's candidate by the one-sided adjacency boost. Only the ranked
+    /// fallback is touched — a pin, sticky, backend URL/title or learned
+    /// rule is definitive evidence and returns before this applies.
+    public struct Continuity: Equatable, Sendable {
+        public let target: Target
+        /// The last moment activity actually fed the running slice; the
+        /// boost decays over the gap to `now` exactly like a journal
+        /// neighbour's (full ≤30s, zero at 15min).
+        public let lastActive: Date
+        public init(target: Target, lastActive: Date) {
+            self.target = target
+            self.lastActive = lastActive
+        }
+    }
+
+    /// The live boost the most recent `attribute` call applied — nil when
+    /// none. The tracker logs it (reasoning + sizes) so the shared constants
+    /// can later be FITTED from correction outcomes.
+    public private(set) var lastLiveBoost: AdjacencyBoost?
+
+    public func attribute(_ signal: ActivitySignal, tasks: [WorkTask], now: Date,
+                          continuity: Continuity? = nil) -> Attribution {
+        lastLiveBoost = nil
         // An explicit pin is law: it wins over a work-package URL and the
         // ranker alike. Alternatives still rank beneath it for the switch-list.
         if let pin = matchingPin(for: signal) {
@@ -336,7 +361,31 @@ public final class Attributor {
             ranked.removeAll { $0.target == .task(primed) }
             ranked.insert(Candidate(target: .task(primed), score: 0.95), at: 0)
         }
+        applyLiveAdjacency(&ranked, continuity: continuity, tasks: tasks, now: now)
         return Attribution(best: ranked.first, ranked: ranked)
+    }
+
+    /// Lift the running task's candidate by the live adjacency prior (see
+    /// `Continuity`). A task the ranker gave nothing still enters at the
+    /// boosted-from-zero score (~0.29 at full strength) — visible in the
+    /// switch list as the continuation hypothesis, but below every
+    /// tracking threshold on its own.
+    private func applyLiveAdjacency(_ ranked: inout [Candidate],
+                                    continuity: Continuity?,
+                                    tasks: [WorkTask], now: Date) {
+        guard let continuity, case .task(let ref) = continuity.target else { return }
+        let gap = max(0, now.timeIntervalSince(continuity.lastActive))
+        guard AdjacencyBoost.strength(gap: gap) > 0 else { return }
+        let name = tasks.first { $0.ref == ref }?.subject ?? "the running task"
+        let base = ranked.first { $0.target == continuity.target }?.score ?? 0
+        let boosted = AdjacencyBoost.live(base: base, candidate: continuity.target,
+                                          name: name, running: continuity.target,
+                                          gap: gap)
+        guard boosted.boost > 0 else { return }
+        ranked.removeAll { $0.target == continuity.target }
+        ranked.append(Candidate(target: continuity.target, score: boosted.certainty))
+        ranked.sort { $0.score > $1.score }
+        lastLiveBoost = boosted
     }
 
     /// SessionTracker calls this when a surface has held focus beyond the

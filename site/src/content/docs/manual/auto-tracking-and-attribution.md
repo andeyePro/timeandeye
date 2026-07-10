@@ -131,6 +131,13 @@ likelihood: strongly when both sides match, less when only one does, fading
 out as the gap to the neighbour grows. Only decided, tracked time counts
 here - a *pending review* neighbour never changes a likelihood.
 
+The same continuity idea runs live: while the clock is running on a task,
+a window that could plausibly belong to it is read as a continuation -
+the running task's likelihood gets the one-sided nudge above, so an
+ambiguous moment mid-flow queues for review less often than the same
+window opened cold. Definite evidence (a pin, a task page, a learned
+rule) always beats the nudge, and a stopped clock carries none.
+
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of clearing it or guessing -
 the time stays tracked with full detail, just off your review queue. It shows
