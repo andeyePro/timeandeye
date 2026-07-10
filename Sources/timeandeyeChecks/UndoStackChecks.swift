@@ -57,6 +57,51 @@ func undoStackChecks(_ c: Checks) async {
         try expectEq(u.count, 0)
     }
 
+    await c.check("sync group: the AI batch registers N assignments as ONE ⌘Z step") {
+        // ingestAIResponse's shape: parse → N assignReview calls, each of
+        // which registers its own inverse. The paste is ONE user gesture, so
+        // undoing it must be ONE ⌘Z — and the caller is a synchronous button
+        // handler (it returns a status string to show), so it cannot await
+        // the async `group` above; the sync overload exists for exactly this.
+        let u = UndoStack()
+        var journal = [1: "pending", 2: "pending", 3: "pending"]
+        u.group("AI assign 3 review rows", sync: {
+            for id in [1, 2, 3] {
+                u.register("assign row \(id)") { journal[id] = "pending" }
+                journal[id] = "assigned"
+            }
+        })
+        try expectEq(journal.values.filter { $0 == "assigned" }.count, 3)
+        try expectEq(u.count, 1, "three assignments, one ⌘Z step")
+        let entry = try unwrap(u.pop())
+        try expectEq(entry.label, "AI assign 3 review rows")
+        await entry.inverse()
+        try expectEq(journal, [1: "pending", 2: "pending", 3: "pending"],
+                     "one undo unwinds the whole AI batch")
+    }
+
+    c.check("an empty sync group pushes nothing (an AI reply with zero assignments)") {
+        let u = UndoStack()
+        u.group("no-op", sync: {})
+        try expectEq(u.count, 0)
+    }
+
+    await c.check("a sync group nested in an async group folds into the outermost") {
+        // Same nesting contract as async-in-async: an inner group must never
+        // split one outer gesture into two ⌘Z steps, whichever flavour it is.
+        let u = UndoStack()
+        var log: [String] = []
+        await u.group("outer") {
+            u.register("x") { log.append("x") }
+            u.group("inner", sync: { u.register("y") { log.append("y") } })
+        }
+        try expectEq(u.count, 1, "the inner sync group does not push its own entry")
+        let entry = try unwrap(u.pop())
+        try expectEq(entry.label, "outer")
+        await entry.inverse()
+        try expectEq(log, ["y", "x"])
+    }
+
     c.check("the stack is uncapped — 'infinitely undoable' means no silent depth limit") {
         // Martin's directive: "every action can be infinitely undone". A cap
         // would silently drop the OLDEST edits; this pins the no-cap contract

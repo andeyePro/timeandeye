@@ -35,8 +35,11 @@ call, not a mechanical fix:
   edits — ⌘Z doesn't touch them by design (compensators: the popover's ←
   revert, and the timeline edits every flushed slice). Confirm that stance
   or fold picks into the stack.
-- [ ] `ingestAIResponse` applies N assignments as N undo steps (each fully
+- [x] `ingestAIResponse` applies N assignments as N undo steps (each fully
   undoable); grouping into one step means making the call async (UI ripple).
+  DONE 2026-07-10 without the ripple: `UndoStack.group(_:sync:)` — a
+  synchronous grouping flavour — bundles the batch into ONE ⌘Z step from
+  inside the existing sync call; no UI signature changed.
 - [ ] A comment undone AFTER its slice flushed only clears the in-flight
   copy; the flushed row keeps it (editable in the timeline). A posted
   task-feed comment is never retracted — undo must not rewrite a backend's

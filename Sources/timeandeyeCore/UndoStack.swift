@@ -29,14 +29,35 @@ public final class UndoStack {
     /// neighbour and moves a slice, undoes in a single ⌘Z). Nestable — inner
     /// groups fold into the outermost. An empty group pushes nothing.
     public func group(_ label: String, _ body: () async -> Void) async {
+        let outer = beginGroup()
+        await body()
+        endGroup(label, outer: outer)
+    }
+
+    /// Same one-⌘Z-step bundling for callers that CANNOT await: the AI-assist
+    /// ingest applies N review assignments from inside a synchronous button
+    /// handler (it returns a status string to display), where forcing the
+    /// async `group` would ripple an async signature through the review UI.
+    /// Inverses are still async and replay reversed on undo; the two flavours
+    /// nest freely (both fold into whichever group is outermost).
+    public func group(_ label: String, sync body: () -> Void) {
+        let outer = beginGroup()
+        body()
+        endGroup(label, outer: outer)
+    }
+
+    /// True when this group is the outermost (it owns the final push).
+    private func beginGroup() -> Bool {
         let outer = pendingGroup == nil
         if outer { pendingGroup = [] }
-        await body()
-        if outer, let group = pendingGroup {
-            pendingGroup = nil
-            if !group.isEmpty {
-                stack.append((label, { for inverse in group.reversed() { await inverse() } }))
-            }
+        return outer
+    }
+
+    private func endGroup(_ label: String, outer: Bool) {
+        guard outer, let group = pendingGroup else { return }
+        pendingGroup = nil
+        if !group.isEmpty {
+            stack.append((label, { for inverse in group.reversed() { await inverse() } }))
         }
     }
 

@@ -4048,9 +4048,17 @@ public final class AppController: ObservableObject {
             let assignments = try AIAssist.parseResponse(
                 raw, validSegmentIDs: Set(pendingReview.map(\.id)),
                 taskRefByID: AIAssist.taskRefLookup(taskCache))
-            for a in assignments {
-                assignReview([a.segmentID], to: a.target)
-            }
+            // Pasting the AI's reply is ONE user gesture: group the per-row
+            // assignReview inverses so one ⌘Z unwinds the whole batch (N
+            // separate steps meant N presses to back out one paste). The
+            // SYNC group flavour, because this returns a status string to a
+            // synchronous button handler.
+            undoStack.group("AI assign \(assignments.count) review rows", sync: {
+                for a in assignments {
+                    assignReview([a.segmentID], to: a.target)
+                }
+            })
+            undoCount = undoStack.count
             return "Applied \(assignments.count) assignments."
         } catch {
             return "Rejected: \(error)"
