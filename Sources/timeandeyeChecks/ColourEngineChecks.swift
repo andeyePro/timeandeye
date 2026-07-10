@@ -533,6 +533,67 @@ func colourEngineChecks(_ c: Checks) {
                      "an anchor that did not move must not re-shade anything")
     }
 
+    c.check("achromatic legacy child: the ring keeps the grey but the allocation hue never comes from quantisation noise") {
+        // A grey hex has OKLCH chroma ≈ 0, so oklch(from:) returns a hue
+        // that is pure atan2 noise (a neutral grey lands red-ish). If the
+        // deterministic legacy child's colour is grey (e.g. a #888888
+        // override), committing that noise would shade every future task in
+        // the project ±25° around red — matching neither the grey nor
+        // anything the user ever saw, forever. The contract: the anchor HEX
+        // stays the grey (that IS what the user saw on the ring); the
+        // allocation HUE falls back to the first chromatic migrated member,
+        // else to the engine's own most-distinct-free-hue allocation.
+        var store = ColourAssignments()
+        ColourEngine.snapshotLegacy(taskKey: "op:1", hex: "#888888", in: &store, at: t0)
+        try expect(ColourEngine.repairProjectAnchor(projectKey: "op/id:14",
+                                                    memberTaskKeys: ["op:1"],
+                                                    storeLoadedPreV2: true,
+                                                    in: &store, at: t0))
+        let record = try unwrap(store.projects["op/id:14"])
+        try expectEq(record.hex, "#888888", "the ring must keep the grey the user saw")
+        try expectEq(record.provenance, "migrated")
+        // No chromatic member, no other anchors → the engine's deterministic
+        // first allocation hue (258), never the grey's noise hue (~red).
+        try expectClose(record.hue, 258, accuracy: 0.0001,
+                        "all-grey project should take the engine's allocated hue")
+        // Future tasks shade around that usable hue, not around red.
+        _ = ColourEngine.taskHex("op:2", projectKey: "op/id:14", in: &store, at: t0)
+        let h = try unwrap(store.tasks["op:2"]?.H)
+        var d = abs(h - 258).truncatingRemainder(dividingBy: 360)
+        d = min(d, 360 - d)
+        try expect(d <= 25.0001, "task hue \(h) not in the allocated neighbourhood")
+        // With a later CHROMATIC migrated sibling, the hue comes from that
+        // sibling instead (a colour the project genuinely wore pre-engine),
+        // while the ring still shows the earliest child's grey.
+        var mixed = ColourAssignments()
+        ColourEngine.snapshotLegacy(taskKey: "op:1", hex: "#888888", in: &mixed, at: t0)
+        ColourEngine.snapshotLegacy(taskKey: "op:2", hex: "#7CC7E8", in: &mixed,
+                                    at: t0.addingTimeInterval(1))
+        try expect(ColourEngine.repairProjectAnchor(projectKey: "op/id:14",
+                                                    memberTaskKeys: ["op:1", "op:2"],
+                                                    storeLoadedPreV2: true,
+                                                    in: &mixed, at: t0))
+        try expectEq(mixed.projects["op/id:14"]?.hex, "#888888")
+        try expectClose(try unwrap(mixed.projects["op/id:14"]?.hue),
+                        ColourEngine.oklch(from: RGB255(hex: "#7CC7E8")!).H,
+                        accuracy: 0.0001,
+                        "hue should come from the chromatic sibling")
+        // Same guard when the grey arrives as an OVERRIDE on a chromatic
+        // legacy child: the override is what the user saw (hex), but its
+        // hue is just as unusable.
+        var overridden = ColourAssignments()
+        ColourEngine.snapshotLegacy(taskKey: "op:1", hex: "#7CC7E8", in: &overridden, at: t0)
+        try expect(ColourEngine.repairProjectAnchor(projectKey: "op/id:14",
+                                                    memberTaskKeys: ["op:1"],
+                                                    overrides: ["op:1": "#888888"],
+                                                    storeLoadedPreV2: true,
+                                                    in: &overridden, at: t0))
+        try expectEq(overridden.projects["op/id:14"]?.hex, "#888888")
+        try expectClose(try unwrap(overridden.projects["op/id:14"]?.hue), 258,
+                        accuracy: 0.0001,
+                        "a grey override must not leak its noise hue either")
+    }
+
     c.check("project vs task derivation stay distinct: anchor from the display ladder, tasks from its hue neighbourhood") {
         // Two different derivations, never swapped: the project wedge shows
         // the anchor's own swatch (contrast-adjusted ladder lightness) and

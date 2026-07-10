@@ -321,6 +321,17 @@ public enum ColourEngine {
     /// overrides never move. If the anchor already wears the target colour
     /// (a re-run after an old binary stripped the provenance fields), the
     /// re-shade is skipped so nothing churns.
+    ///
+    /// ACHROMATIC LEGACY COLOURS. A grey hex has OKLCH chroma ≈ 0, so its
+    /// "hue" is atan2 over sRGB quantisation noise (a pure grey lands
+    /// red-ish) — committing that would permanently shade every future task
+    /// around a hue that matches nothing the user ever saw. The ring KEEPS
+    /// the grey (its hex and lightness are real; the user saw them); only
+    /// the allocation hue falls back: to the first CHROMATIC migrated member
+    /// in the same deterministic order (another colour the project genuinely
+    /// wore), else to the engine's own anchor allocation (the most-distinct
+    /// free hue — a sensible fresh neighbourhood, since an all-grey project
+    /// gave the user no hue association to preserve).
     @discardableResult
     public static func repairProjectAnchor(projectKey: String,
                                            memberTaskKeys: [String],
@@ -333,42 +344,60 @@ public enum ColourEngine {
             if existing.provenance == "migrated" { return false }
             if existing.provenance == "auto", !storeLoadedPreV2 { return false }
         }
-        // Deterministic legacy child: earliest migrated member, ties by key.
-        var legacy: (key: String, record: ColourAssignments.TaskRecord)?
-        for key in memberTaskKeys {
-            guard let record = store.tasks[key], record.provenance == "migrated"
-            else { continue }
-            if let best = legacy,
-               (best.record.firstSeen, best.key) <= (record.firstSeen, key) {
-                continue
+        // Deterministic legacy order: earliest migrated members first, ties
+        // broken by key. The head is "the" legacy child; the tail doubles as
+        // the achromatic-hue fallback ladder.
+        let migratedMembers = memberTaskKeys
+            .compactMap { key -> (key: String, record: ColourAssignments.TaskRecord)? in
+                guard let record = store.tasks[key], record.provenance == "migrated"
+                else { return nil }
+                return (key, record)
             }
-            legacy = (key, record)
-        }
-        guard let legacy else {
+            .sorted { ($0.record.firstSeen, $0.key) < ($1.record.firstSeen, $1.key) }
+        guard let legacy = migratedMembers.first else {
             if existing != nil, existing?.provenance == nil {
                 store.projects[projectKey]?.provenance = "auto"
                 return true
             }
             return false
         }
-        let overrideHex = overrides[legacy.key].flatMap {
-            RGB255(hex: $0) != nil ? $0 : nil
+        // The colour the user actually saw for a member: a (valid) override
+        // beats its migrated snapshot.
+        func effectiveHex(_ member: (key: String, record: ColourAssignments.TaskRecord)) -> String {
+            overrides[member.key].flatMap { RGB255(hex: $0) != nil ? $0 : nil }
+                ?? member.record.hex
         }
-        let hex = overrideHex ?? legacy.record.hex
+        let hex = effectiveHex(legacy)
         guard let rgb = RGB255(hex: hex) else { return false }
         let c = oklch(from: rgb)
-        let anchorUnmoved = existing?.hex == hex && existing?.hue == c.H
+        var hue = c.H
+        if c.C < anchorHueChromaFloor {
+            hue = migratedMembers.lazy
+                .compactMap { member -> Double? in
+                    guard let rgb = RGB255(hex: effectiveHex(member)) else { return nil }
+                    let mc = oklch(from: rgb)
+                    return mc.C >= anchorHueChromaFloor ? mc.H : nil
+                }
+                .first ?? allocateAnchor(in: store).hue
+        }
+        let anchorUnmoved = existing?.hex == hex && existing?.hue == hue
             && existing?.bandL == c.L
         store.projects[projectKey] = ColourAssignments.ProjectRecord(
-            hue: c.H, bandL: c.L, hex: hex,
+            hue: hue, bandL: c.L, hex: hex,
             firstSeen: existing?.firstSeen ?? now,
             provenance: "migrated")
         if !anchorUnmoved {
-            reshadeAutoTasks(memberTaskKeys: memberTaskKeys, anchorHue: c.H,
+            reshadeAutoTasks(memberTaskKeys: memberTaskKeys, anchorHue: hue,
                              in: &store)
         }
         return true
     }
+
+    /// Below this OKLCH chroma a hex is effectively achromatic: its hue
+    /// component is quantisation noise, never a colour association worth
+    /// preserving. (Pure greys sit at C ≈ 0.000x; the dullest colour the
+    /// engine's own ramps emit with a legible hue carries C 0.07.)
+    static let anchorHueChromaFloor = 0.02
 
     /// Close every remaining provenance-less anchor as an engine pick.
     /// Called once, when the repair pass has seen a COMPLETE task cache, so

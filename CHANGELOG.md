@@ -44,10 +44,17 @@
   their colours intact, the marker lands, and the store is fully stamped.
   What still cannot heal, honestly: anchors whose projects never become
   resolvable before the era closes, and anything a pre-provenance binary
-  mints after the marker exists. Five new ColourEngine checks (19 total)
-  pin the bypass survival, deterministic child choice, override-hijack
-  rejection, cohort re-shade, and version/adoption semantics. 702/0;
-  release timeandeyeApp builds.
+  mints after the marker exists. Gap-sweep addendum, same day: a GREY
+  legacy colour (e.g. a #888888 override) has OKLCH chroma ≈ 0, so the hue
+  derived from its hex is atan2 quantisation noise (red-ish) — the repair
+  would have committed a permanent red task-neighbourhood matching nothing
+  the user saw. Below a chroma floor the ring keeps the grey hex but the
+  allocation hue falls back to the first chromatic migrated member (a
+  colour the project genuinely wore), else to the engine's own
+  most-distinct-free-hue allocation. Six new ColourEngine checks (20
+  total) pin the bypass survival, deterministic child choice,
+  override-hijack rejection, cohort re-shade, version/adoption semantics,
+  and the achromatic-hue guard. 703/0; release timeandeyeApp builds.
 
 - [x] **Fullscreen pose: the decision is now a pure, check-covered type.**
   Closes the review findings on fix nine's window/Space logic. The whole
