@@ -2652,9 +2652,18 @@ public final class AppController: ObservableObject {
 
     /// Apply ONE confirmed reconcile: fold the deleted entries' comments into the
     /// survivor, delete the duplicates, and re-point the journal slices so future
-    /// edits still PATCH the right entry. Nothing is lost.
+    /// edits still PATCH the right entry. Nothing is lost — and since the
+    /// deletions are REMOTE, ⌘Z re-creates the entries from a pre-apply
+    /// snapshot rather than restoring pointers to dead ids (which would 404
+    /// on the next edit — worse than no undo; see ReconcileUndoPlan).
     public func applyReconcile(_ action: ReconcileAction) async {
         guard let backend else { return }
+        // Snapshot FIRST: the sessions must still hold their old pointers.
+        let plan = DuplicateReconcile.undoPlan(
+            for: action,
+            sessions: action.repointSessionIDs.compactMap {
+                ((try? journal.session(id: $0)) ?? nil)
+            })
         if let merged = action.mergedComment {
             try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
         }
@@ -2667,6 +2676,41 @@ public final class AppController: ObservableObject {
                 try? journal.update(s)
                 setPrimaryPosted(sid, entryID: action.survivorID)   // ledger follows
             }
+        }
+        let n = action.deleteIDs.count
+        registerUndo("reconcile \(n) duplicate\(n == 1 ? "" : "s")") { [weak self] in
+            guard let self, let backend = self.backend else { return }
+            // Re-create each deleted entry verbatim; the backend assigns
+            // fresh ids. Activity names map back through the cached activity
+            // list (nil when unmapped — the backend applies its default,
+            // matching what a plain re-post would do).
+            var freshIDs: [RemoteEntryID: RemoteEntryID] = [:]
+            for e in plan.recreate {
+                let activityID = e.activity.flatMap { name in
+                    self.activities.first { $0.name == name }?.id
+                }
+                if let fresh = ((try? await backend.createTimeEntry(
+                    taskID: e.taskID, start: e.start, duration: e.durationSeconds,
+                    activityID: activityID, comment: e.comment)) ?? nil) {
+                    freshIDs[e.id] = fresh
+                }
+            }
+            if let restore = plan.restoreSurvivorComment {
+                try? await backend.updateEntryComment(id: plan.survivorID,
+                                                      comment: restore)
+            }
+            // Each re-pointed slice follows its OWN entry back out; a slice
+            // whose re-create failed stays on the survivor (still live — a
+            // safe landing, never a dead id).
+            for (sid, oldID) in plan.priorEntryIDBySession {
+                guard let fresh = freshIDs[oldID],
+                      var s = ((try? self.journal.session(id: sid)) ?? nil)
+                else { continue }
+                s.opTimeEntryID = fresh
+                try? self.journal.update(s)
+                self.setPrimaryPosted(sid, entryID: fresh)
+            }
+            self.updateJournalSummary()
         }
         updateJournalSummary()
     }

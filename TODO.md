@@ -23,11 +23,14 @@ The infinite-undo audit (CHANGELOG 2026-07-09) closed every local
 registration gap; these stayed open deliberately — each needs a design
 call, not a mechanical fix:
 
-- [ ] Duplicate reconcile (`applyReconcile`) has no undo: the duplicate
+- [x] Duplicate reconcile (`applyReconcile`) has no undo: the duplicate
   backend entries are DELETED remotely, so a local restore would re-point
   sessions at dead entry ids (worse than no undo — later edits would PATCH
-  a 404). A real undo needs the backend entries re-created from the folded
-  comment, i.e. a reconcile journal. The UI confirms per action today.
+  a 404). DONE 2026-07-10 via the reconcile-journal route:
+  `ReconcileUndoPlan` snapshots the doomed entries whole BEFORE the apply;
+  ⌘Z re-creates them at the backend (fresh ids), restores the survivor's
+  pre-merge comment, and re-points each slice at its own entry's fresh id
+  — never at a dead one.
 - [x] `unlockInvoice` / `retryStuck` have no undo (re-lock / re-quarantine).
   DONE 2026-07-10 — decision: repair gestures are still data edits, so they
   join the app-wide ⌘Z stack. Unlock returns a row snapshot and ⌘Z re-locks

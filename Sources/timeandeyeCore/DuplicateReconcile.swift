@@ -143,3 +143,59 @@ public enum DuplicateReconcile {
         return actions.sorted { ($0.entries.first?.createdAt ?? $0.start) < ($1.entries.first?.createdAt ?? $1.start) }
     }
 }
+
+/// Everything needed to REVERSE an applied reconcile — the "reconcile
+/// journal" the undo audit called for, held in the undo closure (session-
+/// bounded, like every other ⌘Z step). The duplicates are DELETED at the
+/// backend, so undo can't restore the old pointers: the ids are dead and a
+/// later timeline edit would PATCH a 404. Instead it re-CREATES the entries
+/// verbatim from this snapshot and re-points each slice at its entry's
+/// FRESH backend-assigned id. Must be built BEFORE the apply mutates
+/// anything (the sessions still hold their old pointers).
+public struct ReconcileUndoPlan: Equatable, Sendable {
+    /// The deleted entries, whole (comment, start, length, activity) — undo
+    /// re-creates each at the backend.
+    public var recreate: [RemoteTimeEntry]
+    public var survivorID: RemoteEntryID
+    /// Rewrite the survivor's comment back to this pre-merge text. nil when
+    /// the apply never touched it; "" actively clears a survivor that had no
+    /// comment before the fold.
+    public var restoreSurvivorComment: String?
+    /// Session id → the deleted entry id it pointed at before the re-point,
+    /// so each slice follows its OWN entry's re-created id back out.
+    public var priorEntryIDBySession: [UUID: RemoteEntryID]
+
+    public init(recreate: [RemoteTimeEntry], survivorID: RemoteEntryID,
+                restoreSurvivorComment: String?,
+                priorEntryIDBySession: [UUID: RemoteEntryID]) {
+        self.recreate = recreate
+        self.survivorID = survivorID
+        self.restoreSurvivorComment = restoreSurvivorComment
+        self.priorEntryIDBySession = priorEntryIDBySession
+    }
+}
+
+public extension DuplicateReconcile {
+    /// Snapshot `action`'s reversal. `sessions` are the CURRENT journal rows
+    /// for `action.repointSessionIDs`, fetched before the apply re-points
+    /// them — their `opTimeEntryID` still names the doomed entry.
+    static func undoPlan(for action: ReconcileAction,
+                         sessions: [Session]) -> ReconcileUndoPlan {
+        let deleteSet = Set(action.deleteIDs)
+        let survivorComment = action.entries
+            .first { $0.id == action.survivorID }?.comment
+        return ReconcileUndoPlan(
+            recreate: action.entries.filter { deleteSet.contains($0.id) },
+            survivorID: action.survivorID,
+            // The apply rewrites the comment only when mergedComment is set;
+            // undo mirrors that exactly (nil = hands off).
+            restoreSurvivorComment: action.mergedComment == nil
+                ? nil : (survivorComment ?? ""),
+            priorEntryIDBySession: Dictionary(uniqueKeysWithValues:
+                sessions.compactMap { s in
+                    guard let old = s.opTimeEntryID, deleteSet.contains(old)
+                    else { return nil }
+                    return (s.id, old)
+                }))
+    }
+}

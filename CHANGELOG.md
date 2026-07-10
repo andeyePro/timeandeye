@@ -2,6 +2,22 @@
 
 ## 2026-07-10
 
+- [x] **Undo: duplicate reconcile is reversible (the reconcile journal).**
+  `applyReconcile` deletes duplicate entries at the backend, so a naive
+  undo would re-point sessions at dead ids (later edits would PATCH a
+  404 — the reason the audit left it open). New Core
+  `DuplicateReconcile.undoPlan` / `ReconcileUndoPlan`: snapshotted BEFORE
+  the apply mutates anything, it holds the doomed entries verbatim, the
+  survivor's pre-merge comment (nil = the apply never touched it, "" =
+  actively clear a comment-less survivor) and each re-pointed slice's old
+  entry id. The registered ⌘Z re-creates each deleted entry at the backend
+  (fresh backend-assigned ids; activity names mapped back through the
+  cached activity list), restores the survivor's comment, and re-points
+  each slice at its OWN entry's fresh id — a slice whose re-create failed
+  stays on the survivor (live, never a dead id). Checks: plan snapshot
+  contents, comment-restore semantics (empty vs hands-off), and a pure
+  apply+undo round-trip replaying the controller mechanics.
+
 - [x] **Undo: invoice unlock and retry-stuck are reversible.** The two
   posting-health repair gestures joined the app-wide ⌘Z stack (decision:
   deliberate repair is still a data edit). `SyncEngine.unlockInvoice` now
