@@ -1,6 +1,7 @@
 import SwiftUI
 import timeandeyeCore
 import timeandeyeMac
+import timeandeyeTheme
 
 /// The Evidence Card (2026-07-03 context-rules spec, Option A + grafts): one
 /// view, shared by the timeline's why-pane and the popover's inline

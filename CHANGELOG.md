@@ -2,6 +2,20 @@
 
 ## 2026-07-10
 
+- [x] **timeandeyeTheme: the shared andeye look as its own SwiftUI-only
+  target.** The a sibling project's coordination request, needed by a sibling andeye app v0.3:
+  AndeyeTheme.Colours (the highlight moved from timeandeyeUI — AndeyeColors
+  stays as a compatibility spelling — plus the brand amber #F0A13A),
+  AndeyeTheme.Fonts (a semantic type scale distilled from the app's real
+  usage), and AndeyeMark/AndeyeMarkView — the first in-app SwiftUI renderer
+  of the AndeyeLogo geometry (arc-length reveal + wink, both animatable;
+  stroke weight scales per the SVG's 17/365). No AppKit anywhere in the
+  target, so sibling apps consume theme without the macOS app layers.
+  timeandeyeUI now depends on it; product `timeandeyeTheme` exported (Mon
+  pins branch FableMax until main). Four checks pin the render contract —
+  faithful scale/centre/flip of the Core geometry, wink moves lids not
+  footprint, SVG stroke ratio, alias identity. Suite 669/0.
+
 - [x] **Docs truth pass (findings 7–8, 11–12).** The 2026-07-09 rebrand
   entry corrected: the backend key lives in an owner-only file, not the
   Keychain (no Keychain code exists in Sources; a 2026-06-24 entry had

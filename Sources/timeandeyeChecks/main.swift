@@ -81,6 +81,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("TimelineMath", timelineMathChecks),
     ("SpanAllocation", spanAllocationChecks),
     ("AndeyeLogo", andeyeLogoChecks),
+    ("AndeyeTheme", andeyeThemeChecks),
     ("CommentRouting", commentRoutingChecks),
     ("FuzzyMatch", fuzzyMatchChecks),
     ("TimeAggregator", timeAggregatorChecks),

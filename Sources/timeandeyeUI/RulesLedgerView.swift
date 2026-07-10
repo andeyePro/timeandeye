@@ -1,6 +1,7 @@
 import SwiftUI
 import timeandeyeCore
 import timeandeyeMac
+import timeandeyeTheme
 
 /// The audit surface for every learned + pinned rule (2026-07-03
 /// context-rules spec §5.3 + §6 later polish — list + provenance + delete,

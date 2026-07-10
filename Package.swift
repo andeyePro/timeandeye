@@ -11,6 +11,10 @@ let package = Package(
         .library(name: "timeandeyeUI", targets: ["timeandeyeUI"]),
         .library(name: "timeandeyeStore", targets: ["timeandeyeStore"]),
         .library(name: "timeandeyePhone", targets: ["timeandeyePhone"]),
+        // The shared andeye look (colours, type scale, eye-mark renderer) —
+        // SwiftUI-only, no AppKit, so sibling apps (a sibling andeye app etc.) consume
+        // theme without the macOS app deps. Surface contract: the cross-repo note.
+        .library(name: "timeandeyeTheme", targets: ["timeandeyeTheme"]),
     ],
     targets: [
         .target(name: "timeandeyeCore"),
@@ -23,17 +27,21 @@ let package = Package(
         .target(name: "timeandeyePhone", dependencies: ["timeandeyeCore", "timeandeyeStore"]),
         // macOS-only layer: sensors, app controller, menu-bar glue.
         .target(name: "timeandeyeMac", dependencies: ["timeandeyeCore", "timeandeyeStore"]),
+        // Shared brand look, SwiftUI-only (see the library product note).
+        .target(name: "timeandeyeTheme", dependencies: ["timeandeyeCore"]),
         // The whole SwiftUI layer as a LIBRARY, so app flavours are thin
         // wrappers: Community (below) and the private Pro executable both
         // return AndeyeScenes.body(controller:).
-        .target(name: "timeandeyeUI", dependencies: ["timeandeyeCore", "timeandeyeMac"]),
+        .target(name: "timeandeyeUI",
+                dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyeTheme"]),
         // The Community menu-bar app (wrapped into timeandeye.app by scripts/make-app.sh).
         .executableTarget(name: "timeandeyeApp",
                           dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyeUI"]),
         // Check harness instead of a test target: the build Mac has Command
         // Line Tools only (no XCTest / Swift Testing). Run: swift run timeandeyeChecks
         .executableTarget(name: "timeandeyeChecks",
-                          dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyePhone"]),
+                          dependencies: ["timeandeyeCore", "timeandeyeMac",
+                                         "timeandeyePhone", "timeandeyeTheme"]),
         // Headless end-to-end against a REAL OpenProject as a test user:
         // swift run timeandeyeIntegration <base-url> <key-file>
         .executableTarget(name: "timeandeyeIntegration",

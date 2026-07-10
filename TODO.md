@@ -170,12 +170,14 @@ and recorded rather than fixed blind:
   only (connector resolves its own project) so the editor works through the
   seam's fetchTasks alone; store made lock-protected with a snapshot key
   table (the connector reads from the sync context).
-- [ ] timeandeyeTheme extraction (a sibling project request, 2026-07-08):
-  a small SwiftUI-only target (colours, type scale, eye-mark renderer) pulled
-  out of timeandeyeUI so sibling apps (a sibling andeye app) consume theme without the
-  macOS app deps. Needed by Mon v0.3 (Plus gating + CloudKit); Mon ships a
-  local shim until then. HLC/sync/licence need nothing — timeandeyeCore
-  already exports them.
+- [x] timeandeyeTheme extraction (a sibling project request, 2026-07-08)
+  — DONE 2026-07-10: SwiftUI-only target + exported product; AndeyeTheme
+  (Colours incl. the moved highlight + brand amber, semantic Fonts scale)
+  and AndeyeMark/AndeyeMarkView (first in-app SwiftUI renderer of the
+  AndeyeLogo geometry — reveal + wink animatable, SVG-scaled stroke).
+  timeandeyeUI consumes it; AndeyeColors stays as a compatibility spelling.
+  4 render-contract checks; suite 669/0. Mon pin: branch FableMax until
+  main; 
 - [ ] Invoice NUMBER for the invoice-lock ref needs the Xero Accounting API
   (Projects API doesn't expose it — verified 2026-07-08); until then locks
   group under the single ref "Xero".

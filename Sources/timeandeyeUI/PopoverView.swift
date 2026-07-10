@@ -1,6 +1,7 @@
 import SwiftUI
 import timeandeyeCore
 import timeandeyeMac
+import timeandeyeTheme
 
 struct PopoverView: View {
     @ObservedObject var controller: AppController
