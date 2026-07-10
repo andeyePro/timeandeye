@@ -2,6 +2,16 @@
 
 ## 2026-07-10
 
+- [x] **Fullscreen fix twelve: the open-grace is scoped to the window being
+  opened.** (Entry documents 6c044bb, which landed a minute before this
+  line — a concurrent commit raced the changelog edit.) The fix-ten grant
+  re-graced EVERY themed window on any open, holding them all in the
+  auxiliary overlay pose for 4s — and auxiliary windows cannot enter their
+  own fullscreen, so the green button worked or failed depending on
+  whether anything had been opened in the previous few seconds. The grant
+  now carries the opened scene's id and only the matching window restarts
+  its grace; the review/settings/rules windows gained stable identifiers.
+
 - [x] **Review drawer selection goes native: click replaces, ⌘-click
   toggles, ⇧-click spans; brighter accent highlight; bigger twisty
   targets.** Martin's follow-up on the morning's click-to-toggle model:
