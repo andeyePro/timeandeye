@@ -83,9 +83,40 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     final class SpaceJoiningView: NSView {
         var windowID: String?
         var title: String?
+        /// Self-owned re-check cadence. The level decision below must track
+        /// the screen's fullscreen-look over time, and riding SwiftUI
+        /// re-renders for that proved uneven: clock-driven windows re-render
+        /// ~1Hz, but the review drawer re-renders only on queue changes, so
+        /// its level never updated after attach and it alone failed to float
+        /// over fullscreen apps (Martin, 2026-07-10 — timeline and settings
+        /// floated, the drawer didn't). A timer owned HERE gives every
+        /// window the same cadence regardless of how often SwiftUI renders.
+        private var recheck: Timer?
+        private var screenObserver: NSObjectProtocol?
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            recheck?.invalidate()
+            recheck = nil
+            if let observer = screenObserver {
+                NotificationCenter.default.removeObserver(observer)
+                screenObserver = nil
+            }
+            guard window != nil else { return }
             applyToWindow()
+            recheck = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) {
+                [weak self] _ in self?.applyToWindow()
+            }
+            screenObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeScreenNotification, object: window,
+                queue: .main) { [weak self] _ in
+                DispatchQueue.main.async { self?.applyToWindow() }
+            }
+        }
+        deinit {
+            recheck?.invalidate()
+            if let observer = screenObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
         func applyToWindow() {
             guard let w = window else { return }
