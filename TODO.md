@@ -147,6 +147,17 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Positive fullscreen detector for menu-bar auto-hide users. With the
+  System Settings auto-hide preference on, every desktop looks fullscreen
+  to the visibleFrame heuristic, so FullscreenPose disables the
+  float-over-fullscreen behaviour wholesale for those users (2026-07-10
+  review) — their windows behave plain-normal and can be evicted when
+  opened over a real fullscreen app. A richer detector could restore the
+  behaviour: `CGWindowListCopyWindowInfo` bounds==screen owned by another
+  app needs no extra permissions for bounds/PID, but wants care around
+  multi-display, split view and edge cases — keep it simple and provable
+  or don't ship it.
+
 - [ ] Retire the com.andeye.mac transition shims once no pre-rename install
   remains on any Mac (transition began 2026-07-09): the LEGACY_BUNDLE_ID
   quit line + old-bundle retire block in scripts/make-app.sh, and the

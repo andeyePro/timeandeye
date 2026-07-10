@@ -2,6 +2,34 @@
 
 ## 2026-07-10
 
+- [x] **Fullscreen pose: the decision is now a pure, check-covered type.**
+  Closes the review findings on fix nine's window/Space logic. The whole
+  float-over-fullscreen verdict moved out of SpaceJoiningView into
+  `FullscreenPose.decide` (timeandeyeMac — Foundation-only, so the checks
+  cover the full matrix without AppKit; 10 new checks). Behaviour fixes
+  riding the extraction: the settle stickiness is TIME-based (~5 s of
+  continuous non-fullscreen look) instead of 3 samples, so SwiftUI render
+  bursts can no longer spend it in under a second — updateNSView is
+  identity-upkeep only and the 1 Hz timer owns sampling; grace samples no
+  longer pre-count against it; the grace runs on the monotonic clock
+  (systemUptime), so an NTP step can't stretch or kill it; the app now
+  TELLS the pose logic when its own menu-bar popover is open (the reveal
+  that blinds the heuristic) and sampling holds — no demotion however long
+  the popover stays up, and no false promotion of settled windows; hidden
+  retained windows are silently MAINTAINED in the fullscreen-capable pose
+  (AppKit re-asserts flags on them, so a pose parked once wouldn't stick)
+  so a reopen orders front already wearing it, with logs gated to visible
+  windows or decision changes; users with menu-bar auto-hide (the
+  heuristic's permanent blind spot — every desktop looks fullscreen) get
+  the float behaviour disabled wholesale via the `_HIHideMenuBar` global,
+  windows plain-normal (trade documented; richer positive detector is a
+  TODO). Hygiene from the same review: the re-check timer runs in
+  `.common` runloop mode (ticks survived menu tracking/drags) with 0.2 s
+  tolerance; teardown lives on the window-nil detach path with deinit as
+  a main-hopping backstop; and the behaviours log prints the flags READ
+  BACK from the window, not the requested value — the fullScreenNone saga
+  was only diagnosable because the log showed what AppKit actually kept.
+
 - [x] **Fullscreen fix nine: open-grace + sticky settle, and windows stop
   following you.** Two blind spots from Martin's morning report: opening
   from the menu-bar popover REVEALS the menu bar, so the fullscreen-look
