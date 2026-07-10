@@ -86,7 +86,18 @@ Clearing a backlog? Sort the queue from the control at the top - newest,
 oldest, longest or shortest - then click a row and shift-click another to
 select everything between them (⌘-click adds or removes single rows). One
 press of **Do not track**, **Unknown** or a task then clears the whole
-range, and one ⌘Z brings it all back.
+range - so does ⌫ for "Do not track" - and one ⌘Z brings it all back.
+
+Every row is dated - Today, Yesterday or the calendar date - and every row
+expands. A row is one *surface* (an app, window or tab), stacking every
+separate visit to it; the chevron lists those visits, and each visit's own
+chevron reveals everything held on it - exact start and end, duration, app,
+window title and address, any email correspondents and subject, how certain
+andeye currently is about it and where that certainty comes from, and what
+was tracked immediately before and after it (with the gap named when they
+weren't back-to-back). The **assign** button beside a visit scopes the
+assign bar to just that one, so one visit in a stack can go to a different
+task than its siblings.
 
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of "Do not track" or a guess -

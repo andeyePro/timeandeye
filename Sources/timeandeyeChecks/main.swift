@@ -136,6 +136,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("ApprovalsDrawerAcceptance", approvalsDrawerAcceptanceChecks),
     ("UnknownTaskCategory", unknownSweepChecks),
     ("ReviewFloor", reviewFloorChecks),
+    ("ReviewSliceDetail", reviewSliceDetailChecks),
     ("SiteRecipeExtraction", siteRecipeExtractionChecks),
     ("SiteIdentity", siteIdentityChecks),
     ("SiteMatcher", siteMatcherChecks),

@@ -479,3 +479,130 @@ func reviewFloorChecks(_ c: Checks) {
         try expectEq([s].meetingReviewFloor(0).map(\.id), [s.id])
     }
 }
+
+// MARK: - Slice detail (2026-07-10, Martin's drawer critique: "the one that
+// it classifies as Oldest has no date or timestamp … Clicking on an entry
+// should reveal 100% of the data you have on it … including what was
+// tracked before and after"). The pure parts: the day classification the
+// drawer's date labels ride on, the neighbour lookup with its gap
+// indication, and per-slice assignment routing.
+
+func reviewSliceDetailChecks(_ c: Checks) {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "UTC")!
+
+    // 2026-07-09 12:00:00 UTC — a fixed midday "now".
+    let noon = Date(timeIntervalSince1970: 1_783_598_400)
+
+    c.check("RelativeDay classifies by CALENDAR day, not elapsed time") {
+        try expectEq(RelativeDay.of(noon, now: noon, calendar: cal), .today)
+        try expectEq(RelativeDay.of(noon.addingTimeInterval(-11 * 3600), now: noon, calendar: cal),
+                     .today, "01:00 the same morning is Today, eleven hours later")
+        try expectEq(RelativeDay.of(noon.addingTimeInterval(-13 * 3600), now: noon, calendar: cal),
+                     .yesterday, "23:00 last night is Yesterday, only thirteen hours back")
+        try expectEq(RelativeDay.of(noon.addingTimeInterval(-2 * 86_400), now: noon, calendar: cal),
+                     .other, "two days back gets the calendar date")
+    }
+
+    c.check("just past midnight, a moment 40 minutes earlier is already Yesterday") {
+        // The Oldest sort's whole point: the day boundary matters even when
+        // barely any time has passed.
+        let halfPastMidnight = noon.addingTimeInterval(-11.5 * 3600)   // 00:30
+        let lateLastNight = halfPastMidnight.addingTimeInterval(-40 * 60)   // 23:50
+        try expectEq(RelativeDay.of(lateLastNight, now: halfPastMidnight, calendar: cal), .yesterday)
+    }
+
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func session(_ task: TaskRef, _ start: TimeInterval, _ end: TimeInterval) -> Session {
+        Session(task: task, start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end),
+                certainty: 0.9)
+    }
+
+    c.check("neighbours: the NEAREST session each side wins, with its gap") {
+        // Slice 1000–1600. Before candidates end at 400 and 940; after
+        // candidates start at 1660 and 3000.
+        let sessions = [session(.op(1), 0, 400), session(.op(2), 500, 940),
+                        session(.op(3), 1660, 1800), session(.op(4), 3000, 3300)]
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600), in: sessions)
+        let before = try unwrap(n.before)
+        try expectEq(before.task, .op(2), "the later-ending session is the one actually adjacent")
+        try expectEq(before.gap, 60)
+        let after = try unwrap(n.after)
+        try expectEq(after.task, .op(3))
+        try expectEq(after.gap, 60)
+    }
+
+    c.check("contiguity: a gap at the tolerance still reads contiguous; past it gets the indicator") {
+        let atTolerance = SliceNeighbours.Neighbour(task: .op(1), start: t0, end: t0,
+                                                    gap: SliceNeighbours.contiguityTolerance)
+        try expect(atTolerance.isContiguous, "the tracker's own switch grace can journal "
+                   + "back-to-back activity seconds apart — under a minute is 'immediately'")
+        let past = SliceNeighbours.Neighbour(task: .op(1), start: t0, end: t0,
+                                             gap: SliceNeighbours.contiguityTolerance + 1)
+        try expect(!past.isContiguous, "anything past the tolerance names its gap")
+        let touching = SliceNeighbours.Neighbour(task: .op(1), start: t0, end: t0, gap: 0)
+        try expect(touching.isContiguous)
+    }
+
+    c.check("a session overlapping the slice is never a neighbour — it IS the slice's own minutes") {
+        // The low-certainty session journalled over the same span must not
+        // be reported as "before" or "after" itself.
+        let overlapping = session(.op(9), 500, 1200)     // straddles the slice start
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600), in: [overlapping])
+        try expectNil(n.before)
+        try expectNil(n.after)
+    }
+
+    c.check("empty sides stay nil — 'nothing tracked' is a fact, not a guess") {
+        let n = SliceNeighbours.around(start: t0, end: t0.addingTimeInterval(60), in: [])
+        try expectNil(n.before)
+        try expectNil(n.after)
+    }
+
+    c.check("a session ending exactly at the slice start is the zero-gap before-neighbour") {
+        let flush = session(.op(5), 0, 1000)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600), in: [flush])
+        let before = try unwrap(n.before)
+        try expectEq(before.gap, 0)
+        try expect(before.isContiguous)
+    }
+
+    c.check("per-slice assign routes ONE segment; its stack siblings stay queued as a stack") {
+        let journal = InMemoryJournalStore()
+        func seg(_ start: TimeInterval, _ end: TimeInterval) -> ReviewSegment {
+            ReviewSegment(app: "Excel", windowTitle: "Budget.xlsx",
+                          start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
+        }
+        let a = seg(0, 600), b = seg(1000, 1600), d = seg(2000, 2600)
+        for s in [a, b, d] { try journal.save(s) }
+        // The drawer's per-slice path: the same journal.assign the stack
+        // path uses, scoped to one id.
+        try journal.assign([b.id], to: .task(.op(7)))
+        let remaining = try journal.pendingReview()
+        try expectEq(remaining.map(\.id), [a.id, d.id], "only the picked slice left the queue")
+        let stacks = remaining.stacked()
+        try expectEq(stacks.count, 1, "the siblings still present as ONE surface decision")
+        try expectEq(stacks.first?.segments.map(\.id), [a.id, d.id])
+        // Undo's restore path (assign to nil) brings the slice back.
+        try journal.assign([b.id], to: nil)
+        try expectEq(try journal.pendingReview().count, 3)
+    }
+
+    c.check("a one-slice assign teaches from THAT slice's evidence only") {
+        var mail = ReviewSegment(app: "Mail", windowTitle: "Inbox",
+                                 start: t0, end: t0.addingTimeInterval(300))
+        mail.correspondents = ["amy@x.co"]
+        mail.emailSubject = "Renewal"
+        var sibling = ReviewSegment(app: "Mail", windowTitle: "Inbox",
+                                    start: t0.addingTimeInterval(1000),
+                                    end: t0.addingTimeInterval(1300))
+        sibling.correspondents = ["bob@y.co"]
+        let signals = [mail, sibling].teachingSignals(for: [mail.id])
+        try expectEq(signals.count, 1)
+        try expectEq(signals.first?.correspondents, ["amy@x.co"],
+                     "the sibling's evidence never bleeds into a single-slice teach")
+    }
+}

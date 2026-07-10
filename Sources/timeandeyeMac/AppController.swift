@@ -2138,6 +2138,21 @@ public final class AppController: ObservableObject {
         segment.signal
     }
 
+    /// What the journal tracked immediately before and after a review slice
+    /// (task + time, with the gap when they weren't back-to-back) — the
+    /// drawer's per-slice detail disclosure (Martin, 2026-07-10: "including
+    /// what was tracked before and after"). Read-only: a range query over
+    /// the existing journal, no new state. The live-checkpoint sentinel is
+    /// crash-recovery bookkeeping, not history, so it never appears as a
+    /// neighbour.
+    public func sliceNeighbours(for segment: ReviewSegment) -> SliceNeighbours {
+        let window: TimeInterval = 30 * 24 * 3600
+        let sessions = ((try? journal.sessions(from: segment.start.addingTimeInterval(-window),
+                                               to: segment.end.addingTimeInterval(window))) ?? [])
+            .filter { $0.id != Self.liveCheckpointID }
+        return SliceNeighbours.around(start: segment.start, end: segment.end, in: sessions)
+    }
+
     private func reloadReview() {
         // Review-queue admission floor (Martin: "extremely little value in
         // having a user spend time categorising a <1m slice"): filtered HERE,

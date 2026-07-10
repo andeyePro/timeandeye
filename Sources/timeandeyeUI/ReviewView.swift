@@ -12,14 +12,24 @@ import timeandeyeMac
 /// shift-click range can sweep everything below a duration or before a date
 /// in one assign (Martin, 2026-07-09). Selection is keyed by surface id, so
 /// changing the sort keeps the same stacks selected — it means "these
-/// surfaces", not "these positions". A stack with more than one slice
-/// expands to a read-only list on click. Assign to any task (fuzzy-filtered),
+/// surfaces", not "these positions". Every stack expands on click; each
+/// slice inside carries its own disclosure revealing 100% of what's held —
+/// full timestamps, surface, email evidence, current certainty + source,
+/// and the journal's neighbours either side — plus a per-slice assign
+/// affordance, so one visit in a stack can go somewhere different from its
+/// siblings (Martin, 2026-07-10). Assign to any task (fuzzy-filtered),
 /// to "Do not track", or create a new local (non-OpenProject) task on the
-/// spot and assign to it.
+/// spot and assign to it; ⌫ with rows selected is "Do not track" too.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
     @State private var selection = Set<String>()
     @State private var expanded = Set<String>()
+    /// Slices whose full-detail disclosure is open (keyed by segment id).
+    @State private var sliceDetail = Set<UUID>()
+    /// The one slice the assign bar is scoped to, when the user picked a
+    /// slice's own "assign" instead of selecting stacks — mutually
+    /// exclusive with `selection` (picking either clears the other).
+    @State private var sliceAssign: UUID?
     @State private var aiResponse = ""
     @State private var aiStatus = ""
     @State private var filter = ""
@@ -43,8 +53,20 @@ struct ReviewView: View {
                     stackRow(entry.stack).tag(entry.key)
                 }
             }
+            // ⌫ with rows selected = the assign bar's "Do not track" (same
+            // action, same ⌘Z) — the List's native delete command, so both
+            // backspace and forward-delete route here.
+            .onDeleteCommand {
+                guard !selection.isEmpty else { return }
+                assign(.doNotTrack)
+            }
+            // Selecting stacks retires a pending per-slice assign — the bar
+            // must never be ambiguous about what it's about to commit.
+            .onChange(of: selection) { _, new in
+                if !new.isEmpty { sliceAssign = nil }
+            }
 
-            if !selection.isEmpty {
+            if !selection.isEmpty || sliceAssign != nil {
                 assignBar
             }
             grainFooter
@@ -97,17 +119,18 @@ struct ReviewView: View {
 
     private func stackRow(_ stack: ReviewStack) -> some View {
         let key = surfaceKey(stack)
-        let expandable = stack.segments.count > 1
+        let multi = stack.segments.count > 1
         return VStack(alignment: .leading, spacing: 2) {
             HStack {
-                if expandable {
-                    Button {
-                        if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
-                    } label: {
-                        Image(systemName: expanded.contains(key) ? "chevron.down" : "chevron.right")
-                    }
-                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.secondary)
+                // EVERY stack expands — a single-slice entry opens straight
+                // into its full detail ("clicking on an entry should reveal
+                // 100% of the data you have on it", Martin 2026-07-10).
+                Button {
+                    if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
+                } label: {
+                    Image(systemName: expanded.contains(key) ? "chevron.down" : "chevron.right")
                 }
+                .buttonStyle(.plain).font(.caption2).foregroundStyle(.secondary)
                 VStack(alignment: .leading) {
                     Text(stackTitle(stack)).lineLimit(1)
                     if let url = stack.tabURL {
@@ -115,31 +138,135 @@ struct ReviewView: View {
                     }
                 }
                 Spacer()
-                // Single-slice stacks look like today's rows (duration + start
-                // time); a stack the user hasn't split into slices shouldn't
-                // read differently from the old flat list.
-                if expandable {
+                // Single-slice stacks look like today's rows (duration +
+                // dated start); a stack the user hasn't split into slices
+                // shouldn't read differently from the old flat list.
+                if multi {
                     Text(stackSummaryTail(stack)).font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text(durationText(stack.total)).font(.caption).foregroundStyle(.secondary)
-                    Text(stack.first.formatted(date: .omitted, time: .shortened)).font(.caption)
+                    Text(dayTimeText(stack.first)).font(.caption)
                 }
             }
             calendarHintChip(for: stack, key: key)
-            if expandable, expanded.contains(key) {
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(stack.segments) { segment in
-                        HStack {
-                            Text(segment.start.formatted(date: .omitted, time: .shortened))
-                            Spacer()
-                            Text(durationText(segment.end.timeIntervalSince(segment.start)))
+            if expanded.contains(key) {
+                if multi {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(stack.segments) { segment in
+                            sliceRow(segment)
                         }
-                        .font(.caption2).foregroundStyle(.secondary)
                     }
+                    .padding(.leading, 20)
+                } else if let only = stack.segments.first {
+                    sliceDetailView(only).padding(.leading, 20)
                 }
-                .padding(.leading, 20)
             }
         }
+    }
+
+    /// One slice inside an expanded stack: dated start + duration, its own
+    /// full-detail disclosure, and a per-slice assign affordance (the same
+    /// assign bar, scoped to this one slice — Martin, 2026-07-10: "no way
+    /// to assign specific slices within the set to different activities").
+    private func sliceRow(_ segment: ReviewSegment) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack {
+                Button {
+                    if sliceDetail.contains(segment.id) { sliceDetail.remove(segment.id) }
+                    else { sliceDetail.insert(segment.id) }
+                } label: {
+                    Image(systemName: sliceDetail.contains(segment.id) ? "chevron.down" : "chevron.right")
+                }
+                .buttonStyle(.plain)
+                Text(dayTimeText(segment.start))
+                Spacer()
+                Text(durationText(segment.end.timeIntervalSince(segment.start)))
+                Button("assign") {
+                    sliceAssign = segment.id
+                    selection.removeAll()
+                }
+                .buttonStyle(.borderless)
+                .help("Assign just this slice – pick its task in the bar below")
+            }
+            .font(.caption2)
+            .foregroundStyle(sliceAssign == segment.id ? .primary : .secondary)
+            if sliceDetail.contains(segment.id) {
+                sliceDetailView(segment).padding(.leading, 14)
+            }
+        }
+    }
+
+    /// Everything held on one slice — full timestamps + duration, the
+    /// surface, email evidence when present, the attributor's CURRENT read
+    /// (certainty + where it comes from, the Evidence Card's vocabulary),
+    /// and the journal's neighbours either side with an explicit gap when
+    /// they weren't back-to-back.
+    private func sliceDetailView(_ segment: ReviewSegment) -> some View {
+        let explanation = controller.explain(segment.signal, now: segment.start)
+        let neighbours = controller.sliceNeighbours(for: segment)
+        return VStack(alignment: .leading, spacing: 1) {
+            Text("\(segment.start.formatted(date: .abbreviated, time: .standard)) – "
+                 + "\(segment.end.formatted(date: .abbreviated, time: .standard)) · "
+                 + durationText(segment.end.timeIntervalSince(segment.start)))
+            Text(surfaceLine(segment))
+            if let correspondents = segment.correspondents, !correspondents.isEmpty {
+                Text("✉ \(correspondents.joined(separator: ", "))"
+                     + (segment.emailSubject.map { " – \($0)" } ?? ""))
+            } else if let subject = segment.emailSubject {
+                Text("✉ \(subject)")
+            }
+            Text(certaintyLine(explanation))
+            Text("before: \(neighbourText(neighbours.before, before: true))")
+            Text("after: \(neighbourText(neighbours.after, before: false))")
+        }
+        .font(.caption2).foregroundStyle(.secondary)
+        .textSelection(.enabled)
+    }
+
+    private func surfaceLine(_ segment: ReviewSegment) -> String {
+        var parts = ["app \(segment.app)"]
+        if let title = segment.windowTitle { parts.append("title \(title)") }
+        if let url = segment.tabURL { parts.append("url \(url)") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// "certainty: <task> 62% (learned)" — the attributor's read of this
+    /// slice as it stands NOW, scored at the slice's own moment (so the
+    /// time-of-day prior matches what actually happened, like the retro
+    /// pass and `explainSpan`).
+    private func certaintyLine(_ e: AttributionExplanation) -> String {
+        guard let chosen = e.chosen else { return "certainty: nothing matched yet" }
+        let pct = Int((e.chosenScore * 100).rounded())
+        return "certainty: \(controller.name(of: chosen)) \(pct)% (\(sourceWord(e.source)))"
+    }
+
+    /// A plain word for where the certainty comes from — compressed
+    /// `EvidenceCardView.becauseLabel` vocabulary.
+    private func sourceWord(_ source: AttributionExplanation.Source) -> String {
+        switch source {
+        case .pin: return "pinned"
+        case .sessionSticky: return "categorised earlier that day"
+        case .opTaskURL, .opTaskTitle: return "OP page"
+        case .emailRule: return "learned rule"
+        case .siteRule: return "learned site rule"
+        case .pendingPrime: return "just-opened OP task"
+        case .primedSurface: return "past correction"
+        case .ranked: return "learned associations + priors"
+        case .none: return "nothing matched"
+        }
+    }
+
+    /// "<task> until Today 14:20 · …12m gap" / "<task> from Yesterday 9:02"
+    /// — the tracked neighbour on one side, with the gap named whenever it
+    /// wasn't immediately adjacent; an empty side says so rather than
+    /// vanishing.
+    private func neighbourText(_ n: SliceNeighbours.Neighbour?, before: Bool) -> String {
+        guard let n else { return "nothing tracked" }
+        var text = before
+            ? "\(controller.name(of: .task(n.task))) until \(dayTimeText(n.end))"
+            : "\(controller.name(of: .task(n.task))) from \(dayTimeText(n.start))"
+        if !n.isContiguous { text += " · …\(durationText(n.gap)) gap" }
+        return text
     }
 
     /// The review-queue hint chip (calendar-signal spec §7): a past calendar
@@ -176,19 +303,41 @@ struct ReviewView: View {
 
     /// "<total> over N slices, <first> – <last>" — the trailing detail for a
     /// multi-slice stack (spec §4 grouped drawer, amended to group by
-    /// surface rather than task/day).
+    /// surface rather than task/day). Both ends carry their day (Today/
+    /// Yesterday/date): a queue sorted Oldest is unreadable on times alone.
     private func stackSummaryTail(_ s: ReviewStack) -> String {
         let sameDay = Calendar.current.isDate(s.first, inSameDayAs: s.last)
         let span = sameDay
-            ? "\(s.first.formatted(date: .omitted, time: .shortened)) – \(s.last.formatted(date: .omitted, time: .shortened))"
-            : "\(s.first.formatted(date: .abbreviated, time: .shortened)) – \(s.last.formatted(date: .abbreviated, time: .shortened))"
+            ? "\(dayLabel(s.first)) \(s.first.formatted(date: .omitted, time: .shortened)) – \(s.last.formatted(date: .omitted, time: .shortened))"
+            : "\(dayTimeText(s.first)) – \(dayTimeText(s.last))"
         return "\(durationText(s.total)) over \(s.segments.count) slices, \(span)"
+    }
+
+    /// "Today" / "Yesterday" / "5 Jul" — `RelativeDay`'s calendar-day
+    /// classification (Core-checked), formatted for the drawer.
+    private func dayLabel(_ date: Date) -> String {
+        switch RelativeDay.of(date) {
+        case .today: return "Today"
+        case .yesterday: return "Yesterday"
+        case .other:
+            // Another year spells the year out; within this year "5 Jul" is
+            // unambiguous and shorter.
+            let sameYear = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year)
+            return sameYear
+                ? date.formatted(.dateTime.day().month(.abbreviated))
+                : date.formatted(.dateTime.day().month(.abbreviated).year())
+        }
+    }
+
+    /// "Today 14:32" — every time the drawer shows carries its day.
+    private func dayTimeText(_ date: Date) -> String {
+        "\(dayLabel(date)) \(date.formatted(date: .omitted, time: .shortened))"
     }
 
     private var assignBar: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Assign \(selection.count):").font(.caption)
+                Text(sliceAssign != nil ? "Assign slice:" : "Assign \(selection.count):").font(.caption)
                 TextField("type to filter tasks", text: $filter)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
@@ -197,7 +346,7 @@ struct ReviewView: View {
                     .help("Filter tasks; ↵ assigns the selection to the top result")
                 Button("Do not track") { assign(.doNotTrack) }
                     .keyboardShortcut("d", modifiers: .command)
-                    .help("Mark the selection as not worked (⌘D)")
+                    .help("Mark the selection as not worked (⌘D, or ⌫ with rows selected)")
                 Button("Unknown") { assign(.task(WorkTask.unknown.ref)) }
                     .help("Sweep to Unknown – tracked, safe, off your plate, reclaimable")
             }
@@ -276,6 +425,19 @@ struct ReviewView: View {
     /// `assignReview` path (both teach the attributor from every distinct
     /// surface covered — approvals-drawer spec §1 side-bug fix).
     private func assign(_ target: Target) {
+        // Per-slice path (Martin, 2026-07-10): the SAME `assignReview`
+        // mechanics the stack path uses, scoped to one segment id — so it
+        // teaches from that slice's own evidence and registers on the
+        // app-wide undo stack exactly like a stack assign.
+        if let id = sliceAssign {
+            let segment = stacks.flatMap(\.segments).first { $0.id == id }
+            sliceAssign = nil
+            guard let segment else { return }   // assigned away meanwhile
+            controller.assignReview([id], to: target)
+            justAssigned = footerContext(for: [segment], target: target)
+            correspondentChecks = justAssigned.map { Set(ContextIdentity.correspondentChoices($0.signal)) } ?? []
+            return
+        }
         let picked = selectedStacks
         guard !picked.isEmpty else { return }
         let assignedSegments = picked.flatMap(\.segments)

@@ -2,6 +2,32 @@
 
 ## 2026-07-10
 
+- [x] **Review drawer: dated rows, full per-slice detail with tracked
+  neighbours, per-slice assign, ⌫ = Do not track.** Martin's 2026-07-10
+  critique (UI/data slices). Every stack row and expanded slice carries its
+  day (Today/Yesterday/short date; `RelativeDay` in the new
+  timeandeyeCore/ReviewDetail.swift) — an Oldest sort was unreadable on
+  times alone. Every stack expands (a single-slice entry opens straight
+  into full detail), and each slice's own disclosure shows 100% of what's
+  held: exact start/end timestamps, duration, app · title · url, email
+  correspondents/subject, the attributor's current certainty + its source
+  (Evidence Card vocabulary, scored at the slice's own moment), and what
+  the journal tracked immediately before and after — task + time, with an
+  explicit "…2h gap" when not back-to-back (`SliceNeighbours.around`, a
+  read-only range query over existing sessions; no schema change; the
+  live-checkpoint sentinel excluded). Each slice in a stack gains an
+  **assign** affordance that scopes the assign bar to that one segment —
+  the same `assignReview` path, so it teaches from that slice's evidence
+  only and lands on the app-wide undo stack. ⌫ with rows selected triggers
+  the assign bar's "Do not track" (List `onDeleteCommand`, same ⌘Z). New
+  ReviewSliceDetail checks: calendar-day classification incl. the
+  just-past-midnight boundary, nearest-neighbour choice, gap + contiguity
+  tolerance, overlap exclusion (a slice's own session is never its
+  neighbour), and per-slice routing (siblings stay stacked; single-slice
+  teach carries only that slice's evidence). Manuals (root MANUAL.md +
+  site auto-tracking page) describe the row anatomy; ⌫ joined ⌘D on both
+  keyboard pages. The button's NAME stays pending Martin's call (TODO).
+
 - [x] **iOS companion displays as Time&I; inert bundleIdPrefix dropped;
   manual catches up; one bezier evaluator in the checks.** ios/project.yml
   now sets `INFOPLIST_KEY_CFBundleDisplayName: "Time&I"` (the companion

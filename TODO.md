@@ -1,5 +1,15 @@
 # TODO
 
+## Review drawer (Martin's critique, 2026-07-10)
+
+- [ ] Martin: naming call on the assign bar's **Do not track** button ("Do
+  not track sounds like it's going to stop that window from tracking in the
+  future - should that be [Delete]? Does it literally remove those slices?").
+  What it actually does: deletes nothing (queue rows are marked decided and
+  kept, ⌘Z restores; journalled sessions/timeline untouched) AND teaches a
+  learned lean toward "not work" for that surface, so future visits tend to
+  stop the clock. Both readings are half-true; the label waits on his call.
+
 ## Undo — remaining non-undoables (audit, 2026-07-09)
 
 The infinite-undo audit (CHANGELOG 2026-07-09) closed every local
