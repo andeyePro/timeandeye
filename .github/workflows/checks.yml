@@ -1,8 +1,19 @@
 name: checks
 on:
+  # Manual + main-only. This workflow was burning the Actions budget:
+  # push:["**"] ran the full Swift suite on a macos runner (10x minutes
+  # multiplier on a private repo) for EVERY push to every branch, while the
+  # Mac build bridge already gates every commit. 2026-07-10: 1,808 of the
+  # month's 2,000 included minutes were consumed, mostly in one day of
+  # high-frequency verified pushes to FableMax.
+  workflow_dispatch:
   push:
-    branches: ["**"]
-  pull_request:
+    branches: ["main"]
+
+# A newer run supersedes an older one on the same ref - never pay for both.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
