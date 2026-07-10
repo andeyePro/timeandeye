@@ -1165,7 +1165,7 @@ struct PopoverView: View {
             Button {
                 controller.timeWindowView = controller.initialTimeView()
                 openWindow(id: "time")
-                AndeyeWindows.activateOnceVisible()
+                AndeyeWindows.activateOnceVisible(opened: "time")
             } label: {
                 if todayNodes.isEmpty {
                     Image(systemName: "chart.pie")
@@ -1178,7 +1178,7 @@ struct PopoverView: View {
             .help("Time – today's breakdown; click for the timeline / pie (⌘Y)")
             Button {
                 openWindow(id: "review")
-                AndeyeWindows.activateOnceVisible()
+                AndeyeWindows.activateOnceVisible(opened: "review")
             } label: {
                 Label("\(controller.pendingDecisionCount)", systemImage: "tray.full")
             }
@@ -1187,7 +1187,7 @@ struct PopoverView: View {
             Spacer()
             Button {
                 openWindow(id: "settings")
-                AndeyeWindows.activateOnceVisible()
+                AndeyeWindows.activateOnceVisible(opened: "settings")
             } label: {
                 Image(systemName: "gearshape")
             }

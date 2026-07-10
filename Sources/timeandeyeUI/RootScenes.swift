@@ -55,17 +55,17 @@ public enum AndeyeScenes {
         .defaultSize(width: 980, height: 460)
 
         Window("Time&I Review", id: "review") {
-            ReviewView(controller: controller).openOnActiveSpace()
+            ReviewView(controller: controller).openOnActiveSpace(id: "review")
         }
         .defaultSize(width: 640, height: 420)
 
         Window("Time&I Settings", id: "settings") {
-            SettingsView(controller: controller).openOnActiveSpace()
+            SettingsView(controller: controller).openOnActiveSpace(id: "settings")
         }
         .defaultSize(width: 460, height: 480)
 
         Window("Time&I Context Rules", id: "rules") {
-            RulesLedgerView(controller: controller).openOnActiveSpace()
+            RulesLedgerView(controller: controller).openOnActiveSpace(id: "rules")
         }
         .defaultSize(width: 460, height: 420)
     }
@@ -160,8 +160,15 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // Space.
             openObserver = NotificationCenter.default.addObserver(
                 forName: AndeyeWindows.openRequested, object: nil,
-                queue: nil) { [weak self] _ in
+                queue: nil) { [weak self] note in
                 guard let self, Thread.isMainThread else { return }
+                // Scoped: only the window being opened re-graces (see
+                // AndeyeWindows.openGrantApplies) — granting every window
+                // put them all in the auxiliary pose, which blocked the
+                // green button for 4s after any open.
+                guard AndeyeWindows.openGrantApplies(
+                    opened: note.userInfo?["id"] as? String,
+                    windowID: self.windowID) else { return }
                 self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
                 self.applyToWindow()
             }
@@ -354,9 +361,27 @@ enum AndeyeWindows {
     /// accepted cost.
     static let openRequested = Notification.Name("andeyeThemedWindowOpenRequested")
 
-    static func activateOnceVisible(_ retriesLeft: Int = 40) {
+    /// True when a SpaceJoiningView with `windowID` should honour an open
+    /// grant for the openWindow scene `opened`. Scoped (Martin, 2026-07-10
+    /// late afternoon): the original all-windows grant put EVERY window
+    /// into the auxiliary overlay pose for 4s on any open, and auxiliary
+    /// windows cannot enter their own fullscreen — his green button worked
+    /// or failed depending on whether anything had been opened in the
+    /// previous few seconds. Nil on either side stays permissive (an
+    /// unidentified view or an unlabelled open grants broadly — safe, just
+    /// less precise). The Time scenes ("time"/"time2") host views whose
+    /// ids are the VIEW mode ("timeline"/"spent").
+    static func openGrantApplies(opened: String?, windowID: String?) -> Bool {
+        guard let opened, let windowID else { return true }
+        if opened == windowID { return true }
+        return (opened == "time" || opened == "time2")
+            && (windowID == "timeline" || windowID == "spent")
+    }
+
+    static func activateOnceVisible(opened: String? = nil, _ retriesLeft: Int = 40) {
         if retriesLeft == 40 {   // the entry call, not a retry turn
-            NotificationCenter.default.post(name: openRequested, object: nil)
+            NotificationCenter.default.post(name: openRequested, object: nil,
+                                            userInfo: opened.map { ["id": $0] })
         }
         // Floating counts: over a fullscreen app the themed windows live at
         // .floating (SpaceJoiningView), and a gate that only accepted
