@@ -393,9 +393,17 @@ and recorded rather than fixed blind:
   (`EmailRecipeValidation`/`EmailRecipeHealth`: every error-free read judged
   healthy / self-only / suspect; suspect reads never enrich; 3 consecutive
   failures mark the system unhealthy, log it, and fire the engine's
-  `onRecipeUnhealthy` seam).
-  REMAINING (single list — the two sibling entries below point here): more
-  provider selectors (OWA/Proton/Yahoo/Fastmail) + native clients;
+  `onRecipeUnhealthy` seam). Webmail recipe pack SHIPPED 2026-07-10
+  (OWA/Proton/Yahoo/Fastmail: anchored host detection, per-provider
+  message-view gates, provider-neutral address ladder in the capture JS;
+  selectors evidence-researched — Proton authoritative from WebClients
+  source, OWA/Yahoo cross-corroborated across extensions, Fastmail weak —
+  but NONE verified against a live DOM yet: validate-on-use is the guard,
+  per-recipe provenance in `EmailSystem`'s comments).
+  REMAINING (single list — the two sibling entries below point here): live
+  verification of the four new webmail recipes (open a real message per
+  provider, watch the health probe); native clients (Apple Mail/Outlook
+  desktop — a different capture channel: AX/window-title, not page JS);
   the re-learn/self-heal loop (probe → label → store-recipe, attaches at
   `onRecipeUnhealthy`) + recipe pack with background updates;
   multi-message-thread sender choice.

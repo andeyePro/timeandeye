@@ -183,12 +183,28 @@ public final class EmailCaptureEngine {
 
     /// Read-only JS that dumps `name<TAB>email` lines for the sender selector
     /// and the recipient selector, separated by a record-separator char.
-    /// Single quotes + fromCharCode → nothing to escape through AppleScript.
+    /// Single quotes + fromCharCode → nothing to escape through AppleScript —
+    /// the same constraint the selectors themselves live under (see
+    /// `EmailSystem`'s embedding note). The address is read through a
+    /// provider-neutral ladder: Gmail carries it in `email`/
+    /// `data-hovercard-id` attributes, OWA/Yahoo in `title`/`data-email`,
+    /// Proton in `title`, Fastmail (worst case) only as text — each candidate
+    /// value is reduced to its first address-shaped token, so a full "Name
+    /// <addr>" title still yields a clean address that survives
+    /// `EmailSignal.isAddress`. The regex mirrors `EmailSignal.addressPattern`
+    /// written without backslashes or quotes (the embedding again). Names are
+    /// scrubbed of the protocol's own delimiter chars (tab/LF/CR) because
+    /// textContent-derived names, unlike Gmail's `name` attribute, can
+    /// contain them.
     private static func jsScript(appName: String, sender: String, recipient: String) -> String {
-        let js = "(function(){var T=String.fromCharCode(9),L=String.fromCharCode(10);"
+        let js = "(function(){var T=String.fromCharCode(9),L=String.fromCharCode(10),C=String.fromCharCode(13);"
+            + "var re=/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z][A-Za-z]+/;"
+            + "function x(v){var m=(v||'').match(re);return m?m[0]:'';}"
             + "function g(sel){var a=[];document.querySelectorAll(sel).forEach(function(e){"
-            + "var em=e.getAttribute('email')||e.getAttribute('data-hovercard-id')||'';"
-            + "var nm=(e.getAttribute('name')||e.textContent||'').trim();"
+            + "var em=x(e.getAttribute('email'))||x(e.getAttribute('data-hovercard-id'))"
+            + "||x(e.getAttribute('data-email'))||x(e.getAttribute('title'))||x(e.textContent);"
+            + "var nm=(e.getAttribute('name')||e.textContent||'')"
+            + ".split(T).join(' ').split(L).join(' ').split(C).join(' ').trim();"
             + "if(em)a.push(nm+T+em);});return a.join(L);}"
             + "return g('\(sender)')+String.fromCharCode(30)+g('\(recipient)');})()"
         return "tell application \"\(appName)\" to execute active tab of front window javascript \"\(js)\""

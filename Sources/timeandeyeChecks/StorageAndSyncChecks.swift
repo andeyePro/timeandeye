@@ -872,7 +872,9 @@ func aiAssistChecks(_ c: Checks) {
         try expectEq(EmailSystem.detect(urlHost: nil), .unknown)
         try expect(EmailSystem.gmail.senderSelector == ".gD")
         try expect(EmailSystem.gmail.recipientSelector == ".g2")
-        try expect(!EmailSystem.outlookWeb.hasRecipe, "no recipe yet for OWA")
+        // The full recipe-pack matrix (all providers, lookalike hosts,
+        // selector invariants) lives in emailSystemRecipeChecks.
+        try expect(EmailSystem.outlookWeb.hasRecipe, "OWA recipe shipped 2026-07-10")
     }
 
     c.check("counterparties drop self ('me', own addr/domain), keep the other party") {

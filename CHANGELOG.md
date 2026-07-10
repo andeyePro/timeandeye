@@ -2,6 +2,33 @@
 
 ## 2026-07-10
 
+- [x] **Email recipe pack: Outlook Web, Proton Mail, Yahoo Mail and Fastmail
+  join Gmail.** `EmailSystem` now ships open-message sender/recipient
+  selectors for all five webmail systems, each with its evidence source,
+  retrieval date and an honest confidence note in the code (Proton is
+  authoritative — read straight from ProtonMail/WebClients source; OWA and
+  Yahoo are cross-corroborated across independent browser-extension
+  extractors; Fastmail is a weak best-candidate from Fastmail's own
+  jmap-demo-webmail class conventions). None is verified against a live DOM
+  yet — validate-on-use (2026-07-10, above) is the designed guard: a wrong
+  selector yields a suspect read that never enriches and self-reports
+  unhealthy. Around the selectors, three model fixes: host detection is now
+  ANCHORED (a bare `hasSuffix` accepted lookalikes — "notmail.google.com"
+  ends with "mail.google.com" — and every match injects recipe JS into the
+  page); every provider got a message-view gate mirroring Gmail's stale-DOM
+  guard (OWA `/id/<item>` + pop-out `itemid` query, Proton `/u/<n>/<label>/
+  <element>` with custom-folder labels excluded, Yahoo `/messages/<id>`,
+  Fastmail `/mail/<mailbox>/<thread>` — all fail closed); and the capture JS
+  reads addresses through a provider-neutral ladder (`email`/
+  `data-hovercard-id`/`data-email`/`title`, then address-shaped text) so a
+  recipe only has to find the sender element, not name the attribute. New
+  `EmailSystemRecipes` checks pin the detection matrix (incl. lookalike
+  hosts), the per-provider gates end-to-end through `captureTarget`, and the
+  embedding invariant (selectors travel single-quoted-JS-inside-AppleScript,
+  so no quotes or backslashes — Proton's `:`-bearing testids use substring
+  matchers). Native clients (Apple Mail/Outlook desktop) stay open in TODO —
+  different capture channel.
+
 - [x] **Email recipes now validate on use, with per-system health telemetry
   and safe degrade.** The NAIL programme's cheap half: a webmail redesign or
   a localized From label never errors, it just makes a recipe silently return

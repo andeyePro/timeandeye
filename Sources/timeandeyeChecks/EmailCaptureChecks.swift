@@ -29,9 +29,27 @@ func emailCaptureChecks(_ c: Checks) {
             bundleID: "com.google.Chrome", tabURL: "https://github.com/andeyePro/timeandeye"))
     }
 
-    c.check("a detected email system with no recipe yet (Outlook) never captures") {
-        try expectNil(EmailCaptureEngine.captureTarget(
-            bundleID: "com.google.Chrome", tabURL: "https://outlook.office.com/mail/inbox"))
+    c.check("every recipe'd system captures on its open-message URL, never on its list URL") {
+        // One (message URL, list URL) pair per 2026-07-10 recipe-pack system —
+        // the end-to-end gate: detect → hasRecipe → isMessageView. IDs are
+        // realistic shapes (OWA base64 item id, Proton base64 element id,
+        // Yahoo message id, Fastmail thread id).
+        let pairs: [(String, String)] = [
+            ("https://outlook.office.com/mail/inbox/id/AAQkADAwATM3ZmYAZS05NmQ4LWI4ZjMtMDACLTAwCgAQAJk3PTVyc0RGvYWkzhMkX9Y%3D",
+             "https://outlook.office.com/mail/inbox"),
+            ("https://mail.proton.me/u/0/inbox/hcBqAeQhI4LzXtRkq1zdQz5W0uwOSbrhMcO2b_9DTBjkZ2rBTCzXCtNMe0KvGqYm==",
+             "https://mail.proton.me/u/0/inbox"),
+            ("https://mail.yahoo.com/d/folders/1/messages/AIkzXW4AAAN1Zr0mVw9dR0X6xw",
+             "https://mail.yahoo.com/d/folders/1"),
+            ("https://app.fastmail.com/mail/Inbox/Tf6d8f01a24f3b1e8.M5a3c9d21b1a2?u=abc123",
+             "https://app.fastmail.com/mail/Inbox/"),
+        ]
+        for (message, list) in pairs {
+            try expectEq(EmailCaptureEngine.captureTarget(
+                bundleID: "com.google.Chrome", tabURL: message), "Google Chrome", message)
+            try expectNil(EmailCaptureEngine.captureTarget(
+                bundleID: "com.google.Chrome", tabURL: list), list)
+        }
     }
 
     c.check("no tab URL at all -> never captures") {
@@ -74,17 +92,114 @@ func emailCaptureChecks(_ c: Checks) {
             tabURL: "https://mail.google.com/mail/u/0/#label/Client%20X/\(thread)"), "Google Chrome")
     }
 
-    c.check("isMessageView: systems with no known URL shape default to true") {
+    c.check("isMessageView: unknown (recipe-less) systems default to true") {
         // A future recipe'd system must not be silently gated before its
-        // classifier is written — the gate stays recipe-only for them.
-        try expectEq(EmailSystem.outlookWeb.isMessageView(urlString:
-            "https://outlook.office.com/mail/inbox"), true)
+        // classifier is written — hasRecipe screens .unknown out long before
+        // the gate, so the permissive default is unreachable in the pipeline.
+        try expectEq(EmailSystem.unknown.isMessageView(urlString:
+            "https://example.com/anything"), true)
     }
 
     c.check("isMessageView: Gmail with no fragment at all is not a message") {
         try expectEq(EmailSystem.gmail.isMessageView(urlString:
             "https://mail.google.com/mail/u/0"), false)
         try expectEq(EmailSystem.gmail.isMessageView(urlString: nil), false)
+    }
+
+    c.check("isMessageView: OWA pop-out readers name the item in the query") {
+        // Deeplink/pop-out route has no /id/ path segment; the item id rides
+        // in an itemid (or id) query parameter instead.
+        try expectEq(EmailSystem.outlookWeb.isMessageView(urlString:
+            "https://outlook.office.com/mail/deeplink/read?ItemID=AAQkADAwATM3ZmYAZS05NmQ4LWI4ZjMtMDACLTAwCgAQAJk3"), true)
+        try expectEq(EmailSystem.outlookWeb.isMessageView(urlString:
+            "https://outlook.office.com/mail/options/general"), false)
+        try expectEq(EmailSystem.outlookWeb.isMessageView(urlString: nil), false)
+    }
+
+    c.check("isMessageView: a Proton custom folder whose LABEL is a long id is still a list") {
+        // Custom folders route as /u/<n>/<labelId> — one segment after the
+        // account index, however id-like it looks. Only a SECOND long
+        // segment (the element id) marks an open conversation.
+        try expectEq(EmailSystem.proton.isMessageView(urlString:
+            "https://mail.proton.me/u/0/hcBqAeQhI4LzXtRkq1zdQz5W0uwOSbrhMcO2b9DTBjk"), false)
+        try expectEq(EmailSystem.proton.isMessageView(urlString:
+            "https://mail.proton.me/u/0/hcBqAeQhI4LzXtRkq1zdQz5W0uwOSbrhMcO2b9DTBjk/WzK9vXtRkq1zdQz5W0uwOSbrhMcO2b9DTBjkZ2rBTCzX=="), true)
+        try expectEq(EmailSystem.proton.isMessageView(urlString:
+            "https://mail.proton.me/u/0/inbox/short"), false, "short trailing segment is a route word, not an id")
+    }
+
+    c.check("isMessageView: Yahoo and Fastmail search/settings surfaces are lists") {
+        try expectEq(EmailSystem.yahoo.isMessageView(urlString:
+            "https://mail.yahoo.com/d/search/keyword=andeye"), false)
+        try expectEq(EmailSystem.fastmail.isMessageView(urlString:
+            "https://app.fastmail.com/mail/search:from%3Arae/"), false,
+            "search: mailbox segment with no thread id is a list")
+        try expectEq(EmailSystem.fastmail.isMessageView(urlString:
+            "https://app.fastmail.com/settings/account"), false)
+    }
+}
+
+// MARK: - EmailSystem recipe pack (detection + selector invariants). The
+// selectors themselves are validated at RUNTIME by design (EmailRecipeHealth)
+// — no fake DOM here; these pin the pure model around them.
+
+func emailSystemRecipeChecks(_ c: Checks) {
+    c.check("host detection: every recipe-pack host maps to its system") {
+        let cases: [(String, EmailSystem)] = [
+            ("mail.google.com", .gmail),
+            ("outlook.office.com", .outlookWeb),
+            ("outlook.live.com", .outlookWeb),
+            ("outlook.office365.com", .outlookWeb),
+            ("mail.proton.me", .proton),
+            ("mail.protonmail.com", .proton),
+            ("mail.yahoo.com", .yahoo),
+            ("fastmail.com", .fastmail),
+            ("app.fastmail.com", .fastmail),
+            ("MAIL.YAHOO.COM", .yahoo),   // hosts compare case-insensitively
+        ]
+        for (host, system) in cases {
+            try expectEq(EmailSystem.detect(urlHost: host), system, host)
+        }
+    }
+
+    c.check("host detection is anchored: lookalike hosts never match") {
+        // hasSuffix alone accepts "notmail.google.com" (it ends with
+        // "mail.google.com") — a page we must never inject recipe JS into.
+        // Matches must be the domain itself or a true dot-separated subdomain.
+        for host in ["notmail.google.com",
+                     "notmail.yahoo.com",
+                     "myfastmail.com",
+                     "mail.proton.me.evil.example",   // prefix lookalike
+                     "outlook.office.com.phish.example",
+                     "mail.yahoo.com.example.net",
+                     "github.com"] {
+            try expectEq(EmailSystem.detect(urlHost: host), .unknown, host)
+        }
+    }
+
+    c.check("every webmail system ships a recipe; both selectors always travel together") {
+        for system in EmailSystem.allCases where system != .unknown {
+            try expect(system.hasRecipe, "\(system) lost its recipe")
+            try expect(!(system.senderSelector ?? "").isEmpty, "\(system) sender selector empty")
+            try expect(!(system.recipientSelector ?? "").isEmpty, "\(system) recipient selector empty")
+        }
+        try expectNil(EmailSystem.unknown.senderSelector)
+        try expectNil(EmailSystem.unknown.recipientSelector)
+    }
+
+    c.check("selectors are AppleScript/JS embedding-safe (no quotes, no backslashes)") {
+        // Recipes travel inside a single-quoted JS string inside a
+        // double-quoted AppleScript string (EmailCaptureEngine.jsScript) —
+        // any quote or backslash in a selector breaks the whole capture, so
+        // attribute values with non-identifier chars must use substring
+        // matchers instead of quoting.
+        for system in EmailSystem.allCases {
+            for selector in [system.senderSelector, system.recipientSelector].compactMap({ $0 }) {
+                try expect(!selector.contains("'"), "\(system): single quote in \(selector)")
+                try expect(!selector.contains("\""), "\(system): double quote in \(selector)")
+                try expect(!selector.contains("\\"), "\(system): backslash in \(selector)")
+            }
+        }
     }
 }
 
