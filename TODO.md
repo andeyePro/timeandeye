@@ -147,6 +147,11 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Retire the com.andeye.mac transition shims once no pre-rename install
+  remains on any Mac (transition began 2026-07-09): the LEGACY_BUNDLE_ID
+  quit line + old-bundle retire block in scripts/make-app.sh, and the
+  com.andeye.mac quit + ~/Applications/andeye.app retire in
+  scripts/install-timeandeye.command.
 - [x] Review-queue sub-minute floor + "Unknown" rename (Martin, 2026-07-09
   evening, BLOCKER for his testing) — DONE same evening: per-surface 60s
   admission floor (`meetingReviewFloor`, Settings-backed, applied at

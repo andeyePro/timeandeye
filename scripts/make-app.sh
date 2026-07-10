@@ -5,24 +5,40 @@ set -euo pipefail
 
 OUT="${1:-.}"
 APP="$OUT/timeandeye.app"
+# The app's identity, single-sourced: quit lines and the Info.plist heredoc
+# (via sed, like BUILD_STAMP) all read these. LEGACY_BUNDLE_ID is the
+# pre-2026-07-09 identity, kept only so upgrades can quit/retire old
+# installs — see the TODO.md expiry entry before touching either.
+BUNDLE_ID="com.timeandeye.mac"
+LEGACY_BUNDLE_ID="com.andeye.mac"
 # With no output-dir arg we INSTALL into /Applications (where launchers —
 # Raycast, Spotlight — find it) and relaunch. A running instance must quit
 # first: replacing a running bundle in place can kill it mid-execution
 # (the "menu bar icon disappeared" deaths).
 INSTALL=0
 [ $# -eq 0 ] && INSTALL=1
-# Quit a running copy so the bundle swaps cleanly. Quit by BUNDLE ID, not by
-# name: the id is shared by the pre-rename andeye.app and today's
-# timeandeye.app, so this targets whichever is running. pgrep matches the
-# executable name, which is "andeye" in both (see CFBundleExecutable below).
+# Quit a running copy so the bundle swaps cleanly. The two identities differ
+# (pre-rename builds carry $LEGACY_BUNDLE_ID, current builds $BUNDLE_ID), so
+# quit BOTH by id; pgrep bridges them by matching the executable name, which
+# is "andeye" in both (see CFBundleExecutable below). The `is running` guard
+# matters: a bare `quit app id` LAUNCHES a registered-but-not-running bundle
+# just to deliver the quit event, and one of these two ids is always not
+# running — without the guard a stale old-id copy cold-starts mid-build.
 if pgrep -xq andeye; then
     if [ "$INSTALL" = 1 ]; then
         echo "Quitting running app to replace it…"
-        # Quit whichever identity is running: pre-rename builds carry
-        # com.andeye.mac, current builds com.timeandeye.mac.
-        osascript -e 'quit app id "com.timeandeye.mac"' 2>/dev/null || true
-        osascript -e 'quit app id "com.andeye.mac"' 2>/dev/null || true
+        for QID in "$BUNDLE_ID" "$LEGACY_BUNDLE_ID"; do
+            osascript -e "if application id \"$QID\" is running then quit app id \"$QID\"" 2>/dev/null || true
+        done
         for _ in $(seq 1 10); do pgrep -xq andeye || break; sleep 0.5; done
+        # The quits above swallow errors (an unanswered Automation-consent
+        # prompt fails silently with -1743), so re-check before the install
+        # step swaps the bundle under a still-running process.
+        if pgrep -xq andeye; then
+            echo "error: the running app did not quit (Automation consent denied, or a stuck copy);" >&2
+            echo "       aborting before replacing the installed bundle. Quit it manually and re-run." >&2
+            exit 1
+        fi
     else
         APP="$OUT/timeandeye+.app"
         echo "NOTE: app is running; building to $APP - quit the old one and rename to swap."
@@ -39,13 +55,11 @@ cp "$BIN" "$APP/Contents/MacOS/andeye"
 # Naming: bundle/folder = timeandeye, human name = Time&I (XML-escaped as
 # Time&amp;I below; there is no separate long form — CFBundleName and
 # CFBundleDisplayName are both Time&I).
-# CFBundleIdentifier is com.timeandeye.mac — Martin's per-app-id decision
-# (2026-07-09: every andeye app gets its own id; a sibling andeye app etc. cannot share
-# one). Changed from com.andeye.mac BEFORE the entitled build, so no iCloud
-# container or provisioning existed to migrate; the one-time cost was a
-# re-grant of TCC permissions. From here it MUST NOT change again: TCC
-# grants (Accessibility, Automation, Calendar) key off this identifier plus
-# the stable signing identity — a new id silently revokes every grant.
+# CFBundleIdentifier is $BUNDLE_ID (defined at the top; stamped into the
+# plist below via sed, like BUILD_STAMP) — per-app ids across andeye apps,
+# see CHANGELOG 2026-07-09. It MUST NOT change again: TCC grants
+# (Accessibility, Automation, Calendar) key off this identifier plus the
+# stable signing identity — a new id silently revokes every grant.
 # CFBundleExecutable stays "andeye" deliberately: the quit-wait above
 # (pgrep -x andeye) must match BOTH the old andeye.app and this bundle's
 # process during an upgrade, and nothing user-visible shows the executable
@@ -56,7 +70,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key><string>com.timeandeye.mac</string>
+    <key>CFBundleIdentifier</key><string>BUNDLE_ID</string>
     <key>CFBundleName</key><string>Time&amp;I</string>
     <key>CFBundleDisplayName</key><string>Time&amp;I</string>
     <key>CFBundleExecutable</key><string>andeye</string>
@@ -83,8 +97,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Stamp the build time into CFBundleVersion so the running app can show exactly
-# which build it is (Settings → About). Must run before signing.
+# Stamp the identity and build time into the plist (single-sourced values,
+# quoted heredoc). Must run before signing.
+/usr/bin/sed -i '' "s/BUNDLE_ID/$BUNDLE_ID/" "$APP/Contents/Info.plist"
 BUILD_STAMP="$(date '+%Y-%m-%d %H:%M')"
 /usr/bin/sed -i '' "s/BUILD_STAMP/$BUILD_STAMP/" "$APP/Contents/Info.plist"
 
@@ -151,13 +166,22 @@ echo "Built $APP"
 # old /Applications copy.
 if [ "$INSTALL" = 1 ]; then
     DEST="/Applications/timeandeye.app"
-    # Retire the pre-rename bundle: two apps with the same bundle id must
-    # never coexist (duplicate-id confusion is what once mislabelled the
-    # app as "andeye+"), so remove the old copy before installing the new.
-    rm -rf "/Applications/andeye.app"
+    # Retire old-identity bundles from BOTH install locations (make-app.sh
+    # installs to /Applications, the zip installer to ~/Applications): a
+    # surviving $LEGACY_BUNDLE_ID copy stays LaunchServices-resolvable, lists
+    # as a second Time&I in launchers, and is what the legacy quit above
+    # would otherwise have to keep targeting. (Duplicate registrations are
+    # also what once mislabelled the app as "andeye+".)
+    rm -rf "/Applications/andeye.app" "$HOME/Applications/andeye.app"
+    OLDHOME="$HOME/Applications/timeandeye.app"
+    if [ -d "$OLDHOME" ] && ! grep -q "$BUNDLE_ID" "$OLDHOME/Contents/Info.plist" 2>/dev/null; then
+        # Pre-rename id under the new folder name; a current-id copy there
+        # is the zip install and is left alone.
+        rm -rf "$OLDHOME"
+    fi
     rm -rf "$DEST"
     ditto "$APP" "$DEST"          # preserves the signature + bundle structure
-    # Make this copy THE LaunchServices registration for com.timeandeye.mac, so
+    # Make this copy THE LaunchServices registration for the bundle id, so
     # its name resolves to the new one and no stale registration lingers.
     LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
     [ -x "$LSREG" ] && "$LSREG" -f "$DEST" >/dev/null 2>&1 || true

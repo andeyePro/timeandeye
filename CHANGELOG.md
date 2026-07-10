@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-10
+
+- [x] **Id-transition hardening (post-rebrand /code-review, findings 1–6,
+  13–14).** Both upgrade paths — scripts/make-app.sh and
+  scripts/install-timeandeye.command — now quit BOTH identities guarded by
+  `is running` (a bare `quit app id` LAUNCHES a registered-but-dormant
+  bundle just to deliver the event; one of the two ids is always not
+  running, and stale old-id staging bundles exist), then wait and ABORT
+  rather than swap the bundle under a still-running process (a denied
+  Automation prompt fails silently — the new Terminal→com.timeandeye.mac
+  pair has never been granted). make-app.sh single-sources
+  BUNDLE_ID/LEGACY_BUNDLE_ID (plist stamped via sed like BUILD_STAMP) and
+  retires old-identity bundles in ~/Applications too (the zip installer's
+  location). Stale "the id is shared"/"same bundle id" comments corrected.
+  Shim expiry recorded in TODO.md.
+
 ## 2026-07-09
 
 - [x] **Bundle identifier is com.timeandeye.mac.** Martin's per-app-id
