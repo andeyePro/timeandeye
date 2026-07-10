@@ -2,6 +2,21 @@
 
 ## 2026-07-10
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 - [x] **Why-panel truth: BECAUSE anchors on the recorded decision, never on
   a rule learned later.** Martin: "The BECAUSE 'remembered from a past
   correction → andeye Ltd confirmation statement + director ID verification'

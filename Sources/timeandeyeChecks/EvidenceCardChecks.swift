@@ -207,7 +207,7 @@ func rulesLedgerChecks(_ c: Checks) {
     c.check("search filters by rule value or task name, case-insensitively") {
         let rules = [rule(.correspondentDomain, "harborlane.example", .op(1)),
                     rule(.subject, "TestFlight", .op(2))]
-        try expectEq(RulesLedger.grouped(rules, nameOf: nameOf, search: "HAYES").map(\.target), [.op(1)])
+        try expectEq(RulesLedger.grouped(rules, nameOf: nameOf, search: "HARBOR").map(\.target), [.op(1)])
         try expectEq(RulesLedger.grouped(rules, nameOf: nameOf, search: "andeye").map(\.target), [.op(2)])
         try expectEq(RulesLedger.grouped(rules, nameOf: nameOf, search: "nonexistent").count, 0)
     }

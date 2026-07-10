@@ -197,6 +197,12 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Re-shoot the deleted review-drawer screenshot with mocked data.
+  `an old screenshot` was deleted in the pre-public
+  privacy scrub (it showed a third party's personal Gmail address and
+  Martin's personal task list). Nothing referenced it, but a replacement
+  capture with fictional fixture data (harborlane.example-style) is wanted
+  for the record.
 - [ ] Journal the decision SOURCE alongside task+certainty. The why-panel
   truth fix (2026-07-10) anchors the timeline card's BECAUSE on the slice's
   recorded outcome, but the journal keeps only WHAT stood (task, certainty),

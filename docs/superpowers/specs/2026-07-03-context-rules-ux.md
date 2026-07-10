@@ -85,7 +85,7 @@ Timeline (window clicked in the detail strip):
 │ EVIDENCE (what andeye saw)                                       │
 │   app            Google Chrome                                   │
 │   site           mail.google.com  (Gmail)                        │
-│   correspondent  r.naismith@harborlane.example                  │
+│   correspondent  r.naismith@harborlane.example                   │
 │   domain         harborlane.example                              │
 │   subject        Re: Insurance Renewals 2026                     │
 │                                                                  │
@@ -93,7 +93,7 @@ Timeline (window clicked in the detail strip):
 │   and remember for…                                              │
 │   ( ) just this once                     (today, this thread)    │
 │   (•) this domain     harborlane.example                         │
-│   ( ) this address    r.naismith@harborlane.example             │
+│   ( ) this address    r.naismith@harborlane.example              │
 │   ( ) this subject    "Insurance Renewals 2026"                  │
 │   ( ) all Gmail                                                  │
 │                              [Remember]   [Remember always 📌]   │
@@ -215,7 +215,7 @@ strip pre-selected at the conservative default grain, ↵ confirms.
 ```
 │ why: ✉ rule on [harborlane.example]̲ → Insurance · 8× · ✕     │
 │ fix: move to [filter tasks…] then                            │
-│  Gmail ▸ harborlane.example ▸ r.naismith@ ▸ "Insurance Re…" │
+│  Gmail ▸ harborlane.example ▸ r.naismith@ ▸ "Insurance Re…"  │
 │         [■■■■■■■■■■■■■■■■■]                                  │
 │  ↵ remember at blue grain · ⇧↵ always · esc once             │
 ```
@@ -576,11 +576,11 @@ Full (timeline / ledger) layout:
 │   ○ once        just today, this thread                          │
 │   ○ Gmail       everything in Gmail                              │
 │   ● domain      harborlane.example                    ← default  │
-│   ○ address     r.naismith@harborlane.example                   │
+│   ○ address     r.naismith@harborlane.example                    │
 │   ○ subject     "Insurance Renewals 2026"                        │
 │                                                                  │
 │   sees: app Chrome · site mail.google.com (Gmail) ·              │
-│         from r.naismith@harborlane.example · subj "Re: Insu…"   │
+│         from r.naismith@harborlane.example · subj "Re: Insu…"    │
 │   candidates: andeye 62% · Northgate Insurance 31% · … ▾            │
 │                              [Remember ↵]  [Always 📌 ⇧↵]        │
 └──────────────────────────────────────────────────────────────────┘
