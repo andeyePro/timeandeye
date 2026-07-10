@@ -2,6 +2,23 @@
 
 ## 2026-07-10
 
+- [x] **Fullscreen fix nine: open-grace + sticky settle, and windows stop
+  following you.** Two blind spots from Martin's morning report: opening
+  from the menu-bar popover REVEALS the menu bar, so the fullscreen-look
+  heuristic read false at exactly the open instant — fresh windows attached
+  at normal level and macOS evicted them to another Space (the already-open
+  timeline floated fine on its attach-time flags). Windows now OPEN in the
+  fullscreen-capable pose (floating + canJoinAllSpaces) and settle after a
+  4s grace, with a sticky 3-sample demotion so a transient menu-bar reveal
+  can't flicker them off a fullscreen Space. The pose is now conditional
+  both ways: once settled on an ordinary desktop the window drops
+  canJoinAllSpaces and floats no more — no more following the user to
+  every Space. Hidden retained windows are left alone (AppKit re-asserts
+  flags on them; touching them back churned behaviours and logged once a
+  second for a closed timeline). The activation gate accepts floating
+  windows (over fullscreen nothing is ever at normal level, so activation
+  never fired there and opens finished stranded on another Space).
+
 - [x] **Colour migration repair: seen projects get their pre-engine colours
   back.** Martin's regression report: after the colour engine landed
   (7b4aed6), projects turned dull and their bright tasks looked unrelated.
