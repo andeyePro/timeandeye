@@ -396,6 +396,113 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(row?.lockedInvoiceRef, "INV-9", "a fresh invoice re-locks")
     }
 
+    await c.check("unlock undo: re-lock restores the ref, the diverged park and the poll suppress") {
+        // The unlock gesture now returns a snapshot of the rows it lifted so
+        // ⌘Z can put the guard back: refs re-stamped, a divergence that was
+        // parked while locked re-parked, and the sticky "never re-lock this
+        // ref" suppress forgotten (the poll may re-apply INV-7 — undo undoes
+        // the WHOLE gesture, stickiness included).
+        let store = try makeStore()
+        let (sidA, sidB) = (UUID(), UUID())
+        let posted = PostingRecord(sessionID: sidA, backendID: "pm-a", state: .posted,
+                                   entryID: "e-1", lastError: "locked by invoice INV-7",
+                                   updatedAt: t(100), lockedInvoiceRef: "INV-7")
+        let parked = PostingRecord(sessionID: sidB, backendID: "pm-a", state: .diverged,
+                                   entryID: "e-2", lastError: "frozen: INV-7",
+                                   updatedAt: t(100), lockedInvoiceRef: "INV-7")
+        try store.setPostingRecord(posted)
+        try store.setPostingRecord(parked)
+        let engine = SyncEngine(journal: store, backend: FakeBackend(owns: .op),
+                                id: "pm-a", class: .pm)
+
+        let snapshot = engine.unlockInvoice(ref: "INV-7", backendID: "pm-a", now: t(200))
+        try expectEq(Set(snapshot.map(\.sessionID)), [sidA, sidB],
+                     "the gesture reports exactly the rows it lifted")
+        var a = ((try? store.postingRecord(session: sidA, backendID: "pm-a")) ?? nil)
+        var b = ((try? store.postingRecord(session: sidB, backendID: "pm-a")) ?? nil)
+        try expectNil(a?.lockedInvoiceRef, "unlock cleared the ref")
+        try expectEq(b?.state, .posted, "unlock un-parked the locked divergence")
+        try expectEq(try store.unlockedInvoiceRefs(backendID: "pm-a"), ["INV-7"])
+
+        engine.relockInvoice(ref: "INV-7", backendID: "pm-a", snapshot: snapshot, now: t(300))
+        a = ((try? store.postingRecord(session: sidA, backendID: "pm-a")) ?? nil)
+        b = ((try? store.postingRecord(session: sidB, backendID: "pm-a")) ?? nil)
+        try expectEq(a?.lockedInvoiceRef, "INV-7", "the lock is back")
+        try expectEq(a?.lastError, "locked by invoice INV-7", "the surfaced reason is back")
+        try expectEq(b?.state, .diverged, "the parked divergence is re-parked")
+        try expectEq(b?.lockedInvoiceRef, "INV-7")
+        try expectEq(try store.unlockedInvoiceRefs(backendID: "pm-a"), [],
+                     "the suppress is forgotten — the poll may lock INV-7 again")
+    }
+
+    await c.check("re-lock never clobbers a row that moved on to a fresh entry id") {
+        // Between unlock and ⌘Z a sync pass may have amended via
+        // delete+recreate (AmendmentError.mustRecreate) — the row now points
+        // at a DIFFERENT backend entry. Stamping the old lock onto it would
+        // freeze an entry the invoice never covered, so re-lock restores
+        // only rows still holding the snapshotted entry id.
+        let store = try makeStore()
+        let sid = UUID()
+        let row = PostingRecord(sessionID: sid, backendID: "pm-a", state: .posted,
+                                entryID: "e-1", updatedAt: t(100), lockedInvoiceRef: "INV-7")
+        try store.setPostingRecord(row)
+        let engine = SyncEngine(journal: store, backend: FakeBackend(owns: .op),
+                                id: "pm-a", class: .pm)
+        let snapshot = engine.unlockInvoice(ref: "INV-7", backendID: "pm-a", now: t(200))
+        // The recreate: same ledger key, fresh backend entry.
+        var moved = ((try? store.postingRecord(session: sid, backendID: "pm-a")) ?? nil)!
+        moved.entryID = "e-9"
+        try store.setPostingRecord(moved)
+
+        engine.relockInvoice(ref: "INV-7", backendID: "pm-a", snapshot: snapshot, now: t(300))
+        let after = ((try? store.postingRecord(session: sid, backendID: "pm-a")) ?? nil)
+        try expectEq(after?.entryID, "e-9", "the moved-on row keeps its fresh entry")
+        try expectNil(after?.lockedInvoiceRef,
+                      "no stale lock lands on an entry the invoice never covered")
+        try expectEq(try store.unlockedInvoiceRefs(backendID: "pm-a"), [],
+                     "the suppress is still forgotten — the poll re-locks from backend truth")
+    }
+
+    await c.check("retry-stuck undo: re-quarantine restores cleared rows, except one the freed retry already posted") {
+        // retryStuck clears .stuck rows so their sessions re-enter the queue;
+        // it returns the cleared rows so ⌘Z can re-quarantine. But the freed
+        // retry starts immediately — a session it already POSTED must not be
+        // re-marked .stuck (the row's entry id would be lost and a later pass
+        // would double-post the same time).
+        let store = try makeStore()
+        let (s1, s2, s3) = (UUID(), UUID(), UUID())
+        func stuck(_ sid: UUID) -> PostingRecord {
+            PostingRecord(sessionID: sid, backendID: "pm-a", state: .stuck,
+                          lastError: "gave up after 5", attempts: 5, updatedAt: t(100))
+        }
+        for sid in [s1, s2, s3] { try store.setPostingRecord(stuck(sid)) }
+        let engine = SyncEngine(journal: store, backend: FakeBackend(owns: .op),
+                                id: "pm-a", class: .pm)
+
+        let cleared = engine.retryStuck(backendID: "pm-a")
+        try expectEq(Set(cleared.map(\.sessionID)), [s1, s2, s3])
+        try expectNil(((try? store.postingRecord(session: s1, backendID: "pm-a")) ?? nil),
+                      "cleared rows leave the ledger — the sessions re-queue")
+        // Before the user reaches ⌘Z the freed retry posts s1 and has s3's
+        // create IN FLIGHT (the F12 intent row).
+        try store.setPostingRecord(PostingRecord(sessionID: s1, backendID: "pm-a",
+                                                 state: .posted, entryID: "e-7",
+                                                 updatedAt: t(200)))
+        try store.setPostingRecord(PostingRecord(sessionID: s3, backendID: "pm-a",
+                                                 state: .inflight, updatedAt: t(200)))
+
+        engine.requarantine(cleared)
+        let one = ((try? store.postingRecord(session: s1, backendID: "pm-a")) ?? nil)
+        try expectEq(one?.state, .posted, "a completed post is never re-quarantined")
+        try expectEq(one?.entryID, "e-7", "its backend entry id survives the undo")
+        let two = ((try? store.postingRecord(session: s2, backendID: "pm-a")) ?? nil)
+        try expectEq(two?.state, .stuck, "the still-unposted row goes back to quarantine")
+        try expectEq(two?.attempts, 5, "with its original attempt history")
+        let three = ((try? store.postingRecord(session: s3, backendID: "pm-a")) ?? nil)
+        try expectEq(three?.state, .inflight,
+                     "an in-flight intent row is never clobbered — F12's amnesia window stays closed")
+    }
+
     await c.check("invoice poll is throttled: back-to-back passes ask the backend once") {
         let store = try makeStore()
         store.clock = makeClock()

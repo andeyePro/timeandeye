@@ -125,6 +125,11 @@ public protocol JournalStore {
     /// the accountant's act — a NEW invoice ref locks again as normal).
     func unlockedInvoiceRefs(backendID: String) throws -> Set<String>
     func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws
+    /// The unlock gesture's ⌘Z: forget ONE explicitly-unlocked ref so the
+    /// engine's poll may re-apply that invoice's lock. Undo is the only
+    /// caller — a voided invoice still never re-opens billed time by itself.
+    /// Removing a ref that was never added is a quiet no-op.
+    func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws
 
     // MARK: Retro-acceptance digests (approvals-drawer §3)
 
@@ -273,6 +278,10 @@ public final class InMemoryJournalStore: JournalStore {
 
     public func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
         unlockedInvoices[backendID, default: []].insert(ref)
+    }
+
+    public func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+        unlockedInvoices[backendID]?.remove(ref)
     }
 
     public func sessions(needingPostTo backendID: String,

@@ -231,11 +231,17 @@ public final class SyncEngine {
     /// and remembers the ref so polling never re-applies the same invoice.
     /// The backend side (credit-note/void) stays the accountant's act —
     /// entries still frozen at the backend park again via frozen handling.
-    public func unlockInvoice(ref: String, backendID: String, now: Date = Date()) {
+    /// Returns the lifted rows AS THEY STOOD, so the caller can register
+    /// `relockInvoice(_:)` as the gesture's ⌘Z.
+    @discardableResult
+    public func unlockInvoice(ref: String, backendID: String,
+                              now: Date = Date()) -> [PostingRecord] {
         try? journal.addUnlockedInvoiceRef(ref, backendID: backendID)
+        var lifted: [PostingRecord] = []
         for state in [PostingState.posted, .diverged] {
             for row in ((try? journal.postingRecords(state: state, backendID: backendID)) ?? [])
             where row.lockedInvoiceRef == ref {
+                lifted.append(row)
                 var updated = row
                 updated.lockedInvoiceRef = nil
                 updated.lastError = nil
@@ -243,6 +249,55 @@ public final class SyncEngine {
                 updated.updatedAt = now
                 try? journal.setPostingRecord(updated)
             }
+        }
+        return lifted
+    }
+
+    /// The unlock gesture's ⌘Z: put the guard back as it stood — refs (and a
+    /// divergence parked while locked) restored from the snapshot, and the
+    /// sticky "never re-lock this ref" suppress forgotten, so the poll may
+    /// re-apply the invoice from backend truth. A row whose entry id moved on
+    /// since the unlock (a delete+recreate amendment) is left alone: stamping
+    /// the old lock onto a FRESH entry would freeze time the invoice never
+    /// covered.
+    public func relockInvoice(ref: String, backendID: String,
+                              snapshot: [PostingRecord], now: Date = Date()) {
+        try? journal.removeUnlockedInvoiceRef(ref, backendID: backendID)
+        for row in snapshot {
+            guard let current = ((try? journal.postingRecord(
+                session: row.sessionID, backendID: backendID)) ?? nil),
+                current.entryID == row.entryID else { continue }
+            var restored = row
+            restored.updatedAt = now
+            try? journal.setPostingRecord(restored)
+        }
+    }
+
+    /// The repair gesture for quarantined rows: clearing a `.stuck` row puts
+    /// its session back in the queue with a fresh attempt budget. Returns the
+    /// cleared rows so the caller can register `requarantine(_:)` as ⌘Z.
+    @discardableResult
+    public func retryStuck(backendID: String) -> [PostingRecord] {
+        let rows = ((try? journal.postingRecords(state: .stuck, backendID: backendID)) ?? [])
+        for row in rows {
+            try? journal.clearPostingRecord(session: row.sessionID, backendID: backendID)
+        }
+        return rows
+    }
+
+    /// The retry-stuck gesture's ⌘Z: restore the quarantined rows — EXCEPT
+    /// where the freed retry already posted (overwriting a `.posted` row
+    /// with the stale `.stuck` snapshot would drop its backend entry id and
+    /// a later pass would re-post the same time) or is mid-create
+    /// (clobbering an `.inflight` intent row re-opens exactly the amnesia
+    /// window F12 closed). Anything else (no row yet, `.failed`, a
+    /// `.skipped` reject) re-quarantines cleanly.
+    public func requarantine(_ rows: [PostingRecord]) {
+        for row in rows {
+            if let current = ((try? journal.postingRecord(
+                session: row.sessionID, backendID: row.backendID)) ?? nil),
+                current.state == .posted || current.state == .inflight { continue }
+            try? journal.setPostingRecord(row)
         }
     }
 

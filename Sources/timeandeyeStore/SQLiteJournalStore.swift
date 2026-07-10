@@ -493,6 +493,23 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
+    public func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+        try locked {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(
+                db, "DELETE FROM unlocked_invoices WHERE backend_id = ? AND invoice_ref = ?",
+                -1, &stmt, nil) == SQLITE_OK else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, backendID, -1, Self.transient)
+            sqlite3_bind_text(stmt, 2, ref, -1, Self.transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.exec(String(cString: sqlite3_errmsg(db)))
+            }
+        }
+    }
+
     public func clearPostingRecord(session: UUID, backendID: String) throws {
         try locked {
             var stmt: OpaquePointer?

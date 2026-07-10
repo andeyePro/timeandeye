@@ -97,6 +97,9 @@ final class FailingLedgerJournalStore: JournalStore {
     func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
         try inner.addUnlockedInvoiceRef(ref, backendID: backendID)
     }
+    func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+        try inner.removeUnlockedInvoiceRef(ref, backendID: backendID)
+    }
 }
 
 func syncIdempotencyChecks(_ c: Checks) async {

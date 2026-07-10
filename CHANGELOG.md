@@ -2,6 +2,22 @@
 
 ## 2026-07-10
 
+- [x] **Undo: invoice unlock and retry-stuck are reversible.** The two
+  posting-health repair gestures joined the app-wide ⌘Z stack (decision:
+  deliberate repair is still a data edit). `SyncEngine.unlockInvoice` now
+  returns the lifted rows as they stood and `relockInvoice` is its inverse:
+  refs and a divergence parked-while-locked restored, the sticky
+  "never re-lock this ref" suppress forgotten (new
+  `JournalStore.removeUnlockedInvoiceRef`, implemented in InMemory +
+  SQLite), and any row whose entry id moved on (delete+recreate amendment)
+  left alone. `retryStuck` moved into SyncEngine, returns the cleared rows,
+  and `requarantine` is its inverse — skipping rows the freed retry already
+  posted (entry id would be lost → double post) or holds `.inflight` (F12
+  intent row). AppController registers both inverses on the undo stack.
+  Checks: store conformance for add/remove unlocked refs (both stores),
+  unlock→relock round-trip incl. suppress, moved-on-entry guard,
+  re-quarantine incl. posted/inflight guards.
+
 - [x] **Undo: one ⌘Z unwinds a whole AI-assist batch.** `ingestAIResponse`
   applied N parsed assignments as N separate undo steps — backing out one
   paste took N presses. The TODO note parked this on "grouping means making

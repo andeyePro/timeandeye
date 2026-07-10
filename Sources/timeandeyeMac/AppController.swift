@@ -4256,8 +4256,17 @@ public final class AppController: ObservableObject {
     /// again; the same invoice is never auto re-locked. The Xero-side
     /// credit-note/void remains the accountant's act.
     public func unlockInvoice(ref: String, backendID: String) {
-        SyncEngine(journal: journal, backends: registry.entries)
+        let snapshot = SyncEngine(journal: journal, backends: registry.entries)
             .unlockInvoice(ref: ref, backendID: backendID)
+        // ⌘Z re-locks: the deliberate repair gesture is still a data edit,
+        // so it joins the app-wide stack like every other one. The engine's
+        // relock restores the snapshot rows AND forgets the sticky suppress
+        // (skipping any row whose entry id moved on — see relockInvoice).
+        registerUndo("unlock invoice \(ref)") { [weak self] in
+            guard let self else { return }
+            SyncEngine(journal: self.journal, backends: self.registry.entries)
+                .relockInvoice(ref: ref, backendID: backendID, snapshot: snapshot)
+        }
         actionNote = "Unlocked invoice \(ref) — edits can reconcile again"
         Task { await syncIfEnabled() }
     }
@@ -4265,11 +4274,17 @@ public final class AppController: ObservableObject {
     /// The repair gesture for quarantined rows: clearing a `.stuck` row puts
     /// its session back in the queue with a fresh attempt budget.
     public func retryStuck(backendID: String) {
-        let rows = ((try? journal.postingRecords(state: .stuck, backendID: backendID)) ?? [])
-        for row in rows {
-            try? journal.clearPostingRecord(session: row.sessionID, backendID: backendID)
-        }
+        let rows = SyncEngine(journal: journal, backends: registry.entries)
+            .retryStuck(backendID: backendID)
         if !rows.isEmpty {
+            // ⌘Z re-quarantines — except rows the freed retry already posted
+            // or has in flight by then (see requarantine: restoring those
+            // would orphan or double-post the backend entry).
+            registerUndo("retry \(rows.count) stuck entr\(rows.count == 1 ? "y" : "ies")") { [weak self] in
+                guard let self else { return }
+                SyncEngine(journal: self.journal, backends: self.registry.entries)
+                    .requarantine(rows)
+            }
             actionNote = "Retrying \(rows.count) stuck entr\(rows.count == 1 ? "y" : "ies")"
             Task { await syncIfEnabled() }
         }

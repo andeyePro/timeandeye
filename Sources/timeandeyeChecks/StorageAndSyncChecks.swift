@@ -342,6 +342,23 @@ func journalStoreConformanceChecks(_ c: Checks, make: () -> any JournalStore) {
         try expect(try s.sessions(needingPostTo: "xero-org", atOrAbove: 0.8)
             .contains { $0.id == pushed.id })
     }
+
+    c.check("unlocked invoice refs: add is sticky per backend; remove forgets ONE ref (the re-lock undo)") {
+        let s = make()
+        try s.addUnlockedInvoiceRef("INV-7", backendID: "a")
+        try s.addUnlockedInvoiceRef("INV-8", backendID: "a")
+        try s.addUnlockedInvoiceRef("INV-7", backendID: "b")   // per-backend isolation
+        try expectEq(try s.unlockedInvoiceRefs(backendID: "a"), ["INV-7", "INV-8"])
+        try s.removeUnlockedInvoiceRef("INV-7", backendID: "a")
+        try expectEq(try s.unlockedInvoiceRefs(backendID: "a"), ["INV-8"],
+                     "only the removed ref is forgotten")
+        try expectEq(try s.unlockedInvoiceRefs(backendID: "b"), ["INV-7"],
+                     "another backend's identical ref is untouched")
+        // Removing an unknown ref is a quiet no-op — undo must never throw
+        // over a suppress that was never written.
+        try s.removeUnlockedInvoiceRef("INV-9", backendID: "a")
+        try expectEq(try s.unlockedInvoiceRefs(backendID: "a"), ["INV-8"])
+    }
 }
 
 func inMemoryJournalChecks(_ c: Checks) {

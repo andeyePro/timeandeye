@@ -28,9 +28,13 @@ call, not a mechanical fix:
   sessions at dead entry ids (worse than no undo — later edits would PATCH
   a 404). A real undo needs the backend entries re-created from the folded
   comment, i.e. a reconcile journal. The UI confirms per action today.
-- [ ] `unlockInvoice` / `retryStuck` have no undo (re-lock / re-quarantine).
-  Both are deliberate repair gestures behind their own UI; decide whether
-  reversibility is even wanted before wiring it.
+- [x] `unlockInvoice` / `retryStuck` have no undo (re-lock / re-quarantine).
+  DONE 2026-07-10 — decision: repair gestures are still data edits, so they
+  join the app-wide ⌘Z stack. Unlock returns a row snapshot and ⌘Z re-locks
+  (restores refs + the diverged park, forgets the sticky suppress; skips
+  rows whose entry id moved on). Retry returns the cleared rows and ⌘Z
+  re-quarantines (never over a `.posted` or `.inflight` row — no orphaned
+  or double-posted entries).
 - [ ] Live pick (`userPicked`) and Stop are live-tracking controls, not data
   edits — ⌘Z doesn't touch them by design (compensators: the popover's ←
   revert, and the timeline edits every flushed slice). Confirm that stance
