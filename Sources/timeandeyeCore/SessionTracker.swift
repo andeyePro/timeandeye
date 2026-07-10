@@ -101,6 +101,14 @@ public final class SessionTracker {
     /// excursion becomes windows in that slice). doNotTrack uses this too, to
     /// damp non-work auto-stop.
     private var pendingSwitch: (target: Target, from: Target, since: Date, score: Double)?
+    /// What decided the CURRENT tracking target (journal provenance,
+    /// 2026-07-10 why-panel follow-up). Refreshed whenever the target is
+    /// (re)decided; deliberately HELD through uncertain patches, so a span
+    /// that keeps the last certain target still tells the story of the
+    /// decision that set it. Restored from `prePendingDecision` when a
+    /// provisional switch reverts.
+    private var currentDecision: SessionProvenance?
+    private var prePendingDecision: SessionProvenance?
     private var pendingNotify: (target: Target, since: Date)?
     /// Manual Stop is respected (only a near-certain OP signal restarts);
     /// idle/auto stops may resume from any confident surface.
@@ -187,6 +195,7 @@ public final class SessionTracker {
         if currentSignal != nil { currentStart = date }
         idleStoppedTarget = nil
         state = .tracking(.task(task), certainty: 1.0)
+        currentDecision = .userAssigned
     }
 
     public func stop(at date: Date, manual: Bool = true) {
@@ -217,7 +226,8 @@ public final class SessionTracker {
         guard date < earliest else { return }
         let signal = currentSignal ?? ActivitySignal(app: "(extended)", timestamp: date)
         spans.insert(FocusSpan(target: target, certainty: max(cert, 0.95),
-                               signal: signal, start: date, end: earliest), at: 0)
+                               signal: signal, start: date, end: earliest,
+                               provenance: .userAssigned), at: 0)
     }
 
     /// The inverse of `backdateSessionStart`: pull the in-flight session's
@@ -265,11 +275,13 @@ public final class SessionTracker {
         for i in spans.indices where !isPinned(spans[i]) {
             spans[i].target = .task(task)
             spans[i].certainty = 0.95
+            spans[i].provenance = .userAssigned
         }
         if let signal = currentSignal {
             attributor.confirm(signal, task: task, tasks: tasks())
         }
         state = .tracking(.task(task), certainty: 0.95)
+        currentDecision = .userAssigned
     }
 
     /// Whether a span covers a comment-pinned moment for ITS OWN target —
@@ -300,17 +312,24 @@ public final class SessionTracker {
     /// spans if the pin moves the target.
     public func reevaluate() {
         guard case .tracking(let displayTarget, _) = state,
-              let signal = currentSignal,
-              let best = attributor.attribute(signal, tasks: tasks(),
-                                              now: signal.timestamp,
-                                              continuity: liveContinuity(at: signal.timestamp)).best,
-              best.score >= config.uncertainBelow else { return }
+              let signal = currentSignal else { return }
+        let attribution = attributor.attribute(signal, tasks: tasks(),
+                                               now: signal.timestamp,
+                                               continuity: liveContinuity(at: signal.timestamp))
+        guard let best = attribution.best, best.score >= config.uncertainBelow else { return }
         if best.target != displayTarget {
             for i in spans.indices where !isPinned(spans[i]) {
                 spans[i].target = best.target
+                spans[i].provenance = attribution.provenance
             }
         }
         state = .tracking(best.target, certainty: best.score)
+        // Same userAssigned-stickiness as the live path: an inferred
+        // re-derivation that merely AGREES must not rewrite the story.
+        if best.target != displayTarget
+            || currentDecision?.sourceRaw != SessionProvenance.userAssigned.sourceRaw {
+            currentDecision = attribution.provenance
+        }
     }
 
     /// Apply a late-arriving correspondents/subject capture to the OPEN span
@@ -349,6 +368,7 @@ public final class SessionTracker {
         }
         if case .tracking = state {
             state = .tracking(.task(task), certainty: 0.95)
+            currentDecision = .userAssigned
         } else {
             start(task: task, at: date)
         }
@@ -462,6 +482,7 @@ public final class SessionTracker {
                 lastInput = now
                 idleStoppedTarget = nil
                 state = .tracking(.task(task), certainty: best.score)
+                currentDecision = attribution.provenance
                 onPrompt(.taskChanged(to: .task(task)))
             } else if idleContext, let best = attribution.best,
                       best.score >= config.uncertainBelow,
@@ -469,11 +490,13 @@ public final class SessionTracker {
                 lastInput = now
                 idleStoppedTarget = nil
                 state = .tracking(.task(task), certainty: best.score)
+                currentDecision = attribution.provenance
                 onPrompt(.taskChanged(to: .task(task)))
             } else if idleContext, let target = idleStoppedTarget, case .task = target {
                 lastInput = now
                 idleStoppedTarget = nil
                 state = .tracking(target, certainty: attribution.best?.score ?? 0)
+                currentDecision = .resumed
                 onPrompt(.taskChanged(to: target))
             }
         case .tracking(let displayTarget, _):
@@ -506,14 +529,22 @@ public final class SessionTracker {
                     // pile of sub-minute slices on whatever the ranker guessed.)
                     let base = p.from
                     revertPendingSwitch(at: now)
-                    handleConfidentSwitch(to: best, from: base, at: now)
+                    handleConfidentSwitch(to: best, from: base, at: now,
+                                          provenance: attribution.provenance)
                 } else {
                     state = .tracking(p.target, certainty: best.score)   // uncertain, hold
                 }
             } else if best.score >= config.uncertainBelow, best.target != displayTarget {
-                handleConfidentSwitch(to: best, from: displayTarget, at: now)
+                handleConfidentSwitch(to: best, from: displayTarget, at: now,
+                                      provenance: attribution.provenance)
             } else if best.score >= config.uncertainBelow {
                 state = .tracking(best.target, certainty: best.score)
+                // Same target re-decided by inference: the user's own word
+                // (start/confirm/relabel) stays the story — an agreeing
+                // ranker must not overwrite "you assigned it".
+                if currentDecision?.sourceRaw != SessionProvenance.userAssigned.sourceRaw {
+                    currentDecision = attribution.provenance
+                }
             } else {
                 // Uncertain: stick with the last certain target, flag it.
                 state = .tracking(displayTarget, certainty: best.score)
@@ -528,7 +559,8 @@ public final class SessionTracker {
     /// and fragmenting the timeline. (Only a held-past-buffer stay commits.
     /// Manual picks go through confirm()/start(), which bypass this entirely.)
     private func handleConfidentSwitch(to best: Candidate, from committed: Target,
-                                       at now: Date) {
+                                       at now: Date,
+                                       provenance: SessionProvenance? = nil) {
         if best.target == .doNotTrack {
             if pendingSwitch?.target != best.target {
                 pendingSwitch = (best.target, committed, now, best.score)
@@ -538,6 +570,8 @@ public final class SessionTracker {
         }
         pendingSwitch = (best.target, committed, now, best.score)
         pendingNotify = (best.target, now)
+        prePendingDecision = currentDecision     // restored if the pend reverts
+        currentDecision = provenance
         state = .tracking(best.target, certainty: best.score)   // instant display
         onDebug("pending switch \(committed) -> \(best.target) since \(now)")
     }
@@ -556,6 +590,7 @@ public final class SessionTracker {
         currentSignal = signal                   // resume accumulating the new task
         currentStart = date
         pendingSwitch = nil
+        prePendingDecision = nil                 // the switch stands; no revert story
         onDebug("committed switch -> \(p.target) after grace")
     }
 
@@ -575,15 +610,19 @@ public final class SessionTracker {
         if pinned, case .task(let ref) = p.target {
             let end = max(date, p.since.addingTimeInterval(1))
             onSession(Session(task: ref, start: p.since, end: end,
-                              certainty: 0.95, comment: nil))
+                              certainty: 0.95, comment: nil,
+                              provenance: .init(source: .pin)))
             carvedIntervals.append((p.since, end))
             pins.removeAll { $0.target == p.target && $0.at >= p.since }
         }
         for i in spans.indices where spans[i].start >= p.since {
             spans[i].target = p.from
+            spans[i].provenance = prePendingDecision
         }
         pendingSwitch = nil
         pendingNotify = nil
+        currentDecision = prePendingDecision
+        prePendingDecision = nil
         if case .task = p.from { state = .tracking(p.from, certainty: 0.95) }
         onDebug(pinned ? "reverted excursion -> \(p.from) (PINNED: slice journalled now)"
                        : "reverted excursion -> \(p.from) (kept as windows)")
@@ -720,7 +759,7 @@ public final class SessionTracker {
         guard let signal = currentSignal, let start = currentStart, end > start,
               case .tracking(let target, let certainty) = state else { return }
         let span = FocusSpan(target: target, certainty: certainty, signal: signal,
-                             start: start, end: end)
+                             start: start, end: end, provenance: currentDecision)
         spans.append(span)
         onSpanClosed(span)
         if certainty < config.uncertainBelow {
@@ -916,19 +955,31 @@ public final class SessionTracker {
             // did exactly that and silently blocked OP pushes).
             var weighted = 0.0
             var totalDuration = 0.0
+            var provenanceDurations: [SessionProvenance: TimeInterval] = [:]
             for span in clipped where span.target == run.target
                 && span.end > run.start && span.start < run.end {
                 let d = min(span.end, run.end).timeIntervalSince(max(span.start, run.start))
                 weighted += span.certainty * d
                 totalDuration += d
+                if let p = span.provenance { provenanceDurations[p, default: 0] += d }
             }
             // A pinned run is user-attested work: floor its certainty at the
             // manual-confidence level whatever the attribution scored it.
             let certainty = max(totalDuration > 0 ? weighted / totalDuration : 0,
                                 run.pinned ? 0.95 : 0)
             let comment = commentText(for: (run.target, run.start, run.end), in: clipped)
+            // The slice's provenance is its DOMINANT decider by covered
+            // duration (ties break on the raw name for determinism); a
+            // pinned run is the user's own attestation whatever decided
+            // the spans underneath.
+            let provenance = run.pinned
+                ? SessionProvenance(source: .pin)
+                : provenanceDurations.max { a, b in
+                      (a.value, b.key.sourceRaw) < (b.value, a.key.sourceRaw)
+                  }?.key
             onSession(Session(task: ref, start: run.start, end: run.end,
-                              certainty: certainty, comment: comment))
+                              certainty: certainty, comment: comment,
+                              provenance: provenance))
         }
     }
 

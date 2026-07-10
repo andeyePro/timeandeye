@@ -208,16 +208,18 @@ and recorded rather than fixed blind:
   Martin's personal task list). Nothing referenced it, but a replacement
   capture with fictional fixture data (harborlane.example-style) is wanted
   for the record.
-- [ ] Journal the decision SOURCE alongside task+certainty. The why-panel
-  truth fix (2026-07-10) anchors the timeline card's BECAUSE on the slice's
-  recorded outcome, but the journal keeps only WHAT stood (task, certainty),
-  not WHICH source decided it (pin / sticky / rule / prime / ranked) — so
-  the card can say "this time stands as → X" but not name the original
-  firing source, and demotes today's re-derivation to "would say" instead.
-  Recording `AttributionExplanation.Source` (+ matched rule/key) on
-  Session/FocusSpan at flush would let BECAUSE tell the original story
-  verbatim. Codable back-compat via decodeIfPresent; decide whether
-  reassigns overwrite or append to the provenance.
+- [x] Journal the decision SOURCE alongside task+certainty — DONE
+  2026-07-10. `SessionProvenance` (raw source string + matched rule/key
+  detail; string-raw so a case rename can't wipe old journals) is stamped
+  by every `attribute()` branch, carried by the tracker through uncertain
+  holds and provisional switches (reverts restore the pre-pend story;
+  same-target inferred agreement never overwrites "you assigned it"),
+  folded at flush as the run's duration-dominant decider (pinned runs =
+  pin), and journalled on Session + FocusSpan (decodeIfPresent both ways).
+  Reassign decision made: overwrite — provenance describes what STANDS
+  (userAssigned / aiApplied / retro), the displaced story stays the card's
+  history line; undo paths restore prior provenance (UnknownRepoint +
+  RetroDigest carry it). BECAUSE now names the original decider verbatim.
 
 - [ ] Positive fullscreen detector for menu-bar auto-hide users. With the
   System Settings auto-hide preference on, every desktop looks fullscreen

@@ -153,6 +153,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("CalendarAlerts", calendarAlertChecks),
     ("SettingsIA", settingsIAChecks),
     ("LiveAdjacency", liveAdjacencyChecks),
+    ("Provenance", provenanceChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

@@ -109,10 +109,15 @@ public enum RetroAcceptance {
 public struct UnknownRepoint: Equatable, Sendable {
     public var sessionID: UUID
     public var priorTask: TaskRef
+    /// What decided the session before the sweep — restored on ⌘Z so the
+    /// undo really is "as it stood" (in-memory only, like the repoint).
+    public var priorProvenance: SessionProvenance?
 
-    public init(sessionID: UUID, priorTask: TaskRef) {
+    public init(sessionID: UUID, priorTask: TaskRef,
+                priorProvenance: SessionProvenance? = nil) {
         self.sessionID = sessionID
         self.priorTask = priorTask
+        self.priorProvenance = priorProvenance
     }
 }
 
@@ -134,7 +139,8 @@ public enum UnknownSweep {
         sessions.filter { session in
             !session.pushedToOP && session.certainty < bar
                 && segments.contains { session.start < $0.end && session.end > $0.start }
-        }.map { UnknownRepoint(sessionID: $0.id, priorTask: $0.task) }
+        }.map { UnknownRepoint(sessionID: $0.id, priorTask: $0.task,
+                               priorProvenance: $0.provenance) }
     }
 }
 
@@ -149,11 +155,16 @@ public struct RetroDigest: Codable, Equatable, Sendable, Identifiable {
         public var id: UUID
         public var task: TaskRef
         public var certainty: Double
+        /// Pre-lift provenance, restored on undo. Optional so digests saved
+        /// before 2026-07-10 keep decoding (synthesized decodeIfPresent).
+        public var priorProvenance: SessionProvenance?
 
-        public init(id: UUID, task: TaskRef, certainty: Double) {
+        public init(id: UUID, task: TaskRef, certainty: Double,
+                    priorProvenance: SessionProvenance? = nil) {
             self.id = id
             self.task = task
             self.certainty = certainty
+            self.priorProvenance = priorProvenance
         }
     }
 

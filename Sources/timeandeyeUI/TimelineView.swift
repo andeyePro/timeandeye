@@ -1629,7 +1629,9 @@ struct TimelineView: View {
                         // reason (Martin's 2026-07-10 report).
                         recorded: .init(target: .task(session.task),
                                         certainty: session.certainty,
-                                        at: spans[i].start))
+                                        at: spans[i].start,
+                                        provenance: spans[i].provenance
+                                            ?? session.provenance))
                     }
                     .frame(width: 372)
                 }

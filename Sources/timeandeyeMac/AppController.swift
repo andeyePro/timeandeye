@@ -2040,6 +2040,7 @@ public final class AppController: ObservableObject {
                 for r in repoints {
                     if var s = try? self.journal.session(id: r.sessionID) {
                         s.task = r.priorTask
+                        s.provenance = r.priorProvenance
                         try? self.journal.update(s)
                     }
                 }
@@ -2098,6 +2099,7 @@ public final class AppController: ObservableObject {
         for r in repoints {
             if var s = try? journal.session(id: r.sessionID) {
                 s.task = WorkTask.unknown.ref
+                s.provenance = .userAssigned
                 try? journal.update(s)
             }
         }
@@ -2437,11 +2439,14 @@ public final class AppController: ObservableObject {
         }
         var priorSessions: [RetroDigest.PriorSessionState] = []
         for lift in plan.lifts {
+            let prior = try? journal.session(id: lift.sessionID)
             priorSessions.append(RetroDigest.PriorSessionState(
-                id: lift.sessionID, task: lift.priorTask, certainty: lift.priorCertainty))
-            if var session = try? journal.session(id: lift.sessionID) {
+                id: lift.sessionID, task: lift.priorTask, certainty: lift.priorCertainty,
+                priorProvenance: prior?.provenance))
+            if var session = prior {
                 session.task = lift.newTask
                 session.certainty = lift.newCertainty
+                session.provenance = .retro
                 try? journal.update(session)
             }
         }
@@ -2486,6 +2491,7 @@ public final class AppController: ObservableObject {
             guard var session = try? journal.session(id: prior.id) else { continue }
             session.task = prior.task
             session.certainty = prior.certainty
+            session.provenance = prior.priorProvenance
             try? journal.update(session)
         }
         try? journal.deleteRetroDigest(id)
@@ -3785,6 +3791,8 @@ public final class AppController: ObservableObject {
     /// .manual ("I claim this time", not "I shaped these bounds").
     public func createTimelineSession(_ session: Session,
                                       origin: SliceOrigin = .edited) async {
+        var session = session
+        session.provenance = .userAssigned   // drawn/claimed by hand
         try? journal.save(session)
         try? journal.escalateOrigin(session.id, to: origin)
         registerUndo("create \(name(of: .task(session.task)))") { [weak self] in
@@ -3834,6 +3842,7 @@ public final class AppController: ObservableObject {
             }
             session.opTimeEntryID = nil
             session.pushedToOP = false
+            session.provenance = .userAssigned   // reassigned in the editor
             clearPrimaryPosting(session.id)   // re-enter the pm queue
             teachAssociation(for: session)
         }
@@ -3937,6 +3946,12 @@ public final class AppController: ObservableObject {
                     await self.reassignTimelineSessions(
                         (try? self.journal.allSessions())?.filter { $0.id == original.id } ?? [],
                         to: original.task, undoable: false)
+                    // The re-run above stamps userAssigned; put the pre-
+                    // reassign provenance back so ⌘Z is "as it stood".
+                    if var s = try? self.journal.session(id: original.id) {
+                        s.provenance = original.provenance
+                        try? self.journal.update(s)
+                    }
                 }
                 // The forward reassign TAUGHT the new association (and the
                 // re-point above taught the old one back); restore the exact
@@ -3953,6 +3968,7 @@ public final class AppController: ObservableObject {
             session.task = task
             session.opTimeEntryID = nil
             session.pushedToOP = false
+            session.provenance = .userAssigned
             clearPrimaryPosting(session.id)   // recreate under the new task
             try? journal.update(session)
             try? journal.escalateOrigin(session.id, to: .edited)
@@ -3983,6 +3999,12 @@ public final class AppController: ObservableObject {
                 (start: max($0.start, session.start), end: min($0.end, session.end))
             }
             let pieces = TimelineMath.split(session, reassign: ranges, to: target)
+                .map { piece -> Session in
+                    guard piece.task == target else { return piece }
+                    var moved = piece
+                    moved.provenance = .userAssigned   // "move app → task" is the user's call
+                    return moved
+                }
             let moved = pieces.filter { $0.task == target }
             guard !moved.isEmpty else { continue }
             movedSeconds += moved.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }

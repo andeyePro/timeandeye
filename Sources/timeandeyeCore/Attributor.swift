@@ -45,10 +45,16 @@ public struct Candidate: Equatable, Sendable {
 public struct Attribution: Equatable, Sendable {
     public var best: Candidate?
     public var ranked: [Candidate]
+    /// Which source decided `best` (+ the matched rule/key when one
+    /// existed) — journalled at flush so the Evidence Card can name the
+    /// original decider verbatim. Defaults keep older call sites compiling.
+    public var provenance: SessionProvenance?
     public var certainty: Double { best?.score ?? 0 }
-    public init(best: Candidate?, ranked: [Candidate]) {
+    public init(best: Candidate?, ranked: [Candidate],
+                provenance: SessionProvenance? = nil) {
         self.best = best
         self.ranked = ranked
+        self.provenance = provenance
     }
 }
 
@@ -300,7 +306,8 @@ public final class Attributor {
             ranked.removeAll { $0.target == .task(pin.task) }
             let c = Candidate(target: .task(pin.task), score: 1.0)
             ranked.insert(c, at: 0)
-            return Attribution(best: c, ranked: ranked)
+            return Attribution(best: c, ranked: ranked,
+                               provenance: .init(source: .pin))
         }
         // The user categorised THIS context today: their word beats every
         // inferred source below (URL, email rules, primes, ranker) so a
@@ -310,12 +317,14 @@ public final class Attributor {
             ranked.removeAll { $0.target == sticky.target }
             let c = Candidate(target: sticky.target, score: Self.inferredCeiling)
             ranked.insert(c, at: 0)
-            return Attribution(best: c, ranked: ranked)
+            return Attribution(best: c, ranked: ranked,
+                               provenance: .init(source: .sessionSticky))
         }
         if let url = signal.tabURL, let ref = recognizer.taskRef(inURL: url) {
             lastOpenedBackendTask = ref
             let c = Candidate(target: .task(ref), score: Self.inferredCeiling)
-            return Attribution(best: c, ranked: [c])
+            return Attribution(best: c, ranked: [c],
+                               provenance: .init(source: .opTaskURL))
         }
         // No URL (e.g. OP as a Chrome PWA): the WP id may be in the window
         // title — or in the app name, which PWAs set to the page title.
@@ -323,7 +332,8 @@ public final class Attributor {
             if let ref = recognizer.taskRef(inTitle: text) {
                 lastOpenedBackendTask = ref
                 let c = Candidate(target: .task(ref), score: Self.inferredCeiling)
-                return Attribution(best: c, ranked: [c])
+                return Attribution(best: c, ranked: [c],
+                                   provenance: .init(source: .opTaskTitle))
             }
         }
         // A learned email rule (correspondent / domain / subject → task) outranks
@@ -336,7 +346,9 @@ public final class Attributor {
             ranked.removeAll { $0.target == .task(rule.target) }
             let c = Candidate(target: .task(rule.target), score: Self.inferredCeiling)
             ranked.insert(c, at: 0)
-            return Attribution(best: c, ranked: ranked)
+            return Attribution(best: c, ranked: ranked,
+                               provenance: .init(source: .emailRule,
+                                                 detail: rule.value.isEmpty ? nil : rule.value))
         }
         // A learned site rule (recipe field / host → task) sits on the SAME
         // rung as an email rule — email is consulted first purely for
@@ -348,21 +360,38 @@ public final class Attributor {
             ranked.removeAll { $0.target == .task(rule.target) }
             let c = Candidate(target: .task(rule.target), score: Self.inferredCeiling)
             ranked.insert(c, at: 0)
-            return Attribution(best: c, ranked: ranked)
+            return Attribution(best: c, ranked: ranked,
+                               provenance: .init(source: .siteRule,
+                                                 detail: "\(rule.field): \(rule.value)"))
         }
         let surface = Surface(signal: signal)
         var ranked = scored(signal, tasks: tasks, now: now)
+        var primeSource: (target: Target, source: AttributionExplanation.Source)?
         if let pending = pendingPrime, pending.surface == surface,
            now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
             ranked.removeAll { $0.target == .task(pending.task) }
             ranked.insert(Candidate(target: .task(pending.task), score: 0.7), at: 0)
+            primeSource = (.task(pending.task), .pendingPrime)
         } else if let primed = primedSurfaces[surface] {
             if pendingPrime?.surface == surface { pendingPrime = nil }   // expired: dead hypothesis
             ranked.removeAll { $0.target == .task(primed) }
             ranked.insert(Candidate(target: .task(primed), score: 0.95), at: 0)
+            primeSource = (.task(primed), .primedSurface)
         }
         applyLiveAdjacency(&ranked, continuity: continuity, tasks: tasks, now: now)
-        return Attribution(best: ranked.first, ranked: ranked)
+        // Provenance names whatever actually ENDED UP on top: a prime if it
+        // held, ranked otherwise — with the live-adjacency reasoning as the
+        // detail when the boost decided/steadied the winner.
+        let provenance: SessionProvenance? = ranked.first.map { best in
+            if let prime = primeSource, prime.target == best.target {
+                return SessionProvenance(source: prime.source)
+            }
+            if let boost = lastLiveBoost, continuity?.target == best.target {
+                return SessionProvenance(source: .ranked, detail: boost.reasoning)
+            }
+            return SessionProvenance(source: .ranked)
+        }
+        return Attribution(best: ranked.first, ranked: ranked, provenance: provenance)
     }
 
     /// Lift the running task's candidate by the live adjacency prior (see

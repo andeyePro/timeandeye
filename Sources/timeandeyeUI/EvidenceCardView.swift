@@ -22,6 +22,12 @@ struct EvidenceCardView: View {
         var target: Target
         var certainty: Double
         var at: Date
+        /// What decided it, as journalled at flush (the window's own span
+        /// when it has one, else the slice's dominant decider) — nil on
+        /// pre-provenance rows. With it, BECAUSE tells the original story
+        /// verbatim; without it, the card falls back to anchoring only
+        /// when today's re-derivation contradicts the record.
+        var provenance: SessionProvenance? = nil
     }
 
     @ObservedObject var controller: AppController
@@ -177,14 +183,47 @@ struct EvidenceCardView: View {
         }
     }
 
-    /// The BECAUSE line's text: the record when one exists and today's
-    /// re-derivation contradicts it (the recorded outcome is the only
-    /// truthful "because" the card holds — the original source wasn't
-    /// journalled, so it claims no source); otherwise the explanation.
+    /// The BECAUSE line's text. With journalled provenance (rows flushed
+    /// since 2026-07-10) the card tells the ORIGINAL story verbatim —
+    /// target, certainty and what decided it. Without it, the record
+    /// anchors only when today's re-derivation contradicts it (the
+    /// recorded outcome is then the only truthful "because" the card
+    /// holds); otherwise the explanation.
     private var anchoredBecauseLabel: String {
-        guard let recorded, recordContradicted else { return becauseLabel }
+        guard let recorded else { return becauseLabel }
+        if let p = recorded.provenance {
+            let decider = provenanceLabel(p) ?? "decided earlier"
+            return "this time stands as → \(controller.name(of: recorded.target)) "
+                + pct(recorded.certainty) + " — \(decider)"
+        }
+        guard recordContradicted else { return becauseLabel }
         return "this time stands as → \(controller.name(of: recorded.target)) "
             + pct(recorded.certainty)
+    }
+
+    /// The journalled decider, in the card's voice. Unknown raw values (a
+    /// future source this build doesn't know) return nil → "decided earlier".
+    private func provenanceLabel(_ p: SessionProvenance) -> String? {
+        switch p.sourceRaw {
+        case "pin": return "you pinned it"
+        case "sessionSticky": return "you categorised this context that day"
+        case "opTaskURL": return "the task's page was open"
+        case "opTaskTitle": return "the task's id was in the title"
+        case "emailRule":
+            return p.detail.map { "a learned rule fired (✉ \($0))" } ?? "a learned rule fired"
+        case "siteRule":
+            return p.detail.map { "a learned site rule fired (\($0))" } ?? "a learned site rule fired"
+        case "pendingPrime": return "a just-opened task primed it"
+        case "primedSurface": return "remembered from a past correction"
+        case "ranked":
+            return p.detail.map { "learned associations + priors (\($0))" }
+                ?? "learned associations + priors"
+        case "userAssigned": return "you assigned it"
+        case "aiApplied": return "an AI suggestion you applied"
+        case "resumed": return "resumed after an idle stop"
+        case "retro": return "confidence reached your bar (retro pass)"
+        default: return nil
+        }
     }
 
     /// "matched remembered surface: Mail · …" — the exact key that fired.

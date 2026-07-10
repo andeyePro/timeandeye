@@ -268,18 +268,60 @@ public struct FocusSpan: Equatable, Codable, Sendable {
     public var signal: ActivitySignal
     public var start: Date
     public var end: Date
+    /// What decided this span's target (nil on spans stored before
+    /// 2026-07-10) — flush folds spans' provenance into the session's.
+    public var provenance: SessionProvenance?
 
     public init(target: Target, certainty: Double, signal: ActivitySignal,
-                start: Date, end: Date) {
+                start: Date, end: Date, provenance: SessionProvenance? = nil) {
         self.target = target
         self.certainty = certainty
         self.signal = signal
         self.start = start
+        self.provenance = provenance
         self.end = end
     }
 }
 
 /// A closed, journalled stretch of tracked time on one task.
+/// WHO or what decided a slice's task — recorded at flush (2026-07-10,
+/// why-panel follow-up) so the Evidence Card can tell the original story
+/// verbatim instead of demoting today's re-derivation to "would say".
+public struct SessionProvenance: Equatable, Hashable, Codable, Sendable {
+    /// An `AttributionExplanation.Source` rawValue ("pin", "emailRule", …)
+    /// or a tracker/controller verb ("userAssigned", "aiApplied", "resumed",
+    /// "retro"). Kept as the raw string so a future case rename can never
+    /// wipe or mis-read old journals — consumers map leniently and show
+    /// unknown values as a plain "decided earlier".
+    public var sourceRaw: String
+    /// The matched rule/key when one existed ("✉ client@…", the remembered
+    /// surface, the live-adjacency reasoning) — display verbatim.
+    public var detail: String?
+
+    public init(sourceRaw: String, detail: String? = nil) {
+        self.sourceRaw = sourceRaw
+        self.detail = detail
+    }
+
+    public init(source: AttributionExplanation.Source, detail: String? = nil) {
+        self.init(sourceRaw: source.rawValue, detail: detail)
+    }
+
+    /// The typed source when the raw string still maps to one.
+    public var source: AttributionExplanation.Source? {
+        AttributionExplanation.Source(rawValue: sourceRaw)
+    }
+
+    /// The user picked/corrected this themselves (popover, drawer, timeline).
+    public static let userAssigned = SessionProvenance(sourceRaw: "userAssigned")
+    /// An AI Assist response the user applied.
+    public static let aiApplied = SessionProvenance(sourceRaw: "aiApplied")
+    /// Auto-resumed onto the pre-idle task after an idle stop.
+    public static let resumed = SessionProvenance(sourceRaw: "resumed")
+    /// The retro-acceptance pass lifted it once confidence reached the bar.
+    public static let retro = SessionProvenance(sourceRaw: "retro")
+}
+
 public struct Session: Equatable, Codable, Sendable, Identifiable {
     public var id: UUID
     public var task: TaskRef
@@ -293,10 +335,16 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
     /// String (OP ids are ints, Xero's are GUIDs); the JSON key keeps its
     /// historic name and legacy Int rows decode via the custom init below.
     public var opTimeEntryID: RemoteEntryID?
+    /// What decided `task` (see SessionProvenance) — nil on rows journalled
+    /// before 2026-07-10. Reassignments overwrite it: provenance describes
+    /// the decision that STANDS; the displaced story is the Evidence Card's
+    /// history line, not the journal's.
+    public var provenance: SessionProvenance?
 
     public init(id: UUID = UUID(), task: TaskRef, start: Date, end: Date,
                 certainty: Double, pushedToOP: Bool = false, comment: String? = nil,
-                opTimeEntryID: RemoteEntryID? = nil) {
+                opTimeEntryID: RemoteEntryID? = nil,
+                provenance: SessionProvenance? = nil) {
         self.id = id
         self.task = task
         self.start = start
@@ -305,6 +353,7 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
         self.pushedToOP = pushedToOP
         self.comment = comment
         self.opTimeEntryID = opTimeEntryID
+        self.provenance = provenance
     }
 
     /// Custom decode ONLY for the widened entry id: journalled rows written
@@ -325,6 +374,9 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
             opTimeEntryID = ((try? c.decodeIfPresent(Int.self, forKey: .opTimeEntryID)) ?? nil)
                 .map(String.init)
         }
+        // Absent on pre-2026-07-10 rows; a malformed value must not sink the
+        // whole session either (provenance is annotation, never identity).
+        provenance = (try? c.decodeIfPresent(SessionProvenance.self, forKey: .provenance)) ?? nil
     }
 }
 

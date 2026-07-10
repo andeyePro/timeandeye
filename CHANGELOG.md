@@ -2,6 +2,24 @@
 
 ## 2026-07-10
 
+- [x] **Decision provenance journalled — BECAUSE names the original
+  decider.** Follow-up to the why-panel truth fix: the journal now records
+  WHICH source decided each slice (`SessionProvenance` on Session +
+  FocusSpan — pin, sticky, backend URL/title, learned email/site rule with
+  the matched value, prime, ranked with the live-adjacency reasoning,
+  userAssigned, aiApplied, resumed, retro). The tracker carries the
+  decision through uncertain holds and provisional switches (a reverted
+  excursion restores the pre-pend story; an inferred agreement never
+  overwrites "you assigned it"), and flush folds spans to the
+  duration-dominant decider (pinned runs stay the user's attestation).
+  Reassignments OVERWRITE (provenance = what stands; the displaced belief
+  remains the card's history line) and every undo path restores the prior
+  provenance (UnknownRepoint + RetroDigest.PriorSessionState extended,
+  old digests still decode). Evidence Card: "this time stands as → X 82% —
+  a learned rule fired (✉ client@…)"; the raw source is stored as a string
+  so future renames can't wipe old journals (unknown values read "decided
+  earlier"). 8-check Provenance suite; manuals updated. Suite 798/0.
+
 - [x] **Live-attribution adjacency prior.** His decision ("the
   running timer IS a sound prior without outcome data"): while the clock
   runs on a task, that task's candidate for an ambiguous surface is lifted
