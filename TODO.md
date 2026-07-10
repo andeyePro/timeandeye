@@ -624,12 +624,22 @@ and recorded rather than fixed blind:
   sites/previews/colour-lab.html. ENGINE v1 SHIPPED (Martin's "build it",
   2026-07-09): hue-neighbourhood allocator in Core (`ColourEngine`),
   first-sight colours.json records, legacy-hash migration snapshot,
-  stable project-anchor ring/legend colour, checks. Remaining per spec:
+  stable project-anchor ring/legend colour, checks. MIGRATION REPAIR
+  (2026-07-10): v1 snapshotted task colours but allocated FRESH anchors
+  for already-seen projects (Martin: dull projects, unrelated bright
+  tasks); anchors now snapshot/repair to the pre-engine first-child
+  colour via record provenance. Remaining per spec:
   click-swatch editing everywhere (legend, ring-3), inherit/fixed with
   "i" marker + swatch popover editor, window/surface colour records (pin
   identity grain), Life period with All/Tracked/Untracked, colours.json
   sync (whole-record LWW) + iOS PhonePalette sharing the store (until
   then iOS still hash-derives, so auto colours differ across devices).
+- [ ] Pie colour editing (Martin, 2026-07-10: "I can see no way of
+  editing any colours in the pie") – the first slice of the
+  click-swatch-everywhere work above: legend project/task swatches (and
+  ring wedges) open the spec §5 popover editor (native picker,
+  `setColour`-style undo). Today the only editor is the timeline slice
+  editor's ColorPicker, which never surfaces in the pie.
 
 ## Hardware-test UI fixes (Martin, 2026-07-06) — Mac verification pending
 

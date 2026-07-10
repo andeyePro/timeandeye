@@ -78,12 +78,21 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
         public var bandL: Double
         public var hex: String
         public var firstSeen: Date
+        /// "auto" = engine pick; "migrated" = the colour the project ring was
+        /// ALREADY showing pre-engine (its first child task's colour),
+        /// snapshotted so the upgrade never changes a colour the user saw.
+        /// nil = written by the first engine build (2026-07-09), which
+        /// allocated fresh anchors for already-seen projects and broke the
+        /// stability promise — `snapshotLegacyAnchor` repairs exactly these.
+        public var provenance: String?
 
-        public init(hue: Double, bandL: Double, hex: String, firstSeen: Date) {
+        public init(hue: Double, bandL: Double, hex: String, firstSeen: Date,
+                    provenance: String? = nil) {
             self.hue = hue
             self.bandL = bandL
             self.hex = hex
             self.firstSeen = firstSeen
+            self.provenance = provenance
         }
     }
 
@@ -230,7 +239,7 @@ public enum ColourEngine {
         let record = ColourAssignments.ProjectRecord(
             hue: hue, bandL: bandL,
             hex: rgb(from: displayColour(hue: hue, band: band)).hex,
-            firstSeen: now)
+            firstSeen: now, provenance: "auto")
         store.projects[key] = record
         return record
     }
@@ -245,6 +254,36 @@ public enum ColourEngine {
         guard store.tasks[taskKey] == nil, RGB255(hex: hex) != nil else { return }
         store.tasks[taskKey] = ColourAssignments.TaskRecord(
             hex: hex, provenance: "migrated", firstSeen: now)
+    }
+
+    /// Migration commit for a PROJECT anchor: pre-engine, the pie's project
+    /// ring/legend wore the FIRST CHILD task's colour, so "the colour the
+    /// user associates with this project" is that child's hex — snapshot it
+    /// as the anchor (hue/bandL derived from the hex, so future tasks in the
+    /// project shade around the familiar hue).
+    ///
+    /// Overwrite rule — the ONE deliberate exception to never-overwrite: a
+    /// record with nil provenance was written by the first engine build
+    /// (2026-07-09), which allocated a fresh anchor for a project the user
+    /// had already seen — the record itself is what broke the "nothing
+    /// already seen changes" promise, so replacing it RESTORES the older,
+    /// longer-seen colour rather than moving one. Records the fixed engine
+    /// wrote ("auto") or this function wrote ("migrated") are never touched,
+    /// so the repair runs at most once per project and then goes quiet.
+    @discardableResult
+    public static func snapshotLegacyAnchor(projectKey: String, hex: String,
+                                            in store: inout ColourAssignments,
+                                            at now: Date = Date()) -> Bool {
+        guard let rgb = RGB255(hex: hex) else { return false }
+        if let existing = store.projects[projectKey], existing.provenance != nil {
+            return false
+        }
+        let c = oklch(from: rgb)
+        store.projects[projectKey] = ColourAssignments.ProjectRecord(
+            hue: c.H, bandL: c.L, hex: hex,
+            firstSeen: store.projects[projectKey]?.firstSeen ?? now,
+            provenance: "migrated")
+        return true
     }
 
     // MARK: Allocation
@@ -473,6 +512,16 @@ public enum ColourEngine {
         linearToOklab(r: srgbToLinear(Double(c.r) / 255),
                       g: srgbToLinear(Double(c.g) / 255),
                       b: srgbToLinear(Double(c.b) / 255))
+    }
+
+    /// sRGB → OKLCH, the inverse edge `snapshotLegacyAnchor` needs: a
+    /// migrated hex must yield real allocation coordinates (hue for the task
+    /// neighbourhood, L for anchor spacing), not a guessed band.
+    public static func oklch(from c: RGB255) -> OKLCH {
+        let lab = oklab(c)
+        let h = atan2(lab.b, lab.a) * 180 / Double.pi
+        return OKLCH(L: lab.L, C: (lab.a * lab.a + lab.b * lab.b).squareRoot(),
+                     H: h < 0 ? h + 360 : h)
     }
 
     private static func distance(_ a: Oklab, _ b: Oklab) -> Double {

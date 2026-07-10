@@ -2,6 +2,34 @@
 
 ## 2026-07-10
 
+- [x] **Colour migration repair: seen projects get their pre-engine colours
+  back.** Martin's regression report: after the colour engine landed
+  (7b4aed6), projects turned dull and their bright tasks looked unrelated.
+  Diagnosis: the v1 migration snapshotted TASK colours faithfully (his task
+  colours never actually changed), but project ring/legend colours were
+  re-derived from fresh engine anchors — pre-engine the project wedge wore
+  its first child task's bright legacy colour, so every already-seen
+  project changed colour, and the preserved random-hue task colours stopped
+  matching their project. (Ring-3 window wedges were always the task colour
+  at alternating opacity — unchanged, just newly conspicuous.) Fix:
+  `ProjectRecord` gains provenance ("auto" for engine picks, "migrated" for
+  snapshots; the 2026-07-09 build's records decode as nil), and
+  `ColourEngine.snapshotLegacyAnchor` anchors a project to its first
+  child's pre-engine colour (override or migrated record), with real OKLCH
+  coordinates derived from the hex so future tasks shade around the
+  familiar hue. It fires from `projectColour(containing:)` at pie render —
+  the one place the pre-engine "first child" is actually known — and it may
+  overwrite exactly one kind of record: a provenance-less anchor from the
+  2026-07-09 build, the record that itself broke the "nothing already seen
+  changes" promise; repaired/auto records are closed forever, so the repair
+  is idempotent and terminating. Existing poisoned colours.json files heal
+  on next launch with no user action. Three new checks pin the legacy
+  first-child snapshot, the poisoned-store recovery (driven from a decoded
+  provenance-less JSON fixture), and the project-vs-task derivation split
+  (anchor swatch from the display ladder, tasks from the ±25°
+  neighbourhood). Pie colour EDITING (also asked for in the report) is a
+  separate TODO item, not this fix.
+
 - [x] **Email recipe pack: Outlook Web, Proton Mail, Yahoo Mail and Fastmail
   join Gmail.** `EmailSystem` now ships open-message sender/recipient
   selectors for all five webmail systems, each with its evidence source,

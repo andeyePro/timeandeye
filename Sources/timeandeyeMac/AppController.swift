@@ -3152,9 +3152,26 @@ public final class AppController: ObservableObject {
         guard let ref, ref != WorkTask.unknown.ref,
               let task = taskCache.first(where: { $0.ref == ref }),
               let key = projectKey(for: task) else { return nil }
+        // Pre-engine, this ring wore exactly the colour of the ref we're
+        // handed (the pie's first child). If that child still shows a
+        // pre-engine colour — a user override or a migrated legacy-hash
+        // record — then THAT is the colour the user associates with the
+        // project, so it becomes the anchor. This is both the upgrade path
+        // for stores migrated by this build and the repair for stores the
+        // 2026-07-09 build wrote (fresh anchors for already-seen projects —
+        // Martin's "dull projects, unrelated tasks" report): those anchors
+        // carry nil provenance and yield, once, to the legacy colour.
+        var repaired = false
+        let childHex = settings.taskColours[ref.storageKey]
+            ?? colourAssignments.tasks[ref.storageKey]
+                .flatMap { $0.provenance == "migrated" ? $0.hex : nil }
+        if let childHex {
+            repaired = ColourEngine.snapshotLegacyAnchor(
+                projectKey: key, hex: childHex, in: &colourAssignments)
+        }
         let before = colourAssignments.recordCount
         let record = ColourEngine.projectRecord(key, in: &colourAssignments)
-        if colourAssignments.recordCount != before {
+        if repaired || colourAssignments.recordCount != before {
             scheduleColoursSave()
         }
         return NSColor(hex: record.hex)

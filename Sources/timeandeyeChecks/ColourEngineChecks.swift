@@ -252,6 +252,93 @@ func colourEngineChecks(_ c: Checks) {
                    "new pick ignored the migrated record")
     }
 
+    c.check("upgrade keeps the project ring colour: legacy first-child snapshot beats fresh allocation") {
+        // Pre-engine, the pie's project ring wore its FIRST CHILD task's
+        // colour — so the migration must anchor a seen project to that hex,
+        // not to a fresh engine pick (Martin's 2026-07-10 regression: dull
+        // engine anchors replaced the bright colours he was using).
+        var store = ColourAssignments()
+        ColourEngine.snapshotLegacy(taskKey: "op:7", hex: "#7CC7E8", in: &store, at: t0)
+        try expect(ColourEngine.snapshotLegacyAnchor(projectKey: "op/id:14",
+                                                     hex: "#7CC7E8", in: &store, at: t0),
+                   "legacy anchor snapshot should commit on an empty key")
+        let record = ColourEngine.projectRecord("op/id:14", in: &store, at: t0)
+        try expectEq(record.hex, "#7CC7E8", "anchor must be the pre-engine ring colour")
+        try expectEq(record.provenance, "migrated")
+        // The snapshotted anchor is permanent: a later snapshot attempt (a
+        // different sort order surfacing a different first child) is a no-op.
+        try expect(!ColourEngine.snapshotLegacyAnchor(projectKey: "op/id:14",
+                                                      hex: "#FF0000", in: &store, at: t0),
+                   "a migrated anchor must never be re-snapshotted")
+        try expectEq(store.projects["op/id:14"]?.hex, "#7CC7E8")
+        // The anchor's coordinates are REAL (derived from the hex), so new
+        // tasks in the project shade around the familiar hue.
+        let expected = ColourEngine.oklch(from: RGB255(hex: "#7CC7E8")!)
+        try expectClose(record.hue, expected.H, accuracy: 0.0001,
+                        "anchor hue should derive from the migrated hex")
+        // A project with no pre-engine colour still allocates normally.
+        let fresh = ColourEngine.projectRecord("op/id:15", in: &store, at: t0)
+        try expectEq(fresh.provenance, "auto")
+    }
+
+    c.check("poisoned-store recovery: a provenance-less anchor (2026-07-09 build) yields once to the legacy colour") {
+        // The first engine build allocated fresh anchors for projects the
+        // user had already seen — its records carry NO provenance field.
+        // Decode such a file (this is what sits on an upgraded Mac) and
+        // prove the repair replaces exactly those records, exactly once,
+        // while records the fixed engine writes ("auto") are untouchable.
+        let poisoned = Data("""
+        {"projects": {"op/id:14": {"hue": 258, "bandL": 0.62,
+                                   "hex": "#4A5568", "firstSeen": 700000000}},
+         "tasks": {"op:7": {"hex": "#7CC7E8", "provenance": "migrated",
+                            "firstSeen": 700000000}}}
+        """.utf8)
+        var store = try JSONDecoder().decode(ColourAssignments.self, from: poisoned)
+        try expectNil(store.projects["op/id:14"]?.provenance,
+                      "fixture premise: the 2026-07-09 build wrote no provenance")
+        try expect(ColourEngine.snapshotLegacyAnchor(projectKey: "op/id:14",
+                                                     hex: "#7CC7E8", in: &store, at: t0),
+                   "repair should replace the provenance-less anchor")
+        try expectEq(store.projects["op/id:14"]?.hex, "#7CC7E8",
+                     "the longer-seen legacy colour must win")
+        try expectEq(store.projects["op/id:14"]?.provenance, "migrated")
+        // Idempotent and terminating: the repaired record is closed.
+        try expect(!ColourEngine.snapshotLegacyAnchor(projectKey: "op/id:14",
+                                                      hex: "#00FF00", in: &store, at: t0),
+                   "repair must run at most once per project")
+        // And an anchor the FIXED engine allocated is never overwritten.
+        let auto = ColourEngine.projectRecord("op/id:15", in: &store, at: t0)
+        try expect(!ColourEngine.snapshotLegacyAnchor(projectKey: "op/id:15",
+                                                      hex: "#7CC7E8", in: &store, at: t0),
+                   "an auto anchor must never be replaced")
+        try expectEq(store.projects["op/id:15"], auto)
+    }
+
+    c.check("project vs task derivation stay distinct: anchor from the display ladder, tasks from its hue neighbourhood") {
+        // Two different derivations, never swapped: the project wedge shows
+        // the anchor's own swatch (contrast-adjusted ladder lightness) and
+        // each task takes a shade from the ±25° neighbourhood of the anchor
+        // hue — a task never wears the anchor swatch and vice versa.
+        var store = ColourAssignments()
+        let anchor = ColourEngine.projectRecord("op/id:14", in: &store, at: t0)
+        var taskHexes: [String] = []
+        for i in 0..<4 {
+            taskHexes.append(ColourEngine.taskHex("op:\(i)", projectKey: "op/id:14",
+                                                  in: &store, at: t0))
+        }
+        for (key, record) in store.tasks {
+            try expect(record.hex != anchor.hex,
+                       "task \(key) wears the project's anchor swatch")
+            let h = try unwrap(record.H, "engine pick \(key) should carry OKLCH")
+            var d = abs(h - anchor.hue).truncatingRemainder(dividingBy: 360)
+            d = min(d, 360 - d)
+            try expect(d <= 25.0001,
+                       "task \(key) hue \(h) outside the anchor's ±25° neighbourhood")
+        }
+        try expectEq(Set(taskHexes).count, taskHexes.count,
+                     "sibling tasks must stay distinct")
+    }
+
     c.check("project-key migration mirrors billing: id key wins, colour records follow renamed keys") {
         // Colour anchors share BillableRules' stable-key convention; when a
         // task refresh captures backend project ids, title-keyed anchors move
