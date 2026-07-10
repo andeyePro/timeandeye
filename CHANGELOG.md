@@ -2,6 +2,53 @@
 
 ## 2026-07-10
 
+- [x] **Colour anchor repair made deterministic, gated and universal — it
+  now runs at every colour read, not just the pie.** Closes six review
+  findings on the same-day repair below (whose over-claim is corrected in
+  place there). The problems, in dependency order: `colour(for:)`'s
+  first-sight path (timeline, popover MiniPie, Settings) minted an "auto"
+  anchor for any project without a record, both shading the newcomer around
+  the wrong hue and permanently closing the repair before the pie — the
+  only repair site — rendered; the anchor derived from the pie's CURRENT
+  first child (seconds-in-range sort), so which colour "won" depended on
+  what period you happened to view first; a post-engine user override
+  counted as a "pre-engine colour" even for a brand-new project (false
+  "migrated" stamp, engine allocation bypassed); the nil-provenance
+  sentinel was one old-binary round-trip away from re-arming (decode drops
+  unknown keys, re-encode loses them all); tasks auto-shaded around a
+  poisoned anchor kept their wrong hues after the anchor healed; and with
+  an "auto" first child the repair never fired at all. The fix, all in
+  `ColourEngine.repairProjectAnchor` + a controller gate that runs BEFORE
+  every `projectRecord`/`taskHex` site: a project is repairable only when
+  it verifiably predates the engine (≥ 1 migrated member task record —
+  overrides carry no date, so they anchor only a proven pre-engine
+  project, and only when they sit on the legacy child itself); the legacy
+  child is the earliest-snapshotted migrated member, ties broken
+  lexicographically — an honest, store-deterministic approximation, since
+  which child the ring actually wore depended on the viewed period and is
+  unrecoverable; colours.json gains a `version: 2` stamp and the repair
+  era is closed by a one-time `colours.repaired` marker file OUTSIDE the
+  JSON (old binaries strip in-JSON fields but never touch the marker;
+  residual risks reasoned out in the code comments — a re-armed repair
+  re-derives the same anchors, so even the worst case is a colour no-op);
+  in a pre-v2 store an "auto" anchor on a pre-engine project is itself
+  repairable (it can only be the broken window's pick, days old, vs a
+  legacy colour seen for months); a repaired anchor RE-SHADES the
+  project's "auto" task records around the restored hue (documented
+  judgement: those records are days old and already moved once — leaving
+  them was a permanent intra-project clash; migrated records and user
+  overrides never move, firstSeen preserved); and once a complete task
+  cache has been swept (successful backend refresh, or standalone), the
+  leftover nil-provenance anchors — projects that resolve to no cached
+  task, so have no restorable legacy colour — are adopted as "auto" with
+  their colours intact, the marker lands, and the store is fully stamped.
+  What still cannot heal, honestly: anchors whose projects never become
+  resolvable before the era closes, and anything a pre-provenance binary
+  mints after the marker exists. Five new ColourEngine checks (19 total)
+  pin the bypass survival, deterministic child choice, override-hijack
+  rejection, cohort re-shade, and version/adoption semantics. 702/0;
+  release timeandeyeApp builds.
+
 - [x] **Fullscreen pose: the decision is now a pure, check-covered type.**
   Closes the review findings on fix nine's window/Space logic. The whole
   float-over-fullscreen verdict moved out of SpaceJoiningView into
@@ -63,12 +110,16 @@
   child's pre-engine colour (override or migrated record), with real OKLCH
   coordinates derived from the hex so future tasks shade around the
   familiar hue. It fires from `projectColour(containing:)` at pie render —
-  the one place the pre-engine "first child" is actually known — and it may
+  and, corrected same-day (see the deterministic-repair entry above): ONLY
+  there, and only when the pie's current first child happened to carry an
+  override or migrated record — a new task first-sighted from the
+  timeline/popover/Settings paths could mint an "auto" anchor first and
+  close the repair before the pie ever rendered, so healing was NOT
+  guaranteed on next launch as this entry originally claimed. It may
   overwrite exactly one kind of record: a provenance-less anchor from the
   2026-07-09 build, the record that itself broke the "nothing already seen
   changes" promise; repaired/auto records are closed forever, so the repair
-  is idempotent and terminating. Existing poisoned colours.json files heal
-  on next launch with no user action. Three new checks pin the legacy
+  is idempotent and terminating. Three new checks pin the legacy
   first-child snapshot, the poisoned-store recovery (driven from a decoded
   provenance-less JSON fixture), and the project-vs-task derivation split
   (anchor swatch from the display ladder, tasks from the ±25°

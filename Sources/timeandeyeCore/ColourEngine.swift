@@ -79,11 +79,13 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
         public var hex: String
         public var firstSeen: Date
         /// "auto" = engine pick; "migrated" = the colour the project ring was
-        /// ALREADY showing pre-engine (its first child task's colour),
+        /// ALREADY showing pre-engine (a child task's legacy colour),
         /// snapshotted so the upgrade never changes a colour the user saw.
         /// nil = written by the first engine build (2026-07-09), which
         /// allocated fresh anchors for already-seen projects and broke the
-        /// stability promise — `snapshotLegacyAnchor` repairs exactly these.
+        /// stability promise — `repairProjectAnchor` repairs exactly these
+        /// (while the store-level repair window is open; see
+        /// `ColourAssignments.version`).
         public var provenance: String?
 
         public init(hue: Double, bandL: Double, hex: String, firstSeen: Date,
@@ -124,11 +126,27 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
     public var projects: [String: ProjectRecord]
     /// `TaskRef.storageKey` → colour.
     public var tasks: [String: TaskRecord]
+    /// Store schema version. nil = the file was last SAVED by a pre-version
+    /// build (the broken 2026-07-09 engine or the 2026-07-10 interim repair)
+    /// — every "auto" project record in such a store predates the
+    /// deterministic anchor repair and may be one of those builds' wrong
+    /// fresh picks, so `repairProjectAnchor` may replace it. A decode by an
+    /// old binary DROPS this field along with the provenance flags (Codable
+    /// ignores unknown keys; re-encode loses them), which is why the version
+    /// stamp alone can't close the repair era — the controller pairs it with
+    /// a one-time marker file OUTSIDE this JSON that old binaries never
+    /// touch (see AppController.finalizeColourRepairsIfComplete).
+    public var version: Int?
+
+    /// What this build writes into `version`.
+    public static let currentVersion = 2
 
     public init(projects: [String: ProjectRecord] = [:],
-                tasks: [String: TaskRecord] = [:]) {
+                tasks: [String: TaskRecord] = [:],
+                version: Int? = nil) {
         self.projects = projects
         self.tasks = tasks
+        self.version = version
     }
 
     /// Anchor key for tasks whose project is unknown (ref no longer in any
@@ -256,34 +274,141 @@ public enum ColourEngine {
             hex: hex, provenance: "migrated", firstSeen: now)
     }
 
-    /// Migration commit for a PROJECT anchor: pre-engine, the pie's project
-    /// ring/legend wore the FIRST CHILD task's colour, so "the colour the
-    /// user associates with this project" is that child's hex — snapshot it
-    /// as the anchor (hue/bandL derived from the hex, so future tasks in the
-    /// project shade around the familiar hue).
+    /// Anchor repair/upgrade for a PROJECT that predates the engine: restore
+    /// the colour its pie ring wore before the engine existed, and bring the
+    /// project's engine-allocated tasks back into that hue family. The
+    /// controller calls this BEFORE any code path that creates or reads the
+    /// project's record (`projectRecord`, `taskHex`), so a new task in an
+    /// already-seen project can neither allocate around a wrong anchor nor
+    /// close the repair window by minting an "auto" record first.
     ///
-    /// Overwrite rule — the ONE deliberate exception to never-overwrite: a
-    /// record with nil provenance was written by the first engine build
-    /// (2026-07-09), which allocated a fresh anchor for a project the user
-    /// had already seen — the record itself is what broke the "nothing
-    /// already seen changes" promise, so replacing it RESTORES the older,
-    /// longer-seen colour rather than moving one. Records the fixed engine
-    /// wrote ("auto") or this function wrote ("migrated") are never touched,
-    /// so the repair runs at most once per project and then goes quiet.
+    /// WHAT COUNTS AS PRE-ENGINE. Only a project with at least one MIGRATED
+    /// member task record verifiably predates the engine — those records are
+    /// written exactly once, at store bootstrap, from the legacy hash
+    /// palette. A user override alone proves nothing (overrides carry no
+    /// date), so a brand-new project whose first task the user recoloured is
+    /// NOT anchored to that override under a false "migrated" stamp — it
+    /// allocates normally.
+    ///
+    /// WHICH CHILD IS "THE" LEGACY CHILD. Pre-engine the ring wore the pie's
+    /// then-current first child — which child that was depended on the period
+    /// being viewed and is unrecoverable. The nearest provable,
+    /// store-deterministic rule (honest approximation): the
+    /// earliest-snapshotted migrated member, ties broken lexicographically by
+    /// key — every migrated hex is a colour the project's tasks genuinely
+    /// wore pre-engine, and this pick depends only on persisted records,
+    /// never on today's sort order. If the user overrode THAT task's colour,
+    /// the override is what they actually saw, so it wins for the anchor.
+    ///
+    /// WHAT MAY BE OVERWRITTEN. "migrated" anchors: never (each already IS a
+    /// restored legacy colour; re-picking would flip a settled colour again).
+    /// "auto" anchors: only when the store was loaded pre-v2
+    /// (`storeLoadedPreV2`) — in a pre-v2 store an "auto" anchor on a
+    /// pre-engine project can only be the 2026-07-09/10 builds' wrong fresh
+    /// pick (days old at most) while the legacy colour was seen for months;
+    /// in a v2 store an "auto" anchor is a legitimate engine pick and is
+    /// closed. nil-provenance anchors: always eligible; when the project has
+    /// NO migrated member, the nil anchor belonged to a genuinely new
+    /// project whose engine pick is the only colour ever seen — it is
+    /// adopted in place (stamped "auto"), never recoloured.
+    ///
+    /// COHORT RE-SHADE. When an anchor moves under a repair, the project's
+    /// "auto" member task records re-allocate around the restored hue
+    /// (sorted-key order, firstSeen preserved). Judgement call, documented:
+    /// those records are days old and already changed once when the engine
+    /// landed — moving them back into the project's family is the lesser
+    /// evil vs a permanent intra-project clash. Migrated records and user
+    /// overrides never move. If the anchor already wears the target colour
+    /// (a re-run after an old binary stripped the provenance fields), the
+    /// re-shade is skipped so nothing churns.
     @discardableResult
-    public static func snapshotLegacyAnchor(projectKey: String, hex: String,
-                                            in store: inout ColourAssignments,
-                                            at now: Date = Date()) -> Bool {
-        guard let rgb = RGB255(hex: hex) else { return false }
-        if let existing = store.projects[projectKey], existing.provenance != nil {
+    public static func repairProjectAnchor(projectKey: String,
+                                           memberTaskKeys: [String],
+                                           overrides: [String: String] = [:],
+                                           storeLoadedPreV2: Bool,
+                                           in store: inout ColourAssignments,
+                                           at now: Date = Date()) -> Bool {
+        let existing = store.projects[projectKey]
+        if let existing {
+            if existing.provenance == "migrated" { return false }
+            if existing.provenance == "auto", !storeLoadedPreV2 { return false }
+        }
+        // Deterministic legacy child: earliest migrated member, ties by key.
+        var legacy: (key: String, record: ColourAssignments.TaskRecord)?
+        for key in memberTaskKeys {
+            guard let record = store.tasks[key], record.provenance == "migrated"
+            else { continue }
+            if let best = legacy,
+               (best.record.firstSeen, best.key) <= (record.firstSeen, key) {
+                continue
+            }
+            legacy = (key, record)
+        }
+        guard let legacy else {
+            if existing != nil, existing?.provenance == nil {
+                store.projects[projectKey]?.provenance = "auto"
+                return true
+            }
             return false
         }
+        let overrideHex = overrides[legacy.key].flatMap {
+            RGB255(hex: $0) != nil ? $0 : nil
+        }
+        let hex = overrideHex ?? legacy.record.hex
+        guard let rgb = RGB255(hex: hex) else { return false }
         let c = oklch(from: rgb)
+        let anchorUnmoved = existing?.hex == hex && existing?.hue == c.H
+            && existing?.bandL == c.L
         store.projects[projectKey] = ColourAssignments.ProjectRecord(
             hue: c.H, bandL: c.L, hex: hex,
-            firstSeen: store.projects[projectKey]?.firstSeen ?? now,
+            firstSeen: existing?.firstSeen ?? now,
             provenance: "migrated")
+        if !anchorUnmoved {
+            reshadeAutoTasks(memberTaskKeys: memberTaskKeys, anchorHue: c.H,
+                             in: &store)
+        }
         return true
+    }
+
+    /// Close every remaining provenance-less anchor as an engine pick.
+    /// Called once, when the repair pass has seen a COMPLETE task cache, so
+    /// anchors whose projects no longer resolve to any cached task (deleted
+    /// projects, the unfiled bucket) stop advertising themselves as
+    /// repairable forever. Colours are kept as-is: with no migrated member
+    /// resolvable there is no older colour to restore.
+    @discardableResult
+    public static func adoptUnrepairedAnchors(in store: inout ColourAssignments) -> Int {
+        var adopted = 0
+        for key in store.projects.keys where store.projects[key]?.provenance == nil {
+            store.projects[key]?.provenance = "auto"
+            adopted += 1
+        }
+        return adopted
+    }
+
+    /// Re-allocate a repaired project's engine-picked task records around the
+    /// restored anchor hue. Records are removed then re-allocated in sorted
+    /// key order (deterministic), each scoring against everything still in
+    /// the store, and keep their original firstSeen — the task's identity and
+    /// history don't change, only its shade rejoins the family.
+    private static func reshadeAutoTasks(memberTaskKeys: [String],
+                                         anchorHue: Double,
+                                         in store: inout ColourAssignments) {
+        let keys = memberTaskKeys
+            .filter { store.tasks[$0]?.provenance == "auto" }
+            .sorted()
+        guard !keys.isEmpty else { return }
+        var firstSeens: [String: Date] = [:]
+        for key in keys {
+            firstSeens[key] = store.tasks[key]?.firstSeen
+            store.tasks[key] = nil
+        }
+        for key in keys {
+            let pick = allocateTask(anchorHue: anchorHue, in: store)
+            store.tasks[key] = ColourAssignments.TaskRecord(
+                hex: rgb(from: pick).hex, L: pick.L, C: pick.C, H: pick.H,
+                provenance: "auto", firstSeen: firstSeens[key] ?? Date())
+        }
     }
 
     // MARK: Allocation
@@ -514,7 +639,7 @@ public enum ColourEngine {
                       b: srgbToLinear(Double(c.b) / 255))
     }
 
-    /// sRGB → OKLCH, the inverse edge `snapshotLegacyAnchor` needs: a
+    /// sRGB → OKLCH, the inverse edge `repairProjectAnchor` needs: a
     /// migrated hex must yield real allocation coordinates (hue for the task
     /// neighbourhood, L for anchor spacing), not a guessed band.
     public static func oklch(from c: RGB255) -> OKLCH {

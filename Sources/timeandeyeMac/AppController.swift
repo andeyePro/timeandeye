@@ -341,6 +341,26 @@ public final class AppController: ObservableObject {
     /// used directly, so no invalidation is needed.
     private let coloursStore: JSONFileStore<ColourAssignments>
     private var colourAssignments: ColourAssignments
+    /// True when colours.json was loaded WITHOUT a version stamp — i.e. last
+    /// saved by the broken 2026-07-09 engine or the 2026-07-10 interim
+    /// repair. In such a store an "auto" project anchor may itself be one of
+    /// those builds' wrong fresh picks, so the repair may replace it (see
+    /// ColourEngine.repairProjectAnchor). Captured at load, BEFORE this
+    /// build stamps the in-memory store to the current version.
+    private let colourStoreLoadedPreV2: Bool
+    /// The one-time "anchor repairs are finished" marker. Lives OUTSIDE
+    /// colours.json because a round-trip through a pre-provenance binary
+    /// silently strips the store's provenance/version fields (decode drops
+    /// unknown keys, re-encode loses them), which would re-arm the nil
+    /// sentinel forever — a separate file no old binary touches survives
+    /// that. While the marker is absent, `colourRepairArmed` keeps the
+    /// legacy-anchor repair live; once written it is never repaired again.
+    private let colourRepairMarkerURL: URL
+    private var colourRepairArmed: Bool
+    /// Projects already put through the repair gate this run — the engine's
+    /// provenance rules make re-checks no-ops anyway; this just skips the
+    /// O(taskCache) member scan on hot render paths.
+    private var colourProjectsRepairChecked: Set<String> = []
     private let financeMappingsStore: JSONFileStore<[String: FinanceMapping]>
     /// D6: sourceProjectKey → the finance backend's task. Core-owned;
     /// Settings edits it; the Pro flavour hands it to its finance connector
@@ -465,9 +485,13 @@ public final class AppController: ObservableObject {
         // go through the allocator on first sight instead. User overrides
         // stay in settings.taskColours untouched (they already win).
         coloursStore = JSONFileStore<ColourAssignments>(url: dir.appendingPathComponent("colours.json"))
+        colourRepairMarkerURL = dir.appendingPathComponent("colours.repaired")
+        colourRepairArmed = !FileManager.default.fileExists(atPath: colourRepairMarkerURL.path)
         if let existing = (try? coloursStore.load()).flatMap({ $0 }) {
+            colourStoreLoadedPreV2 = existing.version == nil
             colourAssignments = existing
         } else {
+            colourStoreLoadedPreV2 = false   // fresh store: no old picks to distrust
             var snapshot = ColourAssignments()
             let seen = (try? journal.latestEndByTask(excluding: [Self.liveCheckpointID])) ?? [:]
             for ref in seen.keys where ref != WorkTask.unknown.ref {
@@ -475,9 +499,13 @@ public final class AppController: ObservableObject {
                                             hex: Self.legacyHashColourHex(for: ref),
                                             in: &snapshot)
             }
+            snapshot.version = ColourAssignments.currentVersion
             colourAssignments = snapshot
             try? coloursStore.save(snapshot)
         }
+        // Every save from here on carries the current schema version; the
+        // pre-v2 verdict above is already banked for this run.
+        colourAssignments.version = ColourAssignments.currentVersion
 
         let host = URL(string: loadedSettings.opBaseURL)?.host ?? ""
         let learning = (try? learningStore.load().flatMap { $0 }) ?? LearningStore()
@@ -3116,11 +3144,65 @@ public final class AppController: ObservableObject {
         }
         // First sight: allocate within the project's hue neighbourhood and
         // persist — from here on this task's colour is data, not derivation.
+        // The repair gate runs FIRST: `taskHex` reads (and, for a new
+        // project, creates) the anchor, so allocating here without it would
+        // shade the newcomer around a wrong anchor AND close the legacy
+        // repair by minting an "auto" record — the 2026-07-10 bypass, where
+        // timeline/MiniPie/Settings first-sights beat the pie (then the only
+        // repair site) to the record.
         let key = taskCache.first(where: { $0.ref == ref }).flatMap { projectKey(for: $0) }
+        if let key { repairColourAnchorIfNeeded(projectKey: key) }
         let hex = ColourEngine.taskHex(ref.storageKey, projectKey: key,
                                        in: &colourAssignments)
         scheduleColoursSave()
         return NSColor(hex: hex) ?? .systemGray
+    }
+
+    /// Repair gate for one project's anchor — MUST run before any path that
+    /// creates or reads the project's record (`projectRecord`/`taskHex`), at
+    /// every such site, so the repair never depends on which view renders
+    /// first. Armed until the one-time marker file exists (see
+    /// `finalizeColourRepairsIfComplete`). Membership can be gathered from
+    /// the cache whenever the key is resolvable at all: resolving a key
+    /// requires the ref's task to be cached, and tasks of one project always
+    /// arrive together (locals at init, backend tasks per fetch).
+    private func repairColourAnchorIfNeeded(projectKey key: String) {
+        guard colourRepairArmed, !colourProjectsRepairChecked.contains(key) else { return }
+        colourProjectsRepairChecked.insert(key)
+        let members = taskCache.compactMap { task in
+            projectKey(for: task) == key ? task.ref.storageKey : nil
+        }
+        if ColourEngine.repairProjectAnchor(projectKey: key,
+                                            memberTaskKeys: members,
+                                            overrides: settings.taskColours,
+                                            storeLoadedPreV2: colourStoreLoadedPreV2,
+                                            in: &colourAssignments) {
+            scheduleColoursSave()
+        }
+    }
+
+    /// One-shot close of the anchor-repair era, run once the task cache is
+    /// COMPLETE — after a successful backend refresh, or at startup when the
+    /// app is standalone (locals are all there is). Sweeps every resolvable
+    /// project through the repair, closes whatever nil-provenance anchors
+    /// remain (their projects resolve to no cached task, so there is no
+    /// legacy colour to restore), then writes the marker that disarms the
+    /// repair. Residual risk, accepted: if a pre-provenance binary later
+    /// rewrites colours.json AND the marker is separately deleted, the
+    /// repair re-arms — and re-derives the same deterministic anchors, so
+    /// the re-run changes nothing unless the user recoloured the legacy
+    /// child in between.
+    private func finalizeColourRepairsIfComplete() {
+        guard colourRepairArmed else { return }
+        var keys = Set<String>()
+        for task in taskCache {
+            if let key = projectKey(for: task) { keys.insert(key) }
+        }
+        for key in keys.sorted() { repairColourAnchorIfNeeded(projectKey: key) }
+        _ = ColourEngine.adoptUnrepairedAnchors(in: &colourAssignments)
+        colourRepairArmed = false
+        try? coloursStore.save(colourAssignments)   // v2 stamp lands with the marker
+        FileManager.default.createFile(atPath: colourRepairMarkerURL.path, contents: Data())
     }
 
     /// One coalesced colours.json write per burst of first sights. A fresh
@@ -3152,26 +3234,16 @@ public final class AppController: ObservableObject {
         guard let ref, ref != WorkTask.unknown.ref,
               let task = taskCache.first(where: { $0.ref == ref }),
               let key = projectKey(for: task) else { return nil }
-        // Pre-engine, this ring wore exactly the colour of the ref we're
-        // handed (the pie's first child). If that child still shows a
-        // pre-engine colour — a user override or a migrated legacy-hash
-        // record — then THAT is the colour the user associates with the
-        // project, so it becomes the anchor. This is both the upgrade path
-        // for stores migrated by this build and the repair for stores the
-        // 2026-07-09 build wrote (fresh anchors for already-seen projects —
-        // Martin's "dull projects, unrelated tasks" report): those anchors
-        // carry nil provenance and yield, once, to the legacy colour.
-        var repaired = false
-        let childHex = settings.taskColours[ref.storageKey]
-            ?? colourAssignments.tasks[ref.storageKey]
-                .flatMap { $0.provenance == "migrated" ? $0.hex : nil }
-        if let childHex {
-            repaired = ColourEngine.snapshotLegacyAnchor(
-                projectKey: key, hex: childHex, in: &colourAssignments)
-        }
+        // The ref only RESOLVES the project key — the anchor never derives
+        // from this particular child (pre-2026-07-10 it did, which made the
+        // anchor depend on whichever child the pie's current sort put
+        // first). Pre-engine projects get their legacy ring colour restored
+        // (and poisoned 2026-07-09 anchors replaced) by the repair gate,
+        // which picks its legacy child deterministically from the store.
+        repairColourAnchorIfNeeded(projectKey: key)
         let before = colourAssignments.recordCount
         let record = ColourEngine.projectRecord(key, in: &colourAssignments)
-        if repaired || colourAssignments.recordCount != before {
+        if colourAssignments.recordCount != before {
             scheduleColoursSave()
         }
         return NSColor(hex: record.hex)
@@ -3950,6 +4022,14 @@ public final class AppController: ObservableObject {
             if lastError == nil, !settings.opBaseURL.isEmpty {
                 lastError = "Not connected – check OP URL and API key in Settings"
             }
+            // Truly standalone (no backend configured): the local-only task
+            // cache IS complete, so the colour-anchor repair era can close
+            // now. A configured-but-unreachable backend does NOT close it —
+            // its projects aren't resolvable yet, and adopting their
+            // poisoned anchors here would lock the wrong colours in.
+            if settings.opBaseURL.isEmpty {
+                finalizeColourRepairsIfComplete()
+            }
             return
         }
         do {
@@ -3973,6 +4053,10 @@ public final class AppController: ObservableObject {
             }
             applyJournalRecency()   // durable recency, not just this session's
             migrateTitleKeyedBilling()   // ids now known: move title-keyed flags
+            // Backend fetch succeeded → the cache now holds every resolvable
+            // project, under its final (id-based) key: sweep the colour
+            // repair across all of them and close the repair era.
+            finalizeColourRepairsIfComplete()
 
             if activities.isEmpty, backend.supportsActivities {
                 activities = (try? await backend.fetchActivities()) ?? []
