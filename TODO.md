@@ -41,7 +41,7 @@ call, not a mechanical fix:
   or fold picks into the stack.
 - [x] `ingestAIResponse` applies N assignments as N undo steps (each fully
   undoable); grouping into one step means making the call async (UI ripple).
-  DONE 2026-07-10 without the ripple: `UndoStack.group(_:sync:)` — a
+  DONE 2026-07-10 without the ripple: `UndoStack.groupSync` — a
   synchronous grouping flavour — bundles the batch into ONE ⌘Z step from
   inside the existing sync call; no UI signature changed.
 - [ ] A comment undone AFTER its slice flushed only clears the in-flight

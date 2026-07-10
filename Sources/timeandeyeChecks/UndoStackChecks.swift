@@ -62,15 +62,15 @@ func undoStackChecks(_ c: Checks) async {
         // which registers its own inverse. The paste is ONE user gesture, so
         // undoing it must be ONE ⌘Z — and the caller is a synchronous button
         // handler (it returns a status string to show), so it cannot await
-        // the async `group` above; the sync overload exists for exactly this.
+        // the async `group` above; `groupSync` exists for exactly this.
         let u = UndoStack()
         var journal = [1: "pending", 2: "pending", 3: "pending"]
-        u.group("AI assign 3 review rows", sync: {
+        u.groupSync("AI assign 3 review rows") {
             for id in [1, 2, 3] {
                 u.register("assign row \(id)") { journal[id] = "pending" }
                 journal[id] = "assigned"
             }
-        })
+        }
         try expectEq(journal.values.filter { $0 == "assigned" }.count, 3)
         try expectEq(u.count, 1, "three assignments, one ⌘Z step")
         let entry = try unwrap(u.pop())
@@ -82,7 +82,7 @@ func undoStackChecks(_ c: Checks) async {
 
     c.check("an empty sync group pushes nothing (an AI reply with zero assignments)") {
         let u = UndoStack()
-        u.group("no-op", sync: {})
+        u.groupSync("no-op") {}
         try expectEq(u.count, 0)
     }
 
@@ -93,7 +93,7 @@ func undoStackChecks(_ c: Checks) async {
         var log: [String] = []
         await u.group("outer") {
             u.register("x") { log.append("x") }
-            u.group("inner", sync: { u.register("y") { log.append("y") } })
+            u.groupSync("inner") { u.register("y") { log.append("y") } }
         }
         try expectEq(u.count, 1, "the inner sync group does not push its own entry")
         let entry = try unwrap(u.pop())

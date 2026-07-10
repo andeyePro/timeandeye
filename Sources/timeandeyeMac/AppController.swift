@@ -4053,11 +4053,11 @@ public final class AppController: ObservableObject {
             // separate steps meant N presses to back out one paste). The
             // SYNC group flavour, because this returns a status string to a
             // synchronous button handler.
-            undoStack.group("AI assign \(assignments.count) review rows", sync: {
+            undoStack.groupSync("AI assign \(assignments.count) review rows") {
                 for a in assignments {
                     assignReview([a.segmentID], to: a.target)
                 }
-            })
+            }
             undoCount = undoStack.count
             return "Applied \(assignments.count) assignments."
         } catch {

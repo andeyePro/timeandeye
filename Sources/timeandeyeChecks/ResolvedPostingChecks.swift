@@ -396,7 +396,7 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(row?.lockedInvoiceRef, "INV-9", "a fresh invoice re-locks")
     }
 
-    await c.check("unlock undo: re-lock restores the ref, the diverged park and the poll suppress") {
+    c.check("unlock undo: re-lock restores the ref, the diverged park and the poll suppress") {
         // The unlock gesture now returns a snapshot of the rows it lifted so
         // ⌘Z can put the guard back: refs re-stamped, a divergence that was
         // parked while locked re-parked, and the sticky "never re-lock this
@@ -435,7 +435,7 @@ func resolvedPostingChecks(_ c: Checks) async {
                      "the suppress is forgotten — the poll may lock INV-7 again")
     }
 
-    await c.check("re-lock never clobbers a row that moved on to a fresh entry id") {
+    c.check("re-lock never clobbers a row that moved on to a fresh entry id") {
         // Between unlock and ⌘Z a sync pass may have amended via
         // delete+recreate (AmendmentError.mustRecreate) — the row now points
         // at a DIFFERENT backend entry. Stamping the old lock onto it would
@@ -463,7 +463,7 @@ func resolvedPostingChecks(_ c: Checks) async {
                      "the suppress is still forgotten — the poll re-locks from backend truth")
     }
 
-    await c.check("retry-stuck undo: re-quarantine restores cleared rows, except one the freed retry already posted") {
+    c.check("retry-stuck undo: re-quarantine restores cleared rows, except one the freed retry already posted") {
         // retryStuck clears .stuck rows so their sessions re-enter the queue;
         // it returns the cleared rows so ⌘Z can re-quarantine. But the freed
         // retry starts immediately — a session it already POSTED must not be

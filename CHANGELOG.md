@@ -22,9 +22,11 @@
   applied N parsed assignments as N separate undo steps — backing out one
   paste took N presses. The TODO note parked this on "grouping means making
   the call async (UI ripple)"; instead `UndoStack` gained a synchronous
-  group flavour (`group(_:sync:)`, same fold-into-one-entry + nesting
-  semantics as the async one, shared begin/end helpers), so the existing
-  sync call site groups without any signature change. New UndoStack checks:
+  group flavour (`groupSync`, same fold-into-one-entry + nesting semantics
+  as the async one, shared begin/end helpers; a distinct name because
+  trailing-closure syntax would let a `group` overload capture existing
+  sync-bodied `await group { … }` callers), so the existing sync call site
+  groups without any signature change. New UndoStack checks:
   the AI-batch shape (N sync-registered assignments, one entry, one undo
   restores all), empty sync group pushes nothing, sync-in-async nesting
   folds into the outermost.

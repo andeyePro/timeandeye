@@ -39,8 +39,11 @@ public final class UndoStack {
     /// handler (it returns a status string to display), where forcing the
     /// async `group` would ripple an async signature through the review UI.
     /// Inverses are still async and replay reversed on undo; the two flavours
-    /// nest freely (both fold into whichever group is outermost).
-    public func group(_ label: String, sync body: () -> Void) {
+    /// nest freely (both fold into whichever group is outermost). A distinct
+    /// name, not a `group` overload: trailing-closure syntax drops argument
+    /// labels, so an overload would silently re-route existing sync-bodied
+    /// `await group { … }` callers here.
+    public func groupSync(_ label: String, _ body: () -> Void) {
         let outer = beginGroup()
         body()
         endGroup(label, outer: outer)
