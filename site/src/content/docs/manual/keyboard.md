@@ -71,9 +71,10 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 
 ## Review queue
 
-- **Click** - select / deselect a visit; a row's header (or its left edge
-  when open) selects / deselects its whole group; **⇧-click** a header -
-  select every group between it and the last header clicked.
+- Selection works like the Finder: **click** - select a visit (a row's
+  header, or its left edge when open, selects its whole group); **⌘-click**
+  - add or remove a row; **⇧-click** - select everything between the last
+  row clicked and here, groups and single visits alike.
 - **⌘D** or **⌫** - **Clear** the selection: drop it from the queue,
   nothing added to timesheets, nothing learned.
 - **⌘E** - expand or collapse every stack and slice detail.

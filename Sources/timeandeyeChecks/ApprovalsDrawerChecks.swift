@@ -122,39 +122,27 @@ func reviewSortAndRangeChecks(_ c: Checks) {
                      "same tie-break both directions — flipping the sort never reverses ties")
     }
 
-    c.check("range endpoints are inclusive, in either direction") {
-        let ids = ["a", "b", "c", "d", "e"]
-        try expectEq(ReviewRangeSelect.range(in: ids, from: "b", to: "d"), ["b", "c", "d"])
-        try expectEq(ReviewRangeSelect.range(in: ids, from: "d", to: "b"), ["b", "c", "d"],
-                     "shift-click above the anchor selects the same range")
-    }
-
-    c.check("anchor == target selects exactly that one row") {
-        try expectEq(ReviewRangeSelect.range(in: ["a", "b"], from: "a", to: "a"), ["a"])
-    }
-
-    c.check("no anchor (or a vanished one) degrades to the clicked row; a vanished target selects nothing") {
-        // The anchor row can be assigned away between clicks — degrading to
-        // the target is the only non-guess.
-        let ids = ["a", "b", "c"]
-        try expectEq(ReviewRangeSelect.range(in: ids, from: nil, to: "b"), ["b"])
-        try expectEq(ReviewRangeSelect.range(in: ids, from: "gone", to: "b"), ["b"])
-        try expectEq(ReviewRangeSelect.range(in: ids, from: "a", to: "gone"), [])
-    }
-
-    c.check("the range follows the CURRENT sort order — same endpoints, different members") {
+    c.check("a ⇧-span follows the CURRENT sort order — same endpoints, different members") {
         // Martin's two sweeps use the same gesture over different orders:
-        // oldest-first + range-from-top clears before-a-date; shortest-
-        // first + range-from-top clears below-a-duration.
-        let byOldest = stacks.sorted(by: .oldestFirst).map(\.id)
-        let byShortest = stacks.sorted(by: .shortestFirst).map(\.id)
-        let cID = try unwrap(stacks.first { $0.app == "C" }).id
-        let aID = try unwrap(stacks.first { $0.app == "A" }).id
+        // oldest-first + span-from-top clears before-a-date; shortest-
+        // first + span-from-top clears below-a-duration.
+        let aIDs = Set(try unwrap(stacks.first { $0.app == "A" }).segments.map(\.id))
+        let bIDs = Set(try unwrap(stacks.first { $0.app == "B" }).segments.map(\.id))
+        let cIDs = Set(try unwrap(stacks.first { $0.app == "C" }).segments.map(\.id))
         let bID = try unwrap(stacks.first { $0.app == "B" }).id
-        try expectEq(ReviewRangeSelect.range(in: byOldest, from: byOldest[0], to: bID),
-                     [cID, bID], "oldest-first: C then B — everything before B's date")
-        try expectEq(ReviewRangeSelect.range(in: byShortest, from: byShortest[0], to: bID),
-                     [aID, bID], "shortest-first: A then B — everything at/below B's duration")
+        for (order, expected, note) in [
+            (ReviewSortOrder.oldestFirst, cIDs.union(bIDs),
+             "oldest-first: C then B — everything before B's date"),
+            (ReviewSortOrder.shortestFirst, aIDs.union(bIDs),
+             "shortest-first: A then B — everything at/below B's duration"),
+        ] {
+            let ordered = stacks.sorted(by: order)
+            let rows = ordered.map { ReviewRow.stack($0.id) }
+            var s = ReviewSelection()
+            s.click(rows[0], in: ordered)
+            s.shiftClick(.stack(bID), rows: rows, in: ordered)
+            try expectEq(s.selected, expected, note)
+        }
     }
 
     c.check("an id-keyed selection resolves to the same stacks after a re-sort") {
@@ -736,12 +724,12 @@ func reviewSliceDetailChecks(_ c: Checks) {
     }
 }
 
-// MARK: - Unified click-to-select (Martin, 2026-07-10, replacing the
-// per-slice Assign button he rejected: "just click the individual item to
-// toggle a blue highlight on it, with the header and left margin doing the
-// same for a whole group … The certainty on the buttons below should refer
-// to all of the selected slices (including those selected as a group)").
-// Pure set logic — the drawer renders membership and nothing else.
+// MARK: - Native selection semantics (Martin, 2026-07-10, second pass,
+// replacing the same morning's toggle-only model: "Can we have the macOS
+// default: single click changes selection, shift click spans, cmd click
+// toggles"). Rows are the drawer's flattened VISIBLE order — group rows
+// and slices interleaved — and a group row stands for all of its slices.
+// Pure value logic; the drawer renders membership and nothing else.
 
 func reviewSelectionChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
@@ -750,41 +738,121 @@ func reviewSelectionChecks(_ c: Checks) {
         ReviewSegment(app: app, windowTitle: title,
                       start: t0.addingTimeInterval(start), end: t0.addingTimeInterval(end))
     }
-    // Two stacks: Excel (two slices) + Mail (one slice).
+    // Three stacks: Excel (two slices), Mail and Xcode (one each).
     let a = seg("Excel", 0, 600, title: "Budget.xlsx")
     let b = seg("Excel", 1000, 1600, title: "Budget.xlsx")
     let m = seg("Mail", 2000, 2600, title: "Inbox")
-    let stacks = [a, b, m].stacked()
+    let x = seg("Xcode", 3000, 3600, title: "andeye")
+    let stacks = [a, b, m, x].stacked()
+    let excel = stacks.first { $0.app == "Excel" }!
+    let mail = stacks.first { $0.app == "Mail" }!
+    let xcode = stacks.first { $0.app == "Xcode" }!
+    // The drawer as the eye would see it with Excel open: its group row,
+    // its two slices, then the Mail and Xcode group rows.
+    let rows: [ReviewRow] = [.stack(excel.id), .slice(a.id), .slice(b.id),
+                             .stack(mail.id), .stack(xcode.id)]
 
-    c.check("clicking a slice toggles it — on, then off again") {
-        let on = ReviewSelection.toggleSlice(a.id, in: [])
-        try expectEq(on, [a.id])
-        try expectEq(ReviewSelection.toggleSlice(a.id, in: on), [])
+    c.check("a plain click REPLACES the selection — never toggles or accumulates") {
+        var s = ReviewSelection()
+        s.click(.slice(a.id), in: stacks)
+        try expectEq(s.selected, [a.id])
+        s.click(.slice(m.id), in: stacks)
+        try expectEq(s.selected, [m.id], "the previous selection is gone, Finder-style")
+        s.click(.slice(m.id), in: stacks)
+        try expectEq(s.selected, [m.id], "re-clicking the selected row keeps it selected")
     }
 
-    c.check("clicking a stack's header/margin selects EVERY slice in it; again deselects the group") {
-        let excel = try unwrap(stacks.first { $0.app == "Excel" })
-        let on = ReviewSelection.toggleStack(excel, in: [])
-        try expectEq(on, Set([a.id, b.id]))
-        try expect(ReviewSelection.isStackSelected(excel, in: on))
-        try expectEq(ReviewSelection.toggleStack(excel, in: on), [])
+    c.check("a plain click on a group row (header/left margin) selects exactly that whole group") {
+        var s = ReviewSelection()
+        s.click(.slice(m.id), in: stacks)
+        s.click(.stack(excel.id), in: stacks)
+        try expectEq(s.selected, Set([a.id, b.id]), "every slice in; Mail out")
+        try expect(ReviewSelection.isStackSelected(excel, in: s.selected))
     }
 
-    c.check("a group click on a PARTIALLY selected stack completes it — never clears it") {
-        // Half the group is highlighted; clicking the header means "all of
+    c.check("⌘-click toggles a row in and out without disturbing the rest") {
+        var s = ReviewSelection()
+        s.click(.slice(a.id), in: stacks)
+        s.commandClick(.slice(m.id), in: stacks)
+        try expectEq(s.selected, Set([a.id, m.id]))
+        s.commandClick(.slice(m.id), in: stacks)
+        try expectEq(s.selected, [a.id], "out again; a stays")
+    }
+
+    c.check("⌘-click on a PARTIALLY selected group completes it; on a full group removes it") {
+        // Half the group is highlighted; a group click means "all of
         // this", so the natural reading is completion, not a surprise clear.
-        let excel = try unwrap(stacks.first { $0.app == "Excel" })
-        let partial: Set<UUID> = [a.id]
-        try expect(!ReviewSelection.isStackSelected(excel, in: partial),
+        var s = ReviewSelection()
+        s.click(.slice(a.id), in: stacks)
+        try expect(!ReviewSelection.isStackSelected(excel, in: s.selected),
                    "one of two slices is not a selected group")
-        try expectEq(ReviewSelection.toggleStack(excel, in: partial), Set([a.id, b.id]))
+        s.commandClick(.stack(excel.id), in: stacks)
+        try expectEq(s.selected, Set([a.id, b.id]))
+        s.commandClick(.stack(excel.id), in: stacks)
+        try expectEq(s.selected, [], "a fully-selected group ⌘-clicks out whole")
     }
 
-    c.check("group state IS per-slice membership — selecting both slices singly selects the group") {
-        let excel = try unwrap(stacks.first { $0.app == "Excel" })
-        var s = ReviewSelection.toggleSlice(a.id, in: [])
-        s = ReviewSelection.toggleSlice(b.id, in: s)
-        try expect(ReviewSelection.isStackSelected(excel, in: s),
+    c.check("⇧-click spans from the anchor, inclusive, either direction — group rows select whole") {
+        var s = ReviewSelection()
+        s.click(.slice(b.id), in: stacks)
+        s.shiftClick(.stack(mail.id), rows: rows, in: stacks)
+        try expectEq(s.selected, Set([b.id, m.id]), "b through the Mail group row")
+        // The same endpoints upward: anchor below, target above.
+        var r = ReviewSelection()
+        r.click(.stack(mail.id), in: stacks)
+        r.shiftClick(.slice(a.id), rows: rows, in: stacks)
+        try expectEq(r.selected, Set([a.id, b.id, m.id]),
+                     "spanning upward crosses slice b too")
+    }
+
+    c.check("a span ACROSS group headers picks up the whole groups in between") {
+        var s = ReviewSelection()
+        s.click(.stack(excel.id), in: stacks)
+        s.shiftClick(.stack(xcode.id), rows: rows, in: stacks)
+        try expectEq(s.selected, Set([a.id, b.id, m.id, x.id]),
+                     "Mail sits between the endpoints and lands whole")
+    }
+
+    c.check("successive ⇧-clicks RE-span from the same anchor — NSTableView, never accumulate") {
+        var s = ReviewSelection()
+        s.click(.slice(a.id), in: stacks)
+        s.shiftClick(.stack(xcode.id), rows: rows, in: stacks)
+        try expectEq(s.selected, Set([a.id, b.id, m.id, x.id]))
+        s.shiftClick(.slice(b.id), rows: rows, in: stacks)
+        try expectEq(s.selected, Set([a.id, b.id]),
+                     "the shorter span drops Mail and Xcode — shift moved the far end, not the anchor")
+    }
+
+    c.check("the anchor is the most recent NON-shift click — ⌘-click moves it, ⇧ doesn't") {
+        var s = ReviewSelection()
+        s.click(.slice(m.id), in: stacks)          // {m}, anchor m
+        s.commandClick(.slice(a.id), in: stacks)   // {m,a}, anchor now a
+        s.shiftClick(.slice(b.id), rows: rows, in: stacks)
+        try expectEq(s.selected, Set([m.id, a.id, b.id]),
+                     "span runs a→b from the ⌘ anchor; m predates the anchor and survives")
+        try expectEq(s.anchor, .slice(a.id), "⇧ left the anchor where the ⌘-click put it")
+    }
+
+    c.check("⇧-click with no anchor, or a vanished one, degrades to a plain click — never a guess") {
+        var s = ReviewSelection()
+        s.shiftClick(.slice(b.id), rows: rows, in: stacks)
+        try expectEq(s.selected, [b.id], "first click of a session")
+        // The anchor row can be assigned away (or its stack collapsed)
+        // between clicks — it is no longer on display.
+        var v = ReviewSelection()
+        v.click(.stack(mail.id), in: stacks)
+        let remaining = [a, b, x].stacked()
+        let rowsNow: [ReviewRow] = [.stack(excel.id), .slice(a.id), .slice(b.id),
+                                    .stack(xcode.id)]
+        v.shiftClick(.slice(a.id), rows: rowsNow, in: remaining)
+        try expectEq(v.selected, [a.id])
+    }
+
+    c.check("group state IS per-slice membership — ⌘-selecting both slices singly selects the group") {
+        var s = ReviewSelection()
+        s.click(.slice(a.id), in: stacks)
+        s.commandClick(.slice(b.id), in: stacks)
+        try expect(ReviewSelection.isStackSelected(excel, in: s.selected),
                    "no separate group flag to fall out of sync")
     }
 
@@ -792,10 +860,10 @@ func reviewSelectionChecks(_ c: Checks) {
         // The assign bar's certainty contract: group-selected slices land
         // in the SAME per-slice list as individually clicked ones, so the
         // mean (AdjacencyBoost.aggregate) covers ALL selected slices.
-        let excel = try unwrap(stacks.first { $0.app == "Excel" })
-        var s = ReviewSelection.toggleStack(excel, in: [])
-        s = ReviewSelection.toggleSlice(m.id, in: s)
-        let scoped = ReviewSelection.segments(of: s, in: stacks)
+        var s = ReviewSelection()
+        s.click(.stack(excel.id), in: stacks)
+        s.commandClick(.slice(m.id), in: stacks)
+        let scoped = ReviewSelection.segments(of: s.selected, in: stacks)
         try expectEq(Set(scoped.map(\.id)), Set([a.id, b.id, m.id]))
         let agg = AdjacencyBoost.aggregate(scoped.map { _ in
             AdjacencyBoost(base: 0.6, certainty: 0.6)
@@ -805,37 +873,40 @@ func reviewSelectionChecks(_ c: Checks) {
     }
 
     c.check("assigning removes the slices; pruning + the scope recalculate over what remains") {
-        let excel = try unwrap(stacks.first { $0.app == "Excel" })
-        let all = ReviewSelection.selecting(stacks, in: [])
+        var s = ReviewSelection()
+        s.click(.stack(excel.id), in: stacks)
+        s.commandClick(.stack(mail.id), in: stacks)
         // Slice `a` is assigned away: the queue reloads without it.
         let remaining = [b, m].stacked()
-        try expectEq(ReviewSelection.pruned(all, to: remaining), Set([b.id, m.id]),
-                     "stale ids never linger in counts or aggregates")
-        try expectEq(ReviewSelection.segments(of: all, in: remaining).map(\.id).count, 2,
+        try expectEq(ReviewSelection.segments(of: s.selected, in: remaining).map(\.id).count, 2,
                      "the scope self-prunes even before an explicit prune")
+        s.prune(to: remaining)
+        try expectEq(s.selected, Set([b.id, m.id]),
+                     "stale ids never linger in counts or aggregates")
         // …and the one-slice Excel stack now reads selected from `b` alone.
         let excelNow = try unwrap(remaining.first { $0.id == excel.id })
         try expect(ReviewSelection.isStackSelected(excelNow, in: [b.id]))
     }
 
-    c.check("the shift-click sweep adds every slice of the covered stacks — the old stack range, absorbed") {
-        // Martin's backlog flow survives the model change: sort, click the
-        // top header, shift-click at the cutoff — every stack in between
-        // lands whole in the selection, ADDITIVELY.
-        let ordered = stacks.sorted(by: .oldestFirst)
-        let range = ReviewRangeSelect.range(in: ordered.map(\.id),
-                                            from: ordered.first?.id,
-                                            to: ordered[1].id)
-        let swept = ReviewSelection.selecting(ordered.filter { range.contains($0.id) },
-                                              in: [m.id])
-        try expect(swept.contains(m.id), "a sweep extends the selection, never clears it")
-        try expectEq(swept.count, 3, "both covered stacks' slices plus the prior lone slice")
+    c.check("clear empties everything — what an assign leaves behind") {
+        var s = ReviewSelection()
+        s.click(.stack(excel.id), in: stacks)
+        s.clear()
+        try expectEq(s.selected, [])
+        try expectNil(s.anchor)
+        s.shiftClick(.stack(mail.id), rows: rows, in: stacks)
+        try expectEq(s.selected, [m.id], "post-clear ⇧ has no anchor to span from")
     }
 
-    c.check("an empty stack is never 'selected'") {
+    c.check("an empty stack is never 'selected'; clicking one selects nothing") {
         let empty = ReviewStack(segments: [], app: "Ghost", windowTitle: nil, tabURL: nil,
                                 total: 0, first: t0, last: t0)
         try expect(!ReviewSelection.isStackSelected(empty, in: [a.id]))
+        var s = ReviewSelection()
+        s.click(.stack(empty.id), in: [empty])
+        try expectEq(s.selected, [])
+        s.commandClick(.stack(empty.id), in: [empty])
+        try expectEq(s.selected, [], "⌘ on an empty group is a no-op, not a phantom toggle")
     }
 }
 

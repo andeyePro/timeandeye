@@ -40,26 +40,3 @@ public extension Array where Element == ReviewStack {
         }
     }
 }
-
-/// Range selection over the drawer's CURRENT display order — sort first,
-/// then range. Pure index math so the semantics are checkable off-Mac;
-/// the macOS drawer's List gets this behaviour from AppKit's own
-/// extended selection (shift-click / ⇧↑⇧↓), and this helper is the same
-/// contract for surfaces without an NSTableView under them (the iOS
-/// drawer, or a custom row layout later).
-public enum ReviewRangeSelect {
-    /// The inclusive contiguous run of stack ids between `anchor` (the row
-    /// last plainly clicked) and `target` (the row shift-clicked), in
-    /// `orderedIDs` — the displayed order, whatever the sort. Endpoint
-    /// direction doesn't matter (shift-click above or below the anchor).
-    /// A nil or vanished anchor (first click of a session, or the anchor
-    /// row was assigned away meanwhile) degrades to just the target; a
-    /// vanished target selects nothing — never a guess.
-    public static func range(in orderedIDs: [String], from anchor: String?,
-                             to target: String) -> Set<String> {
-        guard let ti = orderedIDs.firstIndex(of: target) else { return [] }
-        guard let anchor, let ai = orderedIDs.firstIndex(of: anchor) else { return [target] }
-        let lo = Swift.min(ai, ti), hi = Swift.max(ai, ti)
-        return Set(orderedIDs[lo...hi])
-    }
-}

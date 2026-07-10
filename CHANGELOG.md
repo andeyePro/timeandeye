@@ -2,6 +2,38 @@
 
 ## 2026-07-10
 
+- [x] **Review drawer selection goes native: click replaces, ⌘-click
+  toggles, ⇧-click spans; brighter accent highlight; bigger twisty
+  targets.** Martin's follow-up on the morning's click-to-toggle model:
+  "You appear to have moved to a darker and harder to discern blue than
+  before. And you have used an unconventional and unintuitive selection
+  criteria. Can we have the macOS default …? The twisty … is now much
+  harder to successfully click." Three fixes, keeping everything he
+  liked (mixed group+slice selections, aggregated assign-bar certainty,
+  ⌫/⌘D/⌘E, lazy detail, assign-recalculates). (1) *Semantics*:
+  `ReviewSelection` (Core) is now a value type carrying the selection
+  plus the span anchor, speaking NSTableView: plain click REPLACES the
+  selection with the clicked row (a stack's header/left margin = the
+  whole group), ⌘-click toggles a row in/out (partial group completes;
+  full group leaves whole), ⇧-click spans from the most recent non-shift
+  click through the clicked row over the FLATTENED visible row order
+  (`ReviewRow`: group rows and slices interleaved, so a span across
+  headers takes the groups in between whole); successive shifts re-span
+  from the same anchor over the selection that predated it; a vanished
+  anchor degrades to a plain click. `ReviewRangeSelect` (the stack-id
+  range helper it absorbed) is deleted. (2) *Tint*: the 0.22-opacity
+  accent wash (murky on the drawer's dark background) is replaced by the
+  solid `Color.accentColor` fill a native List row shows, with selected
+  text going white (primary) / white-85 (secondary) so it stays legible.
+  (3) *Twisty*: both disclosure chevrons get a 20×18pt hit target and sit
+  OUTSIDE the row's selection click surface — opening never changes the
+  selection. Checks rewritten to pin the native matrix (replace incl.
+  re-click, group-as-row, ⌘ partial-completes/full-removes, span both
+  directions + across headers, re-span, ⌘-moves-anchor/⇧-doesn't,
+  degraded anchor, prune, clear, empty-stack no-op) and the sort-then-span
+  backlog flow. Manual (site keyboard + attribution pages, MANUAL.md)
+  rewritten to the Finder-familiar wording. Suite 765/0.
+
 - [x] **Pie colour editing: legend swatches open a colour-editor popover
   (project + task), with reset-to-automatic and undo.** Martin, twice:
   "I can see no way of editing any colours in the pie" — the only

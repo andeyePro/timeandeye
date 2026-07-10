@@ -2,6 +2,15 @@
 
 ## Review drawer (Martin's critique, 2026-07-10)
 
+- [x] Martin's third pass — DONE 2026-07-10: the click-to-toggle model
+  (below) was "unconventional and unintuitive", the selection blue "darker
+  and harder to discern", the twisty "much harder to successfully click".
+  Selection is now the macOS default (`ReviewSelection` value type: click
+  replaces, ⌘-click toggles, ⇧-click spans from the last non-shift click
+  over the flattened visible rows — NSTableView anchor rules), the
+  highlight is the solid native accent fill with white text, and both
+  twisties have 20×18pt targets outside the selection click surface.
+  `ReviewRangeSelect` absorbed and deleted.
 - [x] Martin's live drawer feedback, second pass — DONE 2026-07-10:
   (1) expand-all was "intolerably slow" — per-slice ±30-day journal query
   + full ranker explain ran synchronously in EVERY render pass for every

@@ -82,13 +82,15 @@ floor"). Briefer glances stay tracked and journalled as normal - they just
 never queue, however often they repeat - because a moment too brief to
 switch tracking is never worth naming.
 
-Selecting is one click: click a visit to highlight it, click again to
-deselect; click a row's header - or the strip down its left edge while
-it's open - to select or deselect its whole group. A selection mixes
-freely: whole groups here, single visits there, across any number of rows.
+Selecting works like the Finder: click a visit to select it, or click a
+row's header - or the strip down its left edge while it's open - to select
+its whole group. ⌘-click adds or removes a row without disturbing the
+rest; ⇧-click selects everything between the last row you clicked and this
+one, whole groups and single visits alike. A selection mixes freely:
+whole groups here, single visits there, across any number of rows.
 Clearing a backlog? Sort the queue from the control at the top - newest,
-oldest, longest or shortest - then click the top row's header and
-shift-click another to select every group between them. One press of
+oldest, longest or shortest - then click the top row and shift-click at
+the cutoff to select everything in between. One press of
 **Clear**, **Unknown** or a task then handles everything selected - so
 does ⌫ for Clear - and one ⌘Z brings it all back. **Clear** drops the
 selection from the queue without adding it to timesheets and without

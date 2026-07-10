@@ -75,21 +75,108 @@ public extension Array where Element == ReviewSegment {
     }
 }
 
-/// The drawer's unified click-to-select model (Martin, 2026-07-10: "just
-/// click the individual item to toggle a blue highlight on it, with the
-/// header and left margin doing the same for a whole group"). The selection
-/// IS a set of slice ids — there is no separate "group selected" state: a
-/// stack reads selected exactly when every one of its slices is, so a
-/// selection can freely mix lone slices with whole groups and the assign
+/// One row of the drawer as the eye sees it, in flattened display order:
+/// a GROUP row (a stack's header, or the strip down its left edge) or one
+/// slice inside an expanded group. Selection gestures speak in rows; the
+/// selection itself stays a flat set of slice ids — a group row simply
+/// stands for every slice in its stack.
+public enum ReviewRow: Hashable, Sendable {
+    case stack(String)
+    case slice(UUID)
+}
+
+/// The drawer's selection, with the standard macOS semantics (Martin,
+/// 2026-07-10, second pass: "Can we have the macOS default: single click
+/// changes selection, shift click spans, cmd click toggles"): a plain
+/// click REPLACES the selection with the clicked row; ⌘-click TOGGLES the
+/// row in or out without disturbing the rest; ⇧-click SPANS from the
+/// anchor — the most recent NON-shift click — through the clicked row in
+/// the flattened visible row order, so a span across group headers picks
+/// up the whole groups and slices in between. NSTableView's anchor rules:
+/// successive shift-clicks RE-span from the same anchor (they never
+/// accumulate), and the selection that existed when the anchor was set
+/// survives underneath a span. A group row stands for all of its slices,
+/// so a stack reads selected exactly when every one of its slices is, a
+/// selection freely mixes lone slices with whole groups, and the assign
 /// bar's certainty aggregates over the SAME per-slice list either way.
-/// Pure set maths so the CLT-only loop can check it; the drawer just
-/// renders membership.
-public enum ReviewSelection {
-    /// Clicking a slice row: toggle its highlight.
-    public static func toggleSlice(_ id: UUID, in selection: Set<UUID>) -> Set<UUID> {
-        var s = selection
-        if s.contains(id) { s.remove(id) } else { s.insert(id) }
-        return s
+/// Pure value semantics so the CLT-only loop can check it; the drawer
+/// just renders membership.
+public struct ReviewSelection: Equatable, Sendable {
+    /// The selected slice ids — all the view highlights, all the bar scopes.
+    public private(set) var selected: Set<UUID> = []
+    /// The span anchor: the row of the most recent plain or ⌘ click.
+    public private(set) var anchor: ReviewRow?
+    /// The selection as it stood when the anchor was set — what every
+    /// ⇧-span from that anchor builds ON, so a second shift-click re-spans
+    /// (dropping the first span's extras) instead of accumulating.
+    private var anchorBase: Set<UUID> = []
+
+    public init() {}
+
+    /// The slice ids a row stands for: itself, or its stack's whole group.
+    public static func ids(of row: ReviewRow, in stacks: [ReviewStack]) -> Set<UUID> {
+        switch row {
+        case .slice(let id): return [id]
+        case .stack(let key):
+            guard let stack = stacks.first(where: { $0.id == key }) else { return [] }
+            return Set(stack.segments.map(\.id))
+        }
+    }
+
+    /// Plain click: the clicked row becomes the selection (and the anchor).
+    public mutating func click(_ row: ReviewRow, in stacks: [ReviewStack]) {
+        selected = Self.ids(of: row, in: stacks)
+        anchor = row
+        anchorBase = selected
+    }
+
+    /// ⌘-click: toggle the row in or out. A group that is only PARTLY
+    /// selected completes (a group click means "all of this"); only a
+    /// fully-selected group toggles out. The row becomes the anchor.
+    public mutating func commandClick(_ row: ReviewRow, in stacks: [ReviewStack]) {
+        let ids = Self.ids(of: row, in: stacks)
+        if !ids.isEmpty, ids.isSubset(of: selected) {
+            selected.subtract(ids)
+        } else {
+            selected.formUnion(ids)
+        }
+        anchor = row
+        anchorBase = selected
+    }
+
+    /// ⇧-click: select everything between the anchor and the clicked row —
+    /// inclusive, either direction — in `rows`, the drawer's CURRENT
+    /// flattened visible order (sort first, then span). The anchor stays
+    /// put, so the next shift-click re-spans from the same place. No
+    /// anchor yet (first click of a session), or an anchor row no longer
+    /// on display (assigned away, or its stack collapsed), degrades to a
+    /// plain click on the target — never a guess.
+    public mutating func shiftClick(_ row: ReviewRow, rows: [ReviewRow],
+                                    in stacks: [ReviewStack]) {
+        guard let ti = rows.firstIndex(of: row) else { return }
+        guard let anchor, let ai = rows.firstIndex(of: anchor) else {
+            click(row, in: stacks)
+            return
+        }
+        let lo = Swift.min(ai, ti), hi = Swift.max(ai, ti)
+        var span = Set<UUID>()
+        for r in rows[lo...hi] { span.formUnion(Self.ids(of: r, in: stacks)) }
+        selected = anchorBase.union(span)
+    }
+
+    /// Drop ids of slices assigned away meanwhile, so counts and certainty
+    /// aggregates recalculate over what actually remains.
+    public mutating func prune(to stacks: [ReviewStack]) {
+        let live = stacks.everySliceID
+        selected.formIntersection(live)
+        anchorBase.formIntersection(live)
+    }
+
+    /// Nothing selected — what an assign leaves behind.
+    public mutating func clear() {
+        selected = []
+        anchor = nil
+        anchorBase = []
     }
 
     /// A stack is selected when EVERY slice in it is — the header and left
@@ -98,36 +185,10 @@ public enum ReviewSelection {
         !stack.segments.isEmpty && stack.segments.allSatisfy { selection.contains($0.id) }
     }
 
-    /// Clicking a stack's header or left margin: a fully-selected stack
-    /// deselects whole; anything less (none or PART of it selected)
-    /// completes the group — a group click means "all of this", so a
-    /// partial selection is finished, never cleared.
-    public static func toggleStack(_ stack: ReviewStack, in selection: Set<UUID>) -> Set<UUID> {
-        var s = selection
-        if isStackSelected(stack, in: selection) {
-            for segment in stack.segments { s.remove(segment.id) }
-        } else {
-            for segment in stack.segments { s.insert(segment.id) }
-        }
-        return s
-    }
-
-    /// Shift-click sweep (absorbing the old stack-level range select): add
-    /// every slice of the covered stacks to the selection. Additive — a
-    /// sweep extends what's already highlighted, it never clears it.
-    public static func selecting(_ stacks: [ReviewStack], in selection: Set<UUID>) -> Set<UUID> {
-        selection.union(stacks.flatMap(\.segments).map(\.id))
-    }
-
-    /// Drop ids of slices assigned away meanwhile, so counts and certainty
-    /// aggregates recalculate over what actually remains.
-    public static func pruned(_ selection: Set<UUID>, to stacks: [ReviewStack]) -> Set<UUID> {
-        selection.intersection(stacks.everySliceID)
-    }
-
     /// The selected slices, enumerated per-slice in queue order — what the
     /// assign bar scopes to and what its certainty means: group-selected
-    /// slices land in the SAME list as individually-clicked ones.
+    /// slices land in the SAME list as individually-clicked ones. Reading
+    /// through the CURRENT stacks self-prunes ids assigned away meanwhile.
     public static func segments(of selection: Set<UUID>, in stacks: [ReviewStack]) -> [ReviewSegment] {
         stacks.flatMap(\.segments).filter { selection.contains($0.id) }
     }

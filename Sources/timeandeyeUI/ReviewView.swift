@@ -4,12 +4,15 @@ import timeandeyeMac
 
 /// The low-certainty review queue: stacked by default (2026-07-06 spec §2/§4,
 /// approvals-drawer v1) — one row per identical surface (app · window title ·
-/// tab URL), not one row per slice. Selection is unified click-to-select
-/// (Martin, 2026-07-10, replacing the per-slice Assign button): clicking a
-/// slice toggles its accent highlight; clicking a stack's header or left
-/// margin toggles the whole group; shift-clicking a header sweeps every
-/// group between it and the last header clicked (absorbing the 2026-07-09
-/// stack-range sweep — sort first via the header control, then range). A
+/// tab URL), not one row per slice. Selection follows the macOS default
+/// (Martin, 2026-07-10, second pass: "single click changes selection, shift
+/// click spans, cmd click toggles"): a plain click replaces the selection
+/// with the clicked row (a stack's header or left margin means the whole
+/// group), ⌘-click toggles a row in or out, ⇧-click spans from the last
+/// non-shift click through the clicked row in the visible order — groups
+/// and slices alike (`ReviewSelection`, Core-checked; sort first via the
+/// header control, then span). Rows highlight with the solid accent fill a
+/// native List uses, text going white. A
 /// selection freely mixes lone slices and whole groups, and the assign bar
 /// below acts on ALL of it: its per-task certainty is the mean over every
 /// selected slice, group-selected ones included. Assigning removes exactly
@@ -26,12 +29,10 @@ import timeandeyeMac
 /// ⌫ with a selection is Clear too.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
-    /// The selection — slice ids only (`ReviewSelection`): a "selected
-    /// group" is just all of its slices being members.
-    @State private var selectedSlices = Set<UUID>()
-    /// The stack whose header was last clicked — the shift-click sweep's
-    /// anchor, in the CURRENT display order.
-    @State private var anchorStack: String?
+    /// The selection (`ReviewSelection`, Core-checked): a flat set of slice
+    /// ids plus the span anchor — a "selected group" is just all of its
+    /// slices being members.
+    @State private var selection = ReviewSelection()
     @State private var expanded = Set<String>()
     /// Slices whose full-detail disclosure is open (keyed by segment id).
     @State private var sliceDetail = Set<UUID>()
@@ -119,25 +120,37 @@ struct ReviewView: View {
         stacks.map { (surfaceKey($0), $0) }
     }
 
-    /// A header or left-margin click: shift extends from the anchor (the
-    /// old stack-range sweep, absorbed — sort first, click the top, shift-
-    /// click at the cutoff); a plain click toggles the whole group
-    /// (`ReviewSelection.toggleStack` — a partial selection completes,
-    /// never clears). Either way this stack becomes the next anchor.
-    private func headerClicked(_ stack: ReviewStack) {
-        if NSEvent.modifierFlags.contains(.shift), anchorStack != nil {
-            let ordered = stacks.map(\.id)
-            let range = ReviewRangeSelect.range(in: ordered, from: anchorStack, to: stack.id)
-            selectedSlices = ReviewSelection.selecting(stacks.filter { range.contains($0.id) },
-                                                       in: selectedSlices)
-        } else {
-            selectedSlices = ReviewSelection.toggleStack(stack, in: selectedSlices)
+    /// The drawer's rows as the eye sees them right now, flattened in
+    /// display order: each stack's header (a group row), then — only while
+    /// that stack is open — its slices. What a ⇧-span runs over, so a span
+    /// across group headers picks up the whole groups in between.
+    private var visibleRows: [ReviewRow] {
+        var rows: [ReviewRow] = []
+        for stack in stacks {
+            rows.append(.stack(stack.id))
+            if expanded.contains(stack.id), stack.segments.count > 1 {
+                rows.append(contentsOf: stack.segments.map { ReviewRow.slice($0.id) })
+            }
         }
-        anchorStack = stack.id
+        return rows
+    }
+
+    /// One dispatch for every selectable row — a stack's header, its left
+    /// margin, or a slice: plain click replaces, ⌘ toggles, ⇧ spans from
+    /// the last non-shift click (`ReviewSelection`, the macOS default).
+    private func rowClicked(_ row: ReviewRow) {
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.shift) {
+            selection.shiftClick(row, rows: visibleRows, in: stacks)
+        } else if flags.contains(.command) {
+            selection.commandClick(row, in: stacks)
+        } else {
+            selection.click(row, in: stacks)
+        }
     }
 
     private func groupSelected(_ stack: ReviewStack) -> Bool {
-        ReviewSelection.isStackSelected(stack, in: selectedSlices)
+        ReviewSelection.isStackSelected(stack, in: selection.selected)
     }
 
     /// Core-checked predicate (`isFullyExpanded`): subset semantics, so ids
@@ -158,45 +171,76 @@ struct ReviewView: View {
         }
     }
 
+    /// Native emphasized-selection text: a selected row reads white on the
+    /// solid accent fill, exactly as a native List row does — primary and
+    /// secondary flavours.
+    private func rowStyle(_ selected: Bool) -> AnyShapeStyle {
+        selected ? AnyShapeStyle(Color.white) : AnyShapeStyle(.primary)
+    }
+
+    private func rowSecondaryStyle(_ selected: Bool) -> AnyShapeStyle {
+        selected ? AnyShapeStyle(Color.white.opacity(0.85)) : AnyShapeStyle(.secondary)
+    }
+
+    /// A disclosure twisty with a generous hit target (Martin, 2026-07-10:
+    /// it had become "much harder to successfully click"). It sits OUTSIDE
+    /// the row's selection click surface, so opening a group or a slice's
+    /// detail never changes what's selected.
+    private func disclosure(open: Bool, selected: Bool,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: open ? "chevron.down" : "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(rowSecondaryStyle(selected))
+                .frame(width: 20, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func stackRow(_ stack: ReviewStack) -> some View {
         let key = surfaceKey(stack)
         let multi = stack.segments.count > 1
         let selected = groupSelected(stack)
         return VStack(alignment: .leading, spacing: 2) {
-            HStack {
+            HStack(spacing: 2) {
                 // EVERY stack expands — a single-slice entry opens straight
                 // into its full detail ("clicking on an entry should reveal
                 // 100% of the data you have on it", Martin 2026-07-10).
-                Button {
+                disclosure(open: expanded.contains(key), selected: selected) {
                     if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
-                } label: {
-                    Image(systemName: expanded.contains(key) ? "chevron.down" : "chevron.right")
                 }
-                .buttonStyle(.plain).font(.caption2).foregroundStyle(.secondary)
-                VStack(alignment: .leading) {
-                    Text(stackTitle(stack)).lineLimit(1)
-                    if let url = stack.tabURL {
-                        Text(url).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(stackTitle(stack)).lineLimit(1)
+                            .foregroundStyle(rowStyle(selected))
+                        if let url = stack.tabURL {
+                            Text(url).font(.caption2).lineLimit(1)
+                                .foregroundStyle(rowSecondaryStyle(selected))
+                        }
+                    }
+                    Spacer()
+                    // Single-slice stacks look like today's rows (duration +
+                    // dated start); a stack the user hasn't split into slices
+                    // shouldn't read differently from the old flat list.
+                    if multi {
+                        Text(stackSummaryTail(stack)).font(.caption)
+                            .foregroundStyle(rowSecondaryStyle(selected))
+                    } else {
+                        Text(durationText(stack.total)).font(.caption)
+                            .foregroundStyle(rowSecondaryStyle(selected))
+                        Text(dayTimeText(stack.first)).font(.caption)
+                            .foregroundStyle(rowStyle(selected))
                     }
                 }
-                Spacer()
-                // Single-slice stacks look like today's rows (duration +
-                // dated start); a stack the user hasn't split into slices
-                // shouldn't read differently from the old flat list.
-                if multi {
-                    Text(stackSummaryTail(stack)).font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text(durationText(stack.total)).font(.caption).foregroundStyle(.secondary)
-                    Text(dayTimeText(stack.first)).font(.caption)
-                }
+                .contentShape(Rectangle())
+                .onTapGesture { rowClicked(.stack(stack.id)) }
+                .help("Click to select this group; ⌘-click to add or remove it; "
+                      + "⇧-click to select everything between here and the last row clicked")
             }
             .padding(2)
-            .background(selected ? Color.accentColor.opacity(0.22) : .clear,
+            .background(selected ? Color.accentColor : .clear,
                         in: RoundedRectangle(cornerRadius: 4))
-            .contentShape(Rectangle())
-            .onTapGesture { headerClicked(stack) }
-            .help("Click to select or deselect the whole group; "
-                  + "⇧-click to select every group between here and the last one clicked")
             calendarHintChip(for: stack)
             if expanded.contains(key) {
                 if multi {
@@ -209,8 +253,9 @@ struct ReviewView: View {
                             .frame(width: 3)
                             .frame(width: 12)   // wider hit target than the bar
                             .contentShape(Rectangle())
-                            .onTapGesture { headerClicked(stack) }
-                            .help("Select or deselect the whole group")
+                            .onTapGesture { rowClicked(.stack(stack.id)) }
+                            .help("Click to select this group; ⌘-click to add or remove it; "
+                                  + "⇧-click to select everything between here and the last row clicked")
                         VStack(alignment: .leading, spacing: 1) {
                             ForEach(stack.segments) { segment in
                                 sliceRow(segment)
@@ -226,38 +271,34 @@ struct ReviewView: View {
     }
 
     /// One slice inside an expanded stack: dated start + duration, its own
-    /// full-detail disclosure, and click-to-select (Martin, 2026-07-10,
-    /// replacing the per-slice Assign button he rejected): clicking the row
-    /// toggles its accent highlight, so one visit in a stack can go
-    /// somewhere different from its siblings by selecting just it — the
-    /// assign bar below acts on whatever is highlighted.
+    /// full-detail disclosure, and the same macOS selection as every other
+    /// row — click selects just this visit (so one visit in a stack can go
+    /// somewhere different from its siblings), ⌘-click adds or removes it,
+    /// ⇧-click spans to it; the assign bar below acts on whatever is
+    /// highlighted. The twisty sits outside the selectable surface.
     private func sliceRow(_ segment: ReviewSegment) -> some View {
-        let selected = selectedSlices.contains(segment.id)
+        let selected = selection.selected.contains(segment.id)
         return VStack(alignment: .leading, spacing: 1) {
-            HStack {
-                Group {
-                    Button {
-                        if sliceDetail.contains(segment.id) { sliceDetail.remove(segment.id) }
-                        else { sliceDetail.insert(segment.id) }
-                    } label: {
-                        Image(systemName: sliceDetail.contains(segment.id) ? "chevron.down" : "chevron.right")
-                    }
-                    .buttonStyle(.plain)
+            HStack(spacing: 2) {
+                disclosure(open: sliceDetail.contains(segment.id), selected: selected) {
+                    if sliceDetail.contains(segment.id) { sliceDetail.remove(segment.id) }
+                    else { sliceDetail.insert(segment.id) }
+                }
+                HStack {
                     Text(dayTimeText(segment.start))
                     Spacer()
                     Text(durationText(segment.end.timeIntervalSince(segment.start)))
                 }
-                .foregroundStyle(selected ? .primary : .secondary)
+                .foregroundStyle(selected ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
+                .contentShape(Rectangle())
+                .onTapGesture { rowClicked(.slice(segment.id)) }
+                .help("Click to select just this slice; ⌘-click to add or remove it; "
+                      + "⇧-click to select everything between here and the last row clicked")
             }
             .font(.caption2)
             .padding(2)
-            .background(selected ? Color.accentColor.opacity(0.22) : .clear,
+            .background(selected ? Color.accentColor : .clear,
                         in: RoundedRectangle(cornerRadius: 4))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                selectedSlices = ReviewSelection.toggleSlice(segment.id, in: selectedSlices)
-            }
-            .help("Click to select or deselect just this slice")
             if sliceDetail.contains(segment.id) {
                 sliceDetailView(segment).padding(.leading, 14)
             }
@@ -380,7 +421,7 @@ struct ReviewView: View {
                     // No rule yet: select just this group (every slice of
                     // it) and prefill the filter with the event title.
                     Button("Assign") {
-                        selectedSlices = ReviewSelection.selecting([stack], in: [])
+                        selection.click(.stack(stack.id), in: stacks)
                         filter = hint.eventTitle
                     }
                     .font(.caption2).buttonStyle(.borderless)
@@ -508,7 +549,7 @@ struct ReviewView: View {
     /// ids assigned away meanwhile, so the count and the aggregates always
     /// describe what a click would actually do.
     private var scopedSegments: [ReviewSegment] {
-        ReviewSelection.segments(of: selectedSlices, in: stacks)
+        ReviewSelection.segments(of: selection.selected, in: stacks)
     }
 
     /// The assign buttons in descending boosted-certainty order; tasks the
@@ -561,7 +602,7 @@ struct ReviewView: View {
         let segments = scopedSegments
         guard !segments.isEmpty else { return }
         controller.assignReview(segments.map(\.id), to: target)
-        selectedSlices.removeAll()
+        selection.clear()
         justAssigned = footerContext(for: segments, target: target)
         correspondentChecks = justAssigned.map { Set(ContextIdentity.correspondentChoices($0.signal)) } ?? []
     }
