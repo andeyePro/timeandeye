@@ -72,5 +72,8 @@ midnight. Day boundaries are marked with the date.
 - **Colours**: each project gets its own hue, and its tasks distinct shades
   around it - picked to stay tellable-apart (including under colour-blind
   vision) and never reshuffled: once a task has shown its colour, it keeps
-  it. Pick your own in the timeline's slice editor or a local task's
-  Settings row - your pick always wins.
+  it. **Click any legend swatch** to choose your own colour for that project
+  or task (Reset to automatic hands the choice back); your pick always wins,
+  and a recoloured project guides the shades its future tasks pick up. The
+  timeline's slice editor and a local task's Settings row offer the same
+  picker.

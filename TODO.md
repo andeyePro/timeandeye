@@ -696,12 +696,14 @@ and recorded rather than fixed blind:
   identity grain), Life period with All/Tracked/Untracked, colours.json
   sync (whole-record LWW) + iOS PhonePalette sharing the store (until
   then iOS still hash-derives, so auto colours differ across devices).
-- [ ] Pie colour editing (Martin, 2026-07-10: "I can see no way of
-  editing any colours in the pie") – the first slice of the
-  click-swatch-everywhere work above: legend project/task swatches (and
-  ring wedges) open the spec §5 popover editor (native picker,
-  `setColour`-style undo). Today the only editor is the timeline slice
-  editor's ColorPicker, which never surfaces in the pie.
+- [x] Pie colour editing (Martin, 2026-07-10: "I can see no way of
+  editing any colours in the pie") – SHIPPED 2026-07-10: legend
+  project/task swatches (and each row's "Edit colour…" context item)
+  open the spec §5 popover editor — native picker + "Reset to
+  automatic", undoable, project picks steering future task shades via
+  `settings.projectColours`. Ring-3 window wedges stay derived-only (no
+  per-window colour identity yet — that is the pin-identity-grain item
+  above); wedge right-click deferred with them.
 
 ## Hardware-test UI fixes (Martin, 2026-07-06) — Mac verification pending
 

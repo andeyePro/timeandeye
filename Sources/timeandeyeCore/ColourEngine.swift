@@ -224,25 +224,44 @@ public enum ColourEngine {
     /// saved overrides keep working unchanged.
     public static func effectiveHex(taskKey: String, projectKey: String?,
                                     override: String?,
+                                    anchorHueOverride: Double? = nil,
                                     in store: inout ColourAssignments,
                                     at now: Date = Date()) -> String {
         if let override, RGB255(hex: override) != nil { return override }
-        return taskHex(taskKey, projectKey: projectKey, in: &store, at: now)
+        return taskHex(taskKey, projectKey: projectKey,
+                       anchorHueOverride: anchorHueOverride, in: &store, at: now)
     }
 
     /// Stored-or-allocated task colour (no override layer).
+    /// `anchorHueOverride`: when the user has recoloured the PROJECT swatch
+    /// (a settings-level override — the anchor record itself never moves),
+    /// a NEW task shades around the override's hue so the family the user
+    /// chose is the family new work joins. Existing records are returned
+    /// untouched either way — the override steers first sight only.
     @discardableResult
     public static func taskHex(_ taskKey: String, projectKey: String?,
+                               anchorHueOverride: Double? = nil,
                                in store: inout ColourAssignments,
                                at now: Date = Date()) -> String {
         if let existing = store.tasks[taskKey] { return existing.hex }
         let anchor = projectRecord(projectKey ?? ColourAssignments.unfiledKey,
                                    in: &store, at: now)
-        let pick = allocateTask(anchorHue: anchor.hue, in: store)
+        let pick = allocateTask(anchorHue: anchorHueOverride ?? anchor.hue, in: store)
         store.tasks[taskKey] = ColourAssignments.TaskRecord(
             hex: rgb(from: pick).hex, L: pick.L, C: pick.C, H: pick.H,
             provenance: "auto", firstSeen: now)
         return store.tasks[taskKey]!.hex
+    }
+
+    /// The allocation hue a user's project-colour override contributes to
+    /// future task shading: the override's own OKLCH hue — unless the pick
+    /// is (near-)achromatic, where the hue is quantisation noise (see
+    /// `anchorHueChromaFloor`), so a grey pick steers nothing and the
+    /// anchor record's hue stays in charge. nil for undecodable hex too.
+    public static func overrideAnchorHue(hex: String) -> Double? {
+        guard let rgb = RGB255(hex: hex) else { return nil }
+        let c = oklch(from: rgb)
+        return c.C >= anchorHueChromaFloor ? c.H : nil
     }
 
     /// Stored-or-allocated project anchor. The record's `hex` is the swatch

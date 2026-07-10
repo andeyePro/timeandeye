@@ -111,6 +111,13 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
     public var taskColours: [String: String]
+    /// User colour overrides per project (stable project key -> hex) — the
+    /// pie's ring/legend swatch editor. Like `taskColours`, overrides live
+    /// HERE, never in the colour-engine's records: the engine's anchor stays
+    /// untouched underneath, so "reset to automatic" always has the exact
+    /// pre-override colour to fall back to and the repair pass can never
+    /// move a user's pick.
+    public var projectColours: [String: String]
     /// The email→task specificity ladder (general → specific); the most specific
     /// matching rule wins. User-reorderable.
     public var emailMatchOrder: [EmailMatchLevel]
@@ -207,6 +214,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 lockOnLeave: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:],
+                projectColours: [String: String] = [:],
                 emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
                 licenseKey: String? = nil,
                 journalSyncEnabled: Bool = false,
@@ -252,6 +260,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.lockOnLeave = lockOnLeave
         self.localTasks = localTasks
         self.taskColours = taskColours
+        self.projectColours = projectColours
         self.emailMatchOrder = emailMatchOrder
         self.licenseKey = licenseKey
         self.journalSyncEnabled = journalSyncEnabled
@@ -307,6 +316,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         lockOnLeave = c.lenient(.lockOnLeave, or: defaults.lockOnLeave)
         localTasks = c.lenient(.localTasks, or: defaults.localTasks)
         taskColours = c.lenient(.taskColours, or: defaults.taskColours)
+        projectColours = c.lenient(.projectColours, or: defaults.projectColours)
         // Decode the ladder as raw strings and map known levels, so a renamed /
         // unknown level can never throw (which would wipe the whole file). Only a
         // COMPLETE, valid order is honoured; anything else → the default order.

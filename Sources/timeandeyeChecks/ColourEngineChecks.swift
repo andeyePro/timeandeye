@@ -636,6 +636,80 @@ func colourEngineChecks(_ c: Checks) {
         try expectEq(store.projects["op/id:14"], anchor)
     }
 
+    c.check("project override steers future task shading only; records never move and reset falls back to them (pie swatch editor)") {
+        // The pie's project-swatch editor writes a settings-level override —
+        // the anchor record must stay byte-identical underneath (that is
+        // what "reset to automatic" falls back to), while a NEW task shades
+        // around the override's hue so the family the user chose is the
+        // family new work joins. Already-seen tasks keep their colours:
+        // stability cuts both ways.
+        var store = ColourAssignments()
+        let anchor = ColourEngine.projectRecord("op/id:14", in: &store, at: t0)
+        let before = ColourEngine.taskHex("op:1", projectKey: "op/id:14",
+                                          in: &store, at: t0)
+        let overrideHue = try unwrap(ColourEngine.overrideAnchorHue(hex: "#D96020"),
+                                     "a chromatic override must contribute a hue")
+        // The override steers the newcomer…
+        _ = ColourEngine.taskHex("op:2", projectKey: "op/id:14",
+                                 anchorHueOverride: overrideHue, in: &store, at: t0)
+        let h2 = try unwrap(store.tasks["op:2"]?.H)
+        var d2 = abs(h2 - overrideHue).truncatingRemainder(dividingBy: 360)
+        d2 = min(d2, 360 - d2)
+        try expect(d2 <= 25.0001, "new task hue \(h2) outside the override's neighbourhood")
+        // …but moves nothing that already exists.
+        try expectEq(store.projects["op/id:14"], anchor,
+                     "a project override must never rewrite the anchor record")
+        try expectEq(ColourEngine.taskHex("op:1", projectKey: "op/id:14",
+                                          anchorHueOverride: overrideHue, in: &store),
+                     before, "an existing task record must be returned untouched")
+        // Reset semantics: with the override gone, allocation shades around
+        // the record's own hue again — the automatic family was never lost.
+        _ = ColourEngine.taskHex("op:3", projectKey: "op/id:14", in: &store, at: t0)
+        let h3 = try unwrap(store.tasks["op:3"]?.H)
+        var d3 = abs(h3 - anchor.hue).truncatingRemainder(dividingBy: 360)
+        d3 = min(d3, 360 - d3)
+        try expect(d3 <= 25.0001, "post-reset allocation ignored the record's hue")
+    }
+
+    c.check("achromatic or invalid project override steers nothing (a grey's hue is noise)") {
+        // Same guard as the repair's achromatic rule: a grey hex has OKLCH
+        // chroma ≈ 0, so its hue is atan2 quantisation noise — shading a
+        // project's future tasks around it would match nothing the user
+        // picked. The grey still WINS for display (the override layer);
+        // only the allocation steer is withheld.
+        try expectNil(ColourEngine.overrideAnchorHue(hex: "#888888"),
+                      "a grey override must not contribute a hue")
+        try expectNil(ColourEngine.overrideAnchorHue(hex: "not-a-hex"))
+        let hue = try unwrap(ColourEngine.overrideAnchorHue(hex: "#7CC7E8"))
+        try expectClose(hue, ColourEngine.oklch(from: RGB255(hex: "#7CC7E8")!).H,
+                        accuracy: 0.0001, "a chromatic override contributes its own hue")
+    }
+
+    c.check("task override outranks the engine even after the anchor repair re-shades its record; reset returns the repaired truth") {
+        // Overrides are sacred across the repair: the cohort re-shade may
+        // move an "auto" RECORD, but the user's settings-level pick still
+        // wins for display, and removing it falls back to the re-shaded
+        // record — the engine's current truth, not the pre-repair shade.
+        var store = ColourAssignments()
+        ColourEngine.snapshotLegacy(taskKey: "op:1", hex: "#7CC7E8", in: &store, at: t0)
+        _ = ColourEngine.taskHex("op:2", projectKey: "op/id:14", in: &store, at: t0)
+        try expect(ColourEngine.repairProjectAnchor(projectKey: "op/id:14",
+                                                    memberTaskKeys: ["op:1", "op:2"],
+                                                    overrides: ["op:2": "#123456"],
+                                                    storeLoadedPreV2: true,
+                                                    in: &store, at: t0))
+        let recordCountBefore = store.recordCount
+        try expectEq(ColourEngine.effectiveHex(taskKey: "op:2", projectKey: "op/id:14",
+                                               override: "#123456", in: &store, at: t0),
+                     "#123456", "the user's pick must win post-repair")
+        try expectEq(ColourEngine.effectiveHex(taskKey: "op:2", projectKey: "op/id:14",
+                                               override: nil, in: &store, at: t0),
+                     store.tasks["op:2"]?.hex,
+                     "reset must fall back to the re-shaded record")
+        try expectEq(store.recordCount, recordCountBefore,
+                     "resolution reads must not mint records")
+    }
+
     c.check("unknown-project tasks share the 'unfiled' neighbourhood, deterministically") {
         // A ref no longer in any cache still needs a stable colour; unfiled
         // tasks share one anchor rather than scattering, and keep the colour

@@ -2,6 +2,33 @@
 
 ## 2026-07-10
 
+- [x] **Pie colour editing: legend swatches open a colour-editor popover
+  (project + task), with reset-to-automatic and undo.** Martin, twice:
+  "I can see no way of editing any colours in the pie" — the only
+  editor was the timeline slice editor's ColorPicker. Now every legend
+  swatch (project row and expanded task row) is a button: click it (or
+  the row context menu's "Edit colour…") for a popover with the native
+  picker, a "your pick / automatic" state line, and **Reset to
+  automatic**. Task picks use the existing `settings.taskColours`
+  override path; project picks get a parallel `settings.projectColours`
+  override (stable project key → hex) that wins for display while the
+  ColourEngine's anchor record stays byte-identical underneath — so the
+  repair pass can never move a user's pick and reset always restores
+  the exact automatic colour. A recoloured project steers FUTURE task
+  shading (`ColourEngine.overrideAnchorHue` feeds `taskHex`'s new
+  `anchorHueOverride`; achromatic/grey picks steer nothing — their hue
+  is quantisation noise); already-seen task records never move. All
+  four actions (set/reset × project/task) register with the app-wide
+  ⌘Z; propagation is live everywhere colours render (settings is
+  `@Published`; overrides never touch colours.json). Ring-3 window
+  wedges remain derived from the task colour — per-window colour
+  identity (pin-grain records) is still open in TODO, and wedge
+  right-click editing is deferred with it. Checks: override steering +
+  record immutability + reset fallback, achromatic-override guard,
+  override-outranks-engine-post-repair (ColourEngineChecks). Manual
+  (site time-window page + MANUAL.md) gains the one-line "click any
+  legend swatch" instruction.
+
 - [x] **Review drawer: instant expand-all, and click-to-select replaces
   the per-slice Assign button.** Martin's live feedback, two calls.
   (1) *Perf*: Expand all was "intolerably slow" — every open slice

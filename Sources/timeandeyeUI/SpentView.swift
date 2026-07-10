@@ -10,6 +10,9 @@ import timeandeyeMac
 /// the ✕-marked legend row identify the hovered segment instead.
 /// "OpenProject only" hides local/personal time; with it off, non-OP wedges
 /// are drawn desaturated with a dashed outline (and "local" in the legend).
+/// Legend swatches are the colour editor: clicking one (or "Edit colour…"
+/// on the row's context menu) opens a popover picker whose pick is a user
+/// override, with a reset back to the automatic colour.
 struct SpentView: View {
     @ObservedObject var controller: AppController
     /// In-window navigation to the timeline (and the second-window escape hatch).
@@ -43,6 +46,9 @@ struct SpentView: View {
     /// The last billable flip's report — presents the cascade/stranded alert.
     @State private var flipReport: BillableFlipReport?
     @State private var showFlipAlert = false
+    /// The legend swatch whose colour-editor popover is open (swatch click,
+    /// or a row context menu's "Edit colour…").
+    @State private var colourEdit: ColourEditTarget?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -617,36 +623,46 @@ struct SpentView: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
                     let local = isLocalProject(node)
-                    Button {
-                        pinned = pinned == .project(node.label) ? .none : .project(node.label)
-                    } label: {
-                        HStack(spacing: 6) {
-                            swatch(colour(project: node, index: i),
-                                   marked: activeProjectIndex() == i, local: local, size: 11)
-                            Text(node.label).lineLimit(1)
-                            if local {
-                                Text("local").font(.system(size: 8))
-                                    .padding(.horizontal, 3)
-                                    .background(.quaternary, in: Capsule())
+                    let projectTarget = colourTarget(project: node)
+                    HStack(spacing: 6) {
+                        swatchButton(projectTarget,
+                                     colour: colour(project: node, index: i),
+                                     marked: activeProjectIndex() == i,
+                                     local: local, size: 11)
+                        Button {
+                            pinned = pinned == .project(node.label) ? .none : .project(node.label)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(node.label).lineLimit(1)
+                                if local {
+                                    Text("local").font(.system(size: 8))
+                                        .padding(.horizontal, 3)
+                                        .background(.quaternary, in: Capsule())
+                                }
+                                if controller.isProjectBillable(named: node.label) {
+                                    Text("billable").font(.system(size: 8))
+                                        .padding(.horizontal, 3)
+                                        .background(.quaternary, in: Capsule())
+                                }
+                                Spacer()
+                                Text(hm(node.seconds)).foregroundStyle(.secondary)
                             }
-                            if controller.isProjectBillable(named: node.label) {
-                                Text("billable").font(.system(size: 8))
-                                    .padding(.horizontal, 3)
-                                    .background(.quaternary, in: Capsule())
-                            }
-                            Spacer()
-                            Text(hm(node.seconds)).foregroundStyle(.secondary)
+                            .contentShape(Rectangle())
                         }
-                        .font(.caption)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .contextMenu { projectBillableMenu(node.label) }
+                    .font(.caption)
+                    .contextMenu {
+                        projectBillableMenu(node.label)
+                        editColourItem(projectTarget)
+                    }
                     if activeProjectIndex() == i {
                         ForEach(Array(node.children.enumerated()), id: \.offset) { j, task in
+                            let taskTarget = colourTarget(task: task)
                             HStack(spacing: 6) {
-                                swatch(taskColour(task), marked: isActiveTask(j),
-                                       local: local, size: 9)
+                                swatchButton(taskTarget, colour: taskColour(task),
+                                             marked: isActiveTask(j),
+                                             local: local, size: 9)
                                 Text(task.label).lineLimit(1)
                                 Spacer()
                                 Text(hm(task.seconds)).foregroundStyle(.secondary)
@@ -656,7 +672,10 @@ struct SpentView: View {
                             .background(isActiveTask(j)
                                 ? Color.accentColor.opacity(0.12) : .clear)
                             .contentShape(Rectangle())
-                            .contextMenu { taskBillableMenu(task) }
+                            .contextMenu {
+                                taskBillableMenu(task)
+                                editColourItem(taskTarget)
+                            }
                         }
                     }
                 }
@@ -665,6 +684,113 @@ struct SpentView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    // MARK: - Colour editing (click a legend swatch)
+
+    /// A swatch under edit. At task level `ref` is the task itself; at
+    /// project level it is any child ref — the controller resolves the
+    /// stable project key through it (`projectColour(containing:)` shape).
+    private struct ColourEditTarget: Equatable {
+        enum Level { case project, task }
+        let level: Level
+        let ref: TaskRef
+        let label: String
+    }
+
+    /// nil when no child ref resolves (nothing to key the record on).
+    private func colourTarget(project node: TimeAggregator.Node) -> ColourEditTarget? {
+        guard let ref = node.children.compactMap(\.ref).first else { return nil }
+        return ColourEditTarget(level: .project, ref: ref, label: node.label)
+    }
+
+    private func colourTarget(task node: TimeAggregator.Node) -> ColourEditTarget? {
+        guard let ref = node.ref, ref != WorkTask.unknown.ref else { return nil }
+        return ColourEditTarget(level: .task, ref: ref, label: node.label)
+    }
+
+    /// The legend swatch as the colour editor (colour-strategy spec §5: the
+    /// swatch edits, the rest of the row keeps expand/pin). Unresolvable
+    /// targets (no ref — e.g. the Unknown sentinel) stay a plain swatch.
+    @ViewBuilder private func swatchButton(_ target: ColourEditTarget?, colour: Color,
+                                           marked: Bool, local: Bool,
+                                           size: CGFloat) -> some View {
+        if let target {
+            Button {
+                colourEdit = target
+            } label: {
+                swatch(colour, marked: marked, local: local, size: size)
+            }
+            .buttonStyle(.plain)
+            .help("Edit the colour")
+            .popover(isPresented: editBinding(target)) { colourEditor(target) }
+        } else {
+            swatch(colour, marked: marked, local: local, size: size)
+        }
+    }
+
+    /// Presents this row's popover exactly when IT is the open target, so
+    /// one `colourEdit` state serves every swatch without cross-presenting.
+    private func editBinding(_ target: ColourEditTarget) -> Binding<Bool> {
+        Binding(get: { colourEdit == target },
+                set: { open in
+                    if open { colourEdit = target }
+                    else if colourEdit == target { colourEdit = nil }
+                })
+    }
+
+    @ViewBuilder private func editColourItem(_ target: ColourEditTarget?) -> some View {
+        if let target {
+            Button("Edit colour…") { colourEdit = target }
+        }
+    }
+
+    /// The swatch popover: native picker + reset. Picks write a USER
+    /// OVERRIDE through the controller (settings-level, undoable, the
+    /// engine's records untouched); reset removes the override and the
+    /// automatic colour returns.
+    private func colourEditor(_ target: ColourEditTarget) -> some View {
+        let hasOverride = switch target.level {
+        case .project: controller.hasProjectColourOverride(containing: target.ref)
+        case .task: controller.hasColourOverride(for: target.ref)
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(target.label).font(.caption).bold().lineLimit(1)
+            HStack(spacing: 8) {
+                ColorPicker("Colour", selection: Binding(
+                    get: { currentColour(target) },
+                    set: { pick in
+                        switch target.level {
+                        case .project:
+                            controller.setProjectColour(NSColor(pick), containing: target.ref)
+                        case .task:
+                            controller.setColour(NSColor(pick), for: target.ref)
+                        }
+                    }))
+                    .labelsHidden()
+                Text(hasOverride ? "your pick" : "automatic")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button("Reset to automatic") {
+                switch target.level {
+                case .project: controller.resetProjectColour(containing: target.ref)
+                case .task: controller.resetColour(for: target.ref)
+                }
+            }
+            .font(.caption)
+            .disabled(!hasOverride)
+        }
+        .padding(10)
+        .frame(minWidth: 160)
+    }
+
+    private func currentColour(_ target: ColourEditTarget) -> Color {
+        switch target.level {
+        case .project:
+            return Color(nsColor: controller.projectColour(containing: target.ref) ?? .systemGray)
+        case .task:
+            return Color(nsColor: controller.colour(for: target.ref))
         }
     }
 

@@ -3399,7 +3399,12 @@ public final class AppController: ObservableObject {
         // repair site) to the record.
         let key = taskCache.first(where: { $0.ref == ref }).flatMap { projectKey(for: $0) }
         if let key { repairColourAnchorIfNeeded(projectKey: key) }
+        // A user's project-swatch override steers which hue family this
+        // first sight joins (the anchor record itself never moves).
+        let overrideHue = key.flatMap { settings.projectColours[$0] }
+            .flatMap { ColourEngine.overrideAnchorHue(hex: $0) }
         let hex = ColourEngine.taskHex(ref.storageKey, projectKey: key,
+                                       anchorHueOverride: overrideHue,
                                        in: &colourAssignments)
         scheduleColoursSave()
         return NSColor(hex: hex) ?? .systemGray
@@ -3493,6 +3498,12 @@ public final class AppController: ObservableObject {
         if colourAssignments.recordCount != before {
             scheduleColoursSave()
         }
+        // A user override (pie swatch editor) wins for display — checked
+        // AFTER the record settles above, so "reset to automatic" always
+        // has the engine's own untouched anchor to fall back to.
+        if let hex = settings.projectColours[key], let c = NSColor(hex: hex) {
+            return c
+        }
         return NSColor(hex: record.hex)
     }
 
@@ -3519,12 +3530,77 @@ public final class AppController: ObservableObject {
         registerUndo("colour change") { [weak self] in
             self?.settings.taskColours[ref.storageKey] = previous
         }
+        settings.taskColours[ref.storageKey] = Self.hexString(colour)
+    }
+
+    /// True when the task's colour is the user's own pick (a settings
+    /// override) rather than the engine's record — the swatch editor's
+    /// "your pick / automatic" state and its reset enablement.
+    public func hasColourOverride(for ref: TaskRef) -> Bool {
+        settings.taskColours[ref.storageKey] != nil
+    }
+
+    /// Remove a task's colour override. The colour falls back to the
+    /// engine's persisted record — overrides never wrote records, so the
+    /// record survived underneath and reset restores exactly the
+    /// pre-override colour (a never-recorded task simply allocates fresh
+    /// on next sight). Undoable like the edit itself.
+    public func resetColour(for ref: TaskRef) {
+        guard let previous = settings.taskColours[ref.storageKey] else { return }
+        registerUndo("reset colour") { [weak self] in
+            self?.settings.taskColours[ref.storageKey] = previous
+        }
+        settings.taskColours[ref.storageKey] = nil
+    }
+
+    /// The stable project key for the project containing `ref`, nil when
+    /// the ref no longer resolves — the pie targets a project through one
+    /// of its children, exactly like `projectColour(containing:)`.
+    private func projectColourKey(containing ref: TaskRef?) -> String? {
+        guard let ref, ref != WorkTask.unknown.ref,
+              let task = taskCache.first(where: { $0.ref == ref }) else { return nil }
+        return projectKey(for: task)
+    }
+
+    public func hasProjectColourOverride(containing ref: TaskRef?) -> Bool {
+        guard let key = projectColourKey(containing: ref) else { return false }
+        return settings.projectColours[key] != nil
+    }
+
+    /// User override for a whole project's colour (pie ring + legend
+    /// swatch), targeted through any child `ref`. Lives in
+    /// `settings.projectColours` like task overrides — the engine's anchor
+    /// record is never rewritten, so the repair pass cannot move a user's
+    /// pick and reset always has the automatic colour to fall back to.
+    /// Future tasks in the project shade around the override's hue (see
+    /// `ColourEngine.overrideAnchorHue`); already-seen tasks keep their
+    /// colours — stability cuts both ways.
+    public func setProjectColour(_ colour: NSColor, containing ref: TaskRef) {
+        guard let key = projectColourKey(containing: ref) else { return }
+        let previous = settings.projectColours[key]
+        registerUndo("project colour change") { [weak self] in
+            self?.settings.projectColours[key] = previous
+        }
+        settings.projectColours[key] = Self.hexString(colour)
+    }
+
+    /// Remove a project's colour override — the ring/legend falls back to
+    /// the engine's anchor record, untouched underneath. Undoable.
+    public func resetProjectColour(containing ref: TaskRef) {
+        guard let key = projectColourKey(containing: ref),
+              let previous = settings.projectColours[key] else { return }
+        registerUndo("reset project colour") { [weak self] in
+            self?.settings.projectColours[key] = previous
+        }
+        settings.projectColours[key] = nil
+    }
+
+    private static func hexString(_ colour: NSColor) -> String {
         let rgb = colour.usingColorSpace(.sRGB) ?? colour
-        let hex = String(format: "#%02X%02X%02X",
-                         Int(rgb.redComponent * 255),
-                         Int(rgb.greenComponent * 255),
-                         Int(rgb.blueComponent * 255))
-        settings.taskColours[ref.storageKey] = hex
+        return String(format: "#%02X%02X%02X",
+                      Int(rgb.redComponent * 255),
+                      Int(rgb.greenComponent * 255),
+                      Int(rgb.blueComponent * 255))
     }
 
     /// Forgiving search over the full ranked task list.
