@@ -41,7 +41,24 @@ public final class SensorHub {
         emailCapture.setOwnEmail(addresses: addresses, domains: domains)
     }
 
-    public init() {}
+    public init() {
+        // Health telemetry surfaces in the debug log (plus the email probe
+        // report); this log line IS the degrade story until the self-heal
+        // loop lands on this same seam. Fires on the capture queue —
+        // DebugLog appends to a file, no main-thread requirement.
+        emailCapture.onRecipeUnhealthy = { system, record in
+            DebugLog.write("email recipe unhealthy: \(system.rawValue) failed validate-on-use "
+                + "\(record.consecutiveFailures)x in a row (last: "
+                + "\(record.lastFault?.rawValue ?? "?")) — correspondent enrichment "
+                + "withheld until a healthy read")
+        }
+    }
+
+    /// Diagnostics pass-through: per-system validate-on-use health, printed
+    /// by the email probe report. Empty until a recipe'd system has captured.
+    public func emailRecipeHealth() -> [EmailSystem: EmailRecipeHealth] {
+        emailCapture.recipeHealth()
+    }
 
     /// Prompts for Accessibility on first run (window titles need it).
     public func requestPermissions() {

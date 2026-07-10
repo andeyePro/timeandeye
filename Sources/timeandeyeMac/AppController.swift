@@ -3822,6 +3822,13 @@ public final class AppController: ObservableObject {
             out += "signal: nil (nothing observed while tracking yet)\n"
         }
         out += "currentPin: \(currentPin.map { String(describing: $0.pin.rule) } ?? "none")\n"
+        let recipeHealth = sensors.emailRecipeHealth()
+        out += "recipeHealth: " + (recipeHealth.isEmpty ? "no validated captures yet"
+            : recipeHealth.map { system, record in
+                "\(system.rawValue)=\(record.isUnhealthy ? "UNHEALTHY" : "ok") "
+                    + "(streak \(record.consecutiveFailures)"
+                    + "\(record.lastFault.map { ", last \($0.rawValue)" } ?? ""))"
+            }.sorted().joined(separator: "  ")) + "\n"
         copyToClipboard(out)
         return out
     }

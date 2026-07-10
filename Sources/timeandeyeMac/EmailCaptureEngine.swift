@@ -43,9 +43,32 @@ public final class EmailCaptureEngine {
     /// read on the capture queue.
     private var ownAddresses: Set<String> = []
     private var ownDomains: Set<String> = []
+    /// Per-system validate-on-use telemetry (guarded by `gate`). In-memory
+    /// only, deliberately: a genuinely broken recipe re-proves itself within
+    /// one read after relaunch, and no per-system store exists to piggyback
+    /// on — see `EmailRecipeHealth`'s own doc.
+    private var health: [EmailSystem: EmailRecipeHealth] = [:]
+
+    /// RE-LEARN SEAM (NAIL validate-on-use, 2026-07-10): fires ONCE per
+    /// unhealthy transition — on the capture whose failure takes a system's
+    /// streak to `EmailRecipeHealth.unhealthyThreshold`. The future self-heal
+    /// loop (probe → label → store-recipe, per the TODO architecture notes)
+    /// attaches here. Constraints for that loop: this closure is called on
+    /// the capture queue, so hop off before doing anything slow; it must not
+    /// call `capture()` re-entrantly (the one-in-flight gate would drop it);
+    /// and recovery has no manual reset — a successful re-learn proves itself
+    /// by producing healthy reads, which clear the streak. Set once before
+    /// capture traffic starts (SensorHub's init); not mutated after.
+    public var onRecipeUnhealthy: ((EmailSystem, EmailRecipeHealth) -> Void)?
 
     public init(deadline: TimeInterval = 2.0) {
         self.deadline = deadline
+    }
+
+    /// Snapshot for diagnostics (the email probe report). Empty until a
+    /// recipe'd system has produced at least one validated read.
+    public func recipeHealth() -> [EmailSystem: EmailRecipeHealth] {
+        gate.sync { health }
     }
 
     public func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
@@ -72,10 +95,46 @@ public final class EmailCaptureEngine {
         queue.async { [weak self] in
             guard let self else { completion(nil); return }
             let (own, ownD) = self.gate.sync { (self.ownAddresses, self.ownDomains) }
-            let result = Self.mergedCapture(appName: appName, deadline: self.deadline,
-                                            ownAddresses: own, ownDomains: ownD)
+            // Transport failures (no Automation grant, JS off, deadline hit)
+            // arrive as `FullCapture.error` and MUST NOT touch recipe health:
+            // they say nothing about whether the selectors still match — a
+            // revoked grant would otherwise brand a perfectly good recipe
+            // unhealthy. Only an error-free read gets a verdict.
+            var result: Capture?
+            if let full = Self.fullCapture(appName: appName, deadline: self.deadline),
+               full.error == nil {
+                let verdict = EmailRecipeValidation.validate(
+                    senders: full.senders, recipients: full.recipients,
+                    ownAddresses: own, ownDomains: ownD)
+                result = self.apply(verdict, to: full.system)
+            }
             self.gate.sync { self.inFlight = false }
             completion(result)
+        }
+    }
+
+    /// Fold a validate-on-use verdict into the per-system health record and
+    /// map it to what the sensor loop may see: a suspect read returns nil so
+    /// the signal is never enriched with a polluted correspondent list (the
+    /// safe degrade — subject-only enrichment still happens upstream), and a
+    /// self-only read returns an empty correspondent list, exactly like the
+    /// pre-validation behaviour. Runs on `queue`.
+    private func apply(_ verdict: EmailRecipeValidation.Verdict,
+                       to system: EmailSystem) -> Capture? {
+        let (record, crossed): (EmailRecipeHealth, Bool) = gate.sync {
+            let before = health[system] ?? EmailRecipeHealth()
+            let after = before.recording(verdict)
+            health[system] = after
+            return (after, !before.isUnhealthy && after.isUnhealthy)
+        }
+        if crossed { onRecipeUnhealthy?(system, record) }
+        switch verdict {
+        case .healthy(let counterparties):
+            return Capture(system: system, correspondents: counterparties.map(\.email))
+        case .selfOnly:
+            return Capture(system: system, correspondents: [])
+        case .suspect:
+            return nil
         }
     }
 
@@ -85,18 +144,6 @@ public final class EmailCaptureEngine {
     /// so a stuck page can't hang the button forever.
     public static func captureNow(appName: String, deadline: TimeInterval = 2.0) -> FullCapture? {
         fullCapture(appName: appName, deadline: deadline)
-    }
-
-    private static func mergedCapture(appName: String, deadline: TimeInterval,
-                                      ownAddresses: Set<String> = [],
-                                      ownDomains: Set<String> = []) -> Capture? {
-        guard let full = fullCapture(appName: appName, deadline: deadline), full.error == nil
-        else { return nil }
-        let counterparties = EmailSignal.counterparties(senders: full.senders,
-                                                        recipients: full.recipients,
-                                                        ownAddresses: ownAddresses,
-                                                        ownDomains: ownDomains)
-        return Capture(system: full.system, correspondents: counterparties.map(\.email))
     }
 
     private static func fullCapture(appName: String, deadline: TimeInterval) -> FullCapture? {

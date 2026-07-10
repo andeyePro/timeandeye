@@ -87,3 +87,104 @@ func emailCaptureChecks(_ c: Checks) {
         try expectEq(EmailSystem.gmail.isMessageView(urlString: nil), false)
     }
 }
+
+// MARK: - Validate-on-use + per-system recipe health (the NAIL self-heal
+// architecture's cheap half). Pure Core logic, so webmail-redesign scenarios
+// are checkable with no browser in the loop; the impure wiring (engine drops
+// suspect captures, seam fires at the threshold) follows the same functions.
+
+func emailRecipeHealthChecks(_ c: Checks) {
+    func party(_ name: String, _ email: String) -> EmailSignal.Party {
+        EmailSignal.Party(name: name, email: email)
+    }
+    let own: Set<String> = ["martin@andeye.com"]
+
+    c.check("one plausible sender -> healthy, with that counterparty") {
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [party("Rae", "r.naismith@harborlane.example")],
+            recipients: [party("me", "martin@andeye.com")],
+            ownAddresses: own),
+            .healthy([party("Rae", "r.naismith@harborlane.example")]))
+    }
+
+    // A note-to-self (or an own-domain-only thread) reads FINE — the recipe
+    // resolved, there just is no external party. Branding it a failure would
+    // tick the streak on every self-addressed note and eventually trigger a
+    // pointless re-learn of a working recipe.
+    c.check("own-address-only read -> selfOnly, and it does NOT count as a recipe failure") {
+        let v = EmailRecipeValidation.validate(
+            senders: [party("Martin", "martin@andeye.com")],
+            recipients: [party("me", "martin@andeye.com")],
+            ownAddresses: own)
+        try expectEq(v, .selfOnly)
+        var h = EmailRecipeHealth().recording(.suspect(.noParties))
+        h = h.recording(v)
+        try expectEq(h.consecutiveFailures, 0, "selfOnly must reset, not increment")
+    }
+
+    // The redesign symptom that motivates the whole programme: Gmail renames
+    // `.gD` and the selector matches nothing on a page the capture gate has
+    // ALREADY classified as an open message — so emptiness means broken
+    // recipe, not absence of mail (list surfaces never reach validation).
+    c.check("zero parties on a message view -> suspect(noParties)") {
+        try expectEq(EmailRecipeValidation.validate(senders: [], recipients: []),
+                     .suspect(.noParties))
+    }
+
+    // The other redesign shape: selectors still match nodes, but the email
+    // attribute now carries opaque tokens / display names, not addresses.
+    c.check("nothing address-shaped -> suspect(garbage)") {
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [party("Rae", "Rae Naismith"), party("", "1kX9fzQ")],
+            recipients: []),
+            .suspect(.garbage))
+    }
+
+    // Gmail decorates some chips with opaque hovercard ids while the header
+    // chip stays sound — a PARTIAL redesign must not discard the good read.
+    c.check("one sound address among garbage chips is still healthy") {
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [party("", "1kX9fzQ"), party("Rae", "rae@harborlane.example")],
+            recipients: []),
+            .healthy([party("Rae", "rae@harborlane.example")]))
+    }
+
+    // A selector that has started matching the LIST surface scrapes one
+    // address per inbox row — far beyond any single message's header. A big
+    // (but plausible) CC list must stay healthy, though.
+    c.check("an implausible flood of counterparties -> suspect(partyFlood); a big CC list is fine") {
+        let flood = (0..<20).map { party("P\($0)", "p\($0)@example.com") }
+        try expectEq(EmailRecipeValidation.validate(senders: flood, recipients: []),
+                     .suspect(.partyFlood))
+        let cc = (0..<EmailRecipeValidation.maxPlausibleCounterparties)
+            .map { party("P\($0)", "p\($0)@example.com") }
+        try expectEq(EmailRecipeValidation.validate(
+            senders: [cc[0]], recipients: Array(cc.dropFirst())),
+            .healthy(cc))
+    }
+
+    c.check("streak marks unhealthy exactly at the threshold, not before") {
+        var h = EmailRecipeHealth()
+        for i in 1...EmailRecipeHealth.unhealthyThreshold {
+            try expectEq(h.isUnhealthy, false, "already unhealthy before failure \(i)")
+            h = h.recording(.suspect(.noParties))
+        }
+        try expect(h.isUnhealthy)
+        try expectEq(h.lastFault, .noParties)
+    }
+
+    c.check("a healthy read resets the streak completely") {
+        var h = EmailRecipeHealth()
+        h = h.recording(.suspect(.garbage))
+        h = h.recording(.suspect(.garbage))
+        h = h.recording(.healthy([party("J", "j@example.com")]))
+        try expectEq(h.consecutiveFailures, 0)
+        try expectNil(h.lastFault)
+        // A fresh failure after recovery starts from 1 — transient wobbles
+        // (slow page loads) must never accumulate ACROSS healthy reads into
+        // a false unhealthy.
+        h = h.recording(.suspect(.noParties))
+        try expectEq(h.isUnhealthy, false)
+        try expectEq(h.consecutiveFailures, 1)
+    }
+}

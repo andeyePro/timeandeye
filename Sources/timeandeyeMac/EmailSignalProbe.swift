@@ -118,7 +118,20 @@ public enum EmailSignalProbe {
                 out += "Counterparties (you removed): \(fmt(others))\n"
                 let domains = Set(others.compactMap { EmailSignal.domain(of: $0.email) })
                     .sorted().joined(separator: ", ")
-                out += "Counterparty domains: \(domains.isEmpty ? "(none)" : domains)"
+                out += "Counterparty domains: \(domains.isEmpty ? "(none)" : domains)\n"
+                // The same verdict live capture would reach on this read
+                // (own-address sets aren't threaded into the probe, matching
+                // the counterparty lines above) — shows a redesign symptom
+                // by name before anyone digs through selectors.
+                switch EmailRecipeValidation.validate(senders: p.senders,
+                                                      recipients: p.recipients) {
+                case .healthy(let ps):
+                    out += "Validate-on-use: healthy (\(ps.count) counterpart\(ps.count == 1 ? "y" : "ies"))"
+                case .selfOnly:
+                    out += "Validate-on-use: self-only (recipe fine, no external party)"
+                case .suspect(let fault):
+                    out += "Validate-on-use: SUSPECT — \(fault.rawValue)"
+                }
             } else {
                 out += "Capture failed unexpectedly."
             }

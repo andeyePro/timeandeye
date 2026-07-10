@@ -389,9 +389,15 @@ and recorded rather than fixed blind:
   + `any` pin fields shipped 2026-07-01. Own addresses/domains now come from
   Settings ▸ Email "My addresses/domains" (2026-07-09) — alternates like
   martin@example.com no longer appear as correspondents.
+  Validate-on-use + per-system health telemetry SHIPPED 2026-07-10
+  (`EmailRecipeValidation`/`EmailRecipeHealth`: every error-free read judged
+  healthy / self-only / suspect; suspect reads never enrich; 3 consecutive
+  failures mark the system unhealthy, log it, and fire the engine's
+  `onRecipeUnhealthy` seam).
   REMAINING (single list — the two sibling entries below point here): more
   provider selectors (OWA/Proton/Yahoo/Fastmail) + native clients;
-  validate-on-use / self-heal + recipe pack with background updates;
+  the re-learn/self-heal loop (probe → label → store-recipe, attaches at
+  `onRecipeUnhealthy`) + recipe pack with background updates;
   multi-message-thread sender choice.
 - [ ] (b, 2026-06-29) Gmail sender extraction — CHANNEL + RECIPE FOUND, and
   threaded into a live signal 2026-07-03 (see the capture-layer entry below).

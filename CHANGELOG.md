@@ -2,6 +2,26 @@
 
 ## 2026-07-10
 
+- [x] **Email recipes now validate on use, with per-system health telemetry
+  and safe degrade.** The NAIL programme's cheap half: a webmail redesign or
+  a localized From label never errors, it just makes a recipe silently return
+  nothing or junk — so every error-free capture is now judged by the shape of
+  its output (`EmailRecipeValidation`, pure Core: healthy = plausible
+  counterparties; self-only = recipe fine, note-to-self, never a failure;
+  suspect = no parties on a confirmed message view, nothing address-shaped,
+  or a list-scrape flood). Suspect reads never enrich the signal — no
+  polluted correspondents reach learning or EmailRules; subject-only
+  enrichment still flows. `EmailRecipeHealth` keeps a per-system
+  consecutive-failure streak on the engine: three in a row marks the system
+  unhealthy, writes the debug log, and fires `onRecipeUnhealthy` — the
+  documented seam where the future re-learn loop (probe → label →
+  store-recipe) attaches; any healthy or self-only read resets the streak.
+  Transport failures (missing Automation grant, JS off, deadline) never touch
+  health by design. The email probe report and probeEmailSender diagnostics
+  print the verdict and health lines. Eight new checks cover the redesign
+  shapes, the self-only/failure distinction, and the streak threshold/reset.
+  Suite 677/0.
+
 - [x] **timeandeyeTheme: the shared andeye look as its own SwiftUI-only
   target.** The a sibling project's coordination request, needed by a sibling andeye app v0.3:
   AndeyeTheme.Colours (the highlight moved from timeandeyeUI — AndeyeColors

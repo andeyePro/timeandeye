@@ -69,11 +69,22 @@ public enum EmailSignal {
         return d.isEmpty ? nil : String(d).lowercased()
     }
 
+    private static let addressPattern = #"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#
+
+    /// Whether `s` is exactly one well-formed address and nothing else — the
+    /// shape test validate-on-use applies to each captured party (a redesigned
+    /// selector often yields opaque tokens or display names where addresses
+    /// used to be).
+    public static func isAddress(_ s: String) -> Bool {
+        guard let re = try? NSRegularExpression(pattern: "^\(addressPattern)$") else { return false }
+        let range = NSRange(location: 0, length: (s as NSString).length)
+        return re.firstMatch(in: s, range: range) != nil
+    }
+
     /// Every distinct email address in `text`, in first-seen order
     /// (case-insensitively de-duplicated).
     public static func addresses(in text: String) -> [String] {
-        let pattern = #"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        guard let re = try? NSRegularExpression(pattern: addressPattern) else { return [] }
         let ns = text as NSString
         var seen = Set<String>()
         var out: [String] = []
