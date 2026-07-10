@@ -1,13 +1,16 @@
 ---
 // https://andeye.com/privacy – registered with Xero; the URL must not change.
-// The prose is the single source of truth in docs/privacy.md – edit there.
+// One policy for ALL andeye apps (Martin, 2026-07-09): the canonical stays
+// the andeye.com URL wherever this site is served, so no per-app copy ever
+// becomes the reference. The prose is the single source of truth in
+// docs/privacy.md – edit there.
 import LegalPage from '../layouts/LegalPage.astro';
 import { Content as Privacy } from '../../docs/privacy.md';
 ---
 <LegalPage
   title="Privacy policy"
   description="andeye's privacy policy – local-first by design: what you do on your Mac stays on your Mac."
-  path="/privacy/"
+  path="https://andeye.com/privacy/"
 >
   <Privacy />
 </LegalPage>
