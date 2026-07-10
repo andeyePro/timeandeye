@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- [x] **Docs truth pass (findings 7–8, 11–12).** The 2026-07-09 rebrand
+  entry corrected: the backend key lives in an owner-only file, not the
+  Keychain (no Keychain code exists in Sources; a 2026-06-24 entry had
+  already corrected this claim once), and the quit-wait sentence now
+  covers both hardened install paths. the verify command runs
+  timeandeyeChecks (the andeyeTTChecks product no longer exists).
+  Predecessor session audit's uncommitted-inventory line fixed (the
+  checks.yml rename was committed as 59d87b2).
+
 - [x] **iOS companion bundle id is com.timeandeye.ios (finding 10).** The
   per-app-id decision applied to Time&I's iOS app while no App ID,
   provisioning or App Store Connect registration exists to migrate — the
@@ -30,9 +39,11 @@
   share one), so Time&I takes com.timeandeye.mac now — before the entitled
   build, while no iCloud container or provisioning exists to migrate. The
   planned container becomes iCloud.com.timeandeye.mac. One-time cost on
-  the next launch: macOS re-asks for Accessibility/Automation/Calendar,
-  and a Keychain-stored backend key may need re-entering. The upgrade
-  quit-wait handles both old and new identities during the transition.
+  the next launch: macOS re-asks for Accessibility/Automation/Calendar.
+  The backend key is unaffected — it lives in an owner-only file under
+  Application Support, not the Keychain. The upgrade quit-waits (both
+  install paths, hardened 2026-07-10) handle both old and new identities
+  during the transition.
 
 - [x] **Full rebrand: modules andeyeTT* → timeandeye*, human name Time&I.**
   Martin's final naming directive (`<X>&I` / `<x>andeye` / `<x>.andeye.com`
