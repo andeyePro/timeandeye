@@ -475,45 +475,47 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var localTasksSections: some View {
-            Section("Local tasks (never sent to OpenProject)") {
-                // Fixed column widths shared by header + every row → the columns
-                // line up deterministically (a Grid inside a grouped Form didn't).
-                HStack(spacing: 8) {
-                    Color.clear.frame(width: 22, height: 1)
-                    Text("Task").font(.caption2).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Project").font(.caption2).foregroundStyle(.secondary)
-                        .frame(width: 130, alignment: .leading)
-                    Color.clear.frame(width: 18, height: 1)
-                }
+            // Rebuilt clean (his "ugliest thing in the whole app" xnip):
+            // the old rows used TITLED TextFields, which a grouped macOS
+            // Form renders as row labels — ghost "name"/"Personal" captions
+            // over right-aligned boxes — and a width-clipped ColorPicker
+            // that overlapped the field. Now: natural-size swatch, plain
+            // borderless fields with prompts, quiet trailing controls.
+            Section("Local tasks — private to this Mac, never sent to OpenProject") {
                 ForEach($controller.settings.localTasks) { $task in
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         ColorPicker("", selection: Binding(
                             get: { Color(nsColor: controller.colour(for: .local(task.id))) },
                             set: { controller.setColour(NSColor($0), for: .local(task.id)) }))
-                            .labelsHidden().frame(width: 22)
-                        TextField("name", text: $task.name)
-                            .textFieldStyle(.roundedBorder).frame(maxWidth: .infinity)
-                        // nil project shows its effective value ("Personal") as
-                        // real text in the box, not a grey placeholder.
-                        TextField("Personal", text: Binding(
+                            .labelsHidden().fixedSize()
+                        TextField("", text: $task.name, prompt: Text("Task name"))
+                            .textFieldStyle(.plain)
+                        // nil project reads as its effective value, greyed.
+                        TextField("", text: Binding(
                             get: { task.projectName },
                             set: { $task.project.wrappedValue =
-                                ($0.isEmpty || $0 == "Personal") ? nil : $0 }))
-                            .textFieldStyle(.roundedBorder).frame(width: 130)
+                                ($0.isEmpty || $0 == "Personal") ? nil : $0 }),
+                            prompt: Text("Personal"))
+                            .textFieldStyle(.plain)
+                            .foregroundStyle(task.project == nil ? .secondary : .primary)
+                            .frame(width: 150)
                         Button { controller.removeLocalTask(task.id) } label: {
                             Image(systemName: "trash")
-                        }.buttonStyle(.plain).frame(width: 18)
+                        }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary)
+                        .help("Delete this task")
                     }
                 }
-                HStack(spacing: 8) {
-                    Color.clear.frame(width: 22, height: 1)
-                    TextField("New task", text: $newLocalName)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: .infinity).onSubmit(addLocal)
-                    TextField("Personal", text: $newLocalProject)
-                        .textFieldStyle(.roundedBorder).frame(width: 130).onSubmit(addLocal)
-                    Button { addLocal() } label: { Image(systemName: "plus.circle.fill") }
-                        .buttonStyle(.plain).frame(width: 18)
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, alignment: .center)
+                    TextField("", text: $newLocalName, prompt: Text("New task"))
+                        .textFieldStyle(.plain).onSubmit(addLocal)
+                    TextField("", text: $newLocalProject, prompt: Text("Personal"))
+                        .textFieldStyle(.plain).frame(width: 150).onSubmit(addLocal)
+                    Button { addLocal() } label: { Text("Add") }
+                        .buttonStyle(.borderless)
                         .disabled(newLocalName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 Picker("Non-work catch-all task", selection: catchAllBinding) {
@@ -522,7 +524,7 @@ struct SettingsView: View {
                         Text(t.name).tag(UUID?.some(t.id))
                     }
                 }
-                Text("Editing a task's name or project keeps its id, history and colour. The catch-all is the one task that confident non-work time lands on when \"Track leisure locally\" is on (instead of stopping the clock) — that's all \"leisure\" ever meant. Projects just group tasks in Time Spent. (Restart to apply the catch-all.)")
+                Text("Renaming keeps a task's history and colour. The catch-all is where confident non-work time lands when \"Track leisure locally\" is on. Projects just group tasks in the Time Donut. (Restart to apply the catch-all.)")
                     .font(.caption).foregroundStyle(.secondary)
             }
     }
