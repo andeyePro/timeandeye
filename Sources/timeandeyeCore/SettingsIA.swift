@@ -36,7 +36,7 @@ public enum SettingsIA {
             case .menuBar:       return "Menu bar"
             case .colours:       return "Colours"
             case .localTasks:    return "Local tasks"
-            case .billing:       return "Billing"
+            case .billing:       return "Currency"
             case .emailCalendar: return "Email & Calendar"
             case .maintenance:   return "Maintenance"
             case .diagnostics:   return "Diagnostics"
@@ -156,7 +156,8 @@ public enum SettingsIA {
              ["leisure", "default", "personal"], .localTasks),
         // Billing
         Item("billing.currency", "Currency symbol",
-             ["money", "locale", "billable", "pound", "dollar", "euro"], .billing),
+             ["money", "locale", "billable", "pound", "dollar", "euro",
+              "billing", "currency"], .billing),
         Item("billing.mappings", "Billing mappings",
              ["xero", "finance", "map", "invoice", "bills to"], .billing),
         // Email & Calendar

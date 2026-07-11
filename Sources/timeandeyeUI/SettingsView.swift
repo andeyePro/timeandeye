@@ -617,15 +617,24 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var billingSections: some View {
-            Section("Billing") {
+            Section("Currency") {
                 TextField("Currency symbol", text: Binding(
                     get: { controller.settings.currencySymbolOverride ?? "" },
                     set: { controller.settings.currencySymbolOverride = $0.isEmpty ? nil : $0 }),
                     prompt: Text(CurrencyDefault.symbol()))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 120)
-                Text("Shown wherever billable totals appear; leave blank for your locale's symbol (\(CurrencyDefault.symbol())). Projects default to non-billable — right-click a project or task in the Time Spent legend to opt it in, or set a per-task override.")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("Shown wherever billable totals appear; leave blank for your locale's symbol (\(CurrencyDefault.symbol())). Projects default to non-billable — opt them in from the")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Time Donut legend") {
+                        controller.timeWindowView = .spent
+                        openWindow(id: "time")
+                        AndeyeWindows.activateOnceVisible(opened: "time")
+                    }
+                    .buttonStyle(.link).font(.caption)
+                    Text("(right-click a project or task).").font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             // Billing mappings (D6): only with a finance backend registered.
