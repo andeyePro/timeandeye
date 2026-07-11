@@ -101,6 +101,18 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
         private var recheck: Timer?
         private var screenObserver: NSObjectProtocol?
         private var openObserver: NSObjectProtocol?
+        /// Fullscreen fix thirteen (Martin, 2026-07-11): a green-buttoned
+        /// window came back from Esc frozen, unclickable and sinking behind
+        /// other windows. Cause: .fullScreen leaves the styleMask BEFORE the
+        /// exit animation completes, so the styleMask guard below stopped
+        /// protecting the window mid-transition and the 1 Hz timer mutated
+        /// collectionBehavior/level while macOS was still animating the
+        /// Space — which wedges the window. These track the transition via
+        /// the will/did notifications and hold every mutation until it ends,
+        /// plus a settle margin.
+        private var transitionObservers: [NSObjectProtocol] = []
+        private var inFullscreenTransition = false
+        private var transitionHoldUntil: TimeInterval = 0
         /// Fix nine (Martin, 2026-07-10 morning) closed two blind spots:
         /// the popover's menu-bar reveal blinded the heuristic at exactly
         /// open time (fresh windows attached at normal level and macOS
@@ -133,6 +145,12 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(observer)
                 openObserver = nil
             }
+            for observer in transitionObservers {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            transitionObservers = []
+            inFullscreenTransition = false
+            transitionHoldUntil = 0
             guard window != nil else { return }
             pose = FullscreenPose.State(
                 openedAt: ProcessInfo.processInfo.systemUptime)
@@ -172,6 +190,33 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
                 self.applyToWindow()
             }
+            // Fullscreen fix thirteen: bracket macOS's enter/exit animations.
+            let starts = [NSWindow.willEnterFullScreenNotification,
+                          NSWindow.willExitFullScreenNotification]
+            let ends = [NSWindow.didEnterFullScreenNotification,
+                        NSWindow.didExitFullScreenNotification]
+            for name in starts {
+                transitionObservers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main) { [weak self] _ in
+                    self?.inFullscreenTransition = true
+                })
+            }
+            for name in ends {
+                transitionObservers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main) { [weak self] _ in
+                    guard let self else { return }
+                    self.inFullscreenTransition = false
+                    // Settle margin: AppKit finishes rearranging Spaces a
+                    // beat after `did…` fires; mutating immediately can
+                    // still catch the tail of the animation.
+                    self.transitionHoldUntil = ProcessInfo.processInfo.systemUptime + 2
+                    // Fresh grace once the hold lapses, so the window
+                    // re-decides its pose from a clean slate exactly like a
+                    // reopen (and never settles at normal level over a
+                    // fullscreen app it exited next to).
+                    self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
+                })
+            }
         }
         deinit {
             // Backstop only (see viewDidMoveToWindow). deinit may run on
@@ -179,6 +224,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // they were installed.
             let timer = recheck
             let observers = [screenObserver, openObserver].compactMap { $0 }
+                + transitionObservers
             let cleanup = {
                 timer?.invalidate()
                 for observer in observers {
@@ -227,6 +273,13 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // fullscreen risks breaking the Space or its exit animation.
             // Leave it entirely alone until it comes back.
             if w.styleMask.contains(.fullScreen) { return }
+            // …and so does a window mid enter/exit ANIMATION: .fullScreen
+            // drops from the styleMask before the exit finishes, and
+            // mutating flags in that gap wedged a window solid (fix
+            // thirteen — Martin, 2026-07-11). Hold until the transition
+            // ends plus a settle margin.
+            if inFullscreenTransition
+                || ProcessInfo.processInfo.systemUptime < transitionHoldUntil { return }
             // Fullscreen-look heuristic: menu bar hidden ⇒ visibleFrame
             // reaches the top of the screen. Blind while the menu bar is
             // transiently revealed (popover open, pointer at top) — the
