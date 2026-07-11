@@ -1498,6 +1498,11 @@ public final class AppController: ObservableObject {
         checkpointTimer = cp
         Task { await refreshTasks() }
         reloadReview()
+        // Cold-start contradiction pass: without this the mis-filed scan
+        // only ever ran after a teach (persistAssociations), so a fresh
+        // launch never showed the row (Martin, 2026-07-11: "I'm not
+        // seeing that").
+        scheduleRetroPass()
         playDrawOn()
     }
 
