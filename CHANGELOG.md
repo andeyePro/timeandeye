@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-11
+
+- [x] **Colours settings category — re-derive from scratch + colour sets.**
+  preserved pre-engine task colours share no family (each was an
+  independent hue), so Settings ▸ Colours now offers **Re-derive all
+  automatic colours** — `ColourEngine.rederiveAll` drops and re-allocates
+  every groupable record in first-seen order (anchors spread the wheel,
+  tasks shade their project's ±25° neighbourhood; ungroupable history
+  records and user overrides untouched; deterministic; one ⌘Z restores) —
+  and **colour sets**: save/load the complete look (overrides + engine
+  store) as JSON, load = one undo step. 5-check ColourRederive suite;
+  manuals updated. Suite 803/0.
+
+- [x] **Fullscreen fix thirteen — pose mutation held across enter/exit
+  transitions.** A green-buttoned window came back from Esc frozen,
+  unclickable and sinking behind other windows: .fullScreen leaves the
+  styleMask before the exit animation completes, so the 1 Hz pose timer
+  mutated collectionBehavior/level mid-animation — which wedges the
+  window. SpaceJoiningView now brackets the will/did notifications and
+  holds every mutation through the transition + 2 s settle, then
+  re-decides from a fresh grace like a reopen.
+
+- [x] **Evidence card + settings polish.** Whole-card
+  copy button (drag-selection grabbed one line at a time); suppress-fallback
+  control grey like its siblings; empty captured titles no longer render
+  "App – "; timeline editor gains reset-colour-to-automatic and moves the
+  close-✕ away from the swatch; unpin wears pin.slash; menu-bar colours use
+  the stock picker (hex persists); Tracking leads the Settings sidebar and
+  is the default panel; Backend → Connections; Tracking sliders named; ⌘F
+  robustness (1×1 key-equivalent target) and a plain search placeholder.
+
 ## 2026-07-10
 
 - [x] **timeandeyeTheme is now a leaf brand target.** `AndeyeLogo` (the

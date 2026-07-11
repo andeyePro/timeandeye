@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: The Settings window's categories - backend connection, tracking thresholds, behaviour, local tasks, billing, email and calendar matching, maintenance - and the ⌘F search that finds any setting.
+description: The Settings window's categories - tracking thresholds, behaviour, menu bar, colours, local tasks, connections, billing, email and calendar matching, maintenance - and the ⌘F search that finds any setting.
 ---
 
 Settings (⌘,) is organised into categories: a sidebar on the left, the
@@ -8,16 +8,6 @@ selected category's controls on the right. Press **⌘F** (or click the search
 field above the sidebar) and type to find any setting by its label or a
 related word - "color", "xero" and "csv" all work; pick a result to jump to
 its category.
-
-### Backend
-
-- **OpenProject** - base URL and API key.
-- **Posting health** - appears only when something needs you: per backend, a
-  count of entries stuck after repeated failures (with a one-click Retry) and
-  a count of entries that disagree with your journal and can't be fixed
-  automatically (usually because they're locked into an invoice). Ordinary
-  edits and deletions of already-posted time propagate to the backend on
-  their own within a minute or two.
 
 ### Tracking
 
@@ -46,10 +36,31 @@ its category.
 - The low- and high-certainty colours, the certainty percentage, and how many
   letters of the tracked task's name show after the time.
 
+### Colours
+
+- **Re-derive all automatic colours** - rebuilds the whole automatic palette
+  cohesively: every project gets a distinct anchor colour and its tasks shade
+  around it. Colours you picked yourself are untouched, and ⌘Z restores the
+  previous palette. Edit any single colour from the Time Spent legend (click
+  its swatch) or the timeline editor.
+- **Colour sets** - save the complete current look (your picks plus the
+  automatic assignments) to a JSON file, and load one back later - loading
+  replaces everything and is one ⌘Z to undo.
+
 ### Local tasks
 
 - Personal non-OP tasks (e.g. "Chess") you can track against, each with its
   own colour, plus the non-work catch-all task.
+
+### Connections
+
+- **OpenProject** - base URL and API key.
+- **Posting health** - appears only when something needs you: per backend, a
+  count of entries stuck after repeated failures (with a one-click Retry) and
+  a count of entries that disagree with your journal and can't be fixed
+  automatically (usually because they're locked into an invoice). Ordinary
+  edits and deletions of already-posted time propagate to the backend on
+  their own within a minute or two.
 
 ### Billing
 

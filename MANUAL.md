@@ -362,11 +362,16 @@ midnight. Day boundaries are marked with the date.
 ## Settings
 
 Settings (⌘,) is organised into categories - a sidebar on the left, the
-selected category's controls on the right: Backend, Tracking, Behaviour,
-Menu bar, Local tasks, Billing, Email & Calendar, Maintenance, Diagnostics,
-About. Press **⌘F** and type to find any setting by its label or a related
-word ("color", "xero", "csv" all work); pick a result to jump to its
-category.
+selected category's controls on the right: Tracking, Behaviour, Menu bar,
+Colours, Local tasks, Connections, Billing, Email & Calendar, Maintenance,
+Diagnostics, About. Press **⌘F** and type to find any setting by its label
+or a related word ("color", "xero", "csv" all work); pick a result to jump
+to its category.
+
+Colours: **Re-derive all automatic colours** rebuilds the whole automatic
+palette cohesively (every project a distinct anchor, its tasks shading
+around it) - your own picks untouched, ⌘Z restores; **colour sets** save
+the complete look to a JSON file and load it back later.
 
 - **Comments** - whether a note goes to the time entry, the task's feed, or both.
 - **Popover default mode** - "Change to" (default) or "Switch to".

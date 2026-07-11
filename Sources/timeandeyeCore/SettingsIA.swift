@@ -17,6 +17,7 @@ public enum SettingsIA {
         case tracking
         case behaviour
         case menuBar
+        case colours
         case localTasks
         case backend
         case billing
@@ -33,6 +34,7 @@ public enum SettingsIA {
             case .tracking:      return "Tracking"
             case .behaviour:     return "Behaviour"
             case .menuBar:       return "Menu bar"
+            case .colours:       return "Colours"
             case .localTasks:    return "Local tasks"
             case .billing:       return "Billing"
             case .emailCalendar: return "Email & Calendar"
@@ -49,6 +51,7 @@ public enum SettingsIA {
             case .tracking:      return "record.circle"
             case .behaviour:     return "slider.horizontal.3"
             case .menuBar:       return "menubar.rectangle"
+            case .colours:       return "paintpalette"
             case .localTasks:    return "checklist"
             case .billing:       return "creditcard"
             case .emailCalendar: return "envelope"
@@ -136,6 +139,14 @@ public enum SettingsIA {
              ["percentage"], .menuBar),
         Item("menuBar.taskChars", "Task name in menu bar",
              ["letters", "chars", "title", "abbreviation"], .menuBar),
+        // Colours
+        Item("colours.rederive", "Re-derive automatic colours",
+             ["re-apply", "from scratch", "cohesive", "palette", "reset colours",
+              "color"], .colours),
+        Item("colours.save", "Save colour set",
+             ["export", "backup", "palette", "color"], .colours),
+        Item("colours.load", "Load colour set",
+             ["import", "restore", "palette", "color"], .colours),
         // Local tasks
         Item("localTasks.list", "Local tasks",
              ["personal", "private", "offline", "add task", "project"], .localTasks),

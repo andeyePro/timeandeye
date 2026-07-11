@@ -3531,6 +3531,62 @@ public final class AppController: ObservableObject {
                       Int(rgb.blueComponent * 255))
     }
 
+    // MARK: Colour sets (Settings ▸ Colours — Martin, 2026-07-11)
+
+    /// Re-derive EVERY automatic colour from scratch: cohesive per-project
+    /// families replace preserved pre-engine hues that shared none. The
+    /// user's own picks (overrides) are untouched; records for tasks no
+    /// longer resolvable to a project are preserved as they stand. One ⌘Z
+    /// restores the previous palette exactly.
+    public func rederiveAutomaticColours() {
+        let before = colourAssignments
+        var groups: [String: [String]] = [:]
+        for task in taskCache {
+            guard let key = projectKey(for: task) else { continue }
+            groups[key, default: []].append(task.ref.storageKey)
+        }
+        registerUndo("re-derive automatic colours") { [weak self] in
+            guard let self else { return }
+            self.colourAssignments = before
+            self.scheduleColoursSave()
+            self.objectWillChange.send()
+        }
+        colourAssignments = ColourEngine.rederiveAll(
+            groups: groups.map { (projectKey: $0.key, memberTaskKeys: $0.value) },
+            in: colourAssignments)
+        scheduleColoursSave()
+        objectWillChange.send()
+    }
+
+    /// The complete current colour state, for Save colour set….
+    public func currentColourSet() -> ColourSet {
+        ColourSet(taskOverrides: settings.taskColours,
+                  projectOverrides: settings.projectColours,
+                  assignments: colourAssignments)
+    }
+
+    /// Replace the whole colour state with a saved set (Load colour set…).
+    /// Undoable as one step — both the overrides and the engine store swap
+    /// back together.
+    public func applyColourSet(_ set: ColourSet) {
+        let beforeAssignments = colourAssignments
+        let beforeTaskOverrides = settings.taskColours
+        let beforeProjectOverrides = settings.projectColours
+        registerUndo("load colour set") { [weak self] in
+            guard let self else { return }
+            self.colourAssignments = beforeAssignments
+            self.settings.taskColours = beforeTaskOverrides
+            self.settings.projectColours = beforeProjectOverrides
+            self.scheduleColoursSave()
+            self.objectWillChange.send()
+        }
+        colourAssignments = set.assignments
+        settings.taskColours = set.taskOverrides
+        settings.projectColours = set.projectOverrides
+        scheduleColoursSave()
+        objectWillChange.send()
+    }
+
     public func setColour(_ colour: NSColor, for ref: TaskRef) {
         let previous = settings.taskColours[ref.storageKey]
         registerUndo("colour change") { [weak self] in

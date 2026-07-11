@@ -86,7 +86,7 @@ func settingsIAChecks(_ c: Checks) {
         // 2026-07-11: the backend connection is not the front page).
         try expectEq(SettingsIA.Category.allCases.first, .tracking)
         try expectEq(SettingsIA.Category.allCases.last, .about)
-        try expectEq(SettingsIA.Category.allCases.count, 10)
+        try expectEq(SettingsIA.Category.allCases.count, 11)
         try expectEq(SettingsIA.Category.backend.title, "Connections")
     }
 }

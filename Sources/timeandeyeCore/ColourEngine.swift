@@ -180,6 +180,31 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
 
 // MARK: - The engine
 
+/// A saved colour set (Settings ▸ Colours — Martin, 2026-07-11): the user's
+/// explicit picks PLUS the engine's records — everything that determines
+/// what renders, so loading a set reproduces the exact look, automatic
+/// behaviour included.
+public struct ColourSet: Codable, Equatable, Sendable {
+    public var version: Int
+    /// settings.taskColours — the user's per-task picks (hex by storageKey).
+    public var taskOverrides: [String: String]
+    /// settings.projectColours — the user's project-swatch picks.
+    public var projectOverrides: [String: String]
+    /// The engine store as it stood when saved.
+    public var assignments: ColourAssignments
+
+    public static let currentVersion = 1
+
+    public init(taskOverrides: [String: String],
+                projectOverrides: [String: String],
+                assignments: ColourAssignments) {
+        self.version = Self.currentVersion
+        self.taskOverrides = taskOverrides
+        self.projectOverrides = projectOverrides
+        self.assignments = assignments
+    }
+}
+
 public enum ColourEngine {
 
     // MARK: Palette constants (colour-lab strategy C)
@@ -279,6 +304,49 @@ public enum ColourEngine {
             firstSeen: now, provenance: "auto")
         store.projects[key] = record
         return record
+    }
+
+    // MARK: Re-derive from scratch (Martin, 2026-07-11)
+
+    /// Drop and re-allocate every automatic colour for the given project
+    /// groupings, in first-seen order, so the whole palette comes out
+    /// cohesive: anchors spread across the wheel, each project's tasks
+    /// shading its own hue neighbourhood — the cure for preserved legacy
+    /// colours that predate the engine and share no family. Records for
+    /// keys NOT covered by `groups` are preserved untouched (history tasks
+    /// the caller can no longer group), user overrides never live in this
+    /// store at all, and original first-seen stamps order the pass and
+    /// survive it. Deterministic: same store + groups ⇒ same result.
+    public static func rederiveAll(
+        groups: [(projectKey: String, memberTaskKeys: [String])],
+        in store: ColourAssignments,
+        at now: Date = Date()) -> ColourAssignments {
+        var rebuilt = store
+        func projectSeen(_ key: String) -> Date { store.projects[key]?.firstSeen ?? now }
+        func taskSeen(_ key: String) -> Date { store.tasks[key]?.firstSeen ?? now }
+        let ordered = groups.sorted {
+            (projectSeen($0.projectKey), $0.projectKey)
+                < (projectSeen($1.projectKey), $1.projectKey)
+        }
+        // Clear everything being re-derived FIRST, so allocation only has
+        // to stay distinct from what is genuinely staying.
+        for group in ordered {
+            rebuilt.projects[group.projectKey] = nil
+            for key in group.memberTaskKeys { rebuilt.tasks[key] = nil }
+        }
+        for group in ordered {
+            _ = projectRecord(group.projectKey, in: &rebuilt,
+                              at: projectSeen(group.projectKey))
+            let members = group.memberTaskKeys.sorted {
+                (taskSeen($0), $0) < (taskSeen($1), $1)
+            }
+            for key in members {
+                _ = taskHex(key, projectKey: group.projectKey, in: &rebuilt,
+                            at: taskSeen(key))
+            }
+        }
+        rebuilt.version = ColourAssignments.currentVersion
+        return rebuilt
     }
 
     /// One-time migration commit: snapshot a pre-engine colour (the legacy

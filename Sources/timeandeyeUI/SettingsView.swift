@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import timeandeyeCore
 import timeandeyeMac
 
@@ -60,6 +61,7 @@ struct SettingsView: View {
                 case .tracking:      trackingSections
                 case .behaviour:     behaviourSections
                 case .menuBar:       menuBarSections
+                case .colours:       coloursSections
                 case .localTasks:    localTasksSections
                 case .billing:       billingSections
                 case .emailCalendar: emailCalendarSections
@@ -293,6 +295,60 @@ struct SettingsView: View {
                 Text("The first few letters of what's being tracked appear after the time — \"21m andey\". Set to 0 to hide it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+    }
+
+    @State private var colourSetNote: String?
+
+    @ViewBuilder private var coloursSections: some View {
+            Section("Automatic colours") {
+                Button("Re-derive all automatic colours") {
+                    controller.rederiveAutomaticColours()
+                    colourSetNote = nil
+                }
+                Text("Rebuilds the whole automatic palette cohesively: every project gets a distinct anchor colour and its tasks shade around it. Colours you picked yourself are untouched — and ⌘Z restores the previous palette exactly. Edit any single colour from the Time Spent legend (click its swatch) or the timeline editor.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Colour sets") {
+                HStack {
+                    Button("Save colour set…") { saveColourSet() }
+                    Button("Load colour set…") { loadColourSet() }
+                    if let note = colourSetNote {
+                        Text(note).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text("A set is a JSON file capturing every colour — your own picks and the automatic assignments — so you can keep looks and swap between them. Loading replaces everything and is one ⌘Z to undo.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+    }
+
+    private func saveColourSet() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "timeandeye-colours.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(controller.currentColourSet()).write(to: url)
+            colourSetNote = "Saved"
+        } catch {
+            colourSetNote = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func loadColourSet() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let set = try JSONDecoder().decode(ColourSet.self,
+                                               from: Data(contentsOf: url))
+            controller.applyColourSet(set)
+            colourSetNote = "Loaded"
+        } catch {
+            colourSetNote = "Couldn't read that file as a colour set"
+        }
     }
 
     @ViewBuilder private var localTasksSections: some View {
