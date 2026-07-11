@@ -58,6 +58,20 @@
 - [x] Adjacency boost label honesty — DONE 2026-07-11: the reasoning read
   "+22%" for a value that is percentage POINTS (0.19 → 0.42); it now reads
   "0.19 → 0.42 (+23 pts)". Drawer + live share the one `apply` format.
+- [x] Live decay was dead (F2-2) — DONE 2026-07-11: `handleFocus`'s
+  `handleInput(now)` bumped `lastInput` to `now` before `attribute()` read
+  `liveContinuity`, so the running-clock boost never decayed — full strength
+  regardless of inactivity. `handleFocus` now captures the previous input and
+  passes it via `liveContinuity(at:lastActive:)`. New integration check drives
+  `SessionTracker` end-to-end (synthetic-Continuity checks were blind to it).
+- [x] Undo re-stamps provenance (F2-3) — DONE 2026-07-11: undo of a task-change
+  timeline edit re-ran `applyTimelineEdit`, which re-stamps `.userAssigned` on
+  a task change, clobbering the row's original provenance. The inverse now puts
+  the pre-edit provenance back (mirrors `reassignTimelineSessions`' undo).
+- [x] Leisure inherits work provenance (F2-4) — DONE 2026-07-11: the
+  non-work→leisure flip in `commitSwitch` never updated `currentDecision`, so
+  leisure spans carried the prior work task's provenance (incl. `userAssigned`).
+  Now stamps an honest engine decision (`.ranked`) for the leisure target.
 
 ## Review drawer (Martin's critique, 2026-07-10)
 

@@ -4287,6 +4287,13 @@ public final class AppController: ObservableObject {
                     restore.pushedToOP = current.pushedToOP
                 }
                 await self.applyTimelineEdit(restore, undoable: false)
+                // applyTimelineEdit re-stamps .userAssigned when the task
+                // changed; put the pre-edit provenance back so ⌘Z restores
+                // the row exactly as it stood (mirrors reassignTimelineSessions).
+                if var s = try? self.journal.session(id: previous.id) {
+                    s.provenance = previous.provenance
+                    try? self.journal.update(s)
+                }
                 restoreLearning?()
             }
         }

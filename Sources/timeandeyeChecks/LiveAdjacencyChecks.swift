@@ -103,4 +103,43 @@ func liveAdjacencyChecks(_ c: Checks) {
         try expectEq(with.ranked, without.ranked)
         try expectNil(a.lastLiveBoost)
     }
+
+    // The checks above feed synthetic Continuity values straight to
+    // attribute(), so they never exercise how SessionTracker DERIVES the
+    // decay clock — and were blind to F2-2: handleFocus treats the focus
+    // itself as input (bumping lastInput to `now`) BEFORE reading
+    // liveContinuity, so the gap was always 0 and the running task got a
+    // FULL boost however long the user had actually been away. Only driving
+    // the tracker end-to-end catches it.
+    c.check("SessionTracker seam: the live boost decays over real inactivity") {
+        let epoch = Date(timeIntervalSince1970: 1_750_000_000)
+        func at(_ s: TimeInterval) -> Date { epoch.addingTimeInterval(s) }
+        let work = ActivitySignal(app: "Ghostty", windowTitle: "timeandeye build",
+                                  timestamp: at(0))
+        func ambiguous(_ t: TimeInterval) -> ActivitySignal {
+            ActivitySignal(app: "Preview", windowTitle: "holiday-photo.jpg",
+                           timestamp: at(t))
+        }
+        // Establish op(1) as the running task, register a real last-input
+        // moment at t100, then focus an evidence-free surface `gap` seconds
+        // of inactivity later. The boost the running-clock prior applies is
+        // what we read back.
+        func boostAfterGap(_ gap: TimeInterval) -> AdjacencyBoost? {
+            let a = Attributor(instanceHost: host)
+            a.confirm(work, task: .op(1))
+            let tracker = SessionTracker(attributor: a, config: TrackerConfig()) { tasks }
+            tracker.start(task: .op(1), at: at(0))
+            tracker.handle(.focus(work))            // committed op(1); lastInput → t0
+            tracker.handle(.input(at(100)))         // last REAL activity at t100
+            tracker.handle(.focus(ambiguous(100 + gap)))
+            return a.lastLiveBoost
+        }
+        let full = boostAfterGap(5)                 // within the full-strength window
+        let decayed = boostAfterGap(9 * 60)         // 9 min into the decay ramp (< idle stop)
+
+        try expect((full?.boost ?? 0) > 0, "a fresh gap must boost the running task")
+        try expect((decayed?.boost ?? 0) > 0, "9 min < 15 min horizon: some boost remains")
+        try expect((decayed?.boost ?? 0) < (full?.boost ?? 0) - 0.01,
+                   "the boost must DECAY over 9 min of inactivity, not stay at full strength")
+    }
 }

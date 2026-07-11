@@ -310,11 +310,21 @@ public final class SessionTracker {
     /// COMMITTED slice's task (`pendingSwitch.from`), not the display target
     /// — boosting a not-yet-committed guess would entrench it with its own
     /// echo. Stopped clocks carry no prior (the resume ladder owns that).
-    private func liveContinuity(at now: Date) -> Attributor.Continuity? {
+    /// `lastActive` overrides where the decay clock starts. A focus change is
+    /// itself treated as input (`handleInput` bumps `lastInput` to `now`
+    /// BEFORE attribution runs), so reading `lastInput` here would always see
+    /// a zero gap and hand the running task a FULL boost no matter how long
+    /// the user had been away. `handleFocus` therefore captures the PREVIOUS
+    /// input moment and passes it in, so the boost decays over real
+    /// inactivity. The reevaluate/enrichment paths pass nothing (no focus/
+    /// input bump has happened) and keep using the genuine `lastInput`.
+    private func liveContinuity(at now: Date,
+                                lastActive: Date? = nil) -> Attributor.Continuity? {
         guard case .tracking(let displayTarget, _) = state else { return nil }
         let committed = pendingSwitch.map(\.from) ?? displayTarget
         guard case .task = committed else { return nil }
-        return .init(target: committed, lastActive: lastInput ?? currentStart ?? now)
+        return .init(target: committed,
+                     lastActive: lastActive ?? lastInput ?? currentStart ?? now)
     }
 
     /// Re-evaluate the current surface against the attributor WITHOUT splitting
@@ -454,6 +464,10 @@ public final class SessionTracker {
     private func handleFocus(_ signal: ActivitySignal) {
         if screenLocked { return }   // locked: don't open a window span
         let now = signal.timestamp
+        // Capture the last real input BEFORE handleInput bumps it to `now`:
+        // the live-continuity decay measures the gap since the previous
+        // activity, and a focus change is not itself that activity.
+        let priorInput = lastInput
         handleInput(now)   // a focus change counts as input; also runs the idle check
         if let prev = currentSignal, let start = currentStart {
             if now.timeIntervalSince(start) >= config.primeDwellSeconds {
@@ -462,7 +476,8 @@ public final class SessionTracker {
             endCurrentSpan(at: now)
         }
         let attribution = attributor.attribute(signal, tasks: tasks(), now: now,
-                                               continuity: liveContinuity(at: now))
+                                               continuity: liveContinuity(at: now,
+                                                                          lastActive: priorInput))
         currentSignal = signal
         currentStart = now
         onDebug("focus \(signal.app)|\(signal.windowTitle ?? "-") -> best \(String(describing: attribution.best)) state \(state)")
@@ -726,6 +741,12 @@ public final class SessionTracker {
                 if current != .task(leisure) {
                     flushSessions(asOf: boundary)
                     state = .tracking(.task(leisure), certainty: score)
+                    // Stamp an honest engine decision: the surface was
+                    // classified non-work and routed to the leisure task by
+                    // inference. Without this the leisure span would inherit
+                    // the prior WORK task's provenance (incl. userAssigned),
+                    // making the card claim the user hand-picked leisure.
+                    currentDecision = SessionProvenance(source: .ranked)
                     // Leisure time began at the pend, and the sensor won't
                     // re-emit an unchanged surface: resume the span from the
                     // boundary under the NEW (leisure) state.
