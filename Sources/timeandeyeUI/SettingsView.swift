@@ -242,20 +242,17 @@ struct SettingsView: View {
 
     @ViewBuilder private var trackingSections: some View {
             Section("Auto-push") {
+                // ONE threshold: at/above it, sessions post to the
+                // connected app by themselves; everything below it queues
+                // for review. The separate review threshold (and its silent
+                // limbo of journalled-but-never-asked slices) is gone.
                 let threshold = controller.settings.certaintyAutoPushThreshold
+                let backendName = controller.primaryBackendName ?? "OpenProject"
                 Slider(value: $controller.settings.certaintyAutoPushThreshold, in: 0.5...1.01) {
-                    Text("Auto-push threshold")
+                    Text("Auto-push to \(backendName)")
                 }
-                Text(threshold > 1.0 ? "Never auto-push (review everything)"
-                     : "Auto-push sessions ≥ \(Int((threshold * 100).rounded()))% certain")
-                    .font(.caption).foregroundStyle(.secondary)
-                let reviewThreshold = controller.settings.reviewThreshold
-                Slider(value: $controller.settings.reviewThreshold, in: 0.0...1.0) {
-                    Text("Review threshold")
-                }
-                Text("Queue for review below \(Int((reviewThreshold * 100).rounded()))% certain "
-                     + "· auto-push at \(Int((threshold * 100).rounded()))% and above "
-                     + "· in between, Time&I journals but neither asks nor posts")
+                Text(threshold > 1.0 ? "Never auto-push — everything queues for your review"
+                     : "Sessions ≥ \(Int((threshold * 100).rounded()))% certain post to \(backendName) by themselves; everything below queues for your review")
                     .font(.caption).foregroundStyle(.secondary)
                 // The floor's meaningful range starts AT the Switch Buffer:
                 // anything briefer never journals, so a sub-buffer floor is

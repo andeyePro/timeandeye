@@ -100,9 +100,7 @@ public enum SettingsIA {
              ["lock", "locked", "invoice", "xero", "billed"], .backend),
         // Tracking
         Item("tracking.autoPush", "Auto-push threshold",
-             ["certainty", "automatic", "post", "upload", "push"], .tracking),
-        Item("tracking.review", "Review threshold",
-             ["queue", "certain", "ask", "review"], .tracking),
+             ["certainty", "automatic", "post", "upload", "push", "review"], .tracking),
         Item("tracking.floor", "Review queue floor",
              ["brief", "glances", "seconds", "minimum"], .tracking),
         Item("tracking.refileMode", "When later evidence contradicts past entries",

@@ -4,7 +4,17 @@ public struct TrackerConfig: Equatable, Sendable {
     public var minSegmentSeconds: TimeInterval
     public var primeDwellSeconds: TimeInterval
     public var idleThresholdSeconds: TimeInterval
+    /// The SWITCHING confidence floor: a candidate below this can't switch
+    /// or resume the clock. Fixed internally since 2026-07-11 — it used to
+    /// double as the review-queue gate, which left slices between it and
+    /// the push bar in silent limbo (journalled, never asked, never posted;
+    /// Martin's verdict: no purpose survives scrutiny).
     public var uncertainBelow: Double
+    /// The REVIEW-QUEUE gate: closed spans below this certainty queue for
+    /// review. Fed by the auto-push threshold, so everything that doesn't
+    /// post by itself gets asked about (the review floor still keeps brief
+    /// visits quiet).
+    public var reviewBelow: Double
     public var nonWorkTracksLocally: Bool
     public var leisureTask: TaskRef?
     /// A detected task switch only commits after the new target has held
@@ -21,6 +31,7 @@ public struct TrackerConfig: Equatable, Sendable {
                 primeDwellSeconds: TimeInterval = 30,
                 idleThresholdSeconds: TimeInterval = 600,
                 uncertainBelow: Double = 0.6,
+                reviewBelow: Double = 0.9,
                 nonWorkTracksLocally: Bool = false,
                 leisureTask: TaskRef? = nil,
                 switchGraceSeconds: TimeInterval = 30,
@@ -29,6 +40,7 @@ public struct TrackerConfig: Equatable, Sendable {
         self.primeDwellSeconds = primeDwellSeconds
         self.idleThresholdSeconds = idleThresholdSeconds
         self.uncertainBelow = uncertainBelow
+        self.reviewBelow = reviewBelow
         self.nonWorkTracksLocally = nonWorkTracksLocally
         self.leisureTask = leisureTask
         self.switchGraceSeconds = switchGraceSeconds
@@ -762,11 +774,20 @@ public final class SessionTracker {
                              start: start, end: end, provenance: currentDecision)
         spans.append(span)
         onSpanClosed(span)
-        if certainty < config.uncertainBelow {
+        // Everything that won't auto-push gets ASKED about — the old gate
+        // (uncertainBelow) left a silent limbo between it and the push bar
+        // (his verdict). The review floor still keeps brief visits out.
+        if certainty < config.reviewBelow {
             queueReview(signal: signal, start: start, end: end)
         } else {
             flushPendingReview()
         }
+    }
+
+    /// The auto-push threshold moved at runtime (Settings slider) — the
+    /// review gate follows without a relaunch.
+    public func setReviewBelow(_ value: Double) {
+        config.reviewBelow = value
     }
 
     private func queueReview(signal: ActivitySignal, start: Date, end: Date) {

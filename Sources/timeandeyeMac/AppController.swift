@@ -264,6 +264,11 @@ public final class AppController: ObservableObject {
             // changed floor re-filters the live queue immediately — no
             // restart, no waiting for the next segment to arrive.
             if oldValue.reviewFloorSeconds != settings.reviewFloorSeconds { reloadReview() }
+            // The push bar IS the review gate now — the tracker follows a
+            // slider move without a relaunch.
+            if oldValue.certaintyAutoPushThreshold != settings.certaintyAutoPushThreshold {
+                tracker.setReviewBelow(settings.certaintyAutoPushThreshold)
+            }
             if oldValue.opBaseURL != settings.opBaseURL { rebuildClient() }
             if oldValue.licenseKey != settings.licenseKey { revalidateLicense() }
             // Local-task edits (rename / project / leisure / add / remove) flow
@@ -551,7 +556,10 @@ public final class AppController: ObservableObject {
             // startUp's async refresh applies the live value.
             idleThresholdSeconds: UserDefaults.standard
                 .object(forKey: "cachedDisplaySleepSeconds") as? TimeInterval ?? 600,
-            uncertainBelow: loadedSettings.reviewThreshold,
+            // Switching keeps its own fixed floor; the review gate is the
+            // push bar (no silent limbo between two thresholds).
+            uncertainBelow: 0.6,
+            reviewBelow: loadedSettings.certaintyAutoPushThreshold,
             nonWorkTracksLocally: loadedSettings.trackLeisureLocally && leisure != nil,
             leisureTask: leisure,
             switchGraceSeconds: loadedSettings.switchGraceSeconds,
@@ -2477,7 +2485,7 @@ public final class AppController: ObservableObject {
             return (chosen, explanation.chosenScore)
         }
         let plan = ContradictionRefile.plan(sessions: sessions, bar: bar,
-                                            suggestFloor: settings.reviewThreshold,
+                                            suggestFloor: 0.5,
                                             dismissed: Set(settings.refileDismissals),
                                             score: scoring)
         contradictedPostedCount = plan.postedFlags.count
