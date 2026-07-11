@@ -199,8 +199,16 @@ struct SettingsView: View {
                     // today's rules confidently contradict are only flagged
                     // here (his design).
                     if controller.contradictedPostedCount > 0 {
-                        Text("\(controller.contradictedPostedCount) posted entr\(controller.contradictedPostedCount == 1 ? "y looks" : "ies look") mis-filed under today's rules — review them on the timeline")
-                            .font(.caption).foregroundStyle(.orange)
+                        HStack(spacing: 4) {
+                            Text("\(controller.contradictedPostedCount) entr\(controller.contradictedPostedCount == 1 ? "y" : "ies") posted to \(controller.primaryBackendName ?? "OpenProject") look\(controller.contradictedPostedCount == 1 ? "s" : "") mis-filed under today's rules —")
+                                .font(.caption).foregroundStyle(.orange)
+                            Button("review them on the timeline") {
+                                controller.timeWindowView = .timeline
+                                openWindow(id: "time")
+                                AndeyeWindows.activateOnceVisible(opened: "time")
+                            }
+                            .buttonStyle(.link).font(.caption)
+                        }
                     }
                     ForEach(unhealthy) { item in
                         HStack {
@@ -280,7 +288,7 @@ struct SettingsView: View {
                 HStack(spacing: 4) {
                     Text(reviewFloor <= buffer
                          ? "Every uncertain slice asks for review (visits briefer than the \(Int(buffer))s"
-                         : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review – briefer visits are still timed, they just never ask. Related:")
+                         : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review – briefer visits are still timed and follow the Auto-push rule above, they just never ask. Related:")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Switch Buffer") { selectedCategory = .behaviour }
                         .buttonStyle(.link).font(.caption)
@@ -295,8 +303,17 @@ struct SettingsView: View {
                     Text("Queue them for my review").tag(RefileMode.review)
                 }
                 .pickerStyle(.menu)
-                Text("Entries you assigned or pinned yourself are never touched in any mode; posted entries are only ever flagged.")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("Entries you assigned or pinned yourself are never touched in any mode; entries posted to \(backendName) are only ever")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("flagged") {
+                        controller.timeWindowView = .timeline
+                        openWindow(id: "time")
+                        AndeyeWindows.activateOnceVisible(opened: "time")
+                    }
+                    .buttonStyle(.link).font(.caption)
+                    Text("on the timeline.").font(.caption).foregroundStyle(.secondary)
+                }
                 Text(controller.journalSummary)
                     .font(.caption).foregroundStyle(.secondary)
             }
