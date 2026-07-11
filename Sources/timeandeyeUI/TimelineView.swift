@@ -453,8 +453,8 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut("\\", modifiers: .command)
-            .help("Today's breakdown — click for the pie, ⌘\\ to flip (⌃/right-click: 2nd window)")
-            .contextMenu { Button("Open the pie in a 2nd window") { nav.openSecond(.spent) } }
+            .help("Today's breakdown — click for the donut, ⌘\\ to flip (⌃/right-click: 2nd window)")
+            .contextMenu { Button("Open the donut in a 2nd window") { nav.openSecond(.spent) } }
             Text("today \(MenuTitle.text(elapsed: todayTotalSeconds, certainty: nil, showPercent: false))")
                 .font(.caption).foregroundStyle(.secondary)
         }

@@ -1180,7 +1180,7 @@ struct PopoverView: View {
                 }
             }
             .keyboardShortcut("y", modifiers: .command)
-            .help("Time – today's breakdown; click for the timeline / pie (⌘Y)")
+            .help("Time – today's breakdown; click for the timeline / donut (⌘Y)")
             Button {
                 openWindow(id: "review")
                 AndeyeWindows.activateOnceVisible(opened: "review")

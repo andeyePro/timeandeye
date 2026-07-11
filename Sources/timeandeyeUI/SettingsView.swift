@@ -268,11 +268,17 @@ struct SettingsView: View {
                             get: { max(controller.settings.reviewFloorSeconds, buffer) },
                             set: { controller.settings.reviewFloorSeconds = max($0, buffer) }),
                         in: buffer...600, step: 15)
-                Text(reviewFloor <= buffer
-                     ? "Every uncertain slice asks for review (visits briefer than the \(Int(buffer))s Switch Buffer never journal at all)"
-                     : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review "
-                       + "– briefer glances stay tracked, just never queue")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text(reviewFloor <= buffer
+                         ? "Every uncertain slice asks for review (visits briefer than the \(Int(buffer))s"
+                         : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review – briefer visits are still timed, they just never ask. Related:")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Switch Buffer") { selectedCategory = .behaviour }
+                        .buttonStyle(.link).font(.caption)
+                    if reviewFloor <= buffer {
+                        Text("never journal at all)").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Picker("When later evidence contradicts past entries",
                        selection: $controller.settings.refileMode) {
                     Text("Update them automatically").tag(RefileMode.auto)
@@ -282,12 +288,12 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 Text("Entries you assigned or pinned yourself are never touched in any mode; posted entries are only ever flagged.")
                     .font(.caption).foregroundStyle(.secondary)
-                Toggle("Auto-comment time entries (apps/docs used)",
-                       isOn: $controller.settings.autoComment)
                 Text(controller.journalSummary)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Comments") {
+                Toggle("Auto-comment time entries (apps/docs used)",
+                       isOn: $controller.settings.autoComment)
                 Toggle("Comment to tracked time (on the time entry)",
                        isOn: $controller.settings.commentToTrackedTime)
                 Toggle("Comment to task (on the task's activity feed)",
@@ -309,7 +315,7 @@ struct SettingsView: View {
                             selection: hexColourBinding(\.colourLow, fallback: .systemRed))
                 ColorPicker("High-certainty colour",
                             selection: hexColourBinding(\.colourHigh, fallback: .systemGreen))
-                Text("Set both to the same colour to disable the signalling.")
+                Text("Set both to the same colour to disable colour signalling.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
                 Stepper(controller.settings.menuTaskChars == 0
@@ -333,23 +339,22 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 // Graphical links, not prose directions: the two
                 // places a single colour can be edited, one click away.
-                HStack(spacing: 10) {
-                    Button {
+                HStack(spacing: 4) {
+                    Text("Edit any single colour from the")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Time Donut legend") {
                         controller.timeWindowView = .spent
                         openWindow(id: "time")
                         AndeyeWindows.activateOnceVisible(opened: "time")
-                    } label: {
-                        Label("Time Spent legend", systemImage: "chart.pie")
                     }
-                    Button {
+                    .buttonStyle(.link).font(.caption)
+                    Text("or the").font(.caption).foregroundStyle(.secondary)
+                    Button("Timeline editor") {
                         controller.timeWindowView = .timeline
                         openWindow(id: "time")
                         AndeyeWindows.activateOnceVisible(opened: "time")
-                    } label: {
-                        Label("Timeline editor", systemImage: "calendar.day.timeline.left")
                     }
-                    Text("edit any single colour from either")
-                        .font(.caption).foregroundStyle(.secondary)
+                    .buttonStyle(.link).font(.caption)
                 }
             }
             Section("Colour sets") {
@@ -544,19 +549,22 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Popover defaults to \"Reassign\" (relabel the running session); off = \"Switch to\" (start fresh). Clicking the task title flips it.",
                        isOn: $controller.settings.popoverDefaultsToChangeMode)
-                Picker("Time button opens", selection: $controller.settings.timeViewOpenMode) {
+                Picker("Donut button opens", selection: $controller.settings.timeViewOpenMode) {
                     Text("Timeline").tag(TimeViewOpenMode.timeline)
                     Text("Last viewed").tag(TimeViewOpenMode.lastViewed)
-                    Text("Pie chart").tag(TimeViewOpenMode.spent)
+                    Text("Donut").tag(TimeViewOpenMode.spent)
                 }
                 .pickerStyle(.menu).fixedSize()
                 Toggle("System notifications (sounds still play when off)",
                        isOn: $controller.settings.systemNotifications)
-                Toggle("Quiet while presenting",
+                Toggle("Hide banners while presenting",
                        isOn: $controller.settings.quietWhilePresenting)
                     .help("While your mic is live or a display is mirrored, banners that would name a task or contact stay hidden – nothing about your work shows on a shared screen.")
-                Toggle("Lock the Mac when I leave my desk (⌘⇧L)",
-                       isOn: $controller.settings.lockOnLeave)
+                Toggle(isOn: $controller.settings.lockOnLeave) {
+                    // The walk figure IS the popover control that arms this —
+                    // naming it beats describing it.
+                    Text("Lock the Mac when I continue work away (\(Image(systemName: "figure.walk")) ⌘⇧L)")
+                }
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
             }
@@ -830,7 +838,7 @@ struct SettingsView: View {
                 // — a column of disabled knobs for a feature you haven't
                 // enabled is noise, not affordance.
                 if controller.settings.calendarSignalEnabled {
-                    Toggle("Alert before meetings",
+                    Toggle("Pulse the menu-bar mark before meetings",
                            isOn: $controller.settings.calendarPreMeetingAlertEnabled)
                         .help("The menu-bar mark pulses gently through the lead-up to each meeting.")
                     Picker("Alert lead time",
