@@ -36,10 +36,13 @@ struct TimeContainer: View {
             case .spent:    SpentView(controller: controller, nav: nav)
             }
         }
-        // Reflect the current view in the window identity so the timeline's
-        // scroll-pan monitor can recognise it, and retitle the host window to
-        // match; both update as the view flips.
-        .openOnActiveSpace(id: view == .timeline ? "timeline" : "spent",
+        // Window identity is the SCENE ("time"/"time2"), stable as the view
+        // flips — so activation and open-grants can tell the two Time windows
+        // apart (they used to share the VIEW-mode id, and openWindow(id:) /
+        // activateOnceVisible target the scene, not the view). The scroll-pan
+        // monitor recognises the timeline by its window INSTANCE and its
+        // title, so the title still carries the view mode.
+        .openOnActiveSpace(id: isPrimary ? "time" : "time2",
                            title: view == .timeline ? "Timeline" : "Time Donut")
         .onAppear { if isPrimary { controller.noteTimeViewOpened(view) } }
     }

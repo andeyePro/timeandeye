@@ -2,6 +2,17 @@
 
 ## Review-fix cluster (2026-07-11)
 
+- [x] Window activation + green button + re-front (F1-1/F1-5/F1-2/F1-4) — DONE
+  2026-07-11: Time windows now carry their SCENE id ("time"/"time2") as window
+  identity (was the shared VIEW mode), so activation fronts the right one and
+  the open grant is a plain identity match (no "time"↔"time2" cross-grant that
+  killed the sibling's green button for 4 s); the view mode stays in the title
+  for the scroll-pan monitor. `GreenButtonHelper.greenClicked` holds off while a
+  fullscreen enter/exit animates (shared `isMidFullscreenTransition`), matching
+  the timer path. The 1 Hz off-Space re-front backs off (a few tries per
+  episode, then once per 10 s) and logs only on state change. DebugLog gained an
+  8 MB cap (atomic rename to `.old`). AppKit paths aren't check-covered (checks
+  don't link timeandeyeUI); verified by suite 863/0 + release build.
 - [x] Mechanical polish cluster (strings, search index, small UI correctness)
   — DONE 2026-07-11: SettingsIA titles/keywords brought current (Donut button,
   Hide banners, walk-figure lock label; "donut" keyword added to the two Time

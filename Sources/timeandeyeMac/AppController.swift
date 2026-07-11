@@ -5402,7 +5402,12 @@ public enum DebugLog {
     /// signal-handler path stays as safe as it ever was (open/write/close
     /// are async-signal-safe; a queue hop is not). 0644 keeps the file
     /// world-readable for the scoped SSH user (see the type doc).
+    /// Above this the log is rotated (the 1 Hz window churn alone can add
+    /// megabytes a day — an unbounded /Users/Shared file is a slow leak).
+    private static let maxBytes: off_t = 8 * 1024 * 1024
+
     public static func write(_ message: String) {
+        rotateIfLarge()
         let line = "\(formatter.string(from: Date())) \(message)\n"
         let fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
         guard fd >= 0 else { return }
@@ -5411,6 +5416,17 @@ public enum DebugLog {
             _ = Darwin.write(fd, buf.baseAddress, buf.count)
         }
         close(fd)
+    }
+
+    /// Dumb, crash-safe rotation: one stat, one rename. Once the file passes
+    /// `maxBytes`, move it to `<path>.old` and start fresh. rename(2) is
+    /// atomic, so a line from a racing writer (background queue, crash
+    /// handler) lands wholly in the old file or the new one — never split,
+    /// never corrupt. No locks, safe to call on every write.
+    private static func rotateIfLarge() {
+        var st = Darwin.stat()
+        guard stat(path, &st) == 0, st.st_size > maxBytes else { return }
+        rename(path, path + ".old")
     }
 }
 

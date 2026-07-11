@@ -95,8 +95,18 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     /// Trade accepted: option-click zoom is gone; green means fullscreen.
     final class GreenButtonHelper: NSObject {
         weak var window: NSWindow?
+        /// The owning view, for its fullscreen-transition state. Mutating
+        /// collectionBehavior/level or toggling fullscreen WHILE macOS is
+        /// still animating a Space wedges the window solid (fix thirteen) —
+        /// the timer path already holds off in that gap (applyToWindow), and
+        /// a green click must too.
+        weak var owner: SpaceJoiningView?
         @objc func greenClicked(_ sender: Any?) {
             guard let w = window else { return }
+            // Mid enter/exit animation: ignore the click rather than pose the
+            // window while the Space is still settling (same hold the 1 Hz
+            // timer path applies). Transitions are brief; the next click lands.
+            if owner?.isMidFullscreenTransition == true { return }
             // Mac-native nuances stay native (Martin, 2026-07-11): option-
             // click means zoom, and green inside fullscreen exits.
             if NSEvent.modifierFlags.contains(.option) {
@@ -144,6 +154,21 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
         private var transitionObservers: [NSObjectProtocol] = []
         private var inFullscreenTransition = false
         private var transitionHoldUntil: TimeInterval = 0
+        /// Re-front back-off (Martin's 06:52 log): a window macOS refuses to
+        /// pull onto the active Space was orderFrontRegardless'd — and logged
+        /// — every single second. The first few ticks after it lands off-Space
+        /// still fix it fast; after that, retry only every 10 s, and log only
+        /// when the off-Space state first appears.
+        private var wasOffActiveSpace = false
+        private var refrontAttempts = 0
+        private var lastRefrontAt: TimeInterval = 0
+        /// True while macOS is animating an enter/exit (plus a settle margin):
+        /// no window mutation is safe in this gap. Read by GreenButtonHelper
+        /// so a green click holds off exactly as the 1 Hz timer path does.
+        var isMidFullscreenTransition: Bool {
+            inFullscreenTransition
+                || ProcessInfo.processInfo.systemUptime < transitionHoldUntil
+        }
         private let greenHelper = GreenButtonHelper()
         /// Fix nine (Martin, 2026-07-10 morning) closed two blind spots:
         /// the popover's menu-bar reveal blinded the heuristic at exactly
@@ -304,6 +329,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             if let zoom = w.standardWindowButton(.zoomButton),
                zoom.target !== greenHelper {
                 greenHelper.window = w
+                greenHelper.owner = self
                 zoom.target = greenHelper
                 zoom.action = #selector(GreenButtonHelper.greenClicked(_:))
             }
@@ -345,8 +371,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // mutating flags in that gap wedged a window solid (fix
             // thirteen — Martin, 2026-07-11). Hold until the transition
             // ends plus a settle margin.
-            if inFullscreenTransition
-                || ProcessInfo.processInfo.systemUptime < transitionHoldUntil { return }
+            if isMidFullscreenTransition { return }
             // Fullscreen-look heuristic: menu bar hidden ⇒ visibleFrame
             // reaches the top of the screen. Blind while the menu bar is
             // transiently revealed (popover open, pointer at top) — the
@@ -423,10 +448,25 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // hasn't caught up, order it front again (cheap, idempotent,
             // and only while the fullscreen-capable pose is on).
             if wantFullscreenPose, visible, !w.isOnActiveSpace {
-                w.orderFrontRegardless()
-                if logworthy {
-                    DebugLog.write("window \(windowID ?? w.title): re-fronted (was off active Space in overlay pose)")
+                let nowUp = ProcessInfo.processInfo.systemUptime
+                let firstOffSpace = !wasOffActiveSpace
+                if firstOffSpace { refrontAttempts = 0 }
+                // A few quick retries per off-Space episode, then back off to
+                // once per 10 s — so a window macOS won't move doesn't spin
+                // orderFrontRegardless (and a log line) every second.
+                if refrontAttempts < 3 || nowUp - lastRefrontAt >= 10 {
+                    w.orderFrontRegardless()
+                    refrontAttempts += 1
+                    lastRefrontAt = nowUp
+                    // Log only when the off-Space state first appears — the
+                    // per-second repeat was pure noise.
+                    if firstOffSpace {
+                        DebugLog.write("window \(windowID ?? w.title): re-fronted (was off active Space in overlay pose)")
+                    }
                 }
+                wasOffActiveSpace = true
+            } else {
+                wasOffActiveSpace = false
             }
             let wantedLevel: NSWindow.Level = wantFullscreenPose ? .floating : .normal
             if w.level != wantedLevel {
@@ -502,13 +542,14 @@ enum AndeyeWindows {
     /// or failed depending on whether anything had been opened in the
     /// previous few seconds. Nil on either side stays permissive (an
     /// unidentified view or an unlabelled open grants broadly — safe, just
-    /// less precise). The Time scenes ("time"/"time2") host views whose
-    /// ids are the VIEW mode ("timeline"/"spent").
+    /// less precise). Every themed window (Time included) now carries its
+    /// SCENE id, so an open grant is a plain identity match — a "time" open
+    /// no longer cross-graces "time2" (and vice versa), which used to drop the
+    /// sibling into the auxiliary overlay pose for 4s and kill its green
+    /// button meanwhile.
     static func openGrantApplies(opened: String?, windowID: String?) -> Bool {
         guard let opened, let windowID else { return true }
-        if opened == windowID { return true }
-        return (opened == "time" || opened == "time2")
-            && (windowID == "timeline" || windowID == "spent")
+        return opened == windowID
     }
 
     static func activateOnceVisible(opened: String? = nil, _ retriesLeft: Int = 40) {
