@@ -166,8 +166,6 @@ public enum SettingsIA {
              ["own email", "me", "correspondent"], .emailCalendar),
         Item("email.rules", "Context rules",
              ["learned", "pinned", "forget", "provenance", "email rules"], .emailCalendar),
-        Item("email.order", "Email match order",
-             ["specificity", "level", "precedence", "general", "specific"], .emailCalendar),
         Item("calendar.enable", "Use my calendar",
              ["meetings", "events", "read-only"], .emailCalendar),
         Item("calendar.preAlert", "Alert before meetings",

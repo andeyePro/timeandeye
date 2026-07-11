@@ -803,27 +803,18 @@ struct SettingsView: View {
                     get: { controller.settings.ownEmailEntries },
                     set: { controller.settings.ownEmailEntries = $0 }))
                     .help("Comma-separated addresses or domains that are YOU – never treated as a correspondent (e.g. martin@example.com, andeye.com)")
-                Text("When a message matches several rules, the most specific wins. Order is general (top) → specific (bottom); the bottom-most matching level takes precedence.")
+                // The specificity ladder is FIXED (mail system < domain <
+                // correspondent < subject) — neither of us could name a case
+                // where another order wins, so the reorder controls are gone
+                //. The stored order remains honoured internally
+                // for old settings files.
+                Text("When a message matches several rules, the most specific wins: mail system, then domain, then correspondent, then subject.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Context rules…") {
                     openWindow(id: "rules")
                     AndeyeWindows.activateOnceVisible(opened: "rules")
                 }
                 .help("Every learned + pinned email rule, with provenance (origin, created, fired, last fired) — forget any of them.")
-                ForEach(Array(controller.settings.emailMatchOrder.enumerated()), id: \.element) { i, level in
-                    HStack {
-                        Text("\(i + 1). \(level.label)")
-                        Spacer()
-                        Button { moveEmailLevel(i, by: -1) } label: { Image(systemName: "chevron.up") }
-                            .buttonStyle(.borderless).disabled(i == 0)
-                            .help("More general")
-                        Button { moveEmailLevel(i, by: 1) } label: { Image(systemName: "chevron.down") }
-                            .buttonStyle(.borderless)
-                            .disabled(i == controller.settings.emailMatchOrder.count - 1)
-                            .help("More specific")
-                    }
-                    .font(.callout)
-                }
             }
 
             Section("Calendar") {
@@ -917,15 +908,6 @@ struct SettingsView: View {
                     Int(rgb.greenComponent * 255),
                     Int(rgb.blueComponent * 255))
             })
-    }
-
-    /// Reorder the email-matching specificity ladder (persists via settings didSet).
-    private func moveEmailLevel(_ i: Int, by delta: Int) {
-        var order = controller.settings.emailMatchOrder
-        let j = i + delta
-        guard order.indices.contains(i), order.indices.contains(j) else { return }
-        order.swapAt(i, j)
-        controller.settings.emailMatchOrder = order
     }
 
     // MARK: - Duplicate reconcile rows
