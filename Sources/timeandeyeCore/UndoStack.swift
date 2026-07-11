@@ -11,14 +11,28 @@ public final class UndoStack {
     /// Non-nil while inside `group`: inverses accumulate here and the group
     /// pushes ONE entry when the outermost body finishes.
     private var pendingGroup: [Inverse]?
+    /// Identifies the open group. A registration folds in ONLY when it runs
+    /// inside this group's OWN task context (`activeGroupToken` matches) —
+    /// see `register`.
+    private var pendingGroupToken: Int?
+    private static var tokenSeq = 0
+
+    /// The group a registration belongs to, carried down the group body's
+    /// synchronous + awaited call tree (task-locals propagate through `await`
+    /// but NOT into a separately-spawned `Task`). This is the reentrancy
+    /// guard: a `group` body that awaits yields the main actor, and any
+    /// UNRELATED registration that interleaves during that suspension runs
+    /// with no (or a different) token, so it lands as its own ⌘Z step instead
+    /// of being swallowed under the open group's label.
+    @TaskLocal private static var activeGroupToken: Int?
 
     public init() {}
 
     public var count: Int { stack.count }
 
     public func register(_ label: String, inverse: @escaping Inverse) {
-        if pendingGroup != nil {
-            pendingGroup?.append(inverse)   // accumulate; the group pushes one entry
+        if pendingGroupToken != nil, Self.activeGroupToken == pendingGroupToken {
+            pendingGroup?.append(inverse)   // in-context: the group pushes one entry
         } else {
             stack.append((label, inverse))
         }
@@ -29,8 +43,8 @@ public final class UndoStack {
     /// neighbour and moves a slice, undoes in a single ⌘Z). Nestable — inner
     /// groups fold into the outermost. An empty group pushes nothing.
     public func group(_ label: String, _ body: () async -> Void) async {
-        let outer = beginGroup()
-        await body()
+        let (token, outer) = beginGroup()
+        await Self.$activeGroupToken.withValue(token) { await body() }
         endGroup(label, outer: outer)
     }
 
@@ -44,21 +58,38 @@ public final class UndoStack {
     /// labels, so an overload would silently re-route existing sync-bodied
     /// `await group { … }` callers here.
     public func groupSync(_ label: String, _ body: () -> Void) {
-        let outer = beginGroup()
-        body()
+        let (token, outer) = beginGroup()
+        Self.$activeGroupToken.withValue(token) { body() }
         endGroup(label, outer: outer)
     }
 
-    /// True when this group is the outermost (it owns the final push).
-    private func beginGroup() -> Bool {
-        let outer = pendingGroup == nil
-        if outer { pendingGroup = [] }
-        return outer
+    /// Establish (or nest into) the open group, returning its token and
+    /// whether THIS call owns the final push.
+    private func beginGroup() -> (token: Int, outer: Bool) {
+        // Genuine nesting: this call runs inside the open group's own context
+        // (an awaited inner group). Reuse the token so its registrations still
+        // fold in; not outer, so it pushes nothing of its own.
+        if let open = pendingGroupToken, Self.activeGroupToken == open {
+            return (open, false)
+        }
+        Self.tokenSeq += 1
+        let token = Self.tokenSeq
+        // Own the pending slot only when none is open. A group that begins
+        // while an UNRELATED group is mid-await (a stray task) must NOT seize
+        // the slot and swallow the stranger's inverses; it runs under its own
+        // token, so its registrations land as individual undo steps.
+        if pendingGroup == nil {
+            pendingGroup = []
+            pendingGroupToken = token
+            return (token, true)
+        }
+        return (token, false)
     }
 
     private func endGroup(_ label: String, outer: Bool) {
         guard outer, let group = pendingGroup else { return }
         pendingGroup = nil
+        pendingGroupToken = nil
         if !group.isEmpty {
             stack.append((label, { for inverse in group.reversed() { await inverse() } }))
         }

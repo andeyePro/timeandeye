@@ -2,6 +2,17 @@
 
 ## Review-fix cluster (2026-07-11)
 
+- [x] Undo ordering + group reentrancy + reconcile delete tracking
+  (F3-3/F3-4/F3-7) — DONE 2026-07-11: `undo()` chained its inverses (were
+  detached, unordered Tasks that interleaved on rapid ⌘Z⌘Z) so N completes
+  before N+1, still off the caller. `UndoStack.group` gained a task-local group
+  token: a registration folds in only when it runs in the group's OWN call
+  context, so a stray registration interleaving during a group body's await is
+  its own ⌘Z step, not swallowed under the group's label (new interleave
+  check). `applyReconcile` now tracks which backend deletes actually succeeded
+  (was `try?`-swallowed) — undo recreates only those, and a failed delete
+  surfaces via `lastError` instead of undo manufacturing a duplicate. Suite
+  864/0.
 - [x] Window activation + green button + re-front (F1-1/F1-5/F1-2/F1-4) — DONE
   2026-07-11: Time windows now carry their SCENE id ("time"/"time2") as window
   identity (was the shared VIEW mode), so activation fronts the right one and

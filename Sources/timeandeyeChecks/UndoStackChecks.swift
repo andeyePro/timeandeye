@@ -1,6 +1,21 @@
 import Foundation
 import timeandeyeCore
 
+/// A one-shot awaitable gate: lets a check park a group body mid-flight and
+/// resume it deterministically. Actor-isolated so the wait/resume handshake is
+/// race-free on the cooperative pool.
+private actor Gate {
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var released = false
+    func release() {
+        if let w = waiter { waiter = nil; w.resume() } else { released = true }
+    }
+    func wait() async {
+        if released { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+}
+
 func undoStackChecks(_ c: Checks) async {
     await c.check("register/pop is LIFO and count tracks it") {
         let u = UndoStack()
@@ -111,6 +126,44 @@ func undoStackChecks(_ c: Checks) async {
         try expectEq(u.count, 10_000)
         let top = try unwrap(u.pop())
         try expectEq(top.label, "edit 9999")
+    }
+
+    await c.check("a registration interleaving during a group's await is its OWN ⌘Z step") {
+        // F3-4: a group body that awaits yields the main actor; an UNRELATED
+        // registration arriving in that gap used to fold into the open group
+        // (no reentrancy guard) — one ⌘Z would then revert a stranger's edit
+        // under the group's label. The group's task-local token now scopes the
+        // fold to its own context, so the stranger stands alone.
+        let u = UndoStack()
+        var log: [String] = []
+        let bodyStarted = Gate()
+        let mayFinish = Gate()
+
+        // The group runs in its OWN task, so its task-local token does not
+        // leak to the check's task where the stray register() below runs.
+        let grouped = Task {
+            await u.group("group") {
+                u.register("inside") { log.append("inside") }
+                await bodyStarted.release()   // "I'm registered and about to park"
+                await mayFinish.wait()        // suspend until the stray has landed
+            }
+        }
+        await bodyStarted.wait()
+        u.register("stray") { log.append("stray") }   // no group token → its own step
+        await mayFinish.release()
+        _ = await grouped.value
+
+        try expectEq(u.count, 2, "the stray edit must not fold into the group")
+        // The group finalises AFTER the stray was registered, so it sits on
+        // top; the point is that the two are SEPARATE steps.
+        let top = try unwrap(u.pop())
+        try expectEq(top.label, "group", "the completed group sits on top")
+        await top.inverse()
+        try expectEq(log, ["inside"], "the group holds ONLY its own inverse, not the stray")
+        let below = try unwrap(u.pop())
+        try expectEq(below.label, "stray")
+        await below.inverse()
+        try expectEq(log, ["inside", "stray"], "the stray is its own independent ⌘Z step")
     }
 
     await c.check("edit + follow-on coalesce in ONE group undoes to the exact prior rows") {

@@ -2851,6 +2851,12 @@ public final class AppController: ObservableObject {
         undoCount = undoStack.count
     }
 
+    /// Serialises undo inverses: rapid ⌘Z⌘Z used to spawn one detached Task
+    /// each, whose awaits interleaved so inverse N+1's writes could race N's
+    /// (last-writer-wins on the same rows). Each inverse now chains after the
+    /// previous one — ordered, and still off the caller so the UI never blocks.
+    private var undoChain: Task<Void, Never>?
+
     public func undo() {
         guard let last = undoStack.pop() else {
             NSSound(named: "Funk")?.play()
@@ -2858,7 +2864,11 @@ public final class AppController: ObservableObject {
         }
         undoCount = undoStack.count
         notifyContent(symbol: "arrow.uturn.backward", text: last.label, sound: "Pop")
-        Task { await last.inverse() }
+        let previous = undoChain
+        undoChain = Task { @MainActor in
+            await previous?.value      // inverse N completes before N+1 starts
+            await last.inverse()
+        }
     }
 
     /// The ⌘Z local monitor's token (C13): removed at terminate/deinit —
@@ -3056,8 +3066,19 @@ public final class AppController: ObservableObject {
         if let merged = action.mergedComment {
             try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
         }
+        // Track which deletes ACTUALLY landed: a swallowed failure left the
+        // duplicate live on the backend, yet undo then recreated it anyway —
+        // manufacturing a duplicate. Undo now recreates only the entries this
+        // pass truly removed, and a failed delete surfaces instead of
+        // silently diverging journal from backend.
+        var deletedIDs: Set<RemoteEntryID> = []
         for id in action.deleteIDs {
-            try? await backend.deleteTimeEntry(id: id)
+            do {
+                try await backend.deleteTimeEntry(id: id)
+                deletedIDs.insert(id)
+            } catch {
+                lastError = "\(backend.displayName) delete failed: \(error)"
+            }
         }
         for sid in action.repointSessionIDs {
             if var s = try? journal.session(id: sid) {
@@ -3067,14 +3088,15 @@ public final class AppController: ObservableObject {
             }
         }
         let n = action.deleteIDs.count
-        registerUndo("reconcile \(n) duplicate\(n == 1 ? "" : "s")") { [weak self] in
+        registerUndo("reconcile \(n) duplicate\(n == 1 ? "" : "s")") { [weak self, deletedIDs] in
             guard let self, let backend = self.backend else { return }
-            // Re-create each deleted entry verbatim; the backend assigns
-            // fresh ids. Activity names map back through the cached activity
-            // list (nil when unmapped — the backend applies its default,
-            // matching what a plain re-post would do).
+            // Re-create ONLY the entries this apply actually deleted; a
+            // duplicate whose delete failed is still live, so recreating it
+            // would double it. The backend assigns fresh ids. Activity names
+            // map back through the cached activity list (nil when unmapped —
+            // the backend applies its default, matching a plain re-post).
             var freshIDs: [RemoteEntryID: RemoteEntryID] = [:]
-            for e in plan.recreate {
+            for e in plan.recreate where deletedIDs.contains(e.id) {
                 let activityID = e.activity.flatMap { name in
                     self.activities.first { $0.name == name }?.id
                 }
