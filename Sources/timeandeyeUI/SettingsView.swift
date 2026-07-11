@@ -34,6 +34,8 @@ struct SettingsView: View {
     @State private var exportPeriod: TimePeriod = .thisWeek
     @State private var exportCopied = false
     @State private var licenseKeyField = ""
+    @State private var opExpanded = false
+    @State private var opExpandSet = false
     // iCloud quota stewardship (b/c) — see the Maintenance section below.
     @State private var consolidationPlan: JournalPrune.Plan?
     @State private var hardCapCandidatePlan: JournalPrune.Plan?
@@ -139,8 +141,106 @@ struct SettingsView: View {
     // MARK: - Category forms (section bodies unchanged from the single-page
     // Settings; the categories + search are the 2026-07-10 IA rework)
 
+    /// Connections (his redesign): Licence leads, then the connector
+    /// classes — Standard / Pro / Premium — with each connector folded into a
+    /// twisty that hides its plumbing (URL, key, connect) behind a heading
+    /// that shows the at-a-glance truth (task count, who's connected).
+    /// Posting health sits UNDER its connector but never inside the fold — a
+    /// problem must not hide behind a twisty.
     @ViewBuilder private var backendSections: some View {
-            Section("OpenProject") {
+            licenceSection
+
+            Section("Standard connectors") {
+                DisclosureGroup(isExpanded: $opExpanded) {
+                    opConnectorForm
+                } label: {
+                    connectorHeading("OpenProject",
+                                     detail: controller.taskCache.isEmpty
+                                        ? "not connected"
+                                        : "\(controller.taskCache.count) tasks · \(controller.connectedAs ?? "connected")")
+                }
+                .onAppear {
+                    // First presentation only: open the plumbing for the
+                    // unconnected, fold it away once a connection is live.
+                    if !opExpandSet {
+                        opExpanded = controller.taskCache.isEmpty
+                        opExpandSet = true
+                    }
+                }
+                connectorHealth(named: "OpenProject")
+            }
+
+            Section("Pro connectors") {
+                // Xero ships with andeyePro; the Pro build registers it and
+                // this row goes live. In the community build it sits greyed
+                // behind the licence gate, one click from the upgrade page.
+                if controller.registeredConnectorNames.contains("Xero") {
+                    connectorHeading("Xero", detail: "connected")
+                    connectorHealth(named: "Xero")
+                } else {
+                    HStack {
+                        Text("Xero").foregroundStyle(.tertiary)
+                        Spacer()
+                        Text(controller.license == nil
+                             ? "needs a licence —" : "not in your licence —")
+                            .font(.caption).foregroundStyle(.tertiary)
+                        Button("upgrade") {
+                            openURL(URL(string: "https://time.andeye.com/pro")!)
+                        }
+                        .buttonStyle(.link).font(.caption)
+                    }
+                }
+            }
+
+            Section("Premium connectors") {
+                Text("None yet.").font(.caption).foregroundStyle(.tertiary)
+            }
+    }
+
+    /// Licence moved from About to the top of Connections — the
+    /// licence is what unlocks connectors, so it lives with them.
+    @ViewBuilder private var licenceSection: some View {
+            Section("Licence") {
+                if let l = controller.license {
+                    // v2 keys always carry an expiry; a lifetime key's is
+                    // ~200 years out — call that what it is, not a renewal.
+                    let farFuture = l.issued.addingTimeInterval(100 * 365.25 * 86_400)
+                    Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"
+                         + (l.expires > farFuture ? " · lifetime"
+                            : " · renews \(l.expires.formatted(date: .abbreviated, time: .omitted))"))
+                        .font(.caption)
+                } else {
+                    Text("Community (free) — everything you see is fully functional. A licence adds paid backends (Xero…).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                HStack {
+                    TextField("Paste licence key", text: $licenseKeyField)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Apply") {
+                        controller.settings.licenseKey =
+                            licenseKeyField.isEmpty ? nil : licenseKeyField
+                        licenseKeyField = ""
+                    }
+                    .disabled(licenseKeyField.isEmpty && controller.settings.licenseKey == nil)
+                }
+                if let problem = controller.licenseProblem {
+                    Text(problem).font(.caption).foregroundStyle(.red)
+                }
+            }
+    }
+
+    /// A connector twisty's always-visible heading: name + at-a-glance state.
+    private func connectorHeading(_ name: String, detail: String) -> some View {
+        HStack {
+            Text(name).fontWeight(.medium)
+            Spacer()
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// The OpenProject plumbing hidden by its twisty: URL, key, connect,
+    /// connection status, default activity.
+    @ViewBuilder private var opConnectorForm: some View {
                 TextField("Instance URL", text: $controller.settings.opBaseURL,
                           prompt: Text("https://op.example.com"))
                     .textFieldStyle(.roundedBorder)
@@ -186,21 +286,23 @@ struct SettingsView: View {
                         }
                     }
                 }
-            }
+    }
 
-            // Posting health (A5): only appears when something needs a human —
-            // quarantined rows (retryable in one click) or posted entries the
-            // journal has since moved away from (re-sync is the coming
-            // amendment feature; for now the drift is at least VISIBLE).
-            let unhealthy = controller.postingHealthReport()
-            if !unhealthy.isEmpty || controller.contradictedPostedCount > 0 {
-                Section("Posting health") {
+    /// Posting health for one connector (A5, his placement): only rows
+    /// that need a human — quarantined (one-click retry), drifted-from-journal
+    /// posted entries, invoice locks. Rendered under the connector's heading,
+    /// outside its twisty.
+    @ViewBuilder private func connectorHealth(named name: String) -> some View {
+            let items = controller.postingHealthReport().filter { $0.name == name }
+            let showContradicted = name == (controller.primaryBackendName ?? "OpenProject")
+                && controller.contradictedPostedCount > 0
+            if !items.isEmpty || showContradicted {
                     // Posted money never moves off a bulk pass — slices
                     // today's rules confidently contradict are only flagged
                     // here (his design).
-                    if controller.contradictedPostedCount > 0 {
+                    if showContradicted {
                         HStack(spacing: 4) {
-                            Text("\(controller.contradictedPostedCount) entr\(controller.contradictedPostedCount == 1 ? "y" : "ies") posted to \(controller.primaryBackendName ?? "OpenProject") look\(controller.contradictedPostedCount == 1 ? "s" : "") mis-filed under today's rules —")
+                            Text("\(controller.contradictedPostedCount) entr\(controller.contradictedPostedCount == 1 ? "y" : "ies") posted to \(name) look\(controller.contradictedPostedCount == 1 ? "s" : "") mis-filed under today's rules —")
                                 .font(.caption).foregroundStyle(.orange)
                             Button("review them on the timeline") {
                                 controller.timeWindowView = .timeline
@@ -210,9 +312,9 @@ struct SettingsView: View {
                             .buttonStyle(.link).font(.caption)
                         }
                     }
-                    ForEach(unhealthy) { item in
+                    ForEach(items) { item in
                         HStack {
-                            Text(item.name).font(.caption)
+                            Text("Posting health").font(.caption)
                             Spacer()
                             if item.diverged > 0 {
                                 Text("\(item.diverged) drifted from the journal")
@@ -244,7 +346,6 @@ struct SettingsView: View {
                             }
                         }
                     }
-                }
             }
     }
 
@@ -676,34 +777,6 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var aboutSections: some View {
-            Section("Licence") {
-                if let l = controller.license {
-                    // v2 keys always carry an expiry; a lifetime key's is
-                    // ~200 years out — call that what it is, not a renewal.
-                    let farFuture = l.issued.addingTimeInterval(100 * 365.25 * 86_400)
-                    Text("\(l.tier.rawValue.capitalized) — licensed to \(l.licensee)"
-                         + (l.expires > farFuture ? " · lifetime"
-                            : " · renews \(l.expires.formatted(date: .abbreviated, time: .omitted))"))
-                        .font(.caption)
-                } else {
-                    Text("Community (free) — everything you see is fully functional. A licence adds paid backends (Xero…).")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                HStack {
-                    TextField("Paste licence key", text: $licenseKeyField)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Apply") {
-                        controller.settings.licenseKey =
-                            licenseKeyField.isEmpty ? nil : licenseKeyField
-                        licenseKeyField = ""
-                    }
-                    .disabled(licenseKeyField.isEmpty && controller.settings.licenseKey == nil)
-                }
-                if let problem = controller.licenseProblem {
-                    Text(problem).font(.caption).foregroundStyle(.red)
-                }
-            }
-
             Section("About") {
                 // .textSelection alone is unreliable inside a grouped macOS
                 // Form (rows swallow the drag), so the copy button is the

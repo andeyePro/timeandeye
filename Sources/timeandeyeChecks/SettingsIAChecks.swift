@@ -69,7 +69,7 @@ func settingsIAChecks(_ c: Checks) {
         // must still take them somewhere useful.
         let cats = Set(SettingsIA.search("xero").map(\.category))
         try expect(cats.contains(.billing), "xero should surface billing mappings")
-        try expect(cats.contains(.about), "xero should surface the licence")
+        try expect(cats.contains(.backend), "xero should surface the licence (now under Connections)")
         let invoice = Set(SettingsIA.search("invoice").map(\.category))
         try expect(invoice.contains(.backend), "invoice should surface unlock (posting health)")
     }

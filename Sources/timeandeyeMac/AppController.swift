@@ -4588,6 +4588,13 @@ public final class AppController: ObservableObject {
     /// OpenProject"). nil in standalone mode.
     public var primaryBackendName: String? { backend?.displayName }
 
+    /// Display names of every registered connector — Settings ▸ Connections
+    /// uses this to tell a live Pro connector (andeyePro registered it) from
+    /// one that should sit greyed behind the licence gate.
+    public var registeredConnectorNames: [String] {
+        registry.entries.map { $0.backend.displayName }
+    }
+
     /// The timestamped comment list stored locally against a task — the
     /// standalone half of comment-to-task (notes for .local tasks, backends
     /// without a comment endpoint, and failed posts land here). Newest last.

@@ -87,6 +87,12 @@ public enum SettingsIA {
     /// right category even when the section is currently empty.
     public static let items: [Item] = [
         // Backend
+        Item("backend.licence", "Licence",
+             ["license", "key", "xero", "paid", "pro", "community", "renew",
+              "upgrade", "tier"], .backend),
+        Item("backend.connectors", "Connectors",
+             ["xero", "openproject", "pro", "premium", "standard", "upgrade",
+              "finance", "connect"], .backend),
         Item("backend.url", "Instance URL",
              ["openproject", "server", "address", "connect", "http", "backend",
               "connections"], .backend),
@@ -194,8 +200,6 @@ public enum SettingsIA {
         // About
         Item("about.build", "Build details",
              ["version", "copy", "bug report", "about"], .about),
-        Item("about.licence", "Licence",
-             ["license", "key", "xero", "paid", "pro", "community", "renew"], .about),
     ]
 
     // MARK: Search
