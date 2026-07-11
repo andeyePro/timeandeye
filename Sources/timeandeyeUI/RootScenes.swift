@@ -226,6 +226,10 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                         windowID: self.windowID) else { return }
                     self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
                     self.applyToWindow()
+                    // Arrival must be instant, not next-tick: AppKit takes a
+                    // beat to honour fresh Space flags, and waiting for the
+                    // 1 Hz timer read as "very slow" (Martin, 2026-07-11).
+                    self.burstApply()
                 }
             }
             // Fullscreen fix thirteen: bracket macOS's enter/exit animations.
@@ -304,6 +308,17 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 zoom.action = #selector(GreenButtonHelper.greenClicked(_:))
             }
         }
+        /// Three quick follow-up applies (0.1/0.3/0.7s) after an open or
+        /// show — the fast path for "window must be HERE now" moments the
+        /// 1 Hz cadence is too slow for.
+        private func burstApply() {
+            for delay in [0.1, 0.3, 0.7] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.applyToWindow()
+                }
+            }
+        }
+
         func applyToWindow() {
             guard let w = window else { return }
             applyIdentity()
@@ -316,6 +331,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 // pose at the show instant — macOS decides the Space then,
                 // up to a tick before this branch can run.)
                 pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
+                burstApply()
             }
             wasVisible = visible
             didInitialApply = true
