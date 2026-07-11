@@ -273,6 +273,15 @@ struct SettingsView: View {
                      : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review "
                        + "– briefer glances stay tracked, just never queue")
                     .font(.caption).foregroundStyle(.secondary)
+                Picker("When later evidence contradicts past entries",
+                       selection: $controller.settings.refileMode) {
+                    Text("Update them automatically").tag(RefileMode.auto)
+                    Text("Leave them alone").tag(RefileMode.off)
+                    Text("Queue them for my review").tag(RefileMode.review)
+                }
+                .pickerStyle(.menu)
+                Text("Entries you assigned or pinned yourself are never touched in any mode; posted entries are only ever flagged.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Auto-comment time entries (apps/docs used)",
                        isOn: $controller.settings.autoComment)
                 Text(controller.journalSummary)

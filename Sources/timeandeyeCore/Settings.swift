@@ -115,6 +115,10 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// Dismissed mis-filed-slice suggestions (ContradictionRefile
     /// dismissal keys) — "dismiss for good" survives relaunch.
     public var refileDismissals: [String]
+    /// What happens when later evidence contradicts past entries
+    /// (Martin's, 2026-07-11): update them, leave them, or queue
+    /// everything for his review.
+    public var refileMode: RefileMode
     /// Non-OP tasks (leisure etc.), fully tracked locally.
     public var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
@@ -222,6 +226,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 lockOnLeave: Bool = false,
                 diagnosticsMode: Bool = false,
                 refileDismissals: [String] = [],
+                refileMode: RefileMode = .auto,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:],
                 projectColours: [String: String] = [:],
@@ -270,6 +275,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.lockOnLeave = lockOnLeave
         self.diagnosticsMode = diagnosticsMode
         self.refileDismissals = refileDismissals
+        self.refileMode = refileMode
         self.localTasks = localTasks
         self.taskColours = taskColours
         self.projectColours = projectColours
@@ -328,6 +334,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         lockOnLeave = c.lenient(.lockOnLeave, or: defaults.lockOnLeave)
         diagnosticsMode = c.lenient(.diagnosticsMode, or: defaults.diagnosticsMode)
         refileDismissals = c.lenient(.refileDismissals, or: defaults.refileDismissals)
+        refileMode = c.lenient(.refileMode, or: defaults.refileMode)
         localTasks = c.lenient(.localTasks, or: defaults.localTasks)
         taskColours = c.lenient(.taskColours, or: defaults.taskColours)
         projectColours = c.lenient(.projectColours, or: defaults.projectColours)

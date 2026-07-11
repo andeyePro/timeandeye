@@ -2445,6 +2445,12 @@ public final class AppController: ObservableObject {
     /// posted ones flag; the rest suggest. Runs on the retro pass's own
     /// debounce, so every teach/correction re-evaluates promptly.
     private func runContradictionPass() {
+        // the whole behaviour is a user choice.
+        guard settings.refileMode != .off else {
+            refileSuggestions = []
+            contradictedPostedCount = 0
+            return
+        }
         let bar = settings.certaintyAutoPushThreshold
         let now = Date()
         let horizon = now.addingTimeInterval(-Self.contradictionScanDays)
@@ -2470,6 +2476,12 @@ public final class AppController: ObservableObject {
                                             dismissed: Set(settings.refileDismissals),
                                             score: scoring)
         contradictedPostedCount = plan.postedFlags.count
+        // Review mode: nothing moves by itself — confident engine-decided
+        // contradictions queue as suggestions alongside the rest.
+        if settings.refileMode == .review {
+            refileSuggestions = plan.suggestions + plan.refiles
+            return
+        }
         refileSuggestions = plan.suggestions
         guard !plan.refiles.isEmpty else { return }
         applyRefiles(plan.refiles,

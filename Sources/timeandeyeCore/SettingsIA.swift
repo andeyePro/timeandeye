@@ -105,6 +105,8 @@ public enum SettingsIA {
              ["queue", "certain", "ask", "review"], .tracking),
         Item("tracking.floor", "Review queue floor",
              ["brief", "glances", "seconds", "minimum"], .tracking),
+        Item("tracking.refileMode", "When later evidence contradicts past entries",
+             ["refile", "mis-filed", "update", "review mode", "correct"], .tracking),
         Item("tracking.autoComment", "Auto-comment time entries",
              ["apps", "docs", "comment"], .tracking),
         Item("tracking.commentTracked", "Comment to tracked time",

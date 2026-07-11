@@ -17,6 +17,16 @@ import Foundation
 ///   - Below the bar — or when the slice predates provenance journalling,
 ///     where "engine-decided" cannot be proven — it's a suggestion only:
 ///     one review row, refile-all or dismiss-for-good.
+/// How the engine treats past entries that later evidence contradicts
+///: update them automatically, leave them entirely alone,
+/// or queue every contradiction for his review. String-raw + lenient
+/// decode like every settings enum.
+public enum RefileMode: String, Codable, CaseIterable, Sendable {
+    case auto      // update past entries when certainty changes
+    case off       // never touch (or mention) past entries
+    case review    // everything becomes a suggestion to confirm
+}
+
 public enum ContradictionRefile {
 
     public struct Finding: Equatable, Sendable {
