@@ -87,6 +87,31 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     /// transition when the window is shown, so behaviours set a runloop later
     /// changed nothing and opening over a fullscreen app still switched Space
     /// (Martin, 2026-07-09 — twice).
+    /// The zoom (green) button's replacement action: whatever pose the
+    /// window is in, make it CAPABLE of its own fullscreen Space first,
+    /// then enter fullscreen — the overlay pose otherwise downgrades green
+    /// to a plain zoom that squats over the fullscreen app underneath
+    /// (Martin, 2026-07-11). Inside its own fullscreen, green just exits.
+    /// Trade accepted: option-click zoom is gone; green means fullscreen.
+    final class GreenButtonHelper: NSObject {
+        weak var window: NSWindow?
+        @objc func greenClicked(_ sender: Any?) {
+            guard let w = window else { return }
+            if w.styleMask.contains(.fullScreen) {
+                w.toggleFullScreen(sender)
+                return
+            }
+            var behaviours = w.collectionBehavior
+            behaviours.remove([.canJoinAllSpaces, .fullScreenAuxiliary,
+                               .fullScreenNone, .moveToActiveSpace])
+            behaviours.insert(.fullScreenPrimary)
+            w.collectionBehavior = behaviours
+            w.level = .normal
+            DebugLog.write("green: forced primary pose, entering fullscreen (\(w.identifier?.rawValue ?? w.title))")
+            w.toggleFullScreen(sender)
+        }
+    }
+
     final class SpaceJoiningView: NSView {
         var windowID: String?
         var title: String?
@@ -113,6 +138,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
         private var transitionObservers: [NSObjectProtocol] = []
         private var inFullscreenTransition = false
         private var transitionHoldUntil: TimeInterval = 0
+        private let greenHelper = GreenButtonHelper()
         /// Fix nine (Martin, 2026-07-10 morning) closed two blind spots:
         /// the popover's menu-bar reveal blinded the heuristic at exactly
         /// open time (fresh windows attached at normal level and macOS
@@ -258,6 +284,18 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // like the identifier set above — only touch it when it differs.
             if let title, w.title != title {
                 w.title = title
+            }
+            // The green button MUST fullscreen, from any pose (Martin,
+            // 2026-07-11: "from anywhere… it just maximises"). In the
+            // overlay pose (auxiliary + canJoinAllSpaces) macOS downgrades
+            // green to zoom, so the button is retargeted at a helper that
+            // re-poses the window primary and enters fullscreen itself.
+            // Idempotent re-assert — AppKit can rebuild the button.
+            if let zoom = w.standardWindowButton(.zoomButton),
+               zoom.target !== greenHelper {
+                greenHelper.window = w
+                zoom.target = greenHelper
+                zoom.action = #selector(GreenButtonHelper.greenClicked(_:))
             }
         }
         func applyToWindow() {
@@ -457,12 +495,23 @@ enum AndeyeWindows {
         // OTHER window forward while the requested one stayed buried, which
         // read as "the settings gear needs two clicks" (Martin, 2026-07-11).
         if let id = opened {
+            // Deliberately NOT gated on isOnActiveSpace: a retained window
+            // living on another Space never satisfies that gate before the
+            // retries run out — the two-click gear. The open grant has
+            // already given it canJoinAllSpaces; ordering it front pulls it
+            // onto the current Space.
             if let target = NSApp.windows.first(where: { w in
-                w.identifier != nil && acceptable(w)
+                w.identifier != nil && w.isVisible
+                    && (w.level == .normal || w.level == .floating)
                     && openGrantApplies(opened: id, windowID: w.identifier?.rawValue)
             }) {
                 NSApp.activate(ignoringOtherApps: true)
                 target.makeKeyAndOrderFront(nil)
+                // The big hammer: shows the window even when activation is
+                // racing the popover's own dismissal — the settings gear
+                // was still needing two clicks without it (2026-07-11).
+                target.orderFrontRegardless()
+                DebugLog.write("activate: fronted \(target.identifier?.rawValue ?? target.title) for open '\(id)'")
             } else if retriesLeft > 0 {
                 DispatchQueue.main.async { activateOnceVisible(opened: id, retriesLeft - 1) }
             } else if NSApp.windows.contains(where: acceptable) {

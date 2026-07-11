@@ -1204,22 +1204,29 @@ struct TimelineView: View {
                 // Colour controls sit together, the ✕ apart on the far right
                 // — the old ✕-beside-swatch read as "reset colour" when it
                 // was really "close without saving" (Martin, 2026-07-11).
+                // "auto" sits INSIDE the swatch; the revert
+                // control only exists once there IS a manual pick (261).
+                let hasPick = controller.hasColourOverride(for: editTask ?? session.task)
                 ColorPicker("", selection: Binding(
                     get: { Color(nsColor: controller.colour(for: editTask ?? session.task)) },
                     set: { controller.setColour(NSColor($0), for: editTask ?? session.task) }))
                     .labelsHidden().frame(width: 28)
-                    .help("Task colour")
-                // "auto" tags an untouched swatch; the revert control only
-                // exists once there IS a manual pick to revert.
-                if controller.hasColourOverride(for: editTask ?? session.task) {
+                    .overlay {
+                        if !hasPick {
+                            Text("auto")
+                                .font(.system(size: 7, weight: .semibold))
+                                .foregroundStyle(Color(nsColor: controller
+                                    .colour(for: editTask ?? session.task).readableTextColour))
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .help(hasPick ? "Task colour" : "Task colour (automatic)")
+                if hasPick {
                     Button { controller.resetColour(for: editTask ?? session.task) } label: {
                         Image(systemName: "arrow.uturn.backward.circle")
                     }
                         .buttonStyle(.plain)
                         .help("Reset this task's colour to automatic")
-                } else {
-                    Text("auto").font(.caption2).foregroundStyle(.secondary)
-                        .help("This task's colour is automatic — pick one in the swatch to override")
                 }
                 Spacer().frame(width: 8)
                 Button { editing = nil } label: { Image(systemName: "xmark.circle") }
@@ -1443,21 +1450,8 @@ struct TimelineView: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if !spans.isEmpty {
                     Spacer()
-                    // [+all]: with a window selected, one click extends the
-                    // selection to every window carrying the SAME recorded
-                    // data (app + title + tab, NOT the times) — the "move all
-                    // the Calendar windows at once" gesture. Appears only
-                    // when it would actually add something.
-                    let addable = identicalUnselected(in: spans)
-                    if !addable.isEmpty {
-                        Button {
-                            selectedSpanIdx.formUnion(addable)
-                        } label: {
-                            Text("+ all")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .help("Select the \(addable.count) other window\(addable.count == 1 ? "" : "s") recorded with the same app + title")
-                    }
+                    // [+all] lives on the window CARD's top-right only —
+                    // up here its meaning wasn't clear (Martin, 2026-07-11).
                     Button { stripPxPerSec = max(stripPxPerSec / 1.6, 0.2) } label: {
                         Image(systemName: "minus.magnifyingglass")
                     }
@@ -1534,18 +1528,6 @@ struct TimelineView: View {
         "\(span.signal.app)|\(span.signal.windowTitle ?? "")|\(span.signal.tabURL ?? "")"
     }
 
-    /// Unselected span indices whose identity matches ANY selected span —
-    /// what [+all] would add. Empty when nothing is selected or every twin
-    /// is already in the selection.
-    private func identicalUnselected(in spans: [FocusSpan]) -> Set<Int> {
-        let selectedKeys = Set(selectedSpanIdx.compactMap { i -> String? in
-            i < spans.count ? spanIdentity(spans[i]) : nil
-        })
-        guard !selectedKeys.isEmpty else { return [] }
-        return Set(spans.indices.filter { i in
-            !selectedSpanIdx.contains(i) && selectedKeys.contains(spanIdentity(spans[i]))
-        })
-    }
 
     /// Finder-style selection: plain click selects just this one, ⌘-click
     /// toggles it, ⇧-click extends a contiguous range from the anchor, and

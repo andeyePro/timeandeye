@@ -84,10 +84,10 @@ struct EvidenceCardView: View {
             // click-drag selects and copies the whole story (Martin,
             // 2026-07-11 — a copy button was NOT the ask; per-row Texts
             // limited a drag to one line).
-            cardFacts
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.trailing, selectTwins != nil ? 40 : 0)
+            SelectableFacts(text: cardFactsAttributed,
+                            width: (host == .popover ? 268 : 340) - 16
+                                - (selectTwins != nil ? 40 : 0))
+            refileSection
             unlearnSection
             if onPick != nil {
                 Divider()
@@ -122,46 +122,94 @@ struct EvidenceCardView: View {
         }
     }
 
-    /// Everything the card STATES, as one concatenated Text — a single
-    /// selectable run, so click-drag copies the whole card verbatim.
-    private var cardFacts: Text {
-        var t = Text("")
-        if host == .timeline {
-            t = Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
-                .font(.caption).bold()
-            t = t + Text("\n")
+    /// One-click cure when the card KNOWS a better answer than the record
+    /// (Martin, 2026-07-11: "no obvious single click that recategorises it
+    /// correctly"): refile this window's time onto what today's rules say —
+    /// the same path as picking it in the Wrong? strip, one click sooner.
+    @ViewBuilder private var refileSection: some View {
+        if recordContradicted, onPick != nil,
+           case .task(let ref)? = explanation.chosen,
+           let task = controller.taskCache.first(where: { $0.ref == ref }) {
+            Button("↪ refile as \(task.subject)") { onPick?(task) }
+                .font(.caption)
+                .help("Move this window's time onto what today's rules say")
         }
-        t = t + Text("BECAUSE ").font(.caption2).bold().foregroundStyle(.secondary)
-            + Text(anchoredBecauseLabel).font(.caption)
+    }
+
+    /// Everything the card STATES, as one attributed string rendered by a
+    /// single native selectable label — one click-drag selects and copies
+    /// the whole card (SwiftUI Text concatenation still selected in pieces
+    /// — Martin, 2026-07-11). The forget preview line lives HERE so it
+    /// copies too; the buttons beneath stay actions-only.
+    private var cardFactsAttributed: NSAttributedString {
+        let caption = NSFont.systemFont(ofSize: 11)
+        let caption2 = NSFont.systemFont(ofSize: 10)
+        let bold = NSFont.boldSystemFont(ofSize: 11)
+        let out = NSMutableAttributedString()
+        func add(_ text: String, _ font: NSFont, _ colour: NSColor) {
+            out.append(NSAttributedString(string: text, attributes: [
+                .font: font, .foregroundColor: colour]))
+        }
+        if host == .timeline {
+            add("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")\n", bold, .labelColor)
+        }
+        add("BECAUSE ", NSFont.boldSystemFont(ofSize: 10), .secondaryLabelColor)
+        add(anchoredBecauseLabel, caption, .labelColor)
         if recordContradicted {
-            t = t + Text("\ntoday's rules would say: \(becauseLabel) – not what decided this slice")
-                .font(.caption2).foregroundStyle(.secondary)
+            add("\ntoday's rules would say: \(becauseLabel) – not what decided this slice",
+                caption2, .secondaryLabelColor)
         }
         if let prior = explanation.priorToCorrection {
-            t = t + Text("\nbefore your correction: \(priorLabel(prior))")
-                .font(.caption2).foregroundStyle(.secondary)
+            add("\nbefore your correction: \(priorLabel(prior))", caption2, .secondaryLabelColor)
         }
         if let rule = explanation.matchedEmailRule {
-            t = t + Text("\n" + ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
+            add("\n" + ruleProvenance(rule), caption2, .secondaryLabelColor)
         }
         if let rule = explanation.matchedSiteRule {
-            t = t + Text("\n" + siteRuleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
+            add("\n" + siteRuleProvenance(rule), caption2, .secondaryLabelColor)
         }
         if let pin = explanation.matchedPin {
-            t = t + Text("\n")
-                + Text(Image(systemName: "pin.fill")).font(.caption2).foregroundStyle(AndeyeColors.highlight)
-                + Text(" \(pin.rule.shortLabel)").font(.caption2).foregroundStyle(.secondary)
+            add("\n📌 \(pin.rule.shortLabel)", caption2, .secondaryLabelColor)
         }
         if let surface = explanation.matchedSurface {
-            t = t + Text("\n" + surfaceProvenance(surface)).font(.caption2).foregroundStyle(.secondary)
+            add("\n" + surfaceProvenance(surface), caption2, .secondaryLabelColor)
         }
-        t = t + Text("\nsees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
+        if let u = unlearn {
+            add("\nforgetting would fall back to: \(fallbackText(u))",
+                caption2, .tertiaryLabelColor)
+        }
+        add("\nsees: " + seesLine, caption2, .secondaryLabelColor)
         let items = candidateItems
         if !items.isEmpty {
-            t = t + Text("\ncandidates: " + items.joined(separator: " · "))
-                .font(.caption2).foregroundStyle(.tertiary)
+            add("\ncandidates: " + items.joined(separator: " · "), caption2, .tertiaryLabelColor)
         }
-        return t
+        return out
+    }
+
+    /// The whole card's facts as ONE native selectable label — NSTextField
+    /// gives continuous selection where SwiftUI Text (even concatenated)
+    /// selected in per-style pieces on macOS 14.
+    private struct SelectableFacts: NSViewRepresentable {
+        let text: NSAttributedString
+        let width: CGFloat
+
+        func makeNSView(context: Context) -> NSTextField {
+            let field = NSTextField(labelWithAttributedString: text)
+            field.isSelectable = true
+            field.allowsEditingTextAttributes = false
+            field.lineBreakMode = .byWordWrapping
+            field.maximumNumberOfLines = 0
+            field.preferredMaxLayoutWidth = width
+            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            return field
+        }
+
+        func updateNSView(_ field: NSTextField, context: Context) {
+            if field.attributedStringValue != text {
+                field.attributedStringValue = text
+            }
+            field.preferredMaxLayoutWidth = width
+        }
     }
 
     /// The best identity the card HOLDS for its header: the window title,
@@ -184,16 +232,13 @@ struct EvidenceCardView: View {
         VStack(alignment: .leading, spacing: 2) {
             if let u = unlearn {
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .top, spacing: 6) {
-                        Button { controller.forget(u, signal: signal) } label: {
-                            Text(forgetLabel(u)).font(.caption2)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Remove exactly what fired here")
-                        Text("→ would then fall back to: \(fallbackText(u))")
-                            .font(.caption2).foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    // The fallback preview lives in the selectable facts
+                    // block above; these are the actions only.
+                    Button { controller.forget(u, signal: signal) } label: {
+                        Text(forgetLabel(u)).font(.caption2)
                     }
+                    .buttonStyle(.borderless)
+                    .help("Remove exactly what fired here")
                     // The fallback isn't hypothetical to Martin — a wrong old
                     // rule sitting there as a POSSIBILITY is itself unwelcome
                     // (2026-07 feedback). Offer to remove it directly, without
