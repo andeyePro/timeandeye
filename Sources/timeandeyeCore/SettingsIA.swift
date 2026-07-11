@@ -143,6 +143,12 @@ public enum SettingsIA {
              ["color", "hex", "tint"], .menuBar),
         Item("menuBar.percent", "Show certainty %",
              ["percentage"], .menuBar),
+        Item("menuBar.drawIn", "Draw in certainty",
+             ["reveal", "partial", "logo", "mark", "eye", "draw-in",
+              "proportion", "stroke"], .menuBar),
+        Item("menuBar.monochrome", "Monochrome menu bar",
+             ["mono", "template", "calm", "black and white", "grey", "gray",
+              "plain"], .menuBar),
         Item("menuBar.taskChars", "Task name in menu bar",
              ["letters", "chars", "title", "abbreviation"], .menuBar),
         // Colours

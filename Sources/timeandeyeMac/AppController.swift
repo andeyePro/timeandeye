@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import Carbon.HIToolbox   // kVK_ANSI_L / cmdKey / shiftKey for the global Away hotkey
 import timeandeyeCore
+import timeandeyeTheme    // AndeyeLogo geometry for the menu-bar draw-in
 
 /// Pure title/cadence logic, kept out of the controller so it is checkable.
 public enum MenuTitle {
@@ -302,6 +303,13 @@ public final class AppController: ObservableObject {
             if oldValue.calendarExcludedNames != settings.calendarExcludedNames {
                 calendarBridge.setExcludedCalendarNames(settings.calendarExcludedNames)
             }
+            // The two mark-rendering toggles change the label image without
+            // touching its text/width/colour, so refreshTitle's change-gate
+            // would never redraw — render directly on a flip.
+            if oldValue.menuDrawInCertainty != settings.menuDrawInCertainty
+                || oldValue.menuMonochrome != settings.menuMonochrome {
+                renderLogo()
+            }
             // A changed lead time / alert toggle moves the alert boundaries —
             // reschedule and re-evaluate at once, so e.g. turning the
             // pre-meeting alert off stops a pulse that is running right now.
@@ -598,6 +606,10 @@ public final class AppController: ObservableObject {
     /// Current pose of the mark; renderLogo composes these with menuColour.
     private var logoT = 0.0
     private var logoWink = 0.0
+    /// The live attribution certainty the status item shows — the same value
+    /// the colour signalling blends with (refreshTitle keeps it current);
+    /// nil when stopped. Feeds the draw-in option's stroke proportion.
+    private var menuCertainty: Double?
     /// The calendar alerts' current amount (0...1) — a THIRD, independent
     /// pose alongside t/wink, driven by its own loops (`calendarPulseAnimation`
     /// / `calendarStartFlashAnimation`, below) on their own cadences, never
@@ -613,8 +625,19 @@ public final class AppController: ObservableObject {
         // reserved-width column — so the item's width is ours, not a text
         // layout's, and the mark cannot be nudged by a digit tick (the
         // third and final jiggle fix; see AndeyeLogoImage.label).
-        logoImage = AndeyeLogoImage.label(t: logoT, wink: logoWink, colour: menuColour,
-                                          flash: logoFlash, text: menuText,
+        //
+        // Draw-in certainty: the stroke proportion IS the
+        // live certainty, revealed eye-first. logoT stays the animations'
+        // own 0…1 and SCALES the certainty target, so the startup draw-on
+        // still hand-draws (to the target, not past it) and playWink's
+        // "logoT >= 1" gate still means "draw-on finished".
+        let drawIn = settings.menuDrawInCertainty
+        let target = drawIn ? AndeyeLogo.drawInReveal(certainty: menuCertainty) : 1
+        logoImage = AndeyeLogoImage.label(t: logoT * target, wink: logoWink,
+                                          from: drawIn ? .eye : .tail,
+                                          colour: menuColour, flash: logoFlash,
+                                          monochrome: settings.menuMonochrome,
+                                          text: menuText,
                                           reservedTextWidth: menuReservedWidth)
     }
 
@@ -1524,12 +1547,14 @@ public final class AppController: ObservableObject {
         let newText: String
         let newSizingTemplates: [String]
         let newColour: NSColor
+        let newCertainty: Double?
         switch trackerState {
         case .stopped:
             newText = "–"
             newSizingTemplates = []
             newColour = MenuTitle.colour(certainty: nil, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
+            newCertainty = nil
             lastDisplayedTarget = nil
         case .tracking(let target, let certainty):
             let now = Date()
@@ -1583,6 +1608,7 @@ public final class AppController: ObservableObject {
             ).map { MenuTitle.withTaskName(name(of: target), chars: settings.menuTaskChars, body: $0) }
             newColour = MenuTitle.colour(certainty: certainty, lowHex: settings.colourLow,
                                          highHex: settings.colourHigh)
+            newCertainty = certainty
         }
         // Measure the text column from the sizing candidates plus the live
         // text (belt-and-braces: the live text should never exceed its
@@ -1603,6 +1629,13 @@ public final class AppController: ObservableObject {
         if force || !newColour.isEqual(menuColour) {
             menuColour = newColour
             labelChanged = true   // the mark carries the certainty tint
+        }
+        if force || menuCertainty != newCertainty {
+            menuCertainty = newCertainty
+            // Only the draw-in renders certainty as GEOMETRY — without it a
+            // certainty move already re-renders via the tint above (and
+            // with identical low/high colours there's nothing to show).
+            if settings.menuDrawInCertainty { labelChanged = true }
         }
         // The text lives INSIDE the label image now, so the image re-renders
         // on ANY visible change — text, reservation, or tint.

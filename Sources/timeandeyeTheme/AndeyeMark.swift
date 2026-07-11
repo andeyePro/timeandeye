@@ -12,10 +12,17 @@ import SwiftUI
 public struct AndeyeMark: Shape {
     public var t: Double
     public var wink: Double
+    /// Which end the reveal grows from. `.tail` (the default) is the
+    /// original draw-on; `.eye` shows the eye first and grows toward the &
+    /// (the menu bar's certainty draw-in). Not animatable — a direction is
+    /// a mode, not a pose.
+    public var revealFrom: AndeyeLogo.RevealFrom
 
-    public init(t: Double = 1, wink: Double = 0) {
+    public init(t: Double = 1, wink: Double = 0,
+                from revealFrom: AndeyeLogo.RevealFrom = .tail) {
         self.t = t
         self.wink = wink
+        self.revealFrom = revealFrom
     }
 
     public var animatableData: AnimatablePair<Double, Double> {
@@ -33,7 +40,7 @@ public struct AndeyeMark: Shape {
     public static let aspect = AndeyeLogo.aspect
 
     public func path(in rect: CGRect) -> Path {
-        let segs = AndeyeLogo.stroke(t: t, wink: wink)
+        let segs = AndeyeLogo.stroke(t: t, wink: wink, from: revealFrom)
         guard let first = segs.first else { return Path() }
         // Fit the unit-width, `aspect`-tall (y-up) box into rect, centred,
         // preserving aspect; flip y for screen space.
@@ -57,18 +64,21 @@ public struct AndeyeMark: Shape {
 public struct AndeyeMarkView: View {
     public var t: Double
     public var wink: Double
+    public var revealFrom: AndeyeLogo.RevealFrom
     public var colour: Color
 
     public init(t: Double = 1, wink: Double = 0,
+                from revealFrom: AndeyeLogo.RevealFrom = .tail,
                 colour: Color = AndeyeTheme.Colours.brandAccent) {
         self.t = t
         self.wink = wink
+        self.revealFrom = revealFrom
         self.colour = colour
     }
 
     public var body: some View {
         GeometryReader { proxy in
-            AndeyeMark(t: t, wink: wink)
+            AndeyeMark(t: t, wink: wink, from: revealFrom)
                 .stroke(colour, style: AndeyeMark.strokeStyle(
                     for: min(proxy.size.width, proxy.size.height / AndeyeMark.aspect)))
         }

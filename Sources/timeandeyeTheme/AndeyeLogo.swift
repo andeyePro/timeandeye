@@ -115,13 +115,48 @@ public enum AndeyeLogo {
                                normalised($0.2), normalised($0.3)) }
     }
 
-    /// The mark revealed by arc length from its M point. `t` = 0 shows
-    /// nothing, 1 the full closed mark; `wink` closes the eyelids as above.
-    /// Both clamp to [0, 1].
-    public static func stroke(t rawT: Double, wink rawWink: Double = 0) -> [Cubic] {
+    /// Which end of the stroke a partial reveal grows from. `.tail` is the
+    /// original draw-on — from the SVG's M point at the ampersand's tail, so
+    /// the hand-drawing opens by showing it's an ampersand. `.eye` reveals
+    /// the same arc lengths from the path's OTHER end: the eye appears
+    /// first and the reveal grows back through the flourish toward the tail
+    /// (the menu bar's certainty draw-in — Martin's 326: "start with the
+    /// eye, rather than starting with the &").
+    public enum RevealFrom: Sendable { case tail, eye }
+
+    /// The eye's share of the mark's total arc length: segments 2 (top lid)
+    /// and 3 (bottom lid) of the open mark — the almond an `.eye` reveal
+    /// completes first, before any of the & flourish appears.
+    public static let eyeFraction: Double = {
+        let segs = fullStroke(wink: 0)
+        return (length(of: segs[2]) + length(of: segs[3])) / length(of: segs)
+    }()
+
+    /// The menu bar's draw-in mapping: the reveal proportion for a live
+    /// attribution certainty, eye-first. The eye is ALWAYS whole (certainty
+    /// 0 shows exactly the eye — a partial eye reads as a broken mark, not
+    /// a signal) and the flourish grows with certainty until the full &I at
+    /// 1, so every sub-1 certainty is visibly partial. nil (not tracking)
+    /// shows the complete mark. Certainty clamps to [0, 1].
+    public static func drawInReveal(certainty: Double?) -> Double {
+        guard let certainty else { return 1 }
+        let c = min(max(certainty, 0), 1)
+        return eyeFraction + c * (1 - eyeFraction)
+    }
+
+    /// The mark revealed by arc length. `t` = 0 shows nothing, 1 the full
+    /// closed mark; `wink` closes the eyelids as above; `from` picks which
+    /// end the reveal grows from (`.tail`, the default, is the original
+    /// draw-on). t and wink clamp to [0, 1].
+    public static func stroke(t rawT: Double, wink rawWink: Double = 0,
+                              from end: RevealFrom = .tail) -> [Cubic] {
         let t = min(max(rawT, 0), 1)
         let wink = min(max(rawWink, 0), 1)
-        return revealed(fullStroke(wink: wink), fraction: t)
+        let full = fullStroke(wink: wink)
+        switch end {
+        case .tail: return revealed(full, fraction: t)
+        case .eye:  return revealedFromEnd(full, fraction: t)
+        }
     }
 
     // MARK: - Bezier arithmetic (exposed for the checks)
@@ -178,6 +213,35 @@ public enum AndeyeLogo {
             prev = p
         }
         return 1
+    }
+
+    /// Trailing [u, 1] part of `c` (de Casteljau) — the same curve minus its
+    /// leading arc; the `Cubic` twin of `trailing(_:from:)` above.
+    static func trailingSplit(_ c: Cubic, from u: Double) -> Cubic {
+        let t = trailing((c.p0, c.c1, c.c2, c.p1), from: u)
+        return Cubic(t.0, t.1, t.2, t.3)
+    }
+
+    /// Last `fraction` of the path's total arc length — `revealed`'s mirror.
+    /// The END of the path is pinned and the reveal FRONT moves backwards
+    /// toward the start, splitting mid-segment so the front moves smoothly.
+    static func revealedFromEnd(_ segs: [Cubic], fraction: Double) -> [Cubic] {
+        guard fraction > 0 else { return [] }
+        guard fraction < 1 else { return segs }
+        let skip = (1 - fraction) * length(of: segs)
+        var acc = 0.0
+        for (i, seg) in segs.enumerated() {
+            let l = length(of: seg)
+            if acc + l >= skip {
+                let u = parameter(forArcLength: skip - acc, on: seg)
+                var out: [Cubic] = []
+                if u < 1 - 1e-6 { out.append(trailingSplit(seg, from: u)) }
+                out.append(contentsOf: segs[(i + 1)...])
+                return out
+            }
+            acc += l
+        }
+        return []
     }
 
     /// First `fraction` of the path's total arc length, ending mid-segment

@@ -91,6 +91,14 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var offerIdleBackfill: Bool
     /// First N characters of the tracked task name shown in the menu bar; 0 = off.
     public var menuTaskChars: Int
+    /// Menu-bar draw-in: the mark's stroke proportion mirrors
+    /// the live attribution certainty, revealed eye-first — just the eye
+    /// when unsure, the whole &I when certain. Off = the full mark always.
+    public var menuDrawInCertainty: Bool
+    /// Calm menu bar: the status item renders template-mono,
+    /// tinted by macOS like its own items; colour signalling is suppressed
+    /// while on.
+    public var menuMonochrome: Bool
     public var systemNotifications: Bool
     /// While presenting (mic live or a display mirrored), floating banners
     /// that would name a task or contact are suppressed — a toast naming a
@@ -218,6 +226,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 idleBackfillWindowSeconds: Double = 18 * 3600,
                 offerIdleBackfill: Bool = false,
                 menuTaskChars: Int = 5,
+                menuDrawInCertainty: Bool = false,
+                menuMonochrome: Bool = false,
                 systemNotifications: Bool = true,
                 quietWhilePresenting: Bool = true,
                 popoverDefaultsToChangeMode: Bool = true,
@@ -267,6 +277,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.idleBackfillWindowSeconds = idleBackfillWindowSeconds
         self.offerIdleBackfill = offerIdleBackfill
         self.menuTaskChars = menuTaskChars
+        self.menuDrawInCertainty = menuDrawInCertainty
+        self.menuMonochrome = menuMonochrome
         self.systemNotifications = systemNotifications
         self.quietWhilePresenting = quietWhilePresenting
         self.popoverDefaultsToChangeMode = popoverDefaultsToChangeMode
@@ -326,6 +338,8 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         idleBackfillWindowSeconds = c.lenient(.idleBackfillWindowSeconds, or: defaults.idleBackfillWindowSeconds)
         offerIdleBackfill = c.lenient(.offerIdleBackfill, or: defaults.offerIdleBackfill)
         menuTaskChars = c.lenient(.menuTaskChars, or: defaults.menuTaskChars)
+        menuDrawInCertainty = c.lenient(.menuDrawInCertainty, or: defaults.menuDrawInCertainty)
+        menuMonochrome = c.lenient(.menuMonochrome, or: defaults.menuMonochrome)
         systemNotifications = c.lenient(.systemNotifications, or: defaults.systemNotifications)
         quietWhilePresenting = c.lenient(.quietWhilePresenting, or: defaults.quietWhilePresenting)
         popoverDefaultsToChangeMode = c.lenient(.popoverDefaultsToChangeMode, or: defaults.popoverDefaultsToChangeMode)

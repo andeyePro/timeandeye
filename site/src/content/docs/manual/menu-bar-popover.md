@@ -3,9 +3,14 @@ title: The menu-bar popover
 description: The everyday Time&I surface – current task, elapsed time, the pin chip, and the task list.
 ---
 
-Click the Time&I icon in the menu bar to open the popover. The icon itself
-shows the current elapsed time, and a small coloured dot whose colour reflects
-how certain the attribution is (red = uncertain, green = certain).
+Click the Time&I icon in the menu bar to open the popover. The icon is the
+&I mark plus the current elapsed time; the mark's colour reflects how certain
+the attribution is (red = uncertain, green = certain, both tunable in
+[Settings ▸ Menu bar](/manual/settings/)). Two optional looks live there
+too: **Draw in certainty** strokes only part of the mark - just the eye when
+Time&I is unsure, growing to the whole &I as certainty rises - and
+**Monochrome menu bar** renders the item like macOS's own status items (no
+colour signalling).
 
 At the top:
 

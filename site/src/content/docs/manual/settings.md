@@ -35,6 +35,10 @@ its category.
 
 - The low- and high-certainty colours, the certainty percentage, and how many
   letters of the tracked task's name show after the time.
+- **Draw in certainty** - the &I mark strokes in proportion to certainty:
+  just the eye when Time&I is unsure, the whole mark when it's certain.
+- **Monochrome menu bar** - the whole item renders template-mono, tinted by
+  macOS like its own status items; colour signalling is off while this is on.
 
 ### Colours
 

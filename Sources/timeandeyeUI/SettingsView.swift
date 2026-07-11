@@ -445,6 +445,12 @@ struct SettingsView: View {
                 Text("Set both to the same colour to disable colour signalling.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
+                Toggle("Draw in certainty", isOn: $controller.settings.menuDrawInCertainty)
+                Text("The mark draws on in proportion to certainty — just the eye when unsure, the whole &I when certain.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Monochrome menu bar", isOn: $controller.settings.menuMonochrome)
+                Text("The item goes template-mono, tinted by macOS like its own icons. Colour signalling is off while this is on.")
+                    .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Stepper(controller.settings.menuTaskChars == 0
                             ? "Task name in menu bar: off"

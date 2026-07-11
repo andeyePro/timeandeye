@@ -5,8 +5,10 @@ import timeandeyeTheme
 /// Renders the andeye mark — and, via `label`, the ENTIRE menu-bar item
 /// (mark + elapsed text) — as one NSImage. The drawing-handler NSImage
 /// rasterises lazily at the screen's backing scale, so everything is crisp
-/// on retina without explicit 2x plumbing. Non-template: the tint IS the
-/// certainty signal.
+/// on retina without explicit 2x plumbing. Non-template by default: the
+/// tint IS the certainty signal. `monochrome` flips the whole item to a
+/// template image (alpha only, drawn black) so macOS tints it like its own
+/// status items — the calm mode; colour signalling is inherently off there.
 ///
 /// Why the text lives INSIDE the image (Martin, 2026-07-08, third jiggle
 /// report): every SwiftUI-side width defence — figure-space pad,
@@ -36,9 +38,13 @@ public enum AndeyeLogoImage {
     public static let flashTint = NSColor(hex: "#FF9F0A") ?? .systemOrange
 
     @MainActor
-    public static func image(t: Double, wink: Double, colour: NSColor, flash: Double = 0,
+    public static func image(t: Double, wink: Double,
+                             from: AndeyeLogo.RevealFrom = .tail,
+                             colour: NSColor, flash: Double = 0,
+                             monochrome: Bool = false,
                              height: CGFloat = 18) -> NSImage {
-        label(t: t, wink: wink, colour: colour, flash: flash, text: "", reservedTextWidth: 0,
+        label(t: t, wink: wink, from: from, colour: colour, flash: flash,
+              monochrome: monochrome, text: "", reservedTextWidth: 0,
               height: height)
     }
 
@@ -48,13 +54,26 @@ public enum AndeyeLogoImage {
     /// leading-aligned inside it. `flash` (0...1) LERPs the mark's tint
     /// toward `flashTint` — the calendar alerts' pose (quiet pre-meeting
     /// pulse, violent meeting-start flash); 0 (the default) leaves `colour`
-    /// untouched, so every existing caller is unaffected.
+    /// untouched, so every existing caller is unaffected. `monochrome`
+    /// renders the item as a template image (drawn black, macOS supplies
+    /// the tint): `colour` is ignored and the flash blinks the MARK's alpha
+    /// instead — a tint change is invisible in a template, but a meeting
+    /// alert must still be a meeting alert.
     @MainActor
-    public static func label(t: Double, wink: Double, colour: NSColor, flash: Double = 0,
+    public static func label(t: Double, wink: Double,
+                             from: AndeyeLogo.RevealFrom = .tail,
+                             colour: NSColor, flash: Double = 0,
+                             monochrome: Bool = false,
                              text: String, reservedTextWidth: CGFloat,
                              height: CGFloat = 18) -> NSImage {
-        let strokeColour = flash > 0 ? blend(colour, toward: flashTint, amount: flash) : colour
-        let segs = AndeyeLogo.stroke(t: t, wink: wink)
+        let strokeColour: NSColor
+        if monochrome {
+            let f = CGFloat(min(max(flash, 0), 1))
+            strokeColour = NSColor.black.withAlphaComponent(1 - 0.75 * f)
+        } else {
+            strokeColour = flash > 0 ? blend(colour, toward: flashTint, amount: flash) : colour
+        }
+        let segs = AndeyeLogo.stroke(t: t, wink: wink, from: from)
         let logoWidth = (height / AndeyeLogo.aspect).rounded()
         // Tightened 4 → 2 (Martin, 2026-07-08: "closer to the text") — the
         // mark's right side is an eye outline with visual whitespace of its
@@ -92,10 +111,13 @@ public enum AndeyeLogoImage {
                 path.stroke()
             }
             // The text, leading-aligned in its reserved column. labelColor
-            // resolves at draw time, so it tracks the menu bar's appearance.
+            // resolves at draw time, so it tracks the menu bar's appearance;
+            // in monochrome only alpha matters (macOS tints the template),
+            // so plain black keeps the text at full strength.
             if !text.isEmpty {
                 let attributes: [NSAttributedString.Key: Any] = [
-                    .font: font, .foregroundColor: NSColor.labelColor,
+                    .font: font,
+                    .foregroundColor: monochrome ? NSColor.black : NSColor.labelColor,
                 ]
                 let textSize = (text as NSString).size(withAttributes: attributes)
                 (text as NSString).draw(
@@ -105,7 +127,7 @@ public enum AndeyeLogoImage {
             }
             return true
         }
-        image.isTemplate = false
+        image.isTemplate = monochrome
         return image
     }
 

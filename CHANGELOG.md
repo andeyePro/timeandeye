@@ -2,6 +2,26 @@
 
 ## 2026-07-11
 
+- [x] **Menu bar: draw-in certainty + monochrome.** Two new
+  Menu bar toggles, both default-off. *Draw in certainty* strokes the &I
+  mark in proportion to the live attribution certainty, revealed EYE-first
+  per Martin's ask — the reveal parameterisation gained a direction
+  (`AndeyeLogo.stroke(t:wink:from:)`: `.tail` is the original draw-on,
+  every existing call site unchanged; `.eye` is a trailing-arc-length
+  reveal that pins the mark's closing point and grows the front backwards
+  through the flourish), with `drawInReveal(certainty:)` mapping certainty
+  onto `eyeFraction + c·(1−eyeFraction)` so the eye is always whole, every
+  sub-1 certainty is visibly partial, and nil (stopped) shows the full
+  mark. The controller's `logoT` still owns the draw-on/wink animations
+  and scales the certainty target, so the startup hand-draw and the
+  task-switch wink survive unchanged. *Monochrome* renders the whole
+  status item as a template image (drawn black, macOS supplies the tint
+  like its own items): colour signalling is inherently suppressed, and
+  the calendar alerts blink the mark's ALPHA instead of the amber tint so
+  a meeting alert still alerts. Both compose. Lenient-decode settings
+  fields, ⌘F rows, 9 new checks (8 eye-reveal geometry + IA search) plus
+  extended settings default/old-JSON/round-trip checks. Suite 831/0.
+
 - [x] **Palettes — colour sets renamed, generic form added.**
   User-facing "colour set" became "palette" everywhere (Settings section,
   buttons, ⌘F rows, manuals); `ColourSet` grew into `Palette` (typealias

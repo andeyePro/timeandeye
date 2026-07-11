@@ -1017,6 +1017,10 @@ func settingsChecks(_ c: Checks) {
         try expectEq(s.timeViewOpenMode, defs.timeViewOpenMode, "bad enum → default")
         try expectEq(s.menuTaskChars, defs.menuTaskChars, "type-mismatched field → default")
         try expectEq(s.certaintyAutoPushThreshold, 0.42, "good fields still decode normally")
+        // The JSON above predates the menu-bar mark options entirely (no
+        // keys) — an old settings file must load with both OFF, not throw.
+        try expect(!s.menuDrawInCertainty, "pre-draw-in JSON → default off")
+        try expect(!s.menuMonochrome, "pre-monochrome JSON → default off")
     }
 
     c.check("defaults") {
@@ -1033,6 +1037,8 @@ func settingsChecks(_ c: Checks) {
                      "sub-minute surfaces stay off the review queue by default")
         try expect(s.quietWhilePresenting,
                    "naming banners stay off shared screens unless opted out")
+        try expect(!s.menuDrawInCertainty, "the draw-in is opt-in — full mark by default")
+        try expect(!s.menuMonochrome, "the mark ships in colour — mono is opt-in")
     }
 
     c.check("never-auto-push is representable") {
@@ -1053,6 +1059,8 @@ func settingsChecks(_ c: Checks) {
         s.activityOverrides[.op(42)] = 9
         s.activityOverrides[.remote("guid-x")] = 3          // .remote keys survive
         s.taskColours[TaskRef.remote("guid-x").storageKey] = "#123456"
+        s.menuDrawInCertainty = true                        // non-default values round-trip
+        s.menuMonochrome = true
         try store.save(s)
         try expectEq(try store.load(), s)
     }

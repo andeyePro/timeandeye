@@ -213,4 +213,126 @@ func andeyeLogoChecks(_ c: Checks) {
         try expectEq(AndeyeLogo.stroke(t: -1, wink: 2), AndeyeLogo.stroke(t: 0, wink: 1))
         try expect(AndeyeLogo.stroke(t: -1).isEmpty)
     }
+
+    // MARK: - Eye-first reveal (the menu bar's certainty draw-in)
+
+    c.check("eye-first reveal: t=0 nothing, t=1 the whole mark, clamped") {
+        try expect(AndeyeLogo.stroke(t: 0, from: .eye).isEmpty)
+        try expectEq(AndeyeLogo.stroke(t: 1, from: .eye), AndeyeLogo.fullStroke(wink: 0))
+        try expectEq(AndeyeLogo.stroke(t: 2, from: .eye),
+                     AndeyeLogo.stroke(t: 1, from: .eye))
+        try expect(AndeyeLogo.stroke(t: -1, from: .eye).isEmpty)
+    }
+
+    c.check("at low t the eye-first reveal strokes ONLY eye-region points") {
+        // The eye (segments 2+3, the lids) never reaches left of its left
+        // corner; the & flourish sweeps FAR left of it. A low-t eye reveal
+        // staying right of the corner proves no flourish has appeared.
+        let cornerX = (121.243 + 18.0915) / 365.0
+        for t in [0.05, 0.15, AndeyeLogo.eyeFraction * 0.95] {
+            let segs = AndeyeLogo.stroke(t: t, from: .eye)
+            try expect(!segs.isEmpty, "t=\(t) revealed nothing")
+            for s in segs {
+                for i in 0...48 {
+                    let p = AndeyeLogo.point(on: s, at: Double(i) / 48)
+                    try expect(p.x >= cornerX - 0.01,
+                               "t=\(t): point \(p) is left of the eye")
+                }
+            }
+        }
+    }
+
+    c.check("the almond is whole by eyeFraction, then the flourish appears") {
+        // At the eye's exact share of arc length both corners are present…
+        let b = curveBBox(AndeyeLogo.stroke(t: AndeyeLogo.eyeFraction, from: .eye))
+        let cornerX = (121.243 + 18.0915) / 365.0
+        let rightX = (311.0 + 18.0915) / 365.0
+        try expectClose(b.minX, cornerX, accuracy: 0.01, "left corner missing:")
+        try expectClose(b.maxX, rightX, accuracy: 0.01, "right corner missing:")
+        // …and a nudge past it reaches into the flourish (left of the eye).
+        let past = curveBBox(AndeyeLogo.stroke(t: AndeyeLogo.eyeFraction + 0.1,
+                                               from: .eye))
+        try expect(past.minX < cornerX - 0.02,
+                   "past the eye the flourish should be appearing: \(past)")
+    }
+
+    c.check("eye-first reveal grows monotonically and in proportion to t") {
+        let total = AndeyeLogo.length(of: AndeyeLogo.fullStroke(wink: 0))
+        var previous = 0.0
+        for k in 0...20 {
+            let t = Double(k) / 20
+            let revealed = AndeyeLogo.length(of: AndeyeLogo.stroke(t: t, from: .eye))
+            try expect(revealed >= previous - 1e-9, "shrank between t steps at t=\(t)")
+            try expectClose(revealed / total, t, accuracy: 0.02,
+                            "eye reveal is not linear in t at t=\(t):")
+            previous = revealed
+        }
+    }
+
+    c.check("a partial eye-first reveal is contiguous, end-pinned, front ON the path") {
+        let full = AndeyeLogo.fullStroke(wink: 0)
+        for t in [0.15, 0.4, 0.65, 0.9] {
+            let segs = AndeyeLogo.stroke(t: t, from: .eye)
+            for i in 1..<segs.count {
+                try expectEq(segs[i].p0, segs[i - 1].p1, "t=\(t) segment \(i):")
+            }
+            // Revealing from the end pins the mark's CLOSING point and moves
+            // the front backwards — the first segment's start must lie on
+            // the source segment it was split from.
+            try expectEq(segs.last!.p1, full.last!.p1, "t=\(t): the pinned end moved:")
+            let front = segs.first!.p0
+            let host = full[full.count - segs.count]
+            var nearest = Double.infinity
+            for i in 0...48 {
+                let p = AndeyeLogo.point(on: host, at: Double(i) / 48)
+                let dx = p.x - front.x
+                let dy = p.y - front.y
+                nearest = min(nearest, (dx * dx + dy * dy).squareRoot())
+            }
+            try expect(nearest < 0.012, "t=\(t): front \(front) is off the path by \(nearest)")
+        }
+    }
+
+    c.check("eye-first reveal composes with a wink and stays in the box") {
+        for t in [0.2, 0.6] {
+            for wink in [0.5, 1.0] {
+                let b = curveBBox(AndeyeLogo.stroke(t: t, wink: wink, from: .eye))
+                try expect(b.minX >= 0 && b.minY >= 0
+                    && b.maxX <= 1 && b.maxY <= AndeyeLogo.aspect + 1e-9,
+                    "t=\(t) wink=\(wink) escapes the box: \(b)")
+            }
+        }
+    }
+
+    c.check("eyeFraction is the lids' share of arc length, a sane minority") {
+        let segs = AndeyeLogo.fullStroke(wink: 0)
+        let lids = AndeyeLogo.length(of: segs[2]) + AndeyeLogo.length(of: segs[3])
+        try expectClose(AndeyeLogo.eyeFraction, lids / AndeyeLogo.length(of: segs),
+                        accuracy: 1e-12)
+        try expect(AndeyeLogo.eyeFraction > 0.15 && AndeyeLogo.eyeFraction < 0.6,
+                   "eye share out of range: \(AndeyeLogo.eyeFraction)")
+    }
+
+    c.check("drawInReveal: nil = whole mark, 0 = just the eye, grows to 1, clamps") {
+        try expectEq(AndeyeLogo.drawInReveal(certainty: nil), 1)
+        try expectClose(AndeyeLogo.drawInReveal(certainty: 0), AndeyeLogo.eyeFraction,
+                        accuracy: 1e-12)
+        try expectEq(AndeyeLogo.drawInReveal(certainty: 1), 1)
+        try expectClose(AndeyeLogo.drawInReveal(certainty: 0.5),
+                        AndeyeLogo.eyeFraction + 0.5 * (1 - AndeyeLogo.eyeFraction),
+                        accuracy: 1e-12)
+        try expectEq(AndeyeLogo.drawInReveal(certainty: -3),
+                     AndeyeLogo.drawInReveal(certainty: 0))
+        try expectEq(AndeyeLogo.drawInReveal(certainty: 7), 1)
+        // Every sub-1 certainty is VISIBLY partial — never rounds up to full.
+        try expect(AndeyeLogo.drawInReveal(certainty: 0.95) < 0.99,
+                   "0.95 certainty should still look partial")
+        // Monotone: more certainty never shows less mark.
+        var previous = 0.0
+        for k in 0...10 {
+            let reveal = AndeyeLogo.drawInReveal(certainty: Double(k) / 10)
+            try expect(reveal >= previous, "drawInReveal dipped at \(k)/10")
+            previous = reveal
+        }
+    }
 }

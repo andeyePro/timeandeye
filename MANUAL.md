@@ -12,9 +12,13 @@ This manual covers day-to-day use. For building and first-run setup see
 
 ## The menu-bar popover
 
-Click the Time&I icon in the menu bar to open the popover. The icon itself
-shows the current elapsed time, and a small coloured dot whose colour reflects
-how certain the attribution is (red = uncertain, green = certain).
+Click the Time&I icon in the menu bar to open the popover. The icon is the
+&I mark plus the current elapsed time; the mark's colour reflects how certain
+the attribution is (red = uncertain, green = certain, both tunable in
+Settings ▸ Menu bar). Two optional looks live there too: **Draw in
+certainty** strokes only part of the mark - just the eye when Time&I is
+unsure, growing to the whole &I as certainty rises - and **Monochrome menu
+bar** renders the item like macOS's own status items (no colour signalling).
 
 At the top:
 
@@ -386,6 +390,11 @@ colour with an inline editor, per-row revert and a revert-all. A project's swatc
 in the Time Spent legend also offers **Shade tasks around this**.
 
 - **Comments** - whether a note goes to the time entry, the task's feed, or both.
+- **Menu bar** - the low/high certainty colours, a certainty %, **Draw in
+  certainty** (the mark strokes in proportion to certainty, eye first),
+  **Monochrome menu bar** (template-mono like macOS's own items; colour
+  signalling off while on), and how many letters of the task name show
+  after the time.
 - **Popover default mode** - "Change to" (default) or "Switch to".
 - **Time button opens** - Timeline / Last viewed / Pie chart.
 - **Switch Buffer** and grace windows, idle and sleep handling.

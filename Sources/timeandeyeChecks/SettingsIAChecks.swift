@@ -71,6 +71,18 @@ func settingsIAChecks(_ c: Checks) {
         try expect(old.contains("colours.load"), "colour set should still find load")
     }
 
+    c.check("the menu-bar mark options are searchable by label and synonym") {
+        try expectEq(SettingsIA.search("monochrome").first?.id, "menuBar.monochrome")
+        try expect(SettingsIA.search("template").map(\.id).contains("menuBar.monochrome"),
+                   "template should find the mono toggle")
+        try expect(SettingsIA.search("calm").map(\.id).contains("menuBar.monochrome"),
+                   "calm should find the mono toggle")
+        try expect(SettingsIA.search("draw in").map(\.id).contains("menuBar.drawIn"),
+                   "draw in should find the draw-in toggle")
+        try expect(SettingsIA.search("reveal").map(\.id).contains("menuBar.drawIn"),
+                   "reveal should find the draw-in toggle")
+    }
+
     c.check("multi-token queries require every token") {
         let hits = SettingsIA.search("review floor")
         try expectEq(hits.map(\.id), ["tracking.floor"],
