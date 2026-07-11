@@ -78,16 +78,35 @@ struct EvidenceCardView: View {
     /// shows disabled at 0 so the affordance is always discoverable.
     var selectTwins: (count: Int, select: () -> Void)? = nil
 
+    @State private var dataExpanded = false
+    @State private var detailsExpanded = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // ONE text block for every fact the card states, so a single
-            // click-drag selects and copies the whole story (Martin,
-            // 2026-07-11 — a copy button was NOT the ask; per-row Texts
-            // limited a drag to one line).
-            factsSection
-            refileSection
-            unlearnSection
-            if onPick != nil {
+        VStack(alignment: .leading, spacing: 4) {
+            // His card: the window name wears a twisty (all the data
+            // beneath), the standing line wears its own (details + the
+            // forget/suppress controls). Everything default-closed; the
+            // Move bar below the cards is the refile path — no button here.
+            if host == .timeline {
+                DisclosureGroup(isExpanded: $dataExpanded) {
+                    dataSection.padding(.top, 2)
+                } label: {
+                    Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
+                        .font(.caption).bold().lineLimit(1)
+                        .padding(.trailing, 40)
+                }
+            }
+            DisclosureGroup(isExpanded: $detailsExpanded) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if host == .popover { dataSection }
+                    detailsSection
+                }
+                .padding(.top, 2)
+            } label: {
+                Text(standingLine).font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if host == .popover, onPick != nil {
                 Divider()
                 wrongTaskSection
             }
@@ -128,21 +147,71 @@ struct EvidenceCardView: View {
         .help("Copy the whole card as text (diagnostics mode)")
     }
 
-    /// Plain per-line rendering — simple and native-looking; verbatim
-    /// capture goes through the diagnostics copy button, not selection
-    /// acrobatics (Martin, 2026-07-11).
-    @ViewBuilder private var factsSection: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if host == .timeline {
-                Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
-                    .font(.caption).bold().lineLimit(1)
-                    .padding(.trailing, 40)
+
+    @ViewBuilder private var plusAllButton: some View {
+        if let selectTwins {
+            Button(action: selectTwins.select) {
+                Text("+ all").font(.caption.weight(.semibold))
             }
-            HStack(alignment: .top, spacing: 4) {
-                Text("BECAUSE").font(.caption2).bold().foregroundStyle(.secondary)
-                Text(anchoredBecauseLabel).font(.caption)
+            .buttonStyle(.plain)
+            .disabled(selectTwins.count == 0)
+            .padding(6)
+            .help(selectTwins.count == 0
+                  ? "No other windows in this slice carry the same app + title"
+                  : "Also select the \(selectTwins.count) other window\(selectTwins.count == 1 ? "" : "s") recorded with the same app + title")
+        }
+    }
+
+    /// One-click cure when the card KNOWS a better answer than the record
+    /// (Martin, 2026-07-11: "no obvious single click that recategorises it
+    /// correctly"): refile this window's time onto what today's rules say —
+    /// the same path as picking it in the Wrong? strip, one click sooner.
+    /// "= Time&I (95%) – you assigned it": what the time stands as and who
+    /// decided it, in one line (his wording).
+    private var standingLine: String {
+        if let recorded {
+            let decider = recorded.provenance.flatMap { provenanceLabel($0) }
+                ?? (recordContradicted ? "decided earlier"
+                    : shortSource(explanation.source))
+            return "= \(controller.name(of: recorded.target)) \(pct(recorded.certainty)) – \(decider)"
+        }
+        let chosen = explanation.chosen.map { controller.name(of: $0) } ?? "—"
+        return "= \(chosen) \(pct(explanation.chosenScore)) – \(shortSource(explanation.source))"
+    }
+
+    private func shortSource(_ source: AttributionExplanation.Source) -> String {
+        switch source {
+        case .pin: return "you pinned it"
+        case .sessionSticky: return "you categorised this today"
+        case .opTaskURL: return "the task's page is open"
+        case .opTaskTitle: return "the task's id is in the title"
+        case .emailRule: return "a learned rule"
+        case .siteRule: return "a learned site rule"
+        case .pendingPrime: return "a just-opened task"
+        case .primedSurface: return "remembered from a past correction"
+        case .ranked: return "learned associations + priors"
+        case .none: return "nothing matched"
+        }
+    }
+
+    /// Under the window-name twisty: everything the app captured.
+    @ViewBuilder private var dataSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("sees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            let items = candidateItems
+            if !items.isEmpty {
+                Text("candidates: " + items.joined(separator: " · "))
+                    .font(.caption2).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// Under the standing line's twisty: the decision's full story and the
+    /// forget/suppress controls.
+    @ViewBuilder private var detailsSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
             if recordContradicted {
                 Text("today's rules would say: \(becauseLabel) – not what decided this slice")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -171,42 +240,7 @@ struct EvidenceCardView: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("sees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            let items = candidateItems
-            if !items.isEmpty {
-                Text("candidates: " + items.joined(separator: " · "))
-                    .font(.caption2).foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    @ViewBuilder private var plusAllButton: some View {
-        if let selectTwins {
-            Button(action: selectTwins.select) {
-                Text("+ all").font(.caption.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .disabled(selectTwins.count == 0)
-            .padding(6)
-            .help(selectTwins.count == 0
-                  ? "No other windows in this slice carry the same app + title"
-                  : "Also select the \(selectTwins.count) other window\(selectTwins.count == 1 ? "" : "s") recorded with the same app + title")
-        }
-    }
-
-    /// One-click cure when the card KNOWS a better answer than the record
-    /// (Martin, 2026-07-11: "no obvious single click that recategorises it
-    /// correctly"): refile this window's time onto what today's rules say —
-    /// the same path as picking it in the Wrong? strip, one click sooner.
-    @ViewBuilder private var refileSection: some View {
-        if recordContradicted, onPick != nil,
-           case .task(let ref)? = explanation.chosen,
-           let task = controller.taskCache.first(where: { $0.ref == ref }) {
-            Button("↪ refile as \(task.subject)") { onPick?(task) }
-                .font(.caption)
-                .help("Move this window's time onto what today's rules say")
+            unlearnSection
         }
     }
 
@@ -227,8 +261,7 @@ struct EvidenceCardView: View {
         if host == .timeline {
             add("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")\n", bold, .labelColor)
         }
-        add("BECAUSE ", NSFont.boldSystemFont(ofSize: 10), .secondaryLabelColor)
-        add(anchoredBecauseLabel, caption, .labelColor)
+        add(standingLine, caption, .labelColor)
         if recordContradicted {
             add("\ntoday's rules would say: \(becauseLabel) – not what decided this slice",
                 caption2, .secondaryLabelColor)
@@ -315,23 +348,6 @@ struct EvidenceCardView: View {
         }
     }
 
-    /// The BECAUSE line's text. With journalled provenance (rows flushed
-    /// since 2026-07-10) the card tells the ORIGINAL story verbatim —
-    /// target, certainty and what decided it. Without it, the record
-    /// anchors only when today's re-derivation contradicts it (the
-    /// recorded outcome is then the only truthful "because" the card
-    /// holds); otherwise the explanation.
-    private var anchoredBecauseLabel: String {
-        guard let recorded else { return becauseLabel }
-        if let p = recorded.provenance {
-            let decider = provenanceLabel(p) ?? "decided earlier"
-            return "this time stands as → \(controller.name(of: recorded.target)) "
-                + pct(recorded.certainty) + " — \(decider)"
-        }
-        guard recordContradicted else { return becauseLabel }
-        return "this time stands as → \(controller.name(of: recorded.target)) "
-            + pct(recorded.certainty)
-    }
 
     /// The journalled decider, in the card's voice. Unknown raw values (a
     /// future source this build doesn't know) return nil → "decided earlier".

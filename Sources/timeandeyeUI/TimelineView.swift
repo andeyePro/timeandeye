@@ -1549,6 +1549,43 @@ struct TimelineView: View {
         }
     }
 
+    /// Move-bar intelligence: per-task mean certainty across the
+    /// SELECTED windows plus the suggested refile target (only when every
+    /// selected window agrees) — computed once per selection change, not
+    /// per render (explain() per span is too dear for render passes).
+    @State private var barIntel: (key: Set<Int>, scores: [TaskRef: Double],
+                                  suggested: TaskRef?) = ([], [:], nil)
+
+    private func reloadBarIntel(_ session: Session, spans: [FocusSpan]) {
+        var sums: [TaskRef: Double] = [:]
+        var agreeing: [TaskRef: Int] = [:]
+        let idxs = selectedSpanIdx.filter { $0 < spans.count }
+        for i in idxs {
+            let explanation = controller.explain(spans[i].signal, now: spans[i].start)
+            for line in explanation.lines {
+                guard case .task(let ref) = line.target else { continue }
+                sums[ref, default: 0] += line.score
+            }
+            if case .task(let ref)? = explanation.chosen, ref != session.task,
+               explanation.chosenScore >= controller.settings.reviewThreshold {
+                agreeing[ref, default: 0] += 1
+            }
+        }
+        let n = max(idxs.count, 1)
+        barIntel = (selectedSpanIdx,
+                    sums.mapValues { $0 / Double(n) },
+                    agreeing.first { $0.value == idxs.count }?.key)
+    }
+
+    /// With no filter typed, likeliest tasks lead the bar.
+    private func orderedBarTasks() -> [WorkTask] {
+        let base = filteredTasks()
+        guard filter.isEmpty, !barIntel.scores.isEmpty else { return base }
+        return base.sorted {
+            (barIntel.scores[$0.ref] ?? -1) > (barIntel.scores[$1.ref] ?? -1)
+        }
+    }
+
     private func spanReassignBar(_ session: Session, spans: [FocusSpan]) -> some View {
         let isLive = session.id == AppController.liveSessionID
         let ranges = selectedSpanIdx.sorted().compactMap { i -> (start: Date, end: Date)? in
@@ -1567,8 +1604,12 @@ struct TimelineView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(filteredTasks(), id: \.ref) { task in
-                        Button {
+                    ForEach(orderedBarTasks(), id: \.ref) { task in
+                        let score = barIntel.key == selectedSpanIdx
+                            ? barIntel.scores[task.ref] : nil
+                        let suggested = barIntel.key == selectedSpanIdx
+                            && barIntel.suggested == task.ref
+                        let button = Button {
                             // The live slice has no journal row yet — materialise
                             // it first (keeps tracking), then split the real slice
                             // it became. Finished slices split directly.
@@ -1583,7 +1624,23 @@ struct TimelineView: View {
                             HStack(spacing: 3) {
                                 if task.isLocalOnly { Image(systemName: "house").font(.system(size: 8)) }
                                 Text(task.subject)
+                                if let score, score >= 0.05 {
+                                    Text("\(Int((score * 100).rounded()))%")
+                                        .font(.caption2)
+                                        .foregroundStyle(suggested ? .primary : .secondary)
+                                }
                             }
+                        }
+                        .help(suggested
+                              ? "Today's rules say these windows belong here"
+                              : task.subject)
+                        // The card's "should be refiled" verdict lights the
+                        // button it means, right where the action lives
+                        // — blue prominence, no extra button.
+                        if suggested {
+                            button.buttonStyle(.borderedProminent)
+                        } else {
+                            button
                         }
                     }
                 }
@@ -1591,6 +1648,8 @@ struct TimelineView: View {
         }
         .padding(6)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        .onAppear { reloadBarIntel(session, spans: spans) }
+        .onChange(of: selectedSpanIdx) { _, _ in reloadBarIntel(session, spans: spans) }
         // ⌘A selects every window in the slice once you've selected at least one
         // (this bar only shows while a selection exists, so the shortcut is live
         // only in window-selection mode).
