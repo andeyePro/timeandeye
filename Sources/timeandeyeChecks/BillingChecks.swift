@@ -640,4 +640,46 @@ func multiBackendSyncChecks(_ c: Checks) async {
         try expectEq(((try? journal.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.state,
                      .posted)
     }
+
+    await c.check("billable mark then immediate undo posts nothing; a standing mark posts and is never clawed back") {
+        // The undo-window fix (2026-07-11): an entry mark bypasses the `since`
+        // gate, so it posts to finance the moment a sync sees it and is never
+        // clawed back. AppController.setSessionBillable therefore DEFERS its
+        // sync kick — an immediate ⌘Z retracts the override before the kick
+        // fires. Modelled here as: the deferred pass reads each session's
+        // CURRENT override (no AppController in checks — controller mechanics
+        // replayed against the real SyncEngine + Billing.financeEligible).
+        let journal = InMemoryJournalStore()
+        let finance = FakeBackend(owns: .nothing)
+        let entries = [RegisteredBackend(id: "fin-b", class: .finance, backend: finance)]
+        // op(2) is UNFLAGGED: only an explicit entry mark can send it to
+        // finance, isolating the mark's post from any task/project flag.
+        let rules = BillableRules()
+        var s = session(.op(2))
+        try journal.save(s)
+        let engine = SyncEngine(journal: journal, backends: entries)
+        func financeSync() async {
+            _ = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                          financeEligible: {
+                rules.financeEligible(entryOverride: $0.billableOverride, task: $0.task,
+                                      projectKey: nil, sessionStart: $0.start)
+            })
+        }
+
+        // Mark billable, then ⌘Z before the debounced kick fires: the deferred
+        // sync reads the RETRACTED override and posts nothing.
+        s.billableOverride = true; try journal.update(s)
+        s.billableOverride = nil;  try journal.update(s)
+        await financeSync()
+        try expectEq(finance.created.count, 0, "an immediate undo beat the mark to the wire")
+
+        // A mark left to stand: the deferred sync fires with it still set → posts.
+        s.billableOverride = true; try journal.update(s)
+        await financeSync()
+        try expectEq(finance.created.count, 1, "a standing mark posts — marking is consent")
+        // A LATE undo, after the post: posted finance history is never clawed back.
+        s.billableOverride = nil; try journal.update(s)
+        await financeSync()
+        try expectEq(finance.created.count, 1, "posted history stays — no claw-back")
+    }
 }

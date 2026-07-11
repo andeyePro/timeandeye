@@ -2,6 +2,21 @@
 
 ## 2026-07-11
 
+- [x] **Billing: a mis-clicked billable mark now has a real undo window.** A
+  timeline entry-mark bypasses the prospective-only `since` gate (marking the
+  entry IS the consent), so it posts to the finance backend the moment a sync
+  sees it — and posted history is never clawed back. But
+  `setSessionBillable` awaited `syncIfEnabled()` INSIDE the gesture, so a mark
+  posted before ⌘Z could ever fire: the undo window was structurally zero, and
+  a mis-click stayed on the client's books. The sync kick is now debounced (a
+  few seconds) so an immediate undo retracts the override before anything
+  reaches the wire; the undo path defers its kick the same way. The widen-to-
+  task and widen-to-project gestures route their entry-mark through the same
+  method, so they are covered too. Design fact preserved: a mark left to stand
+  past the window syncs on the next pass and, once it has synced, is still
+  never clawed back — marking IS consent once it stands. New BillingChecks
+  case pins mark → immediate undo → nothing posted, and mark-that-stands →
+  posts → no claw-back. Suite 861/0.
 - [x] **Refile: a posted slice re-filed under a new task now sheds its
   backend entry, and refile confidence no longer inherits the old task's.**
   `AppController.applyRefiles` re-pointed `session.task` with no backend

@@ -5231,11 +5231,33 @@ public final class AppController: ObservableObject {
                                          task: session.task, projectKey: key)
     }
 
+    /// The undo window for a billable mark. An entry mark bypasses the
+    /// prospective-only `since` gate (Billing.financeEligible), so it posts to
+    /// finance history the moment a sync sees it — and posted history is never
+    /// clawed back (SyncEngine policy). If the sync fired inside the gesture,
+    /// ⌘Z one second later would restore `billableOverride = nil` but the entry
+    /// would already be on the client's books: the undo window was structurally
+    /// zero. So the sync kick is DEBOUNCED — an immediate undo retracts the
+    /// override before anything reaches the wire. A mark left to stand syncs on
+    /// the next pass (marking IS consent once it stands).
+    private static let billableSyncDebounceSeconds: TimeInterval = 4
+    private var billableSyncTimer: Timer?
+
+    private func scheduleBillableSync() {
+        billableSyncTimer?.invalidate()
+        billableSyncTimer = Timer.scheduledTimer(withTimeInterval: Self.billableSyncDebounceSeconds,
+                                                 repeats: false) { [weak self] _ in
+            Task { @MainActor in await self?.syncIfEnabled() }
+        }
+    }
+
     /// Set (or clear — nil = inherit) ONE entry's billable mark, the
     /// Timeline's per-slice override. Persisted on the journal row itself,
     /// so the mark follows the entry through edits and sync; an explicit
     /// mark is finance-eligible with no prospective-only gate (marking the
-    /// entry IS the consent a flag flip's `since` stands in for). Undoable.
+    /// entry IS the consent a flag flip's `since` stands in for). Undoable —
+    /// the sync kick is deferred (see scheduleBillableSync) so an immediate
+    /// ⌘Z has a real window to retract the mark before it posts.
     public func setSessionBillable(_ session: Session, override: Bool?) async {
         guard var row = try? journal.session(id: session.id),
               row.billableOverride != override else { return }
@@ -5245,12 +5267,12 @@ public final class AppController: ObservableObject {
             current.billableOverride = previous
             try? self.journal.update(current)
             self.updateJournalSummary()
-            await self.syncIfEnabled()
+            self.scheduleBillableSync()
         }
         row.billableOverride = override
         try? journal.update(row)
         updateJournalSummary()
-        await syncIfEnabled()
+        scheduleBillableSync()
     }
 
     /// The Timeline's widen gesture: mark THIS entry billable AND flip its

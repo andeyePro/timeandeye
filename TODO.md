@@ -2,6 +2,13 @@
 
 ## Review-fix cluster (2026-07-11)
 
+- [x] Billing mark undo window — DONE 2026-07-11: `setSessionBillable` awaited
+  `syncIfEnabled()` inside the gesture, so an entry mark (which bypasses the
+  `since` gate) posted before ⌘Z could fire — a mis-click stuck on the books,
+  undo window structurally zero. Debounced the sync kick (and the undo's) so an
+  immediate undo retracts the override before the post; widen-to-task/project
+  covered via the same method. A mark that has already synced still never claws
+  back (design fact kept). New BillingChecks case.
 - [x] Refile backend hygiene + certainty — DONE 2026-07-11: `applyRefiles`
   re-pointed a posted slice's task with no backend hygiene, leaving its entry
   filed under the old work package (money mis-filed). Now sheds the linkage
