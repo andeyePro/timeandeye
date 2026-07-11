@@ -147,6 +147,8 @@ public enum SettingsIA {
              ["export", "backup", "palette", "color"], .colours),
         Item("colours.load", "Load colour set",
              ["import", "restore", "palette", "color"], .colours),
+        Item("colours.manual", "Manually picked colours",
+             ["overrides", "picks", "edit", "revert", "color"], .colours),
         // Local tasks
         Item("localTasks.list", "Local tasks",
              ["personal", "private", "offline", "add task", "project"], .localTasks),

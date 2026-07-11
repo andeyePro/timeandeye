@@ -3553,6 +3553,44 @@ public final class AppController: ObservableObject {
         }
         colourAssignments = ColourEngine.rederiveAll(
             groups: groups.map { (projectKey: $0.key, memberTaskKeys: $0.value) },
+            anchorHueOverrides: projectAnchorHueOverrides(),
+            in: colourAssignments)
+        scheduleColoursSave()
+        objectWillChange.send()
+    }
+
+    /// The hue each user project-swatch pick contributes to shading (nil-
+    /// filtered: greys steer nothing) — re-derives shade around the colour
+    /// the USER chose for a project, exactly like a first sight does.
+    private func projectAnchorHueOverrides() -> [String: Double] {
+        var overrides: [String: Double] = [:]
+        for (key, hex) in settings.projectColours {
+            if let hue = ColourEngine.overrideAnchorHue(hex: hex) {
+                overrides[key] = hue
+            }
+        }
+        return overrides
+    }
+
+    /// "Shade tasks around this": re-derive ONE project's automatic task
+    /// colours around its current (usually just-picked) project colour —
+    /// the project picker's companion to the global re-derive.
+    public func shadeTasks(aroundProjectContaining ref: TaskRef) {
+        guard let task = taskCache.first(where: { $0.ref == ref }),
+              let key = projectKey(for: task) else { return }
+        let before = colourAssignments
+        let members = taskCache.compactMap {
+            projectKey(for: $0) == key ? $0.ref.storageKey : nil
+        }
+        registerUndo("shade tasks around project colour") { [weak self] in
+            guard let self else { return }
+            self.colourAssignments = before
+            self.scheduleColoursSave()
+            self.objectWillChange.send()
+        }
+        colourAssignments = ColourEngine.rederiveAll(
+            groups: [(projectKey: key, memberTaskKeys: members)],
+            anchorHueOverrides: projectAnchorHueOverrides(),
             in: colourAssignments)
         scheduleColoursSave()
         objectWillChange.send()
@@ -3593,6 +3631,39 @@ public final class AppController: ObservableObject {
             self?.settings.taskColours[ref.storageKey] = previous
         }
         settings.taskColours[ref.storageKey] = Self.hexString(colour)
+    }
+
+    /// Manually-picked colours ▸ Revert all: one step clears every override
+    /// (task and project alike); the automatic palette shows through.
+    public func revertAllColourOverrides() {
+        let tasks = settings.taskColours
+        let projects = settings.projectColours
+        guard !tasks.isEmpty || !projects.isEmpty else { return }
+        registerUndo("revert all colour picks") { [weak self] in
+            self?.settings.taskColours = tasks
+            self?.settings.projectColours = projects
+        }
+        settings.taskColours = [:]
+        settings.projectColours = [:]
+    }
+
+    /// Settings ▸ Colours ▸ Manually picked: overrides whose task/project
+    /// no longer resolves still need a way out — remove by raw key,
+    /// undoable like the resolvable paths.
+    public func removeColourOverride(taskKey: String) {
+        guard let previous = settings.taskColours[taskKey] else { return }
+        registerUndo("remove colour pick") { [weak self] in
+            self?.settings.taskColours[taskKey] = previous
+        }
+        settings.taskColours[taskKey] = nil
+    }
+
+    public func removeProjectColourOverride(projectKey key: String) {
+        guard let previous = settings.projectColours[key] else { return }
+        registerUndo("remove project colour pick") { [weak self] in
+            self?.settings.projectColours[key] = previous
+        }
+        settings.projectColours[key] = nil
     }
 
     /// True when the task's colour is the user's own pick (a settings

@@ -186,7 +186,7 @@ struct PopoverView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help("Back to \(prev.subject) — moves the current slice onto it (⌘Z)")
+                        .help("Back to \(prev.subject) — moves the current slice onto it")
                     }
                 }
             } else {

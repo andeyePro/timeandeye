@@ -236,7 +236,7 @@ struct RulesLedgerView: View {
             if group.rows.count > 1 {
                 Button("Forget all") { pendingDelete = group.rows }
                     .font(.caption2).buttonStyle(.borderless)
-                    .help("Forget all \(group.rows.count) rules for this task (undoable, ⌘Z)")
+                    .help("Forget all \(group.rows.count) rules for this task")
             }
         }
     }
@@ -258,7 +258,7 @@ struct RulesLedgerView: View {
                 Button { pendingDelete = [rule] } label: { Image(systemName: "trash") }
                     .buttonStyle(.plain)
                     .foregroundStyle(.red)
-                    .help("Forget this rule — confirms first, then undoable (⌘Z)")
+                    .help("Forget this rule — confirms first")
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -326,7 +326,7 @@ struct RulesLedgerView: View {
             if group.rows.count > 1 {
                 Button("Forget all") { pendingSiteDelete = group.rows }
                     .font(.caption2).buttonStyle(.borderless)
-                    .help("Forget all \(group.rows.count) rules for this task (undoable, ⌘Z)")
+                    .help("Forget all \(group.rows.count) rules for this task")
             }
         }
     }
@@ -355,7 +355,7 @@ struct RulesLedgerView: View {
                 Button { pendingSiteDelete = [rule] } label: { Image(systemName: "trash") }
                     .buttonStyle(.plain)
                     .foregroundStyle(.red)
-                    .help("Forget this rule — confirms first, then undoable (⌘Z)")
+                    .help("Forget this rule — confirms first")
             }
             .opacity(dormant ? 0.5 : 1)
             .contentShape(Rectangle())

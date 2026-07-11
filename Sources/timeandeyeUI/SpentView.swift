@@ -780,6 +780,16 @@ struct SpentView: View {
             }
             .font(.caption)
             .disabled(!hasOverride)
+            // Project pick's companion (Martin, 2026-07-11): pull the
+            // project's AUTOMATIC task colours into the family of the colour
+            // just picked — one ⌘Z restores. Task overrides stay theirs.
+            if case .project = target.level {
+                Button("Shade tasks around this") {
+                    controller.shadeTasks(aroundProjectContaining: target.ref)
+                }
+                .font(.caption)
+                .help("Re-derive this project's automatic task colours around the project colour (your per-task picks are untouched)")
+            }
         }
         .padding(10)
         .frame(minWidth: 160)

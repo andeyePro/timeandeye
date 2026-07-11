@@ -67,6 +67,24 @@ func colourRederiveChecks(_ c: Checks) {
                      "an ungroupable history task must keep its colour")
     }
 
+    c.check("a project override hue steers the re-derived family") {
+        // Martin picked a project colour, then re-derived: the tasks must
+        // shade around HIS hue, not the engine's own anchor (2026-07-11).
+        let overrideHue = 30.0   // an orange family
+        let rebuilt = ColourEngine.rederiveAll(
+            groups: groups, anchorHueOverrides: ["p1": overrideHue],
+            in: legacyStore(), at: t0)
+        for key in ["p1/a", "p1/b", "p1/c"] {
+            guard let h = rebuilt.tasks[key]?.H else {
+                throw CheckFailure(description: "\(key) missing OKLCH record")
+            }
+            let delta = abs((h - overrideHue).truncatingRemainder(dividingBy: 360))
+            let wrapped = min(delta, 360 - delta)
+            try expect(wrapped <= 25.001,
+                       "\(key) hue \(h) ignores the override hue \(overrideHue)")
+        }
+    }
+
     c.check("colour set round-trips exactly through JSON") {
         let set = ColourSet(taskOverrides: ["p1/a": "#ABCDEF"],
                             projectOverrides: ["p1": "#012345"],

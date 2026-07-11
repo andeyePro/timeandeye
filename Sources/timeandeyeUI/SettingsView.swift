@@ -313,8 +313,28 @@ struct SettingsView: View {
                     controller.rederiveAutomaticColours()
                     colourSetNote = nil
                 }
-                Text("Rebuilds the whole automatic palette cohesively: every project gets a distinct anchor colour and its tasks shade around it. Colours you picked yourself are untouched — and ⌘Z restores the previous palette exactly. Edit any single colour from the Time Spent legend (click its swatch) or the timeline editor.")
+                Text("Rebuilds the whole automatic palette cohesively: every project gets a distinct anchor colour and its tasks shade around it. Colours you picked yourself are untouched.")
                     .font(.caption).foregroundStyle(.secondary)
+                // Graphical links, not prose directions: the two
+                // places a single colour can be edited, one click away.
+                HStack(spacing: 10) {
+                    Button {
+                        controller.timeWindowView = .spent
+                        openWindow(id: "time")
+                        AndeyeWindows.activateOnceVisible(opened: "time")
+                    } label: {
+                        Label("Time Spent legend", systemImage: "chart.pie")
+                    }
+                    Button {
+                        controller.timeWindowView = .timeline
+                        openWindow(id: "time")
+                        AndeyeWindows.activateOnceVisible(opened: "time")
+                    } label: {
+                        Label("Timeline editor", systemImage: "calendar.day.timeline.left")
+                    }
+                    Text("edit any single colour from either")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("Colour sets") {
                 HStack {
@@ -324,9 +344,86 @@ struct SettingsView: View {
                         Text(note).font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Text("A set is a JSON file capturing every colour — your own picks and the automatic assignments — so you can keep looks and swap between them. Loading replaces everything and is one ⌘Z to undo.")
+                Text("A set is a JSON file capturing every colour — your own picks and the automatic assignments — so you can keep looks and swap between them. Loading replaces everything.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Manually picked colours") {
+                let projectPicks = controller.settings.projectColours.keys.sorted()
+                let taskPicks = controller.settings.taskColours.keys.sorted()
+                DisclosureGroup(isExpanded: $manualPicksExpanded) {
+                    if projectPicks.isEmpty && taskPicks.isEmpty {
+                        Text("No manual picks — every colour is automatic.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(projectPicks, id: \.self) { key in
+                        manualProjectPickRow(key)
+                    }
+                    ForEach(taskPicks, id: \.self) { key in
+                        manualTaskPickRow(key)
+                    }
+                } label: {
+                    Text("\(projectPicks.count + taskPicks.count) pick\(projectPicks.count + taskPicks.count == 1 ? "" : "s")")
+                        .font(.callout)
+                }
+                HStack {
+                    Text("Every colour you've set by hand, in one place — edit any, or revert it to automatic.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Revert all to automatic") {
+                        controller.revertAllColourOverrides()
+                    }
+                    .font(.caption)
+                    .disabled(projectPicks.isEmpty && taskPicks.isEmpty)
+                }
+            }
+    }
+
+    @State private var manualPicksExpanded = false
+
+    private func manualTaskPickRow(_ key: String) -> some View {
+        let task = controller.taskCache.first { $0.ref.storageKey == key }
+        return HStack(spacing: 8) {
+            if let task {
+                ColorPicker("", selection: Binding(
+                    get: { Color(nsColor: controller.colour(for: task.ref)) },
+                    set: { controller.setColour(NSColor($0), for: task.ref) }))
+                    .labelsHidden().frame(width: 22)
+                Text(task.subject).font(.caption)
+            } else {
+                // The task is no longer resolvable (renamed backend, old
+                // key) — show the raw key so the pick is still removable.
+                Text(key).font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("auto") {
+                if let task { controller.resetColour(for: task.ref) }
+                else { controller.removeColourOverride(taskKey: key) }
+            }
+            .font(.caption)
+            .help("Revert to the automatic colour")
+        }
+    }
+
+    private func manualProjectPickRow(_ key: String) -> some View {
+        let member = controller.taskCache.first { controller.projectKey(for: $0) == key }
+        return HStack(spacing: 8) {
+            if let member {
+                ColorPicker("", selection: Binding(
+                    get: { Color(nsColor: controller.projectColour(containing: member.ref) ?? .systemGray) },
+                    set: { controller.setProjectColour(NSColor($0), containing: member.ref) }))
+                    .labelsHidden().frame(width: 22)
+                Text("\(member.project ?? "Personal") (project)").font(.caption)
+            } else {
+                Text("\(key) (project)").font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("auto") {
+                if let member { controller.resetProjectColour(containing: member.ref) }
+                else { controller.removeProjectColourOverride(projectKey: key) }
+            }
+            .font(.caption)
+            .help("Revert to the automatic colour")
+        }
     }
 
     private func saveColourSet() {

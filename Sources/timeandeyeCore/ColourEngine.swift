@@ -317,8 +317,13 @@ public enum ColourEngine {
     /// the caller can no longer group), user overrides never live in this
     /// store at all, and original first-seen stamps order the pass and
     /// survive it. Deterministic: same store + groups ⇒ same result.
+    /// `anchorHueOverrides`: the hue of the user's project-swatch pick per
+    /// project key (see `overrideAnchorHue`) — a re-derived family shades
+    /// around the colour the USER chose for the project, not the engine's
+    /// own anchor (Martin, 2026-07-11: re-derive ignored his project pick).
     public static func rederiveAll(
         groups: [(projectKey: String, memberTaskKeys: [String])],
+        anchorHueOverrides: [String: Double] = [:],
         in store: ColourAssignments,
         at now: Date = Date()) -> ColourAssignments {
         var rebuilt = store
@@ -341,8 +346,9 @@ public enum ColourEngine {
                 (taskSeen($0), $0) < (taskSeen($1), $1)
             }
             for key in members {
-                _ = taskHex(key, projectKey: group.projectKey, in: &rebuilt,
-                            at: taskSeen(key))
+                _ = taskHex(key, projectKey: group.projectKey,
+                            anchorHueOverride: anchorHueOverrides[group.projectKey],
+                            in: &rebuilt, at: taskSeen(key))
             }
         }
         rebuilt.version = ColourAssignments.currentVersion

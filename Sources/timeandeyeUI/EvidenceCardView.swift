@@ -189,7 +189,7 @@ struct EvidenceCardView: View {
                             Text(forgetLabel(u)).font(.caption2)
                         }
                         .buttonStyle(.borderless)
-                        .help("Remove exactly what fired here (undoable, ⌘Z)")
+                        .help("Remove exactly what fired here")
                         Text("→ would then fall back to: \(fallbackText(u))")
                             .font(.caption2).foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -207,7 +207,7 @@ struct EvidenceCardView: View {
                         // orange accent read as an alert amid an otherwise
                         // grey card (Martin, twice, + 2026-07-11).
                         .foregroundStyle(.secondary)
-                        .help("Also remove the fallback itself, so it's never offered again (undoable, ⌘Z)")
+                        .help("Also remove the fallback itself, so it's never offered again")
                     }
                 }
                 // Disable the implicit animation SwiftUI would otherwise apply
