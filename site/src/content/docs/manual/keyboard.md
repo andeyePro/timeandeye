@@ -19,7 +19,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 
 ## Popover
 
-- **⌘T** - flip the list between Switch-to and Change-to.
+- **⌘T** - flip the list between Switch-to and Reassign.
 - **⌘P** - pin the current window/site (or, when pinned, open the pin editor).
 - **⌘E** - open the Evidence Card (why this was tracked here, un-learn, fix).
 - **⌘.** - stop tracking. **⌘R** - resume the last task.
@@ -44,7 +44,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 
 ## Time window - both views
 
-- **⌘\\** - flip between the timeline and the pie.
+- **⌘\\** - flip between the timeline and the donut.
 - **⌃-click** (or right-click) a preview - open the *other* view in a second
   window instead of flipping.
 
@@ -61,7 +61,7 @@ control). Each shortcut works while that window (or the popover) is frontmost.
   windows*, **Space** = *Exact time*); **Esc** closes; **⌘⌫** deletes the slice.
 - In a slice's window strip: **⌘A** - select every window in the slice.
 
-## Time window - pie
+## Time window - donut
 
 - **⌘1 / ⌘2 / ⌘3 / ⌘4** - period Today / Week / Last 7 days / Month.
 - **⌘⇧O** - toggle "OpenProject only". **⌘⇧C** - show / hide the calendar.

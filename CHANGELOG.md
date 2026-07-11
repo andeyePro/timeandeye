@@ -58,6 +58,81 @@
   from the current effective project colours in first-seen order. 12 new
   checks (ColourPalette + a SettingsIA rename/rank check).
 
+- [x] **Connections redesigned — licence first, classed twisties.**
+  Licence moved from About to the top of Connections (it is what unlocks
+  connectors, so it lives with them; the search index follows). Connectors
+  group under Standard / Pro / Premium subdividers; each connector folds
+  its plumbing (URL, key, connect, connected-as, default activity) behind
+  a twisty whose heading shows the at-a-glance truth ("OpenProject — 143
+  tasks · name") and opens itself only while unconnected. Posting health
+  renders under its connector but never inside the fold — a problem must
+  not hide behind a twisty. Xero sits greyed behind the licence gate with
+  an upgrade link in the community build and goes live when andeyePro
+  registers it (new `registeredConnectorNames` API). Suite 810/0.
+
+- [x] **Billing sidebar is now Currency; legend link in caption (
+  "Billing is confusing — it normally means app billing").** Sidebar title
+  and section header renamed (enum raw value untouched so the persisted
+  selection survives — the Codable rename lesson); search keywords keep
+  "billing" so old muscle memory still lands; the caption's "Time Spent
+  legend" prose became a live Time Donut legend link. Billing mappings
+  keeps its name — it really is billing. Suite 810/0.
+
+- [x] **Posted-vs-tracked wording — name the app, link the flag.**
+  Users can't be assumed to know "tracked" vs "posted": the review-floor
+  caption now says brief visits still follow the Auto-push rule; the refile
+  caption says "entries posted to OpenProject" (live backend name) and
+  "flagged" is a real link that opens the timeline; the Posting-health
+  banner names the connected app and "review them on the timeline" is a
+  link, not prose. Suite 810/0.
+
+- [x] **Typeable number beside every slider/stepper.** Every
+  numeric control in Settings pairs with a right-aligned number field
+  bound to the same value, clamped to the control's range: auto-push
+  threshold (%), review queue floor (s), switch buffer (s), sleep grace
+  (s), idle backfill window (h), menu-bar task chars. Hard cap (MB) and
+  consolidate-years were already typeable fields. Suite 810/0.
+
+- [x] **Local tasks rebuilt clean (his xnip — "ugliest thing in the
+  whole app").** Root cause from the screenshot: TITLED TextFields inside
+  a grouped macOS Form render their titles as row labels (the ghost
+  "name" / duplicated "Personal" captions over right-aligned boxes), and a
+  width-clipped ColorPicker overlapped the field. Rows now use a
+  natural-size swatch, borderless plain fields with prompts (project greys
+  when inherited), a quiet trailing trash, and a plain Add row; the
+  section header carries the never-sent promise; caption tightened and
+  speaks Donut.
+
+- [x] **ONE threshold — the review threshold is deleted (his mandate).**
+  The silent limbo is gone: slices between the review threshold and the
+  push bar were journalled but never asked about and never posted. Now the
+  auto-push bar IS the review gate — everything below it queues (the
+  review floor still keeps brief visits quiet), everything at/above it
+  posts. TrackerConfig splits the old dual-role `uncertainBelow`:
+  switching keeps a fixed internal 0.6 floor; a new `reviewBelow` follows
+  the push bar live (`setReviewBelow` on the slider's didSet — no
+  relaunch). The slider is renamed "Auto-push to OpenProject" (live
+  backend name); its search entry absorbs the deleted one;
+  ContradictionRefile's suggestion floor becomes a fixed 0.5.
+  `settings.reviewThreshold` stays decodable but feeds nothing.
+  Suite 810/0.
+
+- [x] **Email match order is fixed — reorder controls deleted (his
+  mandate).** Neither of us could name a case where mail system < domain <
+  correspondent < subject should run differently, so the up/down controls
+  and their search entry are gone; the caption states the fixed ladder
+  plainly. Old settings files' stored order stays honoured internally.
+  Suite 810/0.
+
+- [x] **The 314 wording/link cluster — Donut rename, presenting label,
+  links not buttons.** Time Pie → Time Donut (window title, Donut-button
+  picker, popover/timeline helps, Settings link); "Quiet while presenting"
+  → "Hide banners while presenting"; Auto-comment lives under Comments;
+  "disable colour signalling"; the meeting alert names what it does (pulse
+  the menu-bar mark); lock-on-leave names the walk-figure control that
+  arms it; the colours caption's buttons became inline links, and the
+  review-floor caption hyperlinks Switch Buffer (jumps to Behaviour).
+
 - [x] **Mis-filed slices get acted on (his design, approved).** The
   why-panel's "today's rules would say" line grew hands:
   `ContradictionRefile` (pure, 6 checks) re-derives recent slices against

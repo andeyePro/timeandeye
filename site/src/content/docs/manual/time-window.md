@@ -1,31 +1,25 @@
 ---
 title: The Time window
-description: The timeline and pie views of your tracked time, and how to edit it.
+description: The timeline and donut views of your tracked time, and how to edit it.
 ---
 
-One window shows your time two ways - a **timeline** and a **pie** - and you flip
-between them in place. The footer pie in the popover opens it on the timeline,
-the pie, or whichever you viewed last, per a Setting. Like every Time&I
-window, it appears over full-screen apps and settles onto whichever desktop
-you're working on.
+One window shows your time two ways - a **timeline** and a **donut** - and you
+flip between them in place. The Donut button in the popover opens it on the
+timeline, the donut, or whichever you viewed last, per a Setting. Like every
+Time&I window, it appears over full-screen apps and settles onto whichever
+desktop you're working on.
 
 ## Switching views
 
 There is no separate switcher button: the cross-previews are the navigation.
 
-- In the **timeline**, the top-right mini-pie is today's breakdown. **Click it**
-  to flip this window to the pie.
-- In the **pie**, the "from HH:MM" strip is the current block's timeline. **Click
+- In the **timeline**, the top-right mini-donut is today's breakdown. **Click
+  it** to flip this window to the donut.
+- In the **donut**, the "from HH:MM" strip is the current block's timeline. **Click
   a slice** to flip to the timeline framed on (and editing) that exact slice;
   **click a gap or the "from" label** to open the timeline with nothing selected.
 
 **⌘\\** flips between the two views from the keyboard. To see both at once,
-**Billable flags** (pie view): right-click a project or task to mark it
-billable or non-billable (tasks can also inherit from their project);
-billable rows carry a "billable" label in the legend. Marking a project
-billable warns you about already-tracked hours that will NOT be invoiced
-(flips apply to new time only) and leaves manually-set tasks as they were.
-
 **⌃-click (or right-click)** a preview - that opens the other view in a *second*
 Time window instead of flipping the current one.
 
@@ -70,11 +64,11 @@ midnight. Day boundaries are marked with the date.
   described in [Auto-tracking and attribution](/manual/auto-tracking-and-attribution/).
   Move windows to another task to split/reassign and teach the learner.
 
-## Pie view
+## Donut view
 
 - **Period** (Today ⌘1 / Week ⌘2 / Last 7 days ⌘3 / Month ⌘4), with an
   "OpenProject only" filter (⌘⇧O) and a show/hide calendar (⌘⇧C).
-- A donut: projects in the inner ring, tasks in the outer. Hover to highlight,
+- Projects in the inner ring, tasks in the outer. Hover to highlight,
   click to pin a selection; reassign time to another task from the bar.
 - **Colours**: each project gets its own hue, and its tasks distinct shades
   around it - picked to stay tellable-apart (including under colour-blind
@@ -84,3 +78,8 @@ midnight. Day boundaries are marked with the date.
   and a recoloured project guides the shades its future tasks pick up. The
   timeline's slice editor and a local task's Settings row offer the same
   picker.
+- **Billable flags**: right-click a project or task to mark it billable or
+  non-billable (tasks can also inherit from their project); billable rows
+  carry a "billable" label in the legend. Marking a project billable warns
+  you about already-tracked hours that will NOT be invoiced (flips apply to
+  new time only) and leaves manually-set tasks as they were.

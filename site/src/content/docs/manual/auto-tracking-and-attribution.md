@@ -150,7 +150,7 @@ rule) always beats the nudge, and a stopped clock carries none.
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of clearing it or guessing -
 the time stays tracked with full detail, just off your review queue. It shows
-up hatched grey on the timeline and in the pie so it's never mistaken for a
+up hatched grey on the timeline and in the donut so it's never mistaken for a
 real task, and you can reassign it from the timeline any time you do work out
 what it was. If a later rule makes andeye confident about it on its own, it
 reclaims itself back out of Unknown automatically.

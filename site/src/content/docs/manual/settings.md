@@ -1,30 +1,41 @@
 ---
 title: Settings
-description: The Settings window's categories - tracking thresholds, behaviour, menu bar, colours, local tasks, connections, billing, email and calendar matching, maintenance - and the ⌘F search that finds any setting.
+description: The Settings window's categories - the auto-push threshold, behaviour, menu bar, colours, local tasks, connections, currency, email and calendar matching, maintenance - and the ⌘F search that finds any setting.
 ---
 
 Settings (⌘,) is organised into categories: a sidebar on the left, the
 selected category's controls on the right. Press **⌘F** (or click the search
 field above the sidebar) and type to find any setting by its label or a
 related word - "color", "xero" and "csv" all work; pick a result to jump to
-its category.
+its category. Every slider and stepper pairs with a typeable number box
+bound to the same value, so you can enter a figure directly.
 
 ### Tracking
 
-- **Auto-push and review thresholds** - how certain Time&I must be before a
-  session posts by itself, and below what certainty it queues for review.
+- **Auto-push to your connected app** - the one certainty threshold:
+  sessions at least this certain post by themselves; everything below
+  queues for your review. Push the slider past 100% to never auto-push and
+  review everything.
 - **Review queue floor** - a visit only asks for review once its slice is
-  at least this many seconds long (default 60; 0 shows everything). Briefer
-  glances stay tracked - they just never queue, however often they repeat.
-- **Comments** - whether a note goes to the time entry, the task's feed, or both.
+  at least this many seconds long (default 60; it bottoms out at the Switch
+  Buffer, where every uncertain slice asks). Briefer visits stay tracked
+  and follow the Auto-push rule - they just never ask, however often they
+  repeat.
+- **When later evidence contradicts past entries** - update them
+  automatically, leave them alone, or queue them for your review. Entries
+  you assigned or pinned yourself are never touched in any mode; entries
+  already posted are only ever flagged on the timeline.
+- **Comments** - auto-comment time entries (the apps/docs used), and whether
+  a typed note goes to the time entry, the task's feed, or both.
 
 ### Behaviour
 
 - **Switch Buffer** and grace windows, idle and sleep handling.
-- **Popover default mode** - "Change to" (default) or "Switch to".
-- **Time button opens** - Timeline / Last viewed / Pie chart.
-- **System notifications**, **lock on leave**, **track leisure to local tasks**.
-- **Quiet while presenting** - while your mic is live or a display is
+- **Popover default mode** - "Reassign" (default) or "Switch to".
+- **Donut button opens** - Timeline / Last viewed / Donut.
+- **System notifications**, **lock the Mac when you continue work away**
+  (the popover's walk figure, ⌘⇧L), **track leisure to local tasks**.
+- **Hide banners while presenting** - while your mic is live or a display is
   mirrored, banners that would name a task or contact stay hidden, so
   nothing about your work pops up on a shared screen (on by default).
 - **Idle backfill** - opt-in: when you return from an idle gap, offer to
@@ -46,7 +57,7 @@ its category.
   cohesively: every project gets a distinct anchor colour and its tasks shade
   around it - and around YOUR colour where you've picked one for a project.
   Colours you picked yourself are untouched. Edit any single colour from the
-  Time Spent legend (click its swatch) or the timeline editor; a project's
+  Time Donut legend (click its swatch) or the timeline editor; a project's
   swatch popover also offers **Shade tasks around this**.
 - **Palettes** - save colours to a JSON file and load them back. **Save
   palette** captures the complete current look (your picks plus the
@@ -61,23 +72,40 @@ its category.
 
 ### Local tasks
 
-- Personal non-OP tasks (e.g. "Chess") you can track against, each with its
-  own colour, plus the non-work catch-all task.
+- Personal tasks (e.g. "Chess") you can track against, private to this Mac
+  and never sent to a backend. Each row has a colour swatch, a name, and an
+  optional project (blank means Personal, shown greyed); an Add row creates
+  the next one and the trash deletes. Renaming keeps a task's history and
+  colour. The non-work catch-all task lives here too.
 
 ### Connections
 
-- **OpenProject** - base URL and API key.
-- **Posting health** - appears only when something needs you: per backend, a
-  count of entries stuck after repeated failures (with a one-click Retry) and
-  a count of entries that disagree with your journal and can't be fixed
-  automatically (usually because they're locked into an invoice). Ordinary
-  edits and deletions of already-posted time propagate to the backend on
-  their own within a minute or two.
+- **Licence** - leads the category, since it is what unlocks connectors;
+  the app is complete without one. Paste a key (`ANDEYE1.` followed by two
+  dot-separated blocks) and Apply: the tier (Plus / Pro / Premium /
+  Enterprise), who it is licensed to, and the renewal date appear -
+  lifetime keys show "lifetime". If the key can't be used, the reason
+  appears in red below the field.
+- **Connectors** - grouped Standard / Pro / Premium. Each connector's
+  plumbing (instance URL, API key, connect, default activity) folds behind
+  a disclosure whose heading shows the at-a-glance state ("OpenProject -
+  143 tasks · your name"); it opens itself only while unconnected. Xero
+  sits under Pro connectors, greyed with an upgrade link until your licence
+  covers it.
+- **Posting health** - appears under its connector only when something
+  needs you: a count of entries stuck after repeated failures (with a
+  one-click Retry) and a count of entries that disagree with your journal
+  and can't be fixed automatically (usually because they're locked into an
+  invoice), plus a "review them on the timeline" link when posted entries
+  look mis-filed under today's rules. Ordinary edits and deletions of
+  already-posted time propagate to the backend on their own within a
+  minute or two.
 
-### Billing
+### Currency
 
 - **Currency symbol** - shown wherever billable totals render; leave blank
-  for your locale's own symbol.
+  for your locale's own symbol. Projects default to non-billable - opt them
+  in from the Time Donut legend (right-click a project or task).
 - **Billing mappings** - with a finance backend connected, each billable
   project picks the backend task its time bills to.
 
@@ -85,7 +113,9 @@ its category.
 
 - **Email → task matching** - your own addresses/domains (comma-separated),
   so andeye never mistakes you for the other party when a message's
-  correspondent decides the task; see
+  correspondent decides the task. When a message matches several rules, the
+  most specific wins: mail system, then domain, then correspondent, then
+  subject. See
   [Auto-tracking and attribution](/manual/auto-tracking-and-attribution/) for
   the rules themselves.
 - **Calendar** - off by default; turning it on asks macOS for read-only
@@ -121,9 +151,4 @@ its category.
 
 ### About
 
-- **Licence** - the app is complete without one; a licence only adds paid
-  connectors. Paste a key (`ANDEYE1.` followed by two dot-separated blocks)
-  and Apply: the tier (Plus / Pro / Premium / Enterprise), who it is licensed
-  to, and the renewal date appear - lifetime keys show "lifetime". If the key
-  can't be used, the reason appears in red below the field.
 - **Build details** - the exact version line to copy into a bug report.

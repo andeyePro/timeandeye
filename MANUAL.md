@@ -23,7 +23,7 @@ bar** renders the item like macOS's own status items (no colour signalling).
 At the top:
 
 - **Current task** - the task the running time is being filed against, in bold.
-  Clicking it flips the task list below between "Switch to" and "Change to" (see
+  Clicking it flips the task list below between "Switch to" and "Reassign" (see
   below). A quiet "← <previous task>" button appears beside it when the last
   switch looks wrong - one click folds the current slice back onto that task.
 - **Elapsed + certainty** - the time on the current contiguous session and, when
@@ -41,8 +41,8 @@ At the top:
 
 The task list:
 
-- **Switch to / Change to.** "Switch to" starts a fresh session on the task you
-  pick. "Change to" relabels the session you're already on (keeps the elapsed
+- **Switch to / Reassign.** "Switch to" starts a fresh session on the task you
+  pick. "Reassign" relabels the session you're already on (keeps the elapsed
   time, moves it to the right task). Which one is the default when you open the
   popover is a Setting; clicking the current task title flips to the other for
   that open.
@@ -61,8 +61,8 @@ The task list:
 
 The footer:
 
-- **Time** (⌘Y) - a live mini-pie of today's breakdown. Click it to open the Time
-  window (see below).
+- **Donut button** (⌘Y) - a live mini-donut of today's breakdown. Click it to
+  open the Time window (see below).
 - **Review queue** (⌘U), **Settings** (⌘,), **Quit** (⌘Q).
 
 ## Auto-tracking and attribution
@@ -213,7 +213,7 @@ rule) always beats the nudge, and a stopped clock carries none.
 Can't place a batch at all? The assign bar's **Unknown** button
 sweeps it to the built-in Unknown task instead of clearing it or guessing -
 the time stays tracked with full detail, just off your review queue. It shows
-up hatched grey on the timeline and in the pie so it's never mistaken for a
+up hatched grey on the timeline and in the donut so it's never mistaken for a
 real task, and you can reassign it from the timeline any time you do work out
 what it was. If a later rule makes andeye confident about it on its own, it
 reclaims itself back out of Unknown automatically.
@@ -296,9 +296,9 @@ else. Click the pin button in the popover to open the pin editor.
 
 ## The Time window
 
-One window shows your time two ways - a **timeline** and a **pie** - and you flip
-between them in place. The footer pie in the popover opens it on the timeline,
-the pie, or whichever you viewed last, per a Setting. Like every Time&I
+One window shows your time two ways - a **timeline** and a **donut** - and you
+flip between them in place. The Donut button in the popover opens it on the
+timeline, the donut, or whichever you viewed last, per a Setting. Like every Time&I
 window, it appears over full-screen apps and settles onto whichever desktop
 you're working on.
 
@@ -306,9 +306,9 @@ you're working on.
 
 There is no separate switcher button: the cross-previews are the navigation.
 
-- In the **timeline**, the top-right mini-pie is today's breakdown. **Click it**
-  to flip this window to the pie.
-- In the **pie**, the "from HH:MM" strip is the current block's timeline. **Click
+- In the **timeline**, the top-right mini-donut is today's breakdown. **Click
+  it** to flip this window to the donut.
+- In the **donut**, the "from HH:MM" strip is the current block's timeline. **Click
   a slice** to flip to the timeline framed on (and editing) that exact slice;
   **click a gap or the "from" label** to open the timeline with nothing selected.
 
@@ -357,11 +357,11 @@ midnight. Day boundaries are marked with the date.
   described above. Move windows to another task to split/reassign and teach the
   learner.
 
-### Pie view
+### Donut view
 
 - **Period** (Today ⌘1 / Week ⌘2 / Last 7 days ⌘3 / Month ⌘4), with an
   "OpenProject only" filter (⌘⇧O) and a show/hide calendar (⌘⇧C).
-- A donut: projects in the inner ring, tasks in the outer. Hover to highlight,
+- Projects in the inner ring, tasks in the outer. Hover to highlight,
   click to pin a selection; reassign time to another task from the bar.
 - **Colours**: each project gets its own hue, and its tasks distinct shades
   around it - picked to stay tellable-apart (including under colour-blind
@@ -381,10 +381,11 @@ midnight. Day boundaries are marked with the date.
 
 Settings (⌘,) is organised into categories - a sidebar on the left, the
 selected category's controls on the right: Tracking, Behaviour, Menu bar,
-Colours, Local tasks, Connections, Billing, Email & Calendar, Maintenance,
+Colours, Local tasks, Connections, Currency, Email & Calendar, Maintenance,
 Diagnostics, About. Press **⌘F** and type to find any setting by its label
 or a related word ("color", "xero", "csv" all work); pick a result to jump
-to its category.
+to its category. Every slider and stepper pairs with a typeable number box
+bound to the same value, so you can enter a figure directly.
 
 Colours: **Re-derive all automatic colours** rebuilds the whole automatic
 palette cohesively (every project a distinct anchor, its tasks shading
@@ -394,40 +395,57 @@ palette captures the complete look, task names included, while a generic
 palette is just the colours and loading one re-derives the automatic
 colours around it; **Manually picked colours** lists every hand-picked
 colour with an inline editor, per-row revert and a revert-all. A project's swatch popover
-in the Time Spent legend also offers **Shade tasks around this**.
+in the Time Donut legend also offers **Shade tasks around this**.
 
-- **Comments** - whether a note goes to the time entry, the task's feed, or both.
+- **Auto-push to your connected app** - the one certainty threshold: sessions
+  at least this certain post by themselves; everything below queues for your
+  review. Push the slider past 100% to never auto-push and review everything.
+- **Comments** - auto-comment time entries (the apps/docs used), and whether
+  a typed note goes to the time entry, the task's feed, or both.
 - **Menu bar** - the low/high certainty colours, a certainty %, **Draw in
   certainty** (the mark strokes in proportion to certainty, eye first),
   **Monochrome menu bar** (template-mono like macOS's own items; colour
   signalling off while on), and how many letters of the task name show
   after the time.
-- **Popover default mode** - "Change to" (default) or "Switch to".
-- **Time button opens** - Timeline / Last viewed / Pie chart.
+- **Popover default mode** - "Reassign" (default) or "Switch to".
+- **Donut button opens** - Timeline / Last viewed / Donut.
 - **Switch Buffer** and grace windows, idle and sleep handling.
 - **Review queue floor** - a window only asks for review once its uncertain
-  slices total this many seconds (default 60; 0 shows everything). Briefer
-  visits stay tracked - they just never queue.
-- **System notifications**, **lock on leave**, **track leisure to local tasks**.
-- **Quiet while presenting** - while your mic is live or a display is
+  slices total this many seconds (default 60; it bottoms out at the Switch
+  Buffer, where every uncertain slice asks). Briefer visits stay tracked
+  and follow the Auto-push rule - they just never ask.
+- **System notifications**, **lock the Mac when you continue work away**
+  (the popover's walk figure, ⌘⇧L), **track leisure to local tasks**.
+- **Hide banners while presenting** - while your mic is live or a display is
   mirrored, banners that would name a task or contact stay hidden, so
   nothing about your work pops up on a shared screen (on by default).
 - **Idle backfill** - opt-in: when you return from an idle gap, offer to
   claim the gap for the task you were on (off by default; hours stepper caps
   how far back it offers).
-- **Local tasks** - personal non-OP tasks (e.g. "Chess") you can track against.
-- **OpenProject** - base URL and API key.
-- **Licence** - the app is complete without one; a licence only adds paid
-  connectors. Paste a key (`ANDEYE1.` followed by two dot-separated blocks)
-  and Apply: the tier (Plus / Pro / Premium / Enterprise), who it is licensed
-  to, and the renewal date appear - lifetime keys show "lifetime". If the key
-  can't be used, the reason appears in red below the field.
-- **Posting health** - appears only when something needs you: per backend, a
-  count of entries stuck after repeated failures (with a one-click Retry) and
-  a count of entries that disagree with your journal and can't be fixed
-  automatically (usually because they're locked into an invoice). Ordinary
-  edits and deletions of already-posted time propagate to the backend on
-  their own within a minute or two.
+- **Local tasks** - personal tasks (e.g. "Chess") you can track against,
+  private to this Mac and never sent to a backend. Each row has a colour
+  swatch, a name, and an optional project (blank means Personal, shown
+  greyed); an Add row creates the next one and the trash deletes. Renaming
+  keeps a task's history and colour.
+- **Licence** - leads the Connections category, since it is what unlocks
+  connectors; the app is complete without one. Paste a key (`ANDEYE1.`
+  followed by two dot-separated blocks) and Apply: the tier (Plus / Pro /
+  Premium / Enterprise), who it is licensed to, and the renewal date appear
+  - lifetime keys show "lifetime". If the key can't be used, the reason
+  appears in red below the field.
+- **Connectors** - grouped Standard / Pro / Premium. Each connector's
+  plumbing (instance URL, API key, connect, default activity) folds behind
+  a disclosure whose heading shows the at-a-glance state ("OpenProject -
+  143 tasks · your name"); it opens itself only while unconnected. Xero
+  sits under Pro connectors, greyed with an upgrade link until your licence
+  covers it.
+- **Posting health** - appears under its connector only when something needs
+  you: a count of entries stuck after repeated failures (with a one-click
+  Retry) and a count of entries that disagree with your journal and can't be
+  fixed automatically (usually because they're locked into an invoice), plus
+  a "review them on the timeline" link when posted entries look mis-filed
+  under today's rules. Ordinary edits and deletions of already-posted time
+  propagate to the backend on their own within a minute or two.
 - **Duplicate reconcile** - scans for OpenProject time entries logged twice
   against the same task and minute. Click a match to see every difference
   between its entries, then Apply: the richest entry survives (the others'
@@ -449,8 +467,9 @@ in the Time Spent legend also offers **Shade tasks around this**.
   journal is normally tiny (see iCloud footprint above).
 - **Email → task matching** - your own addresses/domains (comma-separated),
   so andeye never mistakes you for the other party when a message's
-  correspondent decides the task; see Auto-tracking and attribution above
-  for the rules themselves.
+  correspondent decides the task. When a message matches several rules, the
+  most specific wins: mail system, then domain, then correspondent, then
+  subject. See Auto-tracking and attribution above for the rules themselves.
 - **Calendar** - off by default; turning it on asks macOS for read-only
   calendar access once and reveals the rest of the section: the pre-meeting
   pulse and its lead time (1-15 minutes), the flash at meeting start, which
@@ -458,13 +477,14 @@ in the Time Spent legend also offers **Shade tasks around this**.
   holiday calendars are already excluded), and how far back the Review
   queue looks for a matching past event.
 - **Currency symbol** - shown wherever billable totals render; leave blank
-  for your locale's own symbol.
+  for your locale's own symbol. Projects default to non-billable - opt them
+  in from the Time Donut legend (right-click a project or task).
 
 ## Data, sync and safety
 
 - Your time is journalled to a local SQLite database; that is the source of
-  truth. Confident OP tasks push to your OpenProject automatically (above a
-  certainty threshold you set).
+  truth. Sessions at or above the Auto-push threshold you set post to your
+  OpenProject automatically; everything below queues for your review.
 - The OP API key is stored in an owner-only (0600) file in the app support
   folder, not the Keychain.
 - A crash-safe checkpoint means a hard crash loses at most a short tail of the
@@ -492,7 +512,7 @@ A £ glyph after a task name (in the pick list, and after the running task in
 the header) means its time is billable - resolved from the task's own
 setting, or its project's.
 
-- **⌘T** - flip the list between Switch-to and Change-to.
+- **⌘T** - flip the list between Switch-to and Reassign.
 - **⌘P** - pin the current window/site (or, when pinned, open the pin editor).
 - **⌘E** - open the Evidence Card (why this was tracked here, un-learn, fix).
 - **⌘.** - stop tracking. **⌘R** - resume the last task.
@@ -517,7 +537,7 @@ setting, or its project's.
 
 ### Time window - both views
 
-- **⌘\\** - flip between the timeline and the pie.
+- **⌘\\** - flip between the timeline and the donut.
 - **⌃-click** (or right-click) a preview - open the *other* view in a second
   window instead of flipping.
 
@@ -534,7 +554,7 @@ setting, or its project's.
   windows*, **Space** = *Exact time*); **Esc** closes; **⌘⌫** deletes the slice.
 - In a slice's window strip: **⌘A** - select every window in the slice.
 
-### Time window - pie
+### Time window - donut
 
 - **⌘1 / ⌘2 / ⌘3 / ⌘4** - period Today / Week / Last 7 days / Month.
 - **⌘⇧O** - toggle "OpenProject only". **⌘⇧C** - show / hide the calendar.

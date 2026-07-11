@@ -24,10 +24,10 @@ repository's `README.md`.
   andeye decides which task your time belongs to, and how to see why.
 - [Pinning](/manual/pinning/) – locking a window, site or app to a task at
   100%, by component, expression, or AI-assisted rule.
-- [The Time window](/manual/time-window/) – the timeline and pie views of your
+- [The Time window](/manual/time-window/) – the timeline and donut views of your
   tracked time, and how to edit it.
-- [Settings](/manual/settings/) – comments, popover defaults, the Switch
-  Buffer, local tasks, and your OpenProject connection.
+- [Settings](/manual/settings/) – the auto-push threshold, comments, popover
+  defaults, the Switch Buffer, local tasks, and your connections.
 - [Data, sync and safety](/manual/data-sync-and-safety/) – where your data
   lives, what syncs, and crash safety.
 - [Keyboard](/manual/keyboard/) – every shortcut, by surface.

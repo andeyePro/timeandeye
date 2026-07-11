@@ -15,7 +15,7 @@ colour signalling).
 At the top:
 
 - **Current task** - the task the running time is being filed against, in bold.
-  Clicking it flips the task list below between "Switch to" and "Change to" (see
+  Clicking it flips the task list below between "Switch to" and "Reassign" (see
   below). A quiet "← <previous task>" button appears beside it when the last
   switch looks wrong - one click folds the current slice back onto that task.
 - **Elapsed + certainty** - the time on the current contiguous session and, when
@@ -35,8 +35,8 @@ At the top:
 
 The task list:
 
-- **Switch to / Change to.** "Switch to" starts a fresh session on the task you
-  pick. "Change to" relabels the session you're already on (keeps the elapsed
+- **Switch to / Reassign.** "Switch to" starts a fresh session on the task you
+  pick. "Reassign" relabels the session you're already on (keeps the elapsed
   time, moves it to the right task). Which one is the default when you open the
   popover is a Setting; clicking the current task title flips to the other for
   that open.
@@ -55,6 +55,6 @@ The task list:
 
 The footer:
 
-- **Time** (⌘Y) - a live mini-pie of today's breakdown. Click it to open the Time
-  window (see [The Time window](/manual/time-window/)).
+- **Donut button** (⌘Y) - a live mini-donut of today's breakdown. Click it to
+  open the Time window (see [The Time window](/manual/time-window/)).
 - **Review queue** (⌘U), **Settings** (⌘,), **Quit** (⌘Q).
