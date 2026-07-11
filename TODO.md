@@ -871,11 +871,36 @@ and recorded rather than fixed blind:
   recommendations; F1 floor correction applied — standard connectors `.plus`).
   Then commit the v2 build; do NOT sell any plus SKU before the entitlement
   gate ships end-to-end (spec's own launch-blocker rule).
-- [ ] FableReview.md: triage the 23 findings — F8 (resolveOverlaps unwired),
-  F9/F10 (multi-device posting ledger), F11 (edits never amend finance),
-  F23 (middle-split destroys the smaller side) are the pre-CloudKit-GA set;
-  full designs in docs/superpowers/specs/2026-07-07-multidevice-posting-
-  correctness.md (D0–D7 + 14 acceptance criteria).
+- [x] FableReview.md triage — DONE 2026-07-11 (vsss iter-36 reconciliation).
+  Designs: docs/superpowers/specs/2026-07-07-multidevice-posting-
+  correctness.md (D0–D7 + 14 criteria). SHIPPED and code-verified: F8/D1
+  resolved view feeds pusher+pie+export (e426b7b; resolvedSessions/
+  resolvedContribution; ResolvedPostingChecks pins criterion 1); F23
+  keep-all-fragments split (1955ffc); F21/D0.1 + F22/D0.2 anti-entropy +
+  ≤200 chunked push (1955ffc; criterion-13 failure clause f02a47a);
+  F19/D5 permanent-vs-transient + .stuck/.skipped (1955ffc); F12/D3
+  .inflight verify-then-adopt (1955ffc) + F13 resurrection re-post (3e8be92);
+  F11/D4 amendment loop update/delete+recreate/retract/.diverged (detection
+  f3c0ac8, amendment 367910f) + D4b invoice-lock (685afb2); F18/D6
+  finance-mapping store + Settings editor (a277f29, d1e0150); D2(a)
+  posting-owner gate (8d869f1). D2(a) single-homing is what de-facto closes
+  F9's double-post today. GENUINELY OPEN items broken out below.
+- [ ] D2(b): synced posting ledger — own CloudKit record type keyed
+  (sessionID, backendID), state-lattice merge (posted>skipped>failed>pending).
+  Ledger is still local-only; this is what makes owner HANDOFF safe and shows
+  posted state on every device. Needs a design session on the CK record type;
+  blocks with CloudKit GA.
+- [ ] D2(c): kill in-record posting bookkeeping when sync is on (fixes F10) —
+  markPushed still writes pushedToOP/opTimeEntryID into the synced session, so
+  bookkeeping still competes with edits in whole-record LWW. Depends on D2(b)
+  carrying the state. F10 stays genuinely open until this lands.
+- [ ] D0.3: surface decode drops — "N sessions from a newer andeye version
+  aren't visible on this device" instead of silently compactMap-dropping in
+  pull. User-facing; not built (deliberately deferred, per the D0 audit above).
+- [ ] D7 / F14: billing.json is per-device — fold billable rules into synced
+  settings when settings-sync lands. Deferred by design (D2(a) ownership bounds
+  the harm to one evaluating device); until then, set billable flags on the
+  posting owner.
 - [x] Wire Settings surfacing — DONE 2026-07-08 (overnight): Posting health
   section (stuck + Retry, diverged counts); permanentlySkipped surfaces via
   lastError. REMAINING: entitlement-denial copy — lands with the cross-repo
