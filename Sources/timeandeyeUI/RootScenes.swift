@@ -399,6 +399,19 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                     DebugLog.write("window \(windowID ?? w.title): behaviours -> \(w.collectionBehavior.rawValue), level \(w.level.rawValue), visible \(visible), onActiveSpace \(w.isOnActiveSpace)")
                 }
             }
+            // Martin's 06:52 log (2026-07-11): a freshly-granted settings
+            // window sat visible-but-NOT-on-the-active-Space and stayed
+            // there until the grace demoted it — invisible to him, "gear
+            // needs two clicks". While the window WEARS the everywhere pose
+            // it belongs on the active Space by definition; if AppKit
+            // hasn't caught up, order it front again (cheap, idempotent,
+            // and only while the fullscreen-capable pose is on).
+            if wantFullscreenPose, visible, !w.isOnActiveSpace {
+                w.orderFrontRegardless()
+                if logworthy {
+                    DebugLog.write("window \(windowID ?? w.title): re-fronted (was off active Space in overlay pose)")
+                }
+            }
             let wantedLevel: NSWindow.Level = wantFullscreenPose ? .floating : .normal
             if w.level != wantedLevel {
                 w.level = wantedLevel
