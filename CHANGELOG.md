@@ -2,6 +2,24 @@
 
 ## 2026-07-11
 
+- [x] **Live-session batch (overnight, with Martin testing).** Evidence
+  card: all facts render as ONE selectable text run (single click-drag
+  copies the whole card; the interim copy button removed), `[+ all]` moved
+  to the card's top-right (selects every same-data window in the slice;
+  disabled-not-hidden with no twins), empty captured titles fall back to
+  the tab's site host in the card header and strip chips. Fullscreen fix
+  fourteen: no auxiliary re-grace after a fullscreen exit (it blocked an
+  immediate re-green-button); the fix-thirteen transition hold stays.
+  Settings gear opens first-click (activation now targets the requested
+  window, not just the app). Timeline editor swatch shows "auto"/revert
+  conditionally. Colours: re-derive and the new "Shade tasks around this"
+  honour the user's project picks (`rederiveAll` anchor-hue overrides,
+  check-covered); "Manually picked colours" manager with per-row revert +
+  revert-all. Review-floor stepper bottoms at the Switch Buffer. ⌘Z
+
+
+
+
 - [x] **Colours settings category — re-derive from scratch + colour sets.**
   preserved pre-engine task colours share no family (each was an
   independent hue), so Settings ▸ Colours now offers **Re-derive all

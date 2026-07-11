@@ -40,12 +40,16 @@ its category.
 
 - **Re-derive all automatic colours** - rebuilds the whole automatic palette
   cohesively: every project gets a distinct anchor colour and its tasks shade
-  around it. Colours you picked yourself are untouched, and ⌘Z restores the
-  previous palette. Edit any single colour from the Time Spent legend (click
-  its swatch) or the timeline editor.
+  around it - and around YOUR colour where you've picked one for a project.
+  Colours you picked yourself are untouched. Edit any single colour from the
+  Time Spent legend (click its swatch) or the timeline editor; a project's
+  swatch popover also offers **Shade tasks around this**.
 - **Colour sets** - save the complete current look (your picks plus the
   automatic assignments) to a JSON file, and load one back later - loading
-  replaces everything and is one ⌘Z to undo.
+  replaces everything.
+- **Manually picked colours** - every hand-picked colour in one collapsed
+  list, each with an inline editor and a revert to automatic, plus a
+  revert-all.
 
 ### Local tasks
 
