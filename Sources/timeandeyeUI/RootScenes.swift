@@ -180,15 +180,21 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 forName: AndeyeWindows.openRequested, object: nil,
                 queue: nil) { [weak self] note in
                 guard let self, Thread.isMainThread else { return }
-                // Scoped: only the window being opened re-graces (see
-                // AndeyeWindows.openGrantApplies) — granting every window
-                // put them all in the auxiliary pose, which blocked the
-                // green button for 4s after any open.
-                guard AndeyeWindows.openGrantApplies(
-                    opened: note.userInfo?["id"] as? String,
-                    windowID: self.windowID) else { return }
-                self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
-                self.applyToWindow()
+                // On-main proven by the guard above; assumeIsolated makes
+                // that visible to the compiler (the bare call was warning
+                // 'main actor-isolated method in a synchronous nonisolated
+                // context' on every build — Martin's 04:14 paste).
+                MainActor.assumeIsolated {
+                    // Scoped: only the window being opened re-graces (see
+                    // AndeyeWindows.openGrantApplies) — granting every window
+                    // put them all in the auxiliary pose, which blocked the
+                    // green button for 4s after any open.
+                    guard AndeyeWindows.openGrantApplies(
+                        opened: note.userInfo?["id"] as? String,
+                        windowID: self.windowID) else { return }
+                    self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
+                    self.applyToWindow()
+                }
             }
             // Fullscreen fix thirteen: bracket macOS's enter/exit animations.
             let starts = [NSWindow.willEnterFullScreenNotification,

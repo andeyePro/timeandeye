@@ -1496,7 +1496,14 @@ struct TimelineView: View {
 
     private func spanChip(_ span: FocusSpan, index: Int, task: TaskRef) -> some View {
         let secs = span.end.timeIntervalSince(span.start)
-        let label = [span.signal.app, span.signal.windowTitle].compactMap { $0 }
+        // Empty title falls back to the tab's host — a bare app name tells
+        // the user nothing the sees line doesn't contradict (2026-07-11).
+        let detail: String? = {
+            if let title = span.signal.windowTitle, !title.isEmpty { return title }
+            if let raw = span.signal.tabURL, let url = URL(string: raw) { return url.host }
+            return nil
+        }()
+        let label = [span.signal.app, detail].compactMap { $0 }
             .joined(separator: " – ")
         let selected = selectedSpanIdx.contains(index)
         return Rectangle()
@@ -1640,7 +1647,18 @@ struct TimelineView: View {
                                         certainty: session.certainty,
                                         at: spans[i].start,
                                         provenance: spans[i].provenance
-                                            ?? session.provenance))
+                                            ?? session.provenance),
+                        // "+ all" lives top-right OF THE CARD (Martin,
+                        // 2026-07-11 — that's where he looks for it): one
+                        // click extends the selection to every window in
+                        // the slice recorded with the same data.
+                        selectTwins: {
+                            let twins = Set(spans.indices.filter {
+                                spanIdentity(spans[$0]) == spanIdentity(spans[i])
+                            })
+                            return (count: twins.subtracting(selectedSpanIdx).count,
+                                    select: { selectedSpanIdx.formUnion(twins) })
+                        }())
                     }
                     .frame(width: 372)
                 }

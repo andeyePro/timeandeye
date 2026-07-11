@@ -72,16 +72,23 @@ struct EvidenceCardView: View {
             && identity.segments[grainCount - 1].kind == .correspondent
     }
 
+    /// Timeline host only: "+ all" in the card's top-right (where Martin
+    /// expects it) extends the strip selection to every window recorded
+    /// with the same data. `count` = how many it would ADD; the button
+    /// shows disabled at 0 so the affordance is always discoverable.
+    var selectTwins: (count: Int, select: () -> Void)? = nil
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if host == .timeline {
-                Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
-                    .font(.caption).bold().lineLimit(1)
-                    .padding(.trailing, 18)   // clear of the copy button
-            }
-            becauseSection
-            seesSection
-            candidatesSection
+            // ONE text block for every fact the card states, so a single
+            // click-drag selects and copies the whole story (Martin,
+            // 2026-07-11 — a copy button was NOT the ask; per-row Texts
+            // limited a drag to one line).
+            cardFacts
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.trailing, selectTwins != nil ? 40 : 0)
+            unlearnSection
             if onPick != nil {
                 Divider()
                 wrongTaskSection
@@ -98,105 +105,83 @@ struct EvidenceCardView: View {
         .background(.quaternary.opacity(host == .popover ? 0.5 : 1),
                     in: RoundedRectangle(cornerRadius: 6))
         .textSelection(.enabled)
-        // Drag-selection across the card is unreliable (grouped rows swallow
-        // the drag, one line at a time was all Martin could grab — 2026-07-11)
-        // so the copy button is the guaranteed verbatim path for reports.
-        .overlay(alignment: .topTrailing) { copyCardButton.padding(5) }
+        .overlay(alignment: .topTrailing) { plusAllButton }
     }
 
-    @State private var cardCopied = false
-    private var copyCardButton: some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(cardText, forType: .string)
-            cardCopied = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { cardCopied = false }
-        } label: {
-            Image(systemName: cardCopied ? "checkmark" : "doc.on.doc").font(.caption2)
+    @ViewBuilder private var plusAllButton: some View {
+        if let selectTwins {
+            Button(action: selectTwins.select) {
+                Text("+ all").font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .disabled(selectTwins.count == 0)
+            .padding(6)
+            .help(selectTwins.count == 0
+                  ? "No other windows in this slice carry the same app + title"
+                  : "Also select the \(selectTwins.count) other window\(selectTwins.count == 1 ? "" : "s") recorded with the same app + title")
         }
-        .buttonStyle(.borderless)
-        .help("Copy the whole card as text")
     }
 
-    /// Plain-text rendering of everything the card shows, in display order.
-    private var cardText: String {
-        var lines = ["\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")"]
-        lines.append("BECAUSE \(anchoredBecauseLabel)")
+    /// Everything the card STATES, as one concatenated Text — a single
+    /// selectable run, so click-drag copies the whole card verbatim.
+    private var cardFacts: Text {
+        var t = Text("")
+        if host == .timeline {
+            t = Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
+                .font(.caption).bold()
+            t = t + Text("\n")
+        }
+        t = t + Text("BECAUSE ").font(.caption2).bold().foregroundStyle(.secondary)
+            + Text(anchoredBecauseLabel).font(.caption)
         if recordContradicted {
-            lines.append("today's rules would say: \(becauseLabel) – not what decided this slice")
+            t = t + Text("\ntoday's rules would say: \(becauseLabel) – not what decided this slice")
+                .font(.caption2).foregroundStyle(.secondary)
         }
         if let prior = explanation.priorToCorrection {
-            lines.append("before your correction: \(priorLabel(prior))")
+            t = t + Text("\nbefore your correction: \(priorLabel(prior))")
+                .font(.caption2).foregroundStyle(.secondary)
         }
-        if let rule = explanation.matchedEmailRule { lines.append(ruleProvenance(rule)) }
-        if let rule = explanation.matchedSiteRule { lines.append(siteRuleProvenance(rule)) }
-        if let pin = explanation.matchedPin { lines.append("pinned: \(pin.rule.shortLabel)") }
-        if let surface = explanation.matchedSurface { lines.append(surfaceProvenance(surface)) }
-        if let u = unlearn {
-            lines.append("\(forgetLabel(u)) → would then fall back to: \(fallbackText(u))")
+        if let rule = explanation.matchedEmailRule {
+            t = t + Text("\n" + ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
         }
-        lines.append("sees: " + seesLine)
+        if let rule = explanation.matchedSiteRule {
+            t = t + Text("\n" + siteRuleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
+        }
+        if let pin = explanation.matchedPin {
+            t = t + Text("\n")
+                + Text(Image(systemName: "pin.fill")).font(.caption2).foregroundStyle(AndeyeColors.highlight)
+                + Text(" \(pin.rule.shortLabel)").font(.caption2).foregroundStyle(.secondary)
+        }
+        if let surface = explanation.matchedSurface {
+            t = t + Text("\n" + surfaceProvenance(surface)).font(.caption2).foregroundStyle(.secondary)
+        }
+        t = t + Text("\nsees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
         let items = candidateItems
-        if !items.isEmpty { lines.append("candidates: " + items.joined(separator: " · ")) }
-        return lines.joined(separator: "\n")
+        if !items.isEmpty {
+            t = t + Text("\ncandidates: " + items.joined(separator: " · "))
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+        return t
     }
 
-    /// A captured-but-empty window title renders as nothing, not a dangling
-    /// "App – " (Martin's 2026-07-11 card had exactly that from Chrome).
+    /// The best identity the card HOLDS for its header: the window title,
+    /// else the site host from the tab URL. "Google Chrome" alone told
+    /// Martin nothing about how to recategorise a slice whose URL the app
+    /// knew perfectly well (2026-07-11, the 15:57 10-Jul companies-house
+    /// window) — never show less than what the sees line already knows.
     private var cleanTitle: String? {
-        signal.windowTitle.flatMap { $0.isEmpty ? nil : $0 }
+        if let title = signal.windowTitle, !title.isEmpty { return title }
+        if let raw = signal.tabURL, let url = URL(string: raw), let host = url.host {
+            return host
+        }
+        return nil
     }
 
-    // MARK: - BECAUSE
+    // MARK: - Unlearn controls (the card's facts live in `cardFacts`)
 
     @ViewBuilder
-    private var becauseSection: some View {
+    private var unlearnSection: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .top, spacing: 4) {
-                Text("BECAUSE").font(.caption2).bold().foregroundStyle(.secondary)
-                // Wrap rather than truncate — a long task name or email
-                // subject was clipping instead of reading in full.
-                Text(anchoredBecauseLabel).font(.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            // The stores moved on since this slice was decided (a later
-            // correction primed its surface elsewhere, a rule was learned,
-            // the slice was reassigned): the re-derivation is shown, but
-            // demoted to hypothesis — it is NOT why this time is where it is.
-            if recordContradicted {
-                Text("today's rules would say: \(becauseLabel) – not what decided this slice")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            // Keep the story straight after a correction (2026-07-05 report):
-            // the engine DID believe something else before the user corrected
-            // it — say so, instead of pretending Y was its only idea ever.
-            if let prior = explanation.priorToCorrection {
-                Text("before your correction: \(priorLabel(prior))")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let rule = explanation.matchedEmailRule {
-                Text(ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
-            }
-            if let rule = explanation.matchedSiteRule {
-                Text(siteRuleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
-            }
-            if let pin = explanation.matchedPin {
-                HStack(spacing: 4) {
-                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(AndeyeColors.highlight)
-                    Text(pin.rule.shortLabel).font(.caption2).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            // The remembered key a prime matched on — over-broad learning
-            // (a whole window title, an app with no title) is invisible and
-            // effectively unforgettable unless the key is on the card.
-            if let surface = explanation.matchedSurface {
-                Text(surfaceProvenance(surface))
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             if let u = unlearn {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .top, spacing: 6) {
@@ -362,11 +347,6 @@ struct EvidenceCardView: View {
 
     // MARK: - sees: / candidates:
 
-    private var seesSection: some View {
-        Text("sees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
     private var seesLine: String {
         var parts = ["app \(signal.app)"]
         if let raw = signal.tabURL, let url = URL(string: raw), let urlHost = url.host {
@@ -384,16 +364,6 @@ struct EvidenceCardView: View {
             }
         }
         return parts.joined(separator: " · ")
-    }
-
-    @ViewBuilder
-    private var candidatesSection: some View {
-        let items = candidateItems
-        if !items.isEmpty {
-            Text("candidates: " + items.joined(separator: " · "))
-                .font(.caption2).foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 
     /// The top-ranked candidates — honestly labelled after a correction: the
