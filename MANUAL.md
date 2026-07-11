@@ -115,7 +115,14 @@ The card shows, top to bottom:
   assigned it"). If the rules as they are NOW would file that window
   differently, today's differing read appears beneath, marked "today's
   rules would say" - it is never presented as the reason the slice is
-  where it is. If something LEARNED
+  where it is - with a one-click **↪ refile as…** button when today's
+  answer is confident. The engine also acts on its own: slices IT decided
+  (never ones you assigned or pinned) refile automatically when a later
+  correction or rule confidently contradicts them - batched into the same
+  "recently cleared - undo" receipt as the retro pass; already-posted
+  entries are flagged in Posting health instead of moved; weaker
+  contradictions appear as one "look mis-filed" row in Review with
+  refile-all and dismiss. If something LEARNED
   drove the decision, a **✕ forget** (or **✕ suppress** for a learned
   association, which can't be deleted outright, only counter-taught) removes
   exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you

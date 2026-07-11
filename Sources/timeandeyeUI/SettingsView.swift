@@ -193,8 +193,15 @@ struct SettingsView: View {
             // journal has since moved away from (re-sync is the coming
             // amendment feature; for now the drift is at least VISIBLE).
             let unhealthy = controller.postingHealthReport()
-            if !unhealthy.isEmpty {
+            if !unhealthy.isEmpty || controller.contradictedPostedCount > 0 {
                 Section("Posting health") {
+                    // Posted money never moves off a bulk pass — slices
+                    // today's rules confidently contradict are only flagged
+                    // here (his design).
+                    if controller.contradictedPostedCount > 0 {
+                        Text("\(controller.contradictedPostedCount) posted entr\(controller.contradictedPostedCount == 1 ? "y looks" : "ies look") mis-filed under today's rules — review them on the timeline")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                     ForEach(unhealthy) { item in
                         HStack {
                             Text(item.name).font(.caption)

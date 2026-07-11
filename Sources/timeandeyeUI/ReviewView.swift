@@ -72,6 +72,7 @@ struct ReviewView: View {
                 assignBar
             }
             grainFooter
+            misfiledSection
             clearedSection
 
             Divider()
@@ -711,6 +712,27 @@ struct ReviewView: View {
             }
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    /// Mis-filed suggestions (his design): one row, refile-all or
+    /// dismiss-for-good. Only exists while there ARE suggestions.
+    @ViewBuilder
+    private var misfiledSection: some View {
+        if !controller.refileSuggestions.isEmpty {
+            HStack(spacing: 8) {
+                Text("\(controller.refileSuggestions.count) slice\(controller.refileSuggestions.count == 1 ? " looks" : "s look") mis-filed under today's rules")
+                    .font(.caption)
+                Spacer()
+                Button("Refile all") { controller.applyRefileSuggestions() }
+                    .font(.caption)
+                    .help("Move each onto what today's rules say")
+                Button("Dismiss") { controller.dismissRefileSuggestions() }
+                    .font(.caption)
+                    .help("Never suggest these again")
+            }
+            .padding(6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
         }
     }
 

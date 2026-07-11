@@ -112,6 +112,9 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// button. Off by default: the less clutter the pleasanter the app
     /// (Martin, 2026-07-11).
     public var diagnosticsMode: Bool
+    /// Dismissed mis-filed-slice suggestions (ContradictionRefile
+    /// dismissal keys) — "dismiss for good" survives relaunch.
+    public var refileDismissals: [String]
     /// Non-OP tasks (leisure etc.), fully tracked locally.
     public var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
@@ -218,6 +221,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 lastViewedTimeView: TimeView = .timeline,
                 lockOnLeave: Bool = false,
                 diagnosticsMode: Bool = false,
+                refileDismissals: [String] = [],
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:],
                 projectColours: [String: String] = [:],
@@ -265,6 +269,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.lastViewedTimeView = lastViewedTimeView
         self.lockOnLeave = lockOnLeave
         self.diagnosticsMode = diagnosticsMode
+        self.refileDismissals = refileDismissals
         self.localTasks = localTasks
         self.taskColours = taskColours
         self.projectColours = projectColours
@@ -322,6 +327,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         lastViewedTimeView = c.lenient(.lastViewedTimeView, or: defaults.lastViewedTimeView)
         lockOnLeave = c.lenient(.lockOnLeave, or: defaults.lockOnLeave)
         diagnosticsMode = c.lenient(.diagnosticsMode, or: defaults.diagnosticsMode)
+        refileDismissals = c.lenient(.refileDismissals, or: defaults.refileDismissals)
         localTasks = c.lenient(.localTasks, or: defaults.localTasks)
         taskColours = c.lenient(.taskColours, or: defaults.taskColours)
         projectColours = c.lenient(.projectColours, or: defaults.projectColours)

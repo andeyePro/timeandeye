@@ -2,6 +2,22 @@
 
 ## 2026-07-11
 
+- [x] **Mis-filed slices get acted on (his design, approved).** The
+  why-panel's "today's rules would say" line grew hands:
+  `ContradictionRefile` (pure, 6 checks) re-derives recent slices against
+  today's rules on the retro pass's debounce and, provenance-gated —
+  user-decided slices are never touched — refiles ENGINE-decided slices
+  automatically when contradicted at/above the auto-push bar (one
+  RetroDigest = one undo, same "recently cleared" drawer section);
+  already-POSTED contradictions are flagged in Posting health, never
+  moved; below-bar or pre-provenance contradictions become one "N slices
+  look mis-filed" review row with Refile-all / Dismiss (dismissals persist
+  per slice+target in settings). The card itself gains "↪ refile as X"
+  whenever its record contradicts today's confident answer. Plus
+  diagnostics mode (Settings ▸ Diagnostics) gating the card's copy
+  button, native green-button nuances restored, and the plain card layout
+  back. Suite 810/0.
+
 - [x] **Live-session batch (overnight, with Martin testing).** Evidence
   card: all facts render as ONE selectable text run (single click-drag
   copies the whole card; the interim copy button removed), `[+ all]` moved

@@ -2419,8 +2419,107 @@ public final class AppController: ObservableObject {
         let sessions = ((try? journal.allSessions()) ?? [])
             .filter { $0.id != Self.liveCheckpointID && !$0.pushedToOP }
         let plan = RetroAcceptance.plan(pending: pending, sessions: sessions, bar: bar, score: scoring)
-        guard !plan.clearances.isEmpty else { return }
-        applyRetroPlan(plan, bar: bar, reclaimedFrom: Set(unknownAssigned.map(\.id)))
+        if !plan.clearances.isEmpty {
+            applyRetroPlan(plan, bar: bar, reclaimedFrom: Set(unknownAssigned.map(\.id)))
+        }
+        runContradictionPass()
+    }
+
+    // MARK: - Mis-filed slices (ContradictionRefile — his, 2026-07-11)
+
+    /// How far back the contradiction scan looks. Recent history is where
+    /// mis-files bite (and where the user's corrections point); a bounded
+    /// window keeps the per-pass explain() work off the beachball path.
+    private static let contradictionScanDays: TimeInterval = 14 * 86_400
+    private static let contradictionScanCap = 300
+
+    /// Suggestions awaiting the user (below-bar or unprovable-provenance
+    /// contradictions) — the review drawer's "look mis-filed" row.
+    @Published public private(set) var refileSuggestions: [ContradictionRefile.Finding] = []
+    /// Posted slices today's rules confidently contradict — flagged in
+    /// Posting health, never moved.
+    @Published public private(set) var contradictedPostedCount = 0
+
+    /// Re-derive recent slices against today's rules and act per the
+    /// approved design: engine-decided ≥ bar refile as ONE undoable digest;
+    /// posted ones flag; the rest suggest. Runs on the retro pass's own
+    /// debounce, so every teach/correction re-evaluates promptly.
+    private func runContradictionPass() {
+        let bar = settings.certaintyAutoPushThreshold
+        let now = Date()
+        let horizon = now.addingTimeInterval(-Self.contradictionScanDays)
+        let recent = ((try? journal.sessions(from: horizon, to: now)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
+        let sessions = Array(recent.suffix(Self.contradictionScanCap))
+        guard !sessions.isEmpty else {
+            refileSuggestions = []
+            contradictedPostedCount = 0
+            return
+        }
+        let cache = taskCache
+        let attributor = self.attributor
+        let scoring: (Session) -> (target: Target, score: Double)? = { [weak self] session in
+            guard let self, let span = self.dominantSpan(of: session) else { return nil }
+            let explanation = attributor.explain(span.signal, tasks: cache,
+                                                 now: session.start)
+            guard let chosen = explanation.chosen else { return nil }
+            return (chosen, explanation.chosenScore)
+        }
+        let plan = ContradictionRefile.plan(sessions: sessions, bar: bar,
+                                            suggestFloor: settings.reviewThreshold,
+                                            dismissed: Set(settings.refileDismissals),
+                                            score: scoring)
+        contradictedPostedCount = plan.postedFlags.count
+        refileSuggestions = plan.suggestions
+        guard !plan.refiles.isEmpty else { return }
+        applyRefiles(plan.refiles,
+                     reason: "Today's rules confidently contradicted \(plan.refiles.count) engine-decided slice\(plan.refiles.count == 1 ? "" : "s")")
+    }
+
+    /// Refile a batch of findings as ONE digest — the same undoable receipt
+    /// the retro pass writes, so the drawer's "recently cleared" section and
+    /// its single-undo semantics carry over unchanged.
+    private func applyRefiles(_ findings: [ContradictionRefile.Finding], reason: String) {
+        var priorSessions: [RetroDigest.PriorSessionState] = []
+        for finding in findings {
+            guard var session = try? journal.session(id: finding.sessionID) else { continue }
+            priorSessions.append(RetroDigest.PriorSessionState(
+                id: finding.sessionID, task: finding.priorTask,
+                certainty: finding.priorCertainty,
+                priorProvenance: session.provenance))
+            session.task = finding.newTask
+            session.certainty = max(session.certainty, finding.score)
+            session.provenance = .retro
+            try? journal.update(session)
+        }
+        guard !priorSessions.isEmpty else { return }
+        let digest = RetroDigest(
+            clearedSegmentIDs: [],
+            target: .task(findings[0].newTask),
+            count: priorSessions.count,
+            reason: reason,
+            priorSessions: priorSessions)
+        try? journal.saveRetroDigest(digest)
+        reloadReview()
+    }
+
+    /// The suggestion row's "refile all": apply every current suggestion as
+    /// one digest (one undo), whatever their scores — the user just said so.
+    public func applyRefileSuggestions() {
+        let findings = refileSuggestions
+        guard !findings.isEmpty else { return }
+        refileSuggestions = []
+        applyRefiles(findings,
+                     reason: "You refiled \(findings.count) slice\(findings.count == 1 ? "" : "s") that looked mis-filed")
+    }
+
+    /// The suggestion row's "dismiss": these session+target pairs never
+    /// resurface (a DIFFERENT suggested target for the same slice may).
+    public func dismissRefileSuggestions() {
+        let keys = refileSuggestions.map(\.dismissalKey)
+        guard !keys.isEmpty else { return }
+        settings.refileDismissals.append(contentsOf: keys)
+        refileSuggestions = []
     }
 
     /// Apply a retro-acceptance plan: clear the segments, lift the overlapping
