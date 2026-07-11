@@ -97,6 +97,12 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
         weak var window: NSWindow?
         @objc func greenClicked(_ sender: Any?) {
             guard let w = window else { return }
+            // Mac-native nuances stay native (Martin, 2026-07-11): option-
+            // click means zoom, and green inside fullscreen exits.
+            if NSEvent.modifierFlags.contains(.option) {
+                w.zoom(sender)
+                return
+            }
             if w.styleMask.contains(.fullScreen) {
                 w.toggleFullScreen(sender)
                 return

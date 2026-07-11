@@ -186,6 +186,8 @@ public enum SettingsIA {
         Item("maintenance.hardCap", "Hard cap",
              ["prune", "delete", "emergency", "mb", "cap"], .maintenance),
         // Diagnostics
+        Item("diagnostics.mode", "Diagnostics mode",
+             ["developer", "debug", "copy card", "affordances"], .diagnostics),
         Item("diagnostics.sender", "Probe email sender",
              ["accessibility", "extractor", "debug", "probe"], .diagnostics),
         Item("diagnostics.recipes", "What recipes see here",

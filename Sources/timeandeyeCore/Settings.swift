@@ -107,6 +107,11 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var lastViewedTimeView: TimeView
     /// Lock the Mac when "I'm leaving my desk" is activated.
     public var lockOnLeave: Bool
+    /// Diagnostics mode (Settings ▸ Diagnostics): shows developer
+    /// affordances the everyday UI hides — e.g. the evidence card's copy
+    /// button. Off by default: the less clutter the pleasanter the app
+    /// (Martin, 2026-07-11).
+    public var diagnosticsMode: Bool
     /// Non-OP tasks (leisure etc.), fully tracked locally.
     public var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
@@ -212,6 +217,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
                 timeViewOpenMode: TimeViewOpenMode = .lastViewed,
                 lastViewedTimeView: TimeView = .timeline,
                 lockOnLeave: Bool = false,
+                diagnosticsMode: Bool = false,
                 localTasks: [LocalTaskDef] = [],
                 taskColours: [String: String] = [:],
                 projectColours: [String: String] = [:],
@@ -258,6 +264,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         self.timeViewOpenMode = timeViewOpenMode
         self.lastViewedTimeView = lastViewedTimeView
         self.lockOnLeave = lockOnLeave
+        self.diagnosticsMode = diagnosticsMode
         self.localTasks = localTasks
         self.taskColours = taskColours
         self.projectColours = projectColours
@@ -314,6 +321,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
         timeViewOpenMode = c.lenient(.timeViewOpenMode, or: defaults.timeViewOpenMode)
         lastViewedTimeView = c.lenient(.lastViewedTimeView, or: defaults.lastViewedTimeView)
         lockOnLeave = c.lenient(.lockOnLeave, or: defaults.lockOnLeave)
+        diagnosticsMode = c.lenient(.diagnosticsMode, or: defaults.diagnosticsMode)
         localTasks = c.lenient(.localTasks, or: defaults.localTasks)
         taskColours = c.lenient(.taskColours, or: defaults.taskColours)
         projectColours = c.lenient(.projectColours, or: defaults.projectColours)

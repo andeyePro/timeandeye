@@ -84,9 +84,7 @@ struct EvidenceCardView: View {
             // click-drag selects and copies the whole story (Martin,
             // 2026-07-11 — a copy button was NOT the ask; per-row Texts
             // limited a drag to one line).
-            SelectableFacts(text: cardFactsAttributed,
-                            width: (host == .popover ? 268 : 340) - 16
-                                - (selectTwins != nil ? 40 : 0))
+            factsSection
             refileSection
             unlearnSection
             if onPick != nil {
@@ -105,7 +103,83 @@ struct EvidenceCardView: View {
         .background(.quaternary.opacity(host == .popover ? 0.5 : 1),
                     in: RoundedRectangle(cornerRadius: 6))
         .textSelection(.enabled)
-        .overlay(alignment: .topTrailing) { plusAllButton }
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 6) {
+                // Developer affordance only: visible in diagnostics mode
+                // (Settings ▸ Diagnostics) — everyday UI stays uncluttered.
+                if controller.settings.diagnosticsMode { copyCardButton }
+                plusAllButton
+            }
+            .padding(2)
+        }
+    }
+
+    @State private var cardCopied = false
+    private var copyCardButton: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(cardFactsAttributed.string, forType: .string)
+            cardCopied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { cardCopied = false }
+        } label: {
+            Image(systemName: cardCopied ? "checkmark" : "doc.on.doc").font(.caption2)
+        }
+        .buttonStyle(.borderless)
+        .help("Copy the whole card as text (diagnostics mode)")
+    }
+
+    /// Plain per-line rendering — simple and native-looking; verbatim
+    /// capture goes through the diagnostics copy button, not selection
+    /// acrobatics (Martin, 2026-07-11).
+    @ViewBuilder private var factsSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if host == .timeline {
+                Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
+                    .font(.caption).bold().lineLimit(1)
+                    .padding(.trailing, 40)
+            }
+            HStack(alignment: .top, spacing: 4) {
+                Text("BECAUSE").font(.caption2).bold().foregroundStyle(.secondary)
+                Text(anchoredBecauseLabel).font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if recordContradicted {
+                Text("today's rules would say: \(becauseLabel) – not what decided this slice")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let prior = explanation.priorToCorrection {
+                Text("before your correction: \(priorLabel(prior))")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let rule = explanation.matchedEmailRule {
+                Text(ruleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
+            }
+            if let rule = explanation.matchedSiteRule {
+                Text(siteRuleProvenance(rule)).font(.caption2).foregroundStyle(.secondary)
+            }
+            if let pin = explanation.matchedPin {
+                HStack(spacing: 4) {
+                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(AndeyeColors.highlight)
+                    Text(pin.rule.shortLabel).font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let surface = explanation.matchedSurface {
+                Text(surfaceProvenance(surface))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("sees: " + seesLine).font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            let items = candidateItems
+            if !items.isEmpty {
+                Text("candidates: " + items.joined(separator: " · "))
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     @ViewBuilder private var plusAllButton: some View {
@@ -186,32 +260,6 @@ struct EvidenceCardView: View {
         return out
     }
 
-    /// The whole card's facts as ONE native selectable label — NSTextField
-    /// gives continuous selection where SwiftUI Text (even concatenated)
-    /// selected in per-style pieces on macOS 14.
-    private struct SelectableFacts: NSViewRepresentable {
-        let text: NSAttributedString
-        let width: CGFloat
-
-        func makeNSView(context: Context) -> NSTextField {
-            let field = NSTextField(labelWithAttributedString: text)
-            field.isSelectable = true
-            field.allowsEditingTextAttributes = false
-            field.lineBreakMode = .byWordWrapping
-            field.maximumNumberOfLines = 0
-            field.preferredMaxLayoutWidth = width
-            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            return field
-        }
-
-        func updateNSView(_ field: NSTextField, context: Context) {
-            if field.attributedStringValue != text {
-                field.attributedStringValue = text
-            }
-            field.preferredMaxLayoutWidth = width
-        }
-    }
-
     /// The best identity the card HOLDS for its header: the window title,
     /// else the site host from the tab URL. "Google Chrome" alone told
     /// Martin nothing about how to recategorise a slice whose URL the app
@@ -232,13 +280,16 @@ struct EvidenceCardView: View {
         VStack(alignment: .leading, spacing: 2) {
             if let u = unlearn {
                 VStack(alignment: .leading, spacing: 2) {
-                    // The fallback preview lives in the selectable facts
-                    // block above; these are the actions only.
-                    Button { controller.forget(u, signal: signal) } label: {
-                        Text(forgetLabel(u)).font(.caption2)
+                    HStack(alignment: .top, spacing: 6) {
+                        Button { controller.forget(u, signal: signal) } label: {
+                            Text(forgetLabel(u)).font(.caption2)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove exactly what fired here")
+                        Text("→ would then fall back to: \(fallbackText(u))")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .buttonStyle(.borderless)
-                    .help("Remove exactly what fired here")
                     // The fallback isn't hypothetical to Martin — a wrong old
                     // rule sitting there as a POSSIBILITY is itself unwelcome
                     // (2026-07 feedback). Offer to remove it directly, without

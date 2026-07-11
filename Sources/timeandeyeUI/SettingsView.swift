@@ -841,6 +841,9 @@ struct SettingsView: View {
 
     @ViewBuilder private var diagnosticsSections: some View {
             Section("Diagnostics (dev)") {
+                Toggle("Diagnostics mode", isOn: $controller.settings.diagnosticsMode)
+                Text("Shows developer affordances the everyday UI hides — e.g. the evidence card's copy-card button.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Button("Probe email sender (front browser)") {
                     Task { senderProbe = await controller.probeEmailSender() }
                 }
