@@ -1,5 +1,27 @@
 # TODO
 
+## Tracking fixes (2026-07-11 log cluster)
+
+- [x] Pending-switch revert gate — DONE 2026-07-11: an ungated revert let a
+  faint boost-only sighting of the base task (running-clock lift to ~0.42 on
+  an ambiguous surface) cancel a 0.95-confident pending switch (Martin's
+  14:22:30–32 log). The revert now requires the same `uncertainBelow` (0.6)
+  floor a forward switch needs; a genuinely confident return still reverts.
+  `SessionTracker` check reproduces the sequence both ways.
+- [x] Reassign taught twice — DONE 2026-07-11: `relabelCurrentSession` also
+  called `attributor.confirm` (weight 2) on top of the controller's
+  deliberate `attributor.assign`, double-counting every correction. Dropped
+  the tracker-level teach (its only production caller is
+  `AppController.changeCurrentTask`, which owns the single `assign`); the
+  reassign now teaches exactly once.
+- [x] Evidence Card window duration — DONE 2026-07-11: the timeline card
+  carried only the window's start; it now carries the span end too and shows
+  a quiet start–end · duration caption under the window name (omitted on the
+  popover's live card, which has no recorded span).
+- [x] Adjacency boost label honesty — DONE 2026-07-11: the reasoning read
+  "+22%" for a value that is percentage POINTS (0.19 → 0.42); it now reads
+  "0.19 → 0.42 (+23 pts)". Drawer + live share the one `apply` format.
+
 ## Review drawer (Martin's critique, 2026-07-10)
 
 - [x] Walk-through confirm (his respec) — DONE 2026-07-11: whole-day

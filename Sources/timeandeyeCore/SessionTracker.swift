@@ -289,9 +289,9 @@ public final class SessionTracker {
             spans[i].certainty = 0.95
             spans[i].provenance = .userAssigned
         }
-        if let signal = currentSignal {
-            attributor.confirm(signal, task: task, tasks: tasks())
-        }
+        // The attributor teach for a reassign is the controller's single
+        // deliberate `assign` (AppController.changeCurrentTask) — teaching
+        // here as well double-counted the correction (weight 2 twice).
         state = .tracking(.task(task), certainty: 0.95)
         currentDecision = .userAssigned
     }
@@ -528,8 +528,14 @@ public final class SessionTracker {
             }
             if let p = pendingSwitch, p.target != .doNotTrack {
                 // We're provisionally showing p.target; the open slice is p.from.
-                if best.target == p.from {
-                    revertPendingSwitch(at: now)          // returned within grace
+                // A return only counts if it's at least as certain as the
+                // forward switch needed (the uncertainBelow floor): otherwise a
+                // faint boost-only sighting of the base task — e.g. the running
+                // clock lifting it to ~0.42 on an ambiguous surface — would
+                // cancel a 0.95-confident pending switch it has no business
+                // overruling (Martin's 14:22:30 log).
+                if best.target == p.from, best.score >= config.uncertainBelow {
+                    revertPendingSwitch(at: now)          // confident return within grace
                 } else if best.target == p.target {
                     state = .tracking(p.target, certainty: best.score)   // hold pending
                 } else if best.score >= config.uncertainBelow {

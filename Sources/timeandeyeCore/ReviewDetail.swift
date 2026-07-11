@@ -290,7 +290,11 @@ public struct AdjacencyBoost: Equatable, Sendable {
             // already fully accounted for by its own source.
             return AdjacencyBoost(base: base, certainty: base)
         }
-        let amount = "+\(Int((boost * 100).rounded()))%"
+        // The delta is percentage POINTS, not a percentage of the base — so
+        // spell it as base → boosted with the points it added, never "+22%"
+        // (which read as a 22 % relative lift it never was).
+        let amount = String(format: "%.2f → %.2f (+%d pts)",
+                            base, base + boost, Int((boost * 100).rounded()))
         let reasoning: String
         if sBefore > 0 && sAfter > 0 {
             let maxGap = max(before?.gap ?? 0, after?.gap ?? 0)

@@ -1758,6 +1758,7 @@ struct TimelineView: View {
                         recorded: .init(target: .task(session.task),
                                         certainty: session.certainty,
                                         at: spans[i].start,
+                                        end: spans[i].end,
                                         provenance: spans[i].provenance
                                             ?? session.provenance),
                         // "+ all" lives top-right OF THE CARD (Martin,

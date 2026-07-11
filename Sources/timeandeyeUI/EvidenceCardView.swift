@@ -22,6 +22,10 @@ struct EvidenceCardView: View {
         var target: Target
         var certainty: Double
         var at: Date
+        /// The window chip's own span end (timeline host), so the card can
+        /// show how long this window actually ran. Nil on the popover's
+        /// live card and on pre-span rows — the duration line is omitted then.
+        var end: Date? = nil
         /// What decided it, as journalled at flush (the window's own span
         /// when it has one, else the slice's dominant decider) — nil on
         /// pre-provenance rows. With it, BECAUSE tells the original story
@@ -61,6 +65,16 @@ struct EvidenceCardView: View {
     private var recordContradicted: Bool {
         recorded.map { explanation.contradicts(recorded: $0.target) } ?? false
     }
+    /// A quiet "start – end · duration" caption for the window chip (timeline
+    /// host), so the reader can see how long this window ran. Nil when the
+    /// record carries no span end (popover live card / pre-span rows).
+    private var recordedRanText: String? {
+        guard let r = recorded, let end = r.end else { return nil }
+        let secs = end.timeIntervalSince(r.at)
+        let dur = secs < 60 ? "\(Int(secs))s" : "\(Int((secs / 60).rounded()))m"
+        return "\(r.at.formatted(date: .omitted, time: .shortened)) – "
+            + "\(end.formatted(date: .omitted, time: .shortened)) · \(dur)"
+    }
     private var identity: ContextIdentity { controller.identity(of: signal) }
     private var hasEmailGrain: Bool { identity.segments.contains { $0.kind.isEmailGrain } }
     private var unlearn: Attributor.Unlearn? { controller.forgettable(for: signal) }
@@ -91,9 +105,15 @@ struct EvidenceCardView: View {
                 DisclosureGroup(isExpanded: $dataExpanded) {
                     dataSection.padding(.top, 2)
                 } label: {
-                    Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
-                        .font(.caption).bold().lineLimit(1)
-                        .padding(.trailing, 40)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
+                            .font(.caption).bold().lineLimit(1)
+                        if let ran = recordedRanText {
+                            Text(ran)
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    .padding(.trailing, 40)
                 }
             }
             DisclosureGroup(isExpanded: $detailsExpanded) {

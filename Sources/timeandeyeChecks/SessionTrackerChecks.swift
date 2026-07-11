@@ -745,6 +745,40 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions.first?.end, t(180))
     }
 
+    c.check("a boost-only sighting of the base task must NOT cancel a confident pending switch; a confident one still reverts (Martin's 14:22:30 log)") {
+        // A (op1) tracked; a confident B (op2) pends the switch A->B at 0.95.
+        // Then an ambiguous surface where A wins ONLY via the running-clock
+        // boost (~0.28, well under the 0.6 floor): the pend MUST survive — an
+        // ungated revert let that faint sighting kill the 0.95 switch. A
+        // genuinely confident (>=0.6) return to A is a real return: it reverts.
+        let (tracker, _) = makeTracker()
+        // A and B are OP work-package pages — a definitive 0.95 apiece, and
+        // (crucially) the URL path teaches the ranker NOTHING, so on any other
+        // surface the base task carries only its faint status/recency prior.
+        func opPage(_ id: Int, at: TimeInterval) -> ActivitySignal {
+            sig("Chrome", "WP \(id)", at: at, url: "https://\(host)/work_packages/\(id)")
+        }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(opPage(1, at: 0)))                        // tracking A
+        tracker.handle(.focus(opPage(2, at: 30)))                       // confident B -> pending A->B
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "confident B should pend-switch the display to B, got \(tracker.state)")
+        }
+        // Ambiguous surface, no learned association to anyone: A leads ONLY on
+        // the running-clock boost (its ~0.2 prior lifted to ~0.42), below the
+        // 0.6 floor. The 0.95 pending switch to B must survive it.
+        tracker.handle(.focus(sig("Preview", "holiday-photo.jpg", at: 32)))
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "a sub-threshold boost-only sighting of the base must NOT revert the pending switch, got \(tracker.state)")
+        }
+        // Confident re-sighting of A (the WP page, 0.95): a real return — revert.
+        tracker.handle(.focus(opPage(1, at: 40)))
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "a confident (>=0.6) re-sighting of the base must revert the pending switch, got \(tracker.state)")
+        }
+    }
+
     c.check("backdateSessionStart extends the live slice earlier with a synthetic span") {
         let (tracker, attributor) = makeTracker()
         attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))

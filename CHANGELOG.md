@@ -2,6 +2,28 @@
 
 ## 2026-07-11
 
+- [x] **Tracking: gate the pending-switch revert, de-duplicate the reassign
+  teach, show window duration, and tell the boost delta honestly.** Four
+  fixes from Martin's 2026-07-11 logs. (1) The main bug: a pending switch
+  reverted the instant the base task reappeared, with NO confidence gate —
+  so a live-adjacency-boosted ~0.42 sighting of the base cancelled a
+  0.95-confident switch (his 14:22:30–32 sequence). The revert now requires
+  `best.score >= config.uncertainBelow` (the same 0.6 floor a forward switch
+  needs); a genuinely confident (≥0.6) return still reverts. New
+  `SessionTracker` check reproduces both arms using OP work-package pages
+  (definitive 0.95 that teach the ranker nothing, so the base carries only
+  its faint prior and wins solely on the boost). (2) A reassign taught the
+  attributor twice — `SessionTracker.relabelCurrentSession` called `confirm`
+  (weight 2) on top of `AppController.changeCurrentTask`'s deliberate
+  `assign`. Dropped the tracker-level teach (the controller is
+  `relabelCurrentSession`'s only production caller and owns the single
+  `assign`); the correction now lands once. (3) `EvidenceCardView.Recorded`
+  gains `end: Date?` (populated from `spans[i].end`); the timeline card shows
+  a quiet start–end · duration caption under the window name, omitted when
+  there is no recorded span. (4) The adjacency reasoning said "+22%" for what
+  is percentage POINTS; `AdjacencyBoost.apply` now formats it as
+  "0.19 → 0.42 (+23 pts)" (drawer and live share the one path). Checks that
+  pinned the old "+N%" reasoning updated to the honest form. Suite 857/0.
 - [x] **Review: walk-through confirm — one click covers exactly the viewed
   slices (his respec).** No whole-day confirm anywhere, by design
   ("what if I only manage to review part of the day"). The drawer's new

@@ -979,7 +979,7 @@ func adjacencyBoostChecks(_ c: Checks) {
         let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
                                      neighbours: SliceNeighbours(before: near(alpha, gap: 0)))
         try expectClose(b.certainty, 0.60)
-        try expectEq(b.reasoning, "follows Alpha (+15%)")
+        try expectEq(b.reasoning, "follows Alpha (0.45 → 0.60 (+15 pts))")
     }
 
     c.check("both contiguous same-task sides close 60%") {
@@ -987,14 +987,14 @@ func adjacencyBoostChecks(_ c: Checks) {
         let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
                                      neighbours: n)
         try expectClose(b.certainty, 0.75)
-        try expectEq(b.reasoning, "both neighbours Alpha (+30%)")
+        try expectEq(b.reasoning, "both neighbours Alpha (0.45 → 0.75 (+30 pts))")
     }
 
     c.check("the after side reads 'followed by'") {
         let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
                                      neighbours: SliceNeighbours(after: near(alpha, gap: 0)))
         try expectClose(b.certainty, 0.60)
-        try expectEq(b.reasoning, "followed by Alpha (+15%)")
+        try expectEq(b.reasoning, "followed by Alpha (0.45 → 0.60 (+15 pts))")
     }
 
     c.check("the boost can never pass the inferred ceiling; a pin's 1.0 passes through untouched") {
@@ -1033,7 +1033,7 @@ func adjacencyBoostChecks(_ c: Checks) {
         try expectClose(midway.certainty, 0.525)
         // (+7%: the exact half-point 7.5 lands a hair below it in binary
         // floating point — a one-point display nuance, not a tuning fact.)
-        try expectEq(midway.reasoning, "follows Alpha (8m gap, +7%)")
+        try expectEq(midway.reasoning, "follows Alpha (8m gap, 0.45 → 0.53 (+7 pts))")
     }
 
     c.check("two-sided decay averages the sides and hands over continuously to one-sided") {
@@ -1042,7 +1042,7 @@ func adjacencyBoostChecks(_ c: Checks) {
         let b = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
                                      neighbours: n)
         try expectClose(b.certainty, 0.675)
-        try expectEq(b.reasoning, "both neighbours Alpha (gaps up to 8m, +22%)")
+        try expectEq(b.reasoning, "both neighbours Alpha (gaps up to 8m, 0.45 → 0.67 (+22 pts))")
         // One side fully decayed = exactly the one-sided value: no cliff as
         // a neighbour's gap crosses the 15-min limit.
         let handover = AdjacencyBoost.apply(base: 0.45, candidate: .task(alpha), name: "Alpha",
