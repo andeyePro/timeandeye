@@ -75,10 +75,12 @@ struct SettingsView: View {
         // Hidden ⌘F target — focuses the sidebar search from anywhere in the
         // window (the standard Settings idiom).
         .background {
+            // 1×1, not 0×0 — a zero-sized view can be dropped from the key-
+            // equivalent chain, which showed as ⌘F missing its first press.
             Button("") { searchFocused = true }
                 .keyboardShortcut("f", modifiers: .command)
                 .opacity(0)
-                .frame(width: 0, height: 0)
+                .frame(width: 1, height: 1)
                 .accessibilityHidden(true)
         }
     }
