@@ -448,9 +448,29 @@ enum AndeyeWindows {
         // .normal never fired there — the open finished without activation
         // and the window was left behind on another Space (Martin,
         // 2026-07-10 morning).
-        if NSApp.windows.contains(where: {
+        let acceptable: (NSWindow) -> Bool = {
             $0.isVisible && $0.isOnActiveSpace
-                && ($0.level == .normal || $0.level == .floating) }) {
+                && ($0.level == .normal || $0.level == .floating)
+        }
+        // With an id, activate THE WINDOW BEING OPENED and make it key —
+        // activating the app on the first acceptable window brought some
+        // OTHER window forward while the requested one stayed buried, which
+        // read as "the settings gear needs two clicks" (Martin, 2026-07-11).
+        if let id = opened {
+            if let target = NSApp.windows.first(where: { w in
+                w.identifier != nil && acceptable(w)
+                    && openGrantApplies(opened: id, windowID: w.identifier?.rawValue)
+            }) {
+                NSApp.activate(ignoringOtherApps: true)
+                target.makeKeyAndOrderFront(nil)
+            } else if retriesLeft > 0 {
+                DispatchQueue.main.async { activateOnceVisible(opened: id, retriesLeft - 1) }
+            } else if NSApp.windows.contains(where: acceptable) {
+                NSApp.activate(ignoringOtherApps: true)   // best effort
+            }
+            return
+        }
+        if NSApp.windows.contains(where: acceptable) {
             NSApp.activate(ignoringOtherApps: true)
         } else if retriesLeft > 0 {
             DispatchQueue.main.async { activateOnceVisible(retriesLeft - 1) }
