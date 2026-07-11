@@ -364,6 +364,9 @@ midnight. Day boundaries are marked with the date.
   **Billable: whole task** and **Billable: whole project**, which mark the
   clicked entry and set the task or project billable for future time in one
   undoable step. The slice editor's footer shows the entry's billable state.
+  The live (running) slice has no Billable menu of its own - mark it once it
+  ends, or set the task's or project's billable flag directly and the live
+  entry inherits it.
 - **Allocate a stretch**: shift-drag (or shift-click, then shift-click again to
   extend) selects a time range, shown as a translucent band with its start and
   end - it isn't bound to any slice's edges, so it can cut straight through

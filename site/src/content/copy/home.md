@@ -48,7 +48,7 @@ demo:
   intro_html: 'Click around like it’s your desk – answer Sarah, settle the accountant’s question, sneak a kitten. The eye follows, winks when you switch, and its tint is its confidence: <span class="cert-gradient">red when unsure, green when sure</span>.'
   drive_idle: "Click an email or a tab – watch andeye follow you"
   drive_active: "andeye is following you – keep clicking around"
-  caption: "Those two boxes are andeye’s own timeline and time pie, filling in live as you click. At the end of a real day, the billable slice is your invoice, and you never wrote anything down."
+  caption: "Those two boxes are andeye’s own timeline and time donut, filling in live as you click. At the end of a real day, the billable slice is your invoice, and you never wrote anything down."
 
 flow:
   eyebrow: "How it works"

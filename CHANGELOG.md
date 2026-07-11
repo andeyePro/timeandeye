@@ -2,6 +2,7 @@
 
 ## 2026-07-11
 
+- [x] **Docs: manual Billable exception, moved-file citations, and hero copy "time donut" wording** — MANUAL.md and time-window.md now note the live/running slice has no Billable menu; assets/brand/README.md and the site previews cite AndeyeLogo.swift's actual location (Sources/timeandeyeTheme/); marketing copy says "time donut" throughout, matching the app.
 - [x] **Polish: stale strings, search-index truth, and small UI
   correctness fixes from the mechanical review cluster.** SettingsIA's ⌘F
   index still spoke old control names: "Time button opens" → "Donut button

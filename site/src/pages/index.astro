@@ -13,7 +13,7 @@
 // The demo cast: Sarah Coleman (a bakery client, saying yes to her spring
 // retainer), Priya at the accounts firm, an Anthropic newsletter, a spring
 // sector-outlook research tab and a kitten video break. Below the fake Mac
-// frame sit andeye's own timeline and time pie - two always-visible boxes,
+// frame sit andeye's own timeline and time donut - two always-visible boxes,
 // never inside a fake window, filling in live as you click.
 import { getEntry } from 'astro:content';
 const copy = (await getEntry('copy', 'home')).data;
@@ -444,7 +444,7 @@ const copy = (await getEntry('copy', 'home')).data;
   /* inline line-art canvases (browser content) */
   .art { width: 100%; height: auto; max-height: 148px; color: #4d566e; display: block; margin: auto; }
 
-  /* ---------- the andeye analytics strip: timeline and time pie, two
+  /* ---------- the andeye analytics strip: timeline and time donut, two
      always-visible boxes below the fake Mac frame ---------- */
 
   .analytics {
@@ -823,7 +823,7 @@ const copy = (await getEntry('copy', 'home')).data;
         </div>
       </div>
 
-      <!-- andeye's own timeline and time pie: two always-visible boxes,
+      <!-- andeye's own timeline and time donut: two always-visible boxes,
            never a fake window, filling in live as you click -->
       <div class="analytics">
         <div class="abox" id="tlBox">
