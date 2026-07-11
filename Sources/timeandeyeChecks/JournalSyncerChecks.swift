@@ -23,12 +23,37 @@ final class MockSyncServer: SyncTransport {
     /// The server's current copy, for assertions.
     func latest(_ id: UUID) -> SessionRevision? { records[id]?.rev }
 
+    /// How many revisions the server holds, for backlog assertions.
+    var recordCount: Int { records.count }
+
     func pull(since token: SyncToken?) async throws -> (changes: [SessionRevision], token: SyncToken) {
         let after = token.flatMap { Int(String(data: $0.raw, encoding: .utf8) ?? "") } ?? 0
         let changed = records.values.filter { $0.seq > after }
             .sorted { $0.seq < $1.seq }
             .map(\.rev)
         return (changed, SyncToken(raw: Data(String(seq).utf8)))
+    }
+}
+
+/// Wraps the mock server and fails chosen push calls (1-based sequence) —
+/// simulates CloudKit rejecting ONE mid-backlog batch (quota blip, transient
+/// server error) while the batches around it are fine.
+final class FlakySyncServer: SyncTransport {
+    struct BatchRejected: Error {}
+    let inner: MockSyncServer
+    var failOnPushCalls: Set<Int> = []
+    private var pushCalls = 0
+
+    init(_ inner: MockSyncServer) { self.inner = inner }
+
+    func push(_ revisions: [SessionRevision]) async throws {
+        pushCalls += 1
+        if failOnPushCalls.contains(pushCalls) { throw BatchRejected() }
+        try await inner.push(revisions)
+    }
+
+    func pull(since token: SyncToken?) async throws -> (changes: [SessionRevision], token: SyncToken) {
+        try await inner.pull(since: token)
     }
 }
 
@@ -254,5 +279,44 @@ func journalSyncerChecks(_ c: Checks) async {
         try expectEq(try store.dirtyRevisionIDs(), [])
         try await syncer.sync()   // echo cycle: nothing re-pushed, no duplicates
         try expectEq(try store.allRevisions().count, 450)
+    }
+
+    await c.check("a mid-backlog batch failure keeps only unlanded chunks dirty (criterion 13)") {
+        // The failure half of acceptance criterion 13: with per-batch
+        // clearDirty, a batch that CloudKit rejects mid-backlog must leave
+        // the failed chunk (and the never-attempted tail) dirty for retry —
+        // while the chunk that already landed stays CLEAR, so the retry
+        // cycle neither re-uploads what the server holds nor loses what it
+        // doesn't. A whole-backlog clearDirty (or none) would break one
+        // direction or the other; this pins the per-batch semantics.
+        let millis: Int64 = 1_750_000_000_000
+        let inner = MockSyncServer()
+        let flaky = FlakySyncServer(inner)
+        let store = InMemoryRevisionStore()
+        let clock = HLCClock(deviceID: "mac") { Date(timeIntervalSince1970: Double(millis) / 1000) }
+        let syncer = JournalSyncer(store: store, transport: flaky, clock: clock)
+        for i in 0..<450 {
+            try store.saveLocal(SessionRevision(
+                session: Session(task: .op(1), start: t(Double(i) * 700),
+                                 end: t(Double(i) * 700 + 600), certainty: 0.9),
+                hlc: clock.tick(), origin: .auto))
+        }
+
+        // Batch 2 of ceil(450/200)=3 is rejected; the cycle must surface it.
+        flaky.failOnPushCalls = [2]
+        var threw = false
+        do { try await syncer.sync() } catch { threw = true }
+        try expect(threw, "a rejected batch must propagate, not be swallowed")
+        try expectEq(inner.recordCount, 200, "exactly the first batch landed")
+        try expectEq(try store.dirtyRevisionIDs().count, 250,
+                     "failed chunk + un-attempted tail stay dirty; the landed 200 are clear")
+
+        // Recovery cycle: only the 250 unlanded rows go up (2 more batches),
+        // nothing already on the server is re-pushed, nothing is lost.
+        flaky.failOnPushCalls = []
+        try await syncer.sync()
+        try expectEq(inner.pushCount, 3, "1 landed + 2 retry batches — no re-upload of the cleared chunk")
+        try expectEq(inner.recordCount, 450, "the whole backlog reached the server")
+        try expectEq(try store.dirtyRevisionIDs(), [])
     }
 }

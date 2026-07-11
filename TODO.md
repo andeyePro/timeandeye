@@ -854,6 +854,15 @@ and recorded rather than fixed blind:
   (SessionTracker.setIdleThreshold) and re-caches.
 
 ## Fable session outputs (2026-07-07 night — review + code, NOT yet Mac-verified)
+- [x] D0 anti-entropy audit — DONE 2026-07-11 (vsss iter-35): D0.1 (F21
+  re-assert local wins) and D0.2 (F22 ≤200-record push batches) were already
+  built and Mac-verified in the licence/sync batch; criterion 12 and the
+  chunking half of 13 were already pinned. The one gap was criterion 13's
+  FAILURE clause — now pinned by a new JournalSyncer check (a mid-backlog
+  batch rejection keeps only the failed chunk + un-attempted tail dirty;
+  the landed chunk is never re-uploaded). 836/0 on the Mac. D0.3 (surface
+  decode drops as "N sessions from a newer version aren't visible") remains
+  open — user-facing, deliberately deferred.
 - [x] RUN `swift run andeyeTTChecks` on the Mac — DONE 2026-07-08 00:2x BST
   via the the local build bridge bridge: TOTAL 441 passed, 0 failed (twice).
   Needed `rm -rf .build` on the Mac tree (stale module cache) and one

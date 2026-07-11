@@ -2,6 +2,18 @@
 
 ## 2026-07-11
 
+- [x] **Sync: criterion 13's failure clause pinned (D0 audit).** The
+  multi-device spec's D0.1/D0.2 (F21 re-assert local wins, F22 batched
+  pushes) turned out already built and verified in the licence/sync batch;
+  auditing the spec's acceptance criteria found one unpinned clause — a
+  mid-backlog batch failure must leave the failed chunk (and the
+  un-attempted tail) dirty for retry while the landed chunk stays clear.
+  New `FlakySyncServer` + JournalSyncer check: batch 2 of 3 rejected → the
+  cycle surfaces the error, exactly 200 records reach the server, 250 rows
+  stay dirty; the recovery cycle uploads only the missing 250 (no
+  re-upload, no loss). Suite 836/0 on the Mac. D0.3 (surfacing decode
+  drops) stays open.
+
 - [x] **Timeline: per-entry billable marks (his Currency review).**
   Right-click a timeline slice → Billable to mark JUST that entry billable
   or non-billable: `Session.billableOverride`, journalled on the row itself
