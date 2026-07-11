@@ -158,13 +158,20 @@ public struct RetroDigest: Codable, Equatable, Sendable, Identifiable {
         /// Pre-lift provenance, restored on undo. Optional so digests saved
         /// before 2026-07-10 keep decoding (synthesized decodeIfPresent).
         public var priorProvenance: SessionProvenance?
+        /// Whether the slice was POSTED before the lift/refile. A refile of a
+        /// posted slice deletes its backend entry, so undo can't resurrect the
+        /// dead id — it re-posts under the restored task instead. Optional so
+        /// digests saved before this field keep decoding; nil reads as false.
+        public var priorPushedToOP: Bool?
 
         public init(id: UUID, task: TaskRef, certainty: Double,
-                    priorProvenance: SessionProvenance? = nil) {
+                    priorProvenance: SessionProvenance? = nil,
+                    priorPushedToOP: Bool? = nil) {
             self.id = id
             self.task = task
             self.certainty = certainty
             self.priorProvenance = priorProvenance
+            self.priorPushedToOP = priorPushedToOP
         }
     }
 

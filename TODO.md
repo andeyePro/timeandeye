@@ -2,6 +2,15 @@
 
 ## Review-fix cluster (2026-07-11)
 
+- [x] Refile backend hygiene + certainty — DONE 2026-07-11: `applyRefiles`
+  re-pointed a posted slice's task with no backend hygiene, leaving its entry
+  filed under the old work package (money mis-filed). Now sheds the linkage
+  (delete old entry, clear id/flag, deferred re-post under the new task) via
+  the same path `applyTimelineEdit` uses; undo re-posts under the restored
+  task. Also fixed refile certainty inheriting the old task's confidence
+  (`max` → re-derived `finding.score`). Decision factored to Core
+  (`ContradictionRefile.apply`); `RetroDigest.PriorSessionState` gained
+  `priorPushedToOP`; 3 new checks.
 
 
 

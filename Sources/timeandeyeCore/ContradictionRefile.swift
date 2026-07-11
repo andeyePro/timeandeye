@@ -78,6 +78,38 @@ public enum ContradictionRefile {
         "userAssigned", "aiApplied", "pin", "sessionSticky",
     ]
 
+    /// The linkage transition when a finding is applied to a session.
+    /// Factored out of `AppController.applyRefiles` so the two rules that
+    /// used to be wrong there are pinned in Core:
+    ///   * certainty becomes the RE-DERIVED score — never `max(old, new)`.
+    ///     The old task's confidence must not inflate the new target's.
+    ///   * a POSTED slice must shed its backend linkage before it re-points,
+    ///     exactly the delete-and-clear hygiene applyTimelineEdit /
+    ///     reassignTimelineSessions run: the old entry belongs to the old
+    ///     work package, so it is deleted and the time re-posts under the
+    ///     new task. An unpushed slice has no backend footprint to clear.
+    public struct Applied: Equatable, Sendable {
+        public var newTask: TaskRef
+        public var certainty: Double
+        public var severBackendLinkage: Bool
+        public var entryToDelete: RemoteEntryID?
+
+        public init(newTask: TaskRef, certainty: Double,
+                    severBackendLinkage: Bool, entryToDelete: RemoteEntryID?) {
+            self.newTask = newTask
+            self.certainty = certainty
+            self.severBackendLinkage = severBackendLinkage
+            self.entryToDelete = entryToDelete
+        }
+    }
+
+    public static func apply(_ finding: Finding, to session: Session) -> Applied {
+        Applied(newTask: finding.newTask,
+                certainty: finding.score,
+                severBackendLinkage: session.pushedToOP,
+                entryToDelete: session.pushedToOP ? session.opTimeEntryID : nil)
+    }
+
     /// `score` re-derives the slice's best answer at its own moment (the
     /// controller feeds the dominant span through the attributor's explain
     /// path — same numbers a human sees opening the card). `suggestFloor`

@@ -2632,14 +2632,32 @@ public final class AppController: ObservableObject {
     /// its single-undo semantics carry over unchanged.
     private func applyRefiles(_ findings: [ContradictionRefile.Finding], reason: String) {
         var priorSessions: [RetroDigest.PriorSessionState] = []
+        var entriesToDelete: [RemoteEntryID] = []
+        var severedAny = false
         for finding in findings {
             guard var session = try? journal.session(id: finding.sessionID) else { continue }
             priorSessions.append(RetroDigest.PriorSessionState(
                 id: finding.sessionID, task: finding.priorTask,
                 certainty: finding.priorCertainty,
-                priorProvenance: session.provenance))
-            session.task = finding.newTask
-            session.certainty = max(session.certainty, finding.score)
+                priorProvenance: session.provenance,
+                priorPushedToOP: session.pushedToOP))
+            let applied = ContradictionRefile.apply(finding, to: session)
+            // A POSTED slice's backend entry belongs to the OLD work package;
+            // re-pointing the task alone would leave the money filed under the
+            // wrong task. Shed the linkage exactly as applyTimelineEdit does —
+            // delete the old entry (below, off the journal write) and clear the
+            // id/flag so sync re-creates the entry under the new task.
+            if applied.severBackendLinkage {
+                if let entry = applied.entryToDelete { entriesToDelete.append(entry) }
+                session.opTimeEntryID = nil
+                session.pushedToOP = false
+                clearPrimaryPosting(session.id)   // re-enter the push queue
+                severedAny = true
+            }
+            session.task = applied.newTask
+            // The RE-DERIVED score for the new target — not max(old, new); the
+            // old task's confidence must not inflate the new one's.
+            session.certainty = applied.certainty
             session.provenance = .retro
             try? journal.update(session)
         }
@@ -2652,6 +2670,18 @@ public final class AppController: ObservableObject {
             priorSessions: priorSessions)
         try? journal.saveRetroDigest(digest)
         reloadReview()
+        // Off the journal mutation (mirrors retryStuck): retire the old backend
+        // entries and re-post the re-pointed slices under their new tasks.
+        if severedAny {
+            Task { [entriesToDelete] in
+                if let backend {
+                    for entry in entriesToDelete {
+                        try? await backend.deleteTimeEntry(id: entry)
+                    }
+                }
+                await syncIfEnabled()
+            }
+        }
     }
 
     /// The suggestion row's "refile all": apply every current suggestion as
@@ -2737,15 +2767,31 @@ public final class AppController: ObservableObject {
     public func undoRetroDigest(_ id: UUID) {
         guard let digest = retroDigest.first(where: { $0.id == id }) else { return }
         try? journal.assign(digest.clearedSegmentIDs, to: nil)
+        var needsResync = false
         for prior in digest.priorSessions {
             guard var session = try? journal.session(id: prior.id) else { continue }
             session.task = prior.task
             session.certainty = prior.certainty
             session.provenance = prior.priorProvenance
+            // The refile of a POSTED slice deleted its old backend entry, so
+            // undo can't restore that dead id — it restores the prior LINKAGE
+            // STATE by re-posting under the now-restored task (leave the row
+            // unlinked so sync re-creates rather than PATCHing a 404, the same
+            // choice applyTimelineEdit's undo makes). Retro/walk lifts never
+            // touch posted slices, so priorPushedToOP is nil/false for them.
+            if prior.priorPushedToOP == true {
+                session.opTimeEntryID = nil
+                session.pushedToOP = false
+                clearPrimaryPosting(session.id)
+                needsResync = true
+            }
             try? journal.update(session)
         }
         try? journal.deleteRetroDigest(id)
         reloadReview()
+        if needsResync {
+            Task { await syncIfEnabled() }
+        }
     }
 
     /// Bumped on every journal mutation (this is called on all of them) and on

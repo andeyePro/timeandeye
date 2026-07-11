@@ -2,6 +2,24 @@
 
 ## 2026-07-11
 
+- [x] **Refile: a posted slice re-filed under a new task now sheds its
+  backend entry, and refile confidence no longer inherits the old task's.**
+  `AppController.applyRefiles` re-pointed `session.task` with no backend
+  hygiene — a posted slice reached the suggestion lane (below-bar contradiction
+  or nil provenance) and, once refiled, its OpenProject/finance entry stayed
+  filed under the OLD work package while the journal claimed the new one. It
+  now runs the same delete-and-clear `applyTimelineEdit`/
+  `reassignTimelineSessions` do: the old entry is deleted, the id/pushed flag
+  cleared, and a deferred sync re-creates the entry under the new task. Undo
+  restores the prior linkage STATE faithfully — a posted slice re-posts under
+  the restored task (the dead id is never resurrected, matching the timeline
+  edit's undo). The decision is factored into Core (`ContradictionRefile.apply`)
+  so it is unit-pinned. Second bug in the same method: refile certainty was
+  `max(session.certainty, finding.score)` — the old task's confidence inflated
+  the new target; it is now the re-derived `finding.score`. `RetroDigest`'s
+  undo payload gained `priorPushedToOP` (optional, lenient-decode). Three
+  ContradictionRefile checks pin the certainty rule, the sever decision, and
+  the posted-slice apply+undo round-trip. Suite 860/0.
 
 
 

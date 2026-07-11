@@ -95,4 +95,74 @@ func contradictionRefileChecks(_ c: Checks) {
                                                   dismissed: [key], score: elsewhere)
         try expectEq(resurfaced.suggestions.count, 1)
     }
+
+    // MARK: - Applying a refile (review-fix, 2026-07-11). The mechanics
+    // AppController.applyRefiles runs, replayed against dictionary state (the
+    // house pattern — no AppController in checks). The two rules that were
+    // wrong there are now pinned in Core via ContradictionRefile.apply: the
+    // certainty is the RE-DERIVED score (never max(old, new)), and a POSTED
+    // slice sheds its backend entry so the time re-posts under the new task.
+
+    c.check("refile certainty is the re-derived score, never the old task's inflated confidence") {
+        let s = session(a, task: .op(1), certainty: 0.99,
+                        provenance: SessionProvenance(source: .ranked))
+        let finding = ContradictionRefile.Finding(
+            sessionID: a, priorTask: .op(1), priorCertainty: 0.99,
+            priorProvenance: s.provenance, newTask: .op(2), score: 0.7)
+        let applied = ContradictionRefile.apply(finding, to: s)
+        try expectEq(applied.certainty, 0.7, "0.99 on the OLD task must not inflate the new target")
+        try expectEq(applied.newTask, .op(2))
+    }
+
+    c.check("an unpushed refile has no backend linkage to shed") {
+        let s = session(a, task: .op(1), certainty: 0.5,
+                        provenance: SessionProvenance(source: .ranked))
+        let applied = ContradictionRefile.apply(
+            ContradictionRefile.Finding(sessionID: a, priorTask: .op(1), priorCertainty: 0.5,
+                priorProvenance: s.provenance, newTask: .op(2), score: 0.95), to: s)
+        try expect(!applied.severBackendLinkage)
+        try expectNil(applied.entryToDelete)
+    }
+
+    c.check("a POSTED slice refiled sheds its old entry, re-posts under the new task; undo restores the posted-under-old state") {
+        var s = session(a, task: .op(1), certainty: 0.6, pushed: true,
+                        provenance: SessionProvenance(source: .ranked))
+        s.opTimeEntryID = "7"
+        var backend: [RemoteEntryID: TaskRef] = ["7": .op(1)]   // entry 7 books under op(1)
+        var ledger: Set<UUID> = [s.id]                          // posting record exists
+
+        let finding = ContradictionRefile.Finding(
+            sessionID: a, priorTask: .op(1), priorCertainty: 0.6,
+            priorProvenance: s.provenance, newTask: .op(2), score: 0.95)
+        // The digest payload snapshots the prior linkage BEFORE the apply.
+        let priorPushed = s.pushedToOP   // → PriorSessionState.priorPushedToOP
+        let applied = ContradictionRefile.apply(finding, to: s)
+        try expect(applied.severBackendLinkage, "a posted slice must shed its entry")
+        try expectEq(applied.entryToDelete, "7")
+
+        // Controller mechanics: delete the old entry, unlink, re-point, then
+        // the deferred sync re-creates the entry under the new task.
+        if let dead = applied.entryToDelete { backend[dead] = nil }
+        s.opTimeEntryID = nil; s.pushedToOP = false; ledger.remove(s.id)
+        s.task = applied.newTask; s.certainty = applied.certainty; s.provenance = .retro
+        backend["fresh"] = s.task; s.opTimeEntryID = "fresh"; s.pushedToOP = true; ledger.insert(s.id)
+
+        try expectNil(backend["7"], "the old op(1) entry is gone")
+        try expectEq(try unwrap(backend["fresh"]), .op(2), "the time now books under op(2)")
+        try expectEq(s.certainty, 0.95, "certainty is the re-derived score")
+        try expect(ledger.contains(s.id), "ledger re-linked under the new task")
+
+        // Undo: a posted slice can't restore its dead id — it re-posts under
+        // the restored task (undoRetroDigest, gated on priorPushedToOP).
+        if priorPushed {
+            backend["fresh"] = nil; s.opTimeEntryID = nil; s.pushedToOP = false; ledger.remove(s.id)
+        }
+        s.task = finding.priorTask
+        if priorPushed {
+            backend["fresh2"] = s.task; s.opTimeEntryID = "fresh2"; s.pushedToOP = true; ledger.insert(s.id)
+        }
+        try expectEq(s.task, .op(1), "back on the original task")
+        try expectEq(try unwrap(backend["fresh2"]), .op(1), "re-posted under op(1), not a dead id")
+        try expect(backend.values.filter { $0 == .op(2) }.isEmpty, "no orphan op(2) entry survives undo")
+    }
 }
