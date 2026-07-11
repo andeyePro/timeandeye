@@ -2,6 +2,26 @@
 
 ## 2026-07-11
 
+- [x] **Timeline: per-entry billable marks (his Currency review).**
+  Right-click a timeline slice → Billable to mark JUST that entry billable
+  or non-billable: `Session.billableOverride`, journalled on the row itself
+  with the SessionProvenance lenient-decode pattern (old journals load, nil
+  = inherit), beating the task tri-state and project flag in BOTH
+  directions; absence inherits exactly as before
+  (`BillableRules.effectiveBillable(entryOverride:)`). The same menu widens
+  the mark — "Billable: whole task/project" stamps the entry AND flips the
+  existing task/project flag in one ⌘Z step; the entry stamp is what makes
+  the clicked slice itself invoiceable, since flag flips stay
+  prospective-only. Entry marks are finance-eligible with no `since` gate
+  (marking the entry IS the consent the gate collects for flips) and are
+  excluded from the stranded-time arithmetic (their posting is their own
+  mark's business). Per-entry marks flow to finance posting via the sync
+  closure; the slice editor's footer shows the entry's billable state; the
+  flip alert copy is now shared with the pie legend (`billableFlipMessage`).
+  4 new checks: both-direction precedence, no-since-gate +
+  personal-always-wins, old-JSON/junk decode, stranded arithmetic.
+  Suite 835/0.
+
 - [x] **Menu bar: draw-in certainty + monochrome.** Two new
   Menu bar toggles, both default-off. *Draw in certainty* strokes the &I
   mark in proportion to the live attribution certainty, revealed EYE-first

@@ -143,6 +143,10 @@ struct TimelineView: View {
     @State private var stripPxPerSec: CGFloat = 2
     @State private var stripPinchBase: CGFloat?
     @State private var scrollMonitor: Any?
+    /// The last billable flip's report (a widen-to-task/project action) —
+    /// presents the same cascade/stranded alert the pie legend shows.
+    @State private var flipReport: BillableFlipReport?
+    @State private var showFlipAlert = false
     /// The window actually hosting THIS view — the scroll-pan gate's
     /// identity (two timeline windows share the "timeline" identifier).
     @State private var hostWindow: NSWindow?
@@ -240,6 +244,12 @@ struct TimelineView: View {
         // compares window instances, because two open timeline windows share
         // the "timeline" identifier and both panned on either's scroll.
         .background(HostWindowAccessor { hostWindow = $0 })
+        .alert("Billable setting changed", isPresented: $showFlipAlert, presenting: flipReport) { _ in
+            Button("OK") { flipReport = nil }
+        } message: { report in
+            Text(billableFlipMessage(report,
+                                     currencySymbol: controller.settings.effectiveCurrencySymbol))
+        }
     }
 
     // MARK: - Data
@@ -754,6 +764,54 @@ struct TimelineView: View {
             .onTapGesture(coordinateSpace: .local) { location in
                 selectSlice(session, isLive: isLive, atX: x0 + location.x, width: width)
             }
+            .contextMenu { billableMenu(session) }
+    }
+
+    // MARK: - Billable (right-click a slice)
+
+    /// Per-entry billable mark: right-click a slice to override ITS
+    /// billability either way (absence inherits the task/project setting,
+    /// exactly as before), with the widen-to-whole-task/project actions in
+    /// the same menu — each a single confirm-free click, one ⌘Z step. The
+    /// live slice has no journal row yet, so it carries no menu (its task
+    /// is flipped from the pie legend).
+    @ViewBuilder
+    private func billableMenu(_ session: Session) -> some View {
+        if session.id != AppController.liveSessionID {
+            Menu("Billable") {
+                entryMarkButton(session, mark: true, label: "Billable")
+                entryMarkButton(session, mark: false, label: "Non-billable")
+                entryMarkButton(session, mark: nil, label: "Inherit (task/project decides)")
+                if let task = controller.taskCache.first(where: { $0.ref == session.task }) {
+                    Divider()
+                    Button("Billable: whole task") {
+                        Task { presentFlip(await controller.markSessionAndTaskBillable(session)) }
+                    }
+                    if task.project != nil {
+                        Button("Billable: whole project") {
+                            Task { presentFlip(await controller.markSessionAndProjectBillable(session)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func entryMarkButton(_ session: Session, mark: Bool?, label: String) -> some View {
+        Button {
+            Task { await controller.setSessionBillable(session, override: mark) }
+        } label: {
+            HStack {
+                if mark == session.billableOverride { Image(systemName: "checkmark") }
+                Text(label)
+            }
+        }
+    }
+
+    private func presentFlip(_ report: BillableFlipReport?) {
+        guard let report else { return }
+        flipReport = report
+        showFlipAlert = true
     }
 
     /// Hatch the "undecided" tail of the live slice: after a confident switch
@@ -1301,7 +1359,13 @@ struct TimelineView: View {
                 }
                 Spacer()
                 if !isNewEditing, !isLive {
-                    Text("\(Int((session.certainty * 100).rounded()))% · \(session.pushedToOP ? "in OP" : "local")")
+                    // Billable readout: a per-entry mark says so explicitly;
+                    // inherited billability shows plain. Marking lives on the
+                    // slice's right-click menu.
+                    let billable = session.billableOverride != nil
+                        ? " · \(session.billableOverride == true ? "billable" : "non-billable") (this entry)"
+                        : (controller.isSessionBillable(session) ? " · billable" : "")
+                    Text("\(Int((session.certainty * 100).rounded()))% · \(session.pushedToOP ? "in OP" : "local")\(billable)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

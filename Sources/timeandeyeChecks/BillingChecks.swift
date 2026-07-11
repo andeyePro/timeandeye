@@ -138,6 +138,69 @@ func billingChecks(_ c: Checks) {
                      "blank override falls back")
     }
 
+    c.check("ENTRY override wins in BOTH directions; absence inherits (the Timeline's per-slice mark)") {
+        var rules = BillableRules()
+        rules.setProject(projectKey, billable: true, at: t0)
+        try expect(!rules.effectiveBillable(entryOverride: false, task: .op(1),
+                                            projectKey: projectKey),
+                   "entry non-billable beats a billable project")
+        try expect(rules.effectiveBillable(entryOverride: true, task: .op(9), projectKey: nil),
+                   "entry billable needs no task or project flag at all")
+        rules.setTask(.op(1), state: .billable, at: t0)
+        try expect(!rules.effectiveBillable(entryOverride: false, task: .op(1),
+                                            projectKey: projectKey),
+                   "entry mark beats a task-level override too")
+        try expect(rules.effectiveBillable(entryOverride: nil, task: .op(1),
+                                           projectKey: projectKey),
+                   "nil inherits: the pre-existing task/project resolution, unchanged")
+        try expect(!rules.effectiveBillable(entryOverride: nil, task: .op(2), projectKey: nil),
+                   "nil on an unflagged task stays default non-billable")
+    }
+
+    c.check("entry marks carry NO since gate — the mark is the consent; personal still never posts") {
+        var rules = BillableRules()
+        rules.setProject(projectKey, billable: true, at: t0)
+        try expect(rules.financeEligible(entryOverride: true, task: .op(1), projectKey: nil,
+                                         sessionStart: t0.addingTimeInterval(-86_400)),
+                   "an explicitly marked entry posts even though it predates every flag")
+        try expect(!rules.financeEligible(entryOverride: false, task: .op(1),
+                                          projectKey: projectKey,
+                                          sessionStart: t0.addingTimeInterval(600)),
+                   "an entry marked non-billable never posts, however billable its project")
+        try expect(!rules.financeEligible(entryOverride: true, task: .local(UUID()),
+                                          projectKey: nil, sessionStart: t0),
+                   ".local never reaches ANY backend — personal beats even an entry mark")
+    }
+
+    c.check("old-journal session JSON decodes with a nil entry mark; a mark round-trips; junk never sinks the row") {
+        // Literal pre-2026-07-11 row: no billableOverride key anywhere.
+        let legacy = #"{"id":"6F1E4E9B-3C5E-4A2B-9A57-1B2C3D4E5F60","task":{"op":{"_0":7}},"start":700000000,"end":700003600,"certainty":0.9,"pushedToOP":false}"#
+        let old = try JSONDecoder().decode(Session.self, from: Data(legacy.utf8))
+        try expectNil(old.billableOverride, "absent key = inherit, exactly as before")
+        var marked = old
+        marked.billableOverride = false
+        let back = try JSONDecoder().decode(Session.self, from: JSONEncoder().encode(marked))
+        try expectEq(back, marked, "an explicit mark survives the round trip")
+        // A malformed value degrades to nil without losing the session
+        // (the mark is annotation, never identity — same as provenance).
+        let junk = legacy.dropLast() + #","billableOverride":"yes"}"#
+        let salvaged = try JSONDecoder().decode(Session.self, from: Data(junk.utf8))
+        try expectNil(salvaged.billableOverride)
+        try expectEq(salvaged.id, old.id)
+    }
+
+    c.check("stranded-time arithmetic ignores entry-marked sessions — a flip neither strands nor releases them") {
+        func s(_ override: Bool?, minutes: Double = 60) -> Session {
+            Session(task: .op(1), start: t0, end: t0.addingTimeInterval(minutes * 60),
+                    certainty: 0.95, billableOverride: override)
+        }
+        let stranded = Billing.strandedSeconds(
+            sessions: [s(nil), s(true), s(false)], tasks: [.op(1)],
+            threshold: 0.8, postedSessionIDs: [])
+        try expectEq(stranded, 3600,
+                     "only the unmarked hour rides the flag flip; marked entries follow their own mark")
+    }
+
     c.check("billing rules persist through JSONFileStore like other user rules") {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("andeyett-billing-\(UUID().uuidString)")

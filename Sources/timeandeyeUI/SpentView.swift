@@ -852,19 +852,26 @@ struct SpentView: View {
     /// left alone, and the stranded-time warning with the currency symbol —
     /// the one place billable totals render today.
     private func flipMessage(_ report: BillableFlipReport) -> String {
-        var lines = [
-            "\(report.name) is now \(report.billable ? "billable" : "non-billable").",
-        ]
-        if !report.leftBehind.isEmpty {
-            let names = report.leftBehind.map(\.subject).joined(separator: ", ")
-            lines.append("\(report.leftBehind.count) task\(report.leftBehind.count == 1 ? "" : "s") kept their manual setting: \(names).")
-        }
-        if report.strandedSeconds >= 60 {
-            let symbol = controller.settings.effectiveCurrencySymbol
-            lines.append(report.billable
-                ? "\(hm(report.strandedSeconds)) of earlier confirmed time stays uninvoiced (\(symbol)) – flips apply to new time only; a catch-up invoice is a future feature."
-                : "\(hm(report.strandedSeconds)) of confirmed time was awaiting invoicing (\(symbol)) and will no longer post.")
-        }
-        return lines.joined(separator: "\n")
+        billableFlipMessage(report, currencySymbol: controller.settings.effectiveCurrencySymbol)
     }
+}
+
+/// The billable-flip alert body, shared by the pie legend's toggles and the
+/// timeline's per-slice widen actions (the two places flips are made): what
+/// changed, which manually-set tasks the cascade left alone, and the
+/// stranded-time warning with the currency symbol.
+func billableFlipMessage(_ report: BillableFlipReport, currencySymbol: String) -> String {
+    var lines = [
+        "\(report.name) is now \(report.billable ? "billable" : "non-billable").",
+    ]
+    if !report.leftBehind.isEmpty {
+        let names = report.leftBehind.map(\.subject).joined(separator: ", ")
+        lines.append("\(report.leftBehind.count) task\(report.leftBehind.count == 1 ? "" : "s") kept their manual setting: \(names).")
+    }
+    if report.strandedSeconds >= 60 {
+        lines.append(report.billable
+            ? "\(MenuTitle.text(elapsed: report.strandedSeconds, certainty: nil, showPercent: false)) of earlier confirmed time stays uninvoiced (\(currencySymbol)) – flips apply to new time only; a catch-up invoice is a future feature."
+            : "\(MenuTitle.text(elapsed: report.strandedSeconds, certainty: nil, showPercent: false)) of confirmed time was awaiting invoicing (\(currencySymbol)) and will no longer post.")
+    }
+    return lines.joined(separator: "\n")
 }

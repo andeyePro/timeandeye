@@ -4881,7 +4881,8 @@ public final class AppController: ObservableObject {
                 activityOverrides: settings.activityOverrides,
                 includeComments: settings.autoComment,
                 financeEligible: { session in
-                    rules.financeEligible(task: session.task,
+                    rules.financeEligible(entryOverride: session.billableOverride,
+                                          task: session.task,
                                           projectKey: projectKeys[session.task],
                                           sessionStart: session.start)
                 },
@@ -5078,6 +5079,68 @@ public final class AppController: ObservableObject {
         billing.setTask(task.ref, state: state)
         saveBilling()
         Task { await syncIfEnabled() }
+        return report
+    }
+
+    /// Effective billability of one journalled entry: its own override when
+    /// marked, else its task's resolution — drives the Timeline's checkmarks
+    /// and the slice editor's footer.
+    public func isSessionBillable(_ session: Session) -> Bool {
+        let key = taskCache.first { $0.ref == session.task }
+            .flatMap { projectKey(for: $0) }
+        return billing.effectiveBillable(entryOverride: session.billableOverride,
+                                         task: session.task, projectKey: key)
+    }
+
+    /// Set (or clear — nil = inherit) ONE entry's billable mark, the
+    /// Timeline's per-slice override. Persisted on the journal row itself,
+    /// so the mark follows the entry through edits and sync; an explicit
+    /// mark is finance-eligible with no prospective-only gate (marking the
+    /// entry IS the consent a flag flip's `since` stands in for). Undoable.
+    public func setSessionBillable(_ session: Session, override: Bool?) async {
+        guard var row = try? journal.session(id: session.id),
+              row.billableOverride != override else { return }
+        let previous = row.billableOverride
+        registerUndo("billable mark \(name(of: .task(row.task)))") { [weak self] in
+            guard let self, var current = try? self.journal.session(id: session.id) else { return }
+            current.billableOverride = previous
+            try? self.journal.update(current)
+            self.updateJournalSummary()
+            await self.syncIfEnabled()
+        }
+        row.billableOverride = override
+        try? journal.update(row)
+        updateJournalSummary()
+        await syncIfEnabled()
+    }
+
+    /// The Timeline's widen gesture: mark THIS entry billable AND flip its
+    /// whole task billable, in one ⌘Z step. The entry mark makes the clicked
+    /// entry itself invoiceable immediately (a bare flag flip is
+    /// prospective-only and would leave it stranded); the task flag handles
+    /// future time. Returns the flip report when the flag actually changed.
+    @discardableResult
+    public func markSessionAndTaskBillable(_ session: Session) async -> BillableFlipReport? {
+        guard let task = taskCache.first(where: { $0.ref == session.task }) else { return nil }
+        var report: BillableFlipReport?
+        await undoGroup("mark \(task.subject) billable") {
+            await setSessionBillable(session, override: true)
+            report = setTaskBillable(task, state: .billable)
+        }
+        return report
+    }
+
+    /// Same widen gesture at project scope: entry mark + project flag,
+    /// one ⌘Z step.
+    @discardableResult
+    public func markSessionAndProjectBillable(_ session: Session) async -> BillableFlipReport? {
+        guard let task = taskCache.first(where: { $0.ref == session.task }),
+              let project = task.project else { return nil }
+        var report: BillableFlipReport?
+        await undoGroup("mark \(project) billable") {
+            await setSessionBillable(session, override: true)
+            report = setProjectBillable(named: project, billable: true)
+        }
         return report
     }
 

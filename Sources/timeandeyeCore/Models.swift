@@ -340,11 +340,17 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
     /// the decision that STANDS; the displaced story is the Evidence Card's
     /// history line, not the journal's.
     public var provenance: SessionProvenance?
+    /// Per-entry billable mark, set from the Timeline (nil on rows journalled
+    /// before 2026-07-11 and on unmarked entries = inherit the task/project
+    /// resolution). An explicit mark beats the task and project flags in BOTH
+    /// directions — see `BillableRules.effectiveBillable`.
+    public var billableOverride: Bool?
 
     public init(id: UUID = UUID(), task: TaskRef, start: Date, end: Date,
                 certainty: Double, pushedToOP: Bool = false, comment: String? = nil,
                 opTimeEntryID: RemoteEntryID? = nil,
-                provenance: SessionProvenance? = nil) {
+                provenance: SessionProvenance? = nil,
+                billableOverride: Bool? = nil) {
         self.id = id
         self.task = task
         self.start = start
@@ -354,6 +360,7 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
         self.comment = comment
         self.opTimeEntryID = opTimeEntryID
         self.provenance = provenance
+        self.billableOverride = billableOverride
     }
 
     /// Custom decode ONLY for the widened entry id: journalled rows written
@@ -377,6 +384,8 @@ public struct Session: Equatable, Codable, Sendable, Identifiable {
         // Absent on pre-2026-07-10 rows; a malformed value must not sink the
         // whole session either (provenance is annotation, never identity).
         provenance = (try? c.decodeIfPresent(SessionProvenance.self, forKey: .provenance)) ?? nil
+        // Absent on pre-2026-07-11 rows (= inherit); same leniency as above.
+        billableOverride = (try? c.decodeIfPresent(Bool.self, forKey: .billableOverride)) ?? nil
     }
 }
 

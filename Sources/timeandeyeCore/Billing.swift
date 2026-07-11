@@ -83,9 +83,13 @@ public struct BillableRules: Codable, Equatable, Sendable {
         tasks[ref.storageKey]?.state ?? .inherit
     }
 
-    /// Effective resolution: task override if manually set, else the project
-    /// flag, else DEFAULT NON-BILLABLE.
-    public func effectiveBillable(task ref: TaskRef, projectKey: String?) -> Bool {
+    /// Effective resolution: an explicit ENTRY mark (the Timeline's per-slice
+    /// override, `Session.billableOverride`) beats everything in BOTH
+    /// directions; else task override if manually set, else the project flag,
+    /// else DEFAULT NON-BILLABLE. Absence (nil) inherits.
+    public func effectiveBillable(entryOverride: Bool? = nil,
+                                  task ref: TaskRef, projectKey: String?) -> Bool {
+        if let entryOverride { return entryOverride }
         switch taskState(ref) {
         case .billable: return true
         case .nonBillable: return false
@@ -99,10 +103,16 @@ public struct BillableRules: Codable, Equatable, Sendable {
     /// prospective-only — flipping a project billable never floods a finance
     /// backend with earlier history (that stranded time is warned about at
     /// flip time; the catch-up invoice is a future feature).
-    public func financeEligible(task ref: TaskRef, projectKey: String?,
+    public func financeEligible(entryOverride: Bool? = nil,
+                                task ref: TaskRef, projectKey: String?,
                                 sessionStart: Date) -> Bool {
         // Personal tasks never leave the Mac, whatever any flag says.
         guard ref.isRemote else { return false }
+        // An explicit entry mark carries NO `since` gate: the user pointed at
+        // THIS entry, which is exactly the consent the prospective-only gate
+        // exists to collect for flag flips. Both directions are final for
+        // this entry — billable posts, non-billable never does.
+        if let entryOverride { return entryOverride }
         switch taskState(ref) {
         case .nonBillable:
             return false
@@ -169,12 +179,16 @@ public enum Billing {
     /// merit (remote task, certainty at/above the auto-push threshold, at
     /// least a minute long) minus those already posted (`postedSessionIDs`,
     /// the ids with a `.posted` finance ledger row — posted history is never
-    /// clawed back, so it is not stranded).
+    /// clawed back, so it is not stranded). Entry-marked sessions
+    /// (`billableOverride` set either way) are excluded: their posting is
+    /// decided by their own mark, so a task/project flip neither strands
+    /// nor releases them.
     public static func strandedSeconds(sessions: [Session], tasks: Set<TaskRef>,
                                        threshold: Double,
                                        postedSessionIDs: Set<UUID>) -> TimeInterval {
         sessions.reduce(0) { total, s in
             guard tasks.contains(s.task), s.task.isRemote,
+                  s.billableOverride == nil,
                   s.certainty >= threshold,
                   !postedSessionIDs.contains(s.id) else { return total }
             let duration = s.end.timeIntervalSince(s.start)

@@ -53,6 +53,13 @@ midnight. Day boundaries are marked with the date.
   time you typed.
 - **Delete**: select slice(s) and press delete/backspace, or use the Delete
   button on the reassign bar. ⌘-click and ⇧⌘-click multi-select like Finder.
+- **Billable**: right-click a slice to mark just that entry billable or
+  non-billable - an entry's own mark beats its task's and project's settings
+  both ways, and it alone decides whether that entry invoices; **Inherit**
+  hands the decision back to the task and project. The same menu offers
+  **Billable: whole task** and **Billable: whole project**, which mark the
+  clicked entry and set the task or project billable for future time in one
+  undoable step. The slice editor's footer shows the entry's billable state.
 - **Allocate a stretch**: shift-drag (or shift-click, then shift-click again to
   extend) selects a time range, shown as a translucent band with its start and
   end - it isn't bound to any slice's edges, so it can cut straight through
