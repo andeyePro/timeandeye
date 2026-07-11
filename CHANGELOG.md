@@ -2,6 +2,34 @@
 
 ## 2026-07-11
 
+- [x] **Review: walk-through confirm — one click covers exactly the viewed
+  slices (his respec).** No whole-day confirm anywhere, by design
+  ("what if I only manage to review part of the day"). The drawer's new
+  walk bar arrows the day's pending slices chronologically in EITHER
+  direction (⌘[/⌘], bare ←/→ while the list has focus): every slice landed
+  on opens its full detail and is marked viewed (eye mark; per-group k/n
+  tallies); clicking a slice or opening its disclosure marks it too, while
+  Expand all and mere scrolling deliberately never do — rendering is not
+  viewing. **Confirm viewed** then takes the engine's current read of each
+  viewed slice (`attributor.explain` at the slice's own moment — the same
+  numbers its detail showed) as the user's word: per-target batches through
+  the existing `assignReview` teach path, overlapping unpushed below-bar
+  sessions stamped `userAssigned` (detail "confirmed in review") at full
+  certainty — the EXISTING user's-word state, so `ContradictionRefile`
+  never refiles/nags them and the retro lift never touches them again —
+  all as ONE ⌘Z (`UndoStack.groupSync`, the AI-apply shape). Viewed slices
+  the scorer has nothing for stay queued (no word to take); slices acted
+  on mid-walk count handled, not viewed; the cursor relocates to the
+  nearest survivor after an assign, and an arrow never skips an unviewed
+  slice under the cursor. Pure core first: `ReviewWalk` (order/cursor/
+  viewed, prune-and-relocate) + `ReviewConfirm` (plan: per-target grouping,
+  unresolved, session stamps with prior-state undo payloads) in
+  `ReviewWalk.swift`, 20 new checks including the userDecided-set contract
+  pin. Viewed state lives on the controller for the app run — survives
+  closing/reopening the window, resets on relaunch (simple honest option;
+  attention is never journalled). Both manuals updated. Suite 856/0;
+  release `timeandeyeApp` build green.
+
 - [x] **Sync: criterion 13's failure clause pinned (D0 audit).** The
   multi-device spec's D0.1/D0.2 (F21 re-assert local wins, F22 batched
   pushes) turned out already built and verified in the licence/sync batch;

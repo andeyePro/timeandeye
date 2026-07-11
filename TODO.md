@@ -2,6 +2,19 @@
 
 ## Review drawer (Martin's critique, 2026-07-10)
 
+- [x] Walk-through confirm (his respec) — DONE 2026-07-11: whole-day
+  confirm rejected for partial-day reality; built his respec verbatim —
+  arrow the day's slices left↔right (⌘[/⌘], bare arrows with list focus),
+  dig in at will, every visited slice marked viewed, ONE **Confirm viewed**
+  takes the engine's current read of exactly the viewed slices as the
+  user's word (sessions stamped `userAssigned`/"confirmed in review", full
+  certainty, one ⌘Z). Decisions taken: viewed state is controller-held
+  in-memory (survives window close/reopen, resets on app relaunch —
+  attention is never journalled); scrolling/Expand-all never mark viewed
+  (rendering ≠ looking); a nothing-matched slice stays queued even when
+  viewed (no read on show to confirm). `ReviewWalk`/`ReviewConfirm`
+  Core-checked (20 checks).
+
 - [x] Martin's third pass — DONE 2026-07-10: the click-to-toggle model
   (below) was "unconventional and unintuitive", the selection blue "darker
   and harder to discern", the twisty "much harder to successfully click".

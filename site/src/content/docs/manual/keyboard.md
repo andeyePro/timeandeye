@@ -78,5 +78,8 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **⌘D** or **⌫** - **Clear** the selection: drop it from the queue,
   nothing added to timesheets, nothing learned.
 - **⌘E** - expand or collapse every stack and slice detail.
+- **⌘[ / ⌘]** (or **← / →** while the list has focus) - walk the day's
+  visits in either direction; each visit you land on opens and is marked
+  viewed. **Confirm viewed** then confirms exactly the marked visits.
 - **↵** in the task filter - assign the selection to the top task.
 - **⌘⇧C** - copy the AI prompt. **⌘↵** - apply a pasted AI response.

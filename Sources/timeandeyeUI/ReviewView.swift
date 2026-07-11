@@ -26,7 +26,12 @@ import timeandeyeMac
 /// Assign to any task (fuzzy-filtered), Clear (drop from the queue and
 /// timesheets, teaching nothing — Martin's 2026-07-10 naming call), or
 /// create a new local (non-OpenProject) task on the spot and assign to it;
-/// ⌫ with a selection is Clear too.
+/// ⌫ with a selection is Clear too. The walk bar above the list is the
+/// walk-through review (Martin's respec): arrow the day's slices in
+/// either direction, dig in at will — every slice landed on, clicked, or
+/// opened is marked viewed (eye) — and ONE Confirm takes exactly the viewed
+/// slices as your word (`ReviewWalk`/`ReviewConfirm`, Core-checked). There
+/// is deliberately NO whole-day confirm.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
     /// The selection (`ReviewSelection`, Core-checked): a flat set of slice
@@ -52,33 +57,110 @@ struct ReviewView: View {
     @State private var clearedExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-            List {
-                ForEach(keyedStacks, id: \.key) { entry in
-                    stackRow(entry.stack)
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 8) {
+                header
+                if !stacks.isEmpty {
+                    walkBar(proxy: proxy)
                 }
-            }
-            // ⌫ with a selection = the assign bar's Clear (same action,
-            // same ⌘Z, same nothing-is-learned semantics) — the List's
-            // native delete command, so both backspace and forward-delete
-            // route here.
-            .onDeleteCommand {
-                guard !scopedSegments.isEmpty else { return }
-                assign(.doNotTrack)
-            }
+                List {
+                    ForEach(keyedStacks, id: \.key) { entry in
+                        stackRow(entry.stack)
+                    }
+                }
+                // ⌫ with a selection = the assign bar's Clear (same action,
+                // same ⌘Z, same nothing-is-learned semantics) — the List's
+                // native delete command, so both backspace and forward-delete
+                // route here.
+                .onDeleteCommand {
+                    guard !scopedSegments.isEmpty else { return }
+                    assign(.doNotTrack)
+                }
+                // Bare ←/→ walk too while the list has focus; the ⌘[ ⌘]
+                // equivalents on the walk buttons work from anywhere in the
+                // window (bare arrows must stay free for the text fields).
+                .onKeyPress(.leftArrow) { walk(.left, proxy: proxy); return .handled }
+                .onKeyPress(.rightArrow) { walk(.right, proxy: proxy); return .handled }
 
-            if !scopedSegments.isEmpty {
-                assignBar
-            }
-            grainFooter
-            misfiledSection
-            clearedSection
+                if !scopedSegments.isEmpty {
+                    assignBar
+                }
+                grainFooter
+                misfiledSection
+                clearedSection
 
-            Divider()
-            aiSection
+                Divider()
+                aiSection
+            }
+            .padding(10)
         }
-        .padding(10)
+    }
+
+    // MARK: - Walk-through review (Martin's respec)
+
+    /// Arrow through the day's slices in either direction — every slice you
+    /// land on opens and is marked viewed (the eye) — then ONE click
+    /// confirms exactly the viewed slices as your word. There is NO
+    /// whole-day confirm: anything you haven't looked at stays queued,
+    /// so reviewing part of the day and coming back later just works.
+    private func walkBar(proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 6) {
+            Button { walk(.left, proxy: proxy) } label: { Image(systemName: "arrow.left") }
+                .controlSize(.small)
+                .keyboardShortcut("[", modifiers: .command)
+                .help("Walk to the previous (earlier) slice – it opens and is marked viewed (⌘[ or ← in the list)")
+            Button { walk(.right, proxy: proxy) } label: { Image(systemName: "arrow.right") }
+                .controlSize(.small)
+                .keyboardShortcut("]", modifiers: .command)
+                .help("Walk to the next (later) slice – it opens and is marked viewed (⌘] or → in the list)")
+            Text("\(controller.reviewWalk.viewedCount) of \(totalSlices) viewed")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Button("Confirm \(controller.reviewWalk.viewedCount) viewed") {
+                controller.confirmViewedSlices()
+            }
+            .controlSize(.small)
+            .disabled(controller.reviewWalk.viewedCount == 0)
+            .help("Take the current read on every slice you've viewed as your word – one ⌘Z undoes it all. Slices you haven't viewed stay exactly as they are.")
+        }
+    }
+
+    /// One walk step: move the cursor, then reveal where it landed — expand
+    /// its stack, open its detail (landing IS digging in: the full data is
+    /// what makes "viewed" honest), and scroll it into view. The slice-id
+    /// scroll runs a beat later so the just-expanded row exists to land on.
+    private func walk(_ direction: ReviewWalk.Direction, proxy: ScrollViewProxy) {
+        controller.walkStep(direction)
+        reveal(proxy: proxy)
+    }
+
+    private func reveal(proxy: ScrollViewProxy) {
+        guard let id = controller.reviewWalk.current,
+              let stack = stacks.first(where: { $0.segments.contains { $0.id == id } })
+        else { return }
+        expanded.insert(stack.id)
+        if stack.segments.count > 1 { sliceDetail.insert(id) }
+        withAnimation { proxy.scrollTo(stack.id, anchor: .center) }
+        DispatchQueue.main.async {
+            withAnimation { proxy.scrollTo(id, anchor: .center) }
+        }
+    }
+
+    /// The viewed mark — always laid out (opacity, not presence) so rows
+    /// don't shuffle as marks appear while walking.
+    private func viewedMark(_ viewed: Bool, selected: Bool) -> some View {
+        Image(systemName: "eye.fill")
+            .font(.system(size: 8))
+            .foregroundStyle(rowSecondaryStyle(selected))
+            .opacity(viewed ? 1 : 0)
+            .help("Viewed – Confirm viewed covers every slice marked like this")
+    }
+
+    /// The walk cursor's outline — distinct from the solid selection fill,
+    /// so where-you-are never masquerades as what's-selected.
+    private func currentStroke(_ isCurrent: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 4)
+            .stroke(Color.accentColor, lineWidth: isCurrent ? 1.5 : 0)
     }
 
     /// The window header: decisions (stacks) up front, per spec §7 — the
@@ -148,6 +230,19 @@ struct ReviewView: View {
         } else {
             selection.click(row, in: stacks)
         }
+        // Walk-through attention: clicking a slice — or a single-visit
+        // group, which IS its one slice — is looking at it. A multi-slice
+        // group click is a bulk gesture and marks nothing (only the clicked
+        // row of a ⇧-span counts, never the swept-up middle).
+        switch row {
+        case .slice(let id):
+            controller.walkVisit(id)
+        case .stack(let key):
+            if let stack = stacks.first(where: { $0.id == key }),
+               stack.segments.count == 1, let only = stack.segments.first {
+                controller.walkVisit(only.id)
+            }
+        }
     }
 
     private func groupSelected(_ stack: ReviewStack) -> Bool {
@@ -203,13 +298,32 @@ struct ReviewView: View {
         let key = surfaceKey(stack)
         let multi = stack.segments.count > 1
         let selected = groupSelected(stack)
+        let only = multi ? nil : stack.segments.first
+        // The walk cursor outlines the single-slice header itself, or the
+        // collapsed header hiding the current slice (expanded multi stacks
+        // outline the slice row instead).
+        let current = controller.reviewWalk.current
+        let cursorHere = only?.id == current
+            || (multi && !expanded.contains(key)
+                && stack.segments.contains { $0.id == current })
+        let viewedHere = stack.segments.filter {
+            controller.reviewWalk.viewed.contains($0.id)
+        }.count
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 2) {
                 // EVERY stack expands — a single-slice entry opens straight
                 // into its full detail ("clicking on an entry should reveal
                 // 100% of the data you have on it", Martin 2026-07-10).
+                // Opening a single-slice stack reveals everything held on
+                // its one slice, so it counts as viewing it (walk-through);
+                // a multi chevron only lists visits — that views nothing.
                 disclosure(open: expanded.contains(key), selected: selected) {
-                    if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
+                    if expanded.contains(key) {
+                        expanded.remove(key)
+                    } else {
+                        expanded.insert(key)
+                        if let only { controller.walkVisit(only.id) }
+                    }
                 }
                 HStack {
                     VStack(alignment: .leading) {
@@ -225,9 +339,18 @@ struct ReviewView: View {
                     // dated start); a stack the user hasn't split into slices
                     // shouldn't read differently from the old flat list.
                     if multi {
+                        if viewedHere > 0 {
+                            // "2/5" beside the eye: how much of this group
+                            // the walk has covered, legible while collapsed.
+                            Text("\(viewedHere)/\(stack.segments.count)")
+                                .font(.caption2)
+                                .foregroundStyle(rowSecondaryStyle(selected))
+                            viewedMark(true, selected: selected)
+                        }
                         Text(stackSummaryTail(stack)).font(.caption)
                             .foregroundStyle(rowSecondaryStyle(selected))
                     } else {
+                        viewedMark(viewedHere > 0, selected: selected)
                         Text(durationText(stack.total)).font(.caption)
                             .foregroundStyle(rowSecondaryStyle(selected))
                         Text(dayTimeText(stack.first)).font(.caption)
@@ -242,6 +365,7 @@ struct ReviewView: View {
             .padding(2)
             .background(selected ? Color.accentColor : .clear,
                         in: RoundedRectangle(cornerRadius: 4))
+            .overlay(currentStroke(cursorHere))
             calendarHintChip(for: stack)
             if expanded.contains(key) {
                 if multi {
@@ -281,13 +405,22 @@ struct ReviewView: View {
         let selected = selection.selected.contains(segment.id)
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 2) {
+                // Opening a slice's detail is looking at it — the walk
+                // marks it viewed (closing never unmarks; attention
+                // happened). ⌘E's bulk expand deliberately does not come
+                // through here: rendering is not viewing.
                 disclosure(open: sliceDetail.contains(segment.id), selected: selected) {
                     if sliceDetail.contains(segment.id) { sliceDetail.remove(segment.id) }
-                    else { sliceDetail.insert(segment.id) }
+                    else {
+                        sliceDetail.insert(segment.id)
+                        controller.walkVisit(segment.id)
+                    }
                 }
                 HStack {
                     Text(dayTimeText(segment.start))
                     Spacer()
+                    viewedMark(controller.reviewWalk.viewed.contains(segment.id),
+                               selected: selected)
                     Text(durationText(segment.end.timeIntervalSince(segment.start)))
                 }
                 .foregroundStyle(selected ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
@@ -300,10 +433,14 @@ struct ReviewView: View {
             .padding(2)
             .background(selected ? Color.accentColor : .clear,
                         in: RoundedRectangle(cornerRadius: 4))
+            .overlay(currentStroke(controller.reviewWalk.current == segment.id))
             if sliceDetail.contains(segment.id) {
                 sliceDetailView(segment).padding(.leading, 14)
             }
         }
+        // The walk's scroll anchor — a UUID, so it can never collide with
+        // the ForEach's String stack keys.
+        .id(segment.id)
     }
 
     /// Everything held on one slice — full timestamps + duration, the

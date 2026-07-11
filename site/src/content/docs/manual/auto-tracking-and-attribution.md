@@ -130,6 +130,23 @@ can go to a different task than its siblings: select just it and assign.
 It leaves its group immediately, and the buttons re-score over the visits
 that remain.
 
+Prefer to walk the day instead of selecting? The arrow buttons at the top
+of the queue (⌘[ / ⌘], or ← / → while the list has focus) step through
+the visits in time order, in either direction - each visit opens as you
+land on it and gains an eye mark: *viewed*. Clicking a visit or opening
+its detail marks it too; merely scrolling past - or Expand all - never
+does, so a mark always means you actually looked. Dig in as deep as you
+like on the way; assigning or clearing something mid-walk simply handles
+it and the walk carries on. **Confirm viewed** then takes andeye's
+current reading of every marked visit as your decision, in one click and
+one ⌘Z: those slices become your word - they post like any confirmed
+time, and no automatic pass will move them again. There is deliberately
+no confirm-the-whole-day: visits you haven't viewed stay queued
+untouched, so reviewing part of the day and coming back later just works
+(viewed marks last until the app quits). A visit andeye can't yet place
+at all stays queued even when viewed - there is nothing on show to
+confirm.
+
 The assign bar's task buttons are sorted by how likely each task is for
 the selected visits - every highlighted visit counts, whether it was
 picked on its own or as part of a group - most likely first, and a button

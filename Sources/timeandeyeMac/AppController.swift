@@ -2171,6 +2171,92 @@ public final class AppController: ObservableObject {
         assignReview(stack.segments.map(\.id), to: target)
     }
 
+    // MARK: - Walk-through review (Martin's respec — no whole-day
+    // confirm; one click covers exactly the slices actually viewed)
+
+    /// The walk's state (order, cursor, viewed set — Core-checked). Held
+    /// HERE, not in the view, so viewed marks survive closing and reopening
+    /// the drawer within the app run; a relaunch starts a fresh walk (the
+    /// simple honest option — mere attention is never journalled).
+    /// `reloadReview` keeps it pruned to the live queue.
+    @Published public private(set) var reviewWalk = ReviewWalk()
+
+    /// Arrow step (the drawer's ◀ ▶ / ⌘[ ⌘] / bare arrows). The view reads
+    /// `reviewWalk.current` straight after to reveal and scroll to it.
+    public func walkStep(_ direction: ReviewWalk.Direction) {
+        reviewWalk.step(direction)
+    }
+
+    /// Explicit attention on one slice — a click on its row or an opened
+    /// detail disclosure. Bulk gestures (Expand all, whole-group selection)
+    /// deliberately do NOT come here: rendering is not viewing.
+    public func walkVisit(_ id: UUID) {
+        reviewWalk.visit(id)
+    }
+
+    /// ONE click confirms exactly the viewed slices: each takes the
+    /// engine's current best read — the same explain numbers the slice's
+    /// own detail showed — as the user's word. Per-target batches go
+    /// through the existing `assignReview` (teaches, clears the queue
+    /// rows); overlapping unpushed below-bar sessions are stamped
+    /// userAssigned at full certainty so the contradiction pass and retro
+    /// lift treat them as user-decided from here on. The whole confirm is
+    /// ONE ⌘Z (the AI-apply `groupSync` shape). Viewed slices the scorer
+    /// has no answer for stay queued — nothing on show, no word to take —
+    /// and everything unviewed is untouched by construction.
+    public func confirmViewedSlices() {
+        let bar = settings.certaintyAutoPushThreshold
+        let cache = taskCache
+        let attributor = self.attributor
+        // Scored at the SEGMENT's own start time, exactly like the retro
+        // pass and the detail disclosure — the confirm must never disagree
+        // with the numbers the user just looked at.
+        let scoring: (ActivitySignal) -> (target: Target, score: Double)? = { signal in
+            let explanation = attributor.explain(signal, tasks: cache, now: signal.timestamp)
+            guard let chosen = explanation.chosen else { return nil }
+            return (chosen, explanation.chosenScore)
+        }
+        let sessions = ((try? journal.allSessions()) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && !$0.pushedToOP }
+        let plan = ReviewConfirm.plan(viewed: reviewWalk.viewed, pending: pendingReview,
+                                      sessions: sessions, bar: bar, score: scoring)
+        guard !plan.assignments.isEmpty else { return }
+        undoStack.groupSync("confirm \(plan.confirmedCount) reviewed slices") {
+            for assignment in plan.assignments {
+                let stamps = assignment.sessionStamps
+                if !stamps.isEmpty {
+                    // Registered inside the group: one ⌘Z restores the
+                    // stamped sessions AND un-assigns the queue rows.
+                    registerUndo("restore confirmed sessions") { [weak self] in
+                        guard let self else { return }
+                        for prior in stamps {
+                            guard var s = try? self.journal.session(id: prior.id) else { continue }
+                            s.task = prior.task
+                            s.certainty = prior.certainty
+                            s.provenance = prior.priorProvenance
+                            try? self.journal.update(s)
+                        }
+                        self.updateJournalSummary()
+                    }
+                }
+                assignReview(assignment.segmentIDs, to: assignment.target)
+                guard case .task(let ref) = assignment.target else { continue }
+                for prior in stamps {
+                    guard var s = try? journal.session(id: prior.id) else { continue }
+                    s.task = ref
+                    // The user viewed it and said so: their word, full
+                    // certainty (what a live pick sets), push-eligible
+                    // through the normal sync path.
+                    s.certainty = 1.0
+                    s.provenance = ReviewConfirm.stampProvenance
+                    try? journal.update(s)
+                }
+            }
+        }
+        undoCount = undoStack.count
+        updateJournalSummary()
+    }
+
     /// Push the settings' own-address list into the capture engine (never
     /// reported as counterparties). Called at startup and on settings change.
     private func pushOwnEmail() {
@@ -2393,6 +2479,13 @@ public final class AppController: ObservableObject {
         // hiding, instead of their having been dropped for good at flush.
         pendingReview = ((try? journal.pendingReview()) ?? [])
             .meetingReviewFloor(settings.reviewFloorSeconds)
+        // Keep the walk honest against the live queue: slices handled
+        // meanwhile (assigned, refiled, cleared, retro-accepted) leave the
+        // viewed set — handled, not merely viewed — and a cursor whose
+        // slice was handled relocates to the nearest survivor.
+        // pendingReview is already chronological (earliest first), the
+        // walk's left→right axis.
+        reviewWalk.update(order: pendingReview.map(\.id))
         retroDigest = (try? journal.retroDigests(limit: 200)) ?? []
         // Assigns and journal writes change both the slice set and its
         // neighbours — a stale adjacency memo would show yesterday's boosts,

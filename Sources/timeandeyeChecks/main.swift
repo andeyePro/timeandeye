@@ -140,6 +140,8 @@ let suites: [(String, (Checks) -> Void)] = [
     ("ReviewSliceDetail", reviewSliceDetailChecks),
     ("ReviewSelection", reviewSelectionChecks),
     ("ReviewExpansion", reviewExpansionChecks),
+    ("ReviewWalk", reviewWalkChecks),
+    ("ReviewConfirm", reviewConfirmChecks),
     ("AdjacencyBoost", adjacencyBoostChecks),
     ("SiteRecipeExtraction", siteRecipeExtractionChecks),
     ("SiteIdentity", siteIdentityChecks),
