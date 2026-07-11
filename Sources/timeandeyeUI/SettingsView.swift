@@ -248,8 +248,13 @@ struct SettingsView: View {
                 // limbo of journalled-but-never-asked slices) is gone.
                 let threshold = controller.settings.certaintyAutoPushThreshold
                 let backendName = controller.primaryBackendName ?? "OpenProject"
-                Slider(value: $controller.settings.certaintyAutoPushThreshold, in: 0.5...1.01) {
-                    Text("Auto-push to \(backendName)")
+                HStack {
+                    Slider(value: $controller.settings.certaintyAutoPushThreshold, in: 0.5...1.01) {
+                        Text("Auto-push to \(backendName)")
+                    }
+                    numericBox(intBinding($controller.settings.certaintyAutoPushThreshold,
+                                          scale: 100, in: 0.5...1.01))
+                    Text("%").font(.caption).foregroundStyle(.secondary)
                 }
                 Text(threshold > 1.0 ? "Never auto-push — everything queues for your review"
                      : "Sessions ≥ \(Int((threshold * 100).rounded()))% certain post to \(backendName) by themselves; everything below queues for your review")
@@ -260,11 +265,18 @@ struct SettingsView: View {
                 // values (Martin, 2026-07-11).
                 let buffer = controller.settings.switchGraceSeconds
                 let reviewFloor = max(controller.settings.reviewFloorSeconds, buffer)
-                Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
-                        value: Binding(
-                            get: { max(controller.settings.reviewFloorSeconds, buffer) },
-                            set: { controller.settings.reviewFloorSeconds = max($0, buffer) }),
-                        in: buffer...600, step: 15)
+                HStack {
+                    Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
+                            value: Binding(
+                                get: { max(controller.settings.reviewFloorSeconds, buffer) },
+                                set: { controller.settings.reviewFloorSeconds = max($0, buffer) }),
+                            in: buffer...600, step: 15)
+                    numericBox(intBinding(Binding(
+                        get: { max(controller.settings.reviewFloorSeconds, buffer) },
+                        set: { controller.settings.reviewFloorSeconds = max($0, buffer) }),
+                        in: buffer...600))
+                    Text("s").font(.caption).foregroundStyle(.secondary)
+                }
                 HStack(spacing: 4) {
                     Text(reviewFloor <= buffer
                          ? "Every uncertain slice asks for review (visits briefer than the \(Int(buffer))s"
@@ -315,10 +327,15 @@ struct SettingsView: View {
                 Text("Set both to the same colour to disable colour signalling.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
-                Stepper(controller.settings.menuTaskChars == 0
-                        ? "Task name in menu bar: off"
-                        : "Task name in menu bar: \(controller.settings.menuTaskChars) chars",
-                        value: $controller.settings.menuTaskChars, in: 0...20)
+                HStack {
+                    Stepper(controller.settings.menuTaskChars == 0
+                            ? "Task name in menu bar: off"
+                            : "Task name in menu bar: \(controller.settings.menuTaskChars) chars",
+                            value: $controller.settings.menuTaskChars, in: 0...20)
+                    numericBox(Binding(
+                        get: { controller.settings.menuTaskChars },
+                        set: { controller.settings.menuTaskChars = min(max($0, 0), 20) }), width: 44)
+                }
                 Text("The first few letters of what's being tracked appear after the time — \"21m andey\". Set to 0 to hide it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -531,19 +548,32 @@ struct SettingsView: View {
 
     @ViewBuilder private var behaviourSections: some View {
             Section("Behaviour") {
-                Stepper("Switch buffer: \(Int(controller.settings.switchGraceSeconds))s",
-                        value: $controller.settings.switchGraceSeconds, in: 0...120, step: 5)
+                HStack {
+                    Stepper("Switch buffer: \(Int(controller.settings.switchGraceSeconds))s",
+                            value: $controller.settings.switchGraceSeconds, in: 0...120, step: 5)
+                    numericBox(intBinding($controller.settings.switchGraceSeconds, in: 0...120))
+                    Text("s").font(.caption).foregroundStyle(.secondary)
+                }
                 Text("A new window must hold focus this long before the task switches; briefer visits merge into the current task. (Restart to apply.)")
                     .font(.caption).foregroundStyle(.secondary)
-                Stepper("Sleep grace: \(Int(controller.settings.sleepGraceSeconds))s",
-                        value: $controller.settings.sleepGraceSeconds, in: 0...300, step: 15)
+                HStack {
+                    Stepper("Sleep grace: \(Int(controller.settings.sleepGraceSeconds))s",
+                            value: $controller.settings.sleepGraceSeconds, in: 0...300, step: 15)
+                    numericBox(intBinding($controller.settings.sleepGraceSeconds, in: 0...300))
+                    Text("s").font(.caption).foregroundStyle(.secondary)
+                }
                 Text("If the Mac sleeps and wakes within this window, tracking just continues — no stop. A longer sleep stops as of when you stepped away. (Restart to apply.)")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Offer to log time you were away",
                        isOn: $controller.settings.offerIdleBackfill)
-                Stepper("Offer to backfill an idle gap for: \(Int(controller.settings.idleBackfillWindowSeconds / 3600))h",
-                        value: $controller.settings.idleBackfillWindowSeconds, in: 3600...86_400, step: 3600)
-                    .disabled(!controller.settings.offerIdleBackfill)
+                HStack {
+                    Stepper("Offer to backfill an idle gap for: \(Int(controller.settings.idleBackfillWindowSeconds / 3600))h",
+                            value: $controller.settings.idleBackfillWindowSeconds, in: 3600...86_400, step: 3600)
+                    numericBox(intBinding($controller.settings.idleBackfillWindowSeconds,
+                                          scale: 1.0 / 3600, in: 3600...86_400), width: 44)
+                    Text("h").font(.caption).foregroundStyle(.secondary)
+                }
+                .disabled(!controller.settings.offerIdleBackfill)
                 Text("After an idle stop the gap defaults to a break. When on, for this long afterwards the popover offers a one-tap \"count it as <task>\" — no need to open the timeline.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Popover defaults to \"Reassign\" (relabel the running session); off = \"Switch to\" (start fresh). Clicking the task title flips it.",
@@ -891,6 +921,22 @@ struct SettingsView: View {
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
+    }
+
+    /// every numeric control pairs with a typeable number.
+    private func numericBox(_ binding: Binding<Int>, width: CGFloat = 52) -> some View {
+        TextField("", value: binding, format: .number)
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .frame(width: width)
+    }
+
+    private func intBinding(_ value: Binding<Double>, scale: Double = 1,
+                            in range: ClosedRange<Double>) -> Binding<Int> {
+        Binding(get: { Int((value.wrappedValue * scale).rounded()) },
+                set: { value.wrappedValue = min(max(Double($0) / scale,
+                                                    range.lowerBound),
+                                                range.upperBound) })
     }
 
     /// A hex-backed settings colour as a stock-picker binding (
