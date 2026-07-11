@@ -2,6 +2,15 @@
 
 ## Review-fix cluster (2026-07-11)
 
+- [x] Mechanical polish cluster (strings, search index, small UI correctness)
+  — DONE 2026-07-11: SettingsIA titles/keywords brought current (Donut button,
+  Hide banners, walk-figure lock label; "donut" keyword added to the two Time
+  Donut legend links); TimelineView Move-bar gate switched off the deleted
+  `reviewThreshold` to `certaintyAutoPushThreshold`; Local tasks project field
+  binding no longer forces "Personal" into the text (raw optional now, prompt
+  restored); email-order caption only claims the fixed ladder when the stored
+  order actually matches it; iOS/menu-bar "pie"→"donut" wording fixes; eight
+  stale "Change to" comments renamed to "Reassign". Suite 862/0.
 - [x] Sync requarantine double-post race — DONE 2026-07-11: `requarantine`
   read the posting record then wrote the stale `.stuck` snapshot in a separate
   store call; the retry-stuck-kicked async pass (off the main actor) could

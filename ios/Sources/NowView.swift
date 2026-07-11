@@ -116,7 +116,7 @@ struct NowView: View {
                         MiniPieIcon(nodes: miniNodes,
                                     overrides: controller.settings.taskColours)
                     }
-                    .accessibilityLabel("Time pie")
+                    .accessibilityLabel("Time donut")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

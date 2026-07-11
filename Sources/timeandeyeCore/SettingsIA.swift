@@ -126,14 +126,14 @@ public enum SettingsIA {
              ["idle", "backfill", "away", "gap", "break"], .behaviour),
         Item("behaviour.popoverDefault", "Popover defaults to Reassign",
              ["switch to", "relabel", "change mode", "start fresh"], .behaviour),
-        Item("behaviour.timeButton", "Time button opens",
-             ["timeline", "pie", "last viewed", "chart"], .behaviour),
+        Item("behaviour.timeButton", "Donut button opens",
+             ["timeline", "pie", "last viewed", "chart", "donut"], .behaviour),
         Item("behaviour.notifications", "System notifications",
              ["sounds", "banners", "alerts"], .behaviour),
-        Item("behaviour.quietPresenting", "Quiet while presenting",
-             ["screen share", "privacy", "mirror", "mic", "banners"], .behaviour),
-        Item("behaviour.lockOnLeave", "Lock the Mac when I leave my desk",
-             ["lock screen", "leave", "away", "security"], .behaviour),
+        Item("behaviour.quietPresenting", "Hide banners while presenting",
+             ["screen share", "privacy", "mirror", "mic", "banners", "quiet", "hide"], .behaviour),
+        Item("behaviour.lockOnLeave", "Lock the Mac when I continue work away",
+             ["lock screen", "leave desk", "away", "security"], .behaviour),
         Item("behaviour.leisure", "Track leisure to local-only tasks",
              ["non-work", "personal", "stop", "catch-all"], .behaviour),
         // Menu bar
@@ -162,7 +162,7 @@ public enum SettingsIA {
         Item("colours.load", "Load palette",
              ["import", "restore", "colour set", "generic", "color"], .colours),
         Item("colours.manual", "Manually picked colours",
-             ["overrides", "picks", "edit", "revert", "color"], .colours),
+             ["overrides", "picks", "edit", "revert", "color", "donut"], .colours),
         // Local tasks
         Item("localTasks.list", "Local tasks",
              ["personal", "private", "offline", "add task", "project"], .localTasks),
@@ -171,7 +171,7 @@ public enum SettingsIA {
         // Billing
         Item("billing.currency", "Currency symbol",
              ["money", "locale", "billable", "pound", "dollar", "euro",
-              "billing", "currency"], .billing),
+              "billing", "currency", "donut"], .billing),
         Item("billing.mappings", "Billing mappings",
              ["xero", "finance", "map", "invoice", "bills to"], .billing),
         // Email & Calendar

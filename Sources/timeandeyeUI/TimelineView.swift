@@ -211,7 +211,7 @@ struct TimelineView: View {
             guard editing == nil, case .tracking = controller.trackerState else { return }
             liveNow = now
         }
-        // Task flips (e.g. "Change to X") land off the SAME @Published tracker
+        // Task flips (e.g. "Reassign") land off the SAME @Published tracker
         // state the menu bar reads, so the two agree instantly instead of
         // lagging up to 30 s. A full reload — only when no editor is open —
         // re-folds the live slice into any now-contiguous same-task neighbour;
@@ -270,7 +270,7 @@ struct TimelineView: View {
         var list = cachedSessions
         // The live slice grows in real time: advance its trailing edge to the
         // current tick and mirror the just-changed task straight off the
-        // @Published tracker state, so a "Change to X" flips here the instant it
+        // @Published tracker state, so a "Reassign" flips here the instant it
         // flips in the menu bar — with no wait for the next journal reload. Both
         // are pure display remaps of the cache; the journal is never touched.
         if let i = list.firstIndex(where: { $0.id == AppController.liveSessionID }) {
@@ -1631,7 +1631,7 @@ struct TimelineView: View {
                 sums[ref, default: 0] += line.score
             }
             if case .task(let ref)? = explanation.chosen, ref != session.task,
-               explanation.chosenScore >= controller.settings.reviewThreshold {
+               explanation.chosenScore >= controller.settings.certaintyAutoPushThreshold {
                 agreeing[ref, default: 0] += 1
             }
         }

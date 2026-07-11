@@ -1884,7 +1884,7 @@ public final class AppController: ObservableObject {
         tracker.stop(at: Date())
     }
 
-    /// "Change to": relabel the RUNNING session to `ref`, keeping its elapsed
+    /// "Reassign": relabel the RUNNING session to `ref`, keeping its elapsed
     /// time (the mis-attributed time moves to the right task, the clock does
     /// not reset). Distinct from userPicked, which starts a fresh session.
     public func changeCurrentTask(to ref: TaskRef, undoable: Bool = true) {
@@ -1926,7 +1926,7 @@ public final class AppController: ObservableObject {
         tracker.relabelCurrentSession(to: ref)   // re-tags spans; fires onState
         // Durably TEACH this window→task, not just the soft prime relabel does:
         // otherwise the learned model re-wins and the window snaps back to its
-        // old task when focus returns (Martin: "Change to andeye" kept
+        // old task when focus returns (Martin: "Reassign andeye" kept
         // reverting to a 70%-certain KLARC on every return).
         if let signal = tracker.currentFocusSignal {
             attributor.assign(signal, target: .task(ref), tasks: taskCache)
@@ -4240,7 +4240,7 @@ public final class AppController: ObservableObject {
 
     /// "That switch was wrong": fold the current (mis-attributed) running slice
     /// back onto the previous task, keeping the clock — no reset. Same machinery
-    /// as the popover's "Change to".
+    /// as the popover's "Reassign".
     public func revertToLastTask() {
         guard let target = revertTargetTask() else { return }
         changeCurrentTask(to: target.ref)

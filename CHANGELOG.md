@@ -2,6 +2,31 @@
 
 ## 2026-07-11
 
+- [x] **Polish: stale strings, search-index truth, and small UI
+  correctness fixes from the mechanical review cluster.** SettingsIA's ⌘F
+  index still spoke old control names: "Time button opens" → "Donut button
+  opens", "Quiet while presenting" → "Hide banners while presenting", "Lock
+  the Mac when I leave my desk" → "Lock the Mac when I continue work away"
+  (matching the actual walk-figure toggle label) — old wording kept as
+  keywords so existing muscle memory still finds them, and "donut" added to
+  the two Time Donut legend link items (manual colours, currency). The
+  timeline's Move-bar blue-suggestion gate read `settings.reviewThreshold`,
+  whose Settings UI was deleted; it now reads `certaintyAutoPushThreshold`
+  (the setting itself stays decodable for old settings files — no other live
+  read of `reviewThreshold` remains). The Local tasks project field's binding
+  returned "Personal" for a nil project via `projectName`, so the field could
+  never be empty and the greyed "Personal" prompt never showed — it now
+  returns the raw optional as "", restoring the prompt (typing "Personal"
+  still collapses back to nil; the greyed/plain display split is untouched).
+  The email-order caption stated the fixed specificity ladder unconditionally
+  even though old settings files' custom `emailMatchOrder` is still honoured
+  internally — it now says so only when the stored order differs from
+  `EmailMatchLevel.defaultOrder`. iOS `NowView`'s "Time pie" accessibility
+  label and the menu-bar donut's tooltip lead word ("Time" → "Donut") now
+  match both manuals' naming. Comment-only sweep: eight comments across
+  `SessionTracker`, `Settings`, `AppController` and `TimelineView` still
+  quoted the dead "Change to" control name — updated to "Reassign". Suite
+  862/0; release `timeandeyeApp` build clean.
 - [x] **Sync: close the requarantine double-post race with an atomic
   conditional ledger write.** `SyncEngine.requarantine` (the retry-stuck ⌘Z)
   read the posting record, then — in a SEPARATE store call — wrote the stale

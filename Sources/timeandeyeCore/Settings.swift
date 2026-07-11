@@ -105,7 +105,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// client on a shared screen is a privacy leak. Content-free banners
     /// still show.
     public var quietWhilePresenting: Bool
-    /// The popover's default mode when tracking: true = "Change to" (relabel the
+    /// The popover's default mode when tracking: true = "Reassign" (relabel the
     /// running session), false = "Switch to" (start a fresh session). Clicking
     /// the running task title flips to the other mode for that open.
     public var popoverDefaultsToChangeMode: Bool

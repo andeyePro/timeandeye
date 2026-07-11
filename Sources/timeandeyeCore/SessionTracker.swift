@@ -98,7 +98,7 @@ public final class SessionTracker {
     private var currentSignal: ActivitySignal?
 
     /// The window/app currently in focus, so the controller can teach the
-    /// attributor a durable association when the user picks "Change to X".
+    /// attributor a durable association when the user picks "Reassign".
     public var currentFocusSignal: ActivitySignal? { currentSignal }
     private var currentStart: Date?
     private var lastInput: Date?
@@ -274,7 +274,7 @@ public final class SessionTracker {
     /// Relabel the CURRENT in-flight session to `task`: re-tag every
     /// accumulated span (so the elapsed time re-attributes, not just the
     /// future), confirm the association, and hold the clock. Distinct from
-    /// confirm/switch — used by the popover's "Change to" to correct a
+    /// confirm/switch — used by the popover's "Reassign" to correct a
     /// mis-attributed running session without resetting it.
     public func relabelCurrentSession(to task: TaskRef) {
         guard case .tracking = state else { return }

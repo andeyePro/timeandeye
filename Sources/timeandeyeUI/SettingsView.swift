@@ -639,9 +639,10 @@ struct SettingsView: View {
                             .labelsHidden().fixedSize()
                         TextField("", text: $task.name, prompt: Text("Task name"))
                             .textFieldStyle(.plain)
-                        // nil project reads as its effective value, greyed.
+                        // nil project shows empty (prompt greys in "Personal");
+                        // typing "Personal" also collapses back to nil.
                         TextField("", text: Binding(
-                            get: { task.projectName },
+                            get: { task.project ?? "" },
                             set: { $task.project.wrappedValue =
                                 ($0.isEmpty || $0 == "Personal") ? nil : $0 }),
                             prompt: Text("Personal"))
@@ -950,7 +951,9 @@ struct SettingsView: View {
                 // where another order wins, so the reorder controls are gone
                 //. The stored order remains honoured internally
                 // for old settings files.
-                Text("When a message matches several rules, the most specific wins: mail system, then domain, then correspondent, then subject.")
+                Text("When a message matches several rules, the most specific wins: mail system, then domain, then correspondent, then subject."
+                     + (controller.settings.emailMatchOrder == EmailMatchLevel.defaultOrder
+                        ? "" : " (your saved custom order still applies)"))
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Context rules…") {
                     openWindow(id: "rules")
