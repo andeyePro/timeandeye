@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 - [x] **Tracking: gate the pending-switch revert, de-duplicate the reassign
   teach, show window duration, and tell the boost delta honestly.** Four
   fixes from Martin's 2026-07-11 logs. (1) The main bug: a pending switch
