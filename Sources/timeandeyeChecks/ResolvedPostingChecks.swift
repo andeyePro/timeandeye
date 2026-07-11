@@ -503,6 +503,42 @@ func resolvedPostingChecks(_ c: Checks) async {
                      "an in-flight intent row is never clobbered — F12's amnesia window stays closed")
     }
 
+    c.check("atomic conditional set refuses a stale requarantine over a newer inflight/posted row") {
+        // The requarantine ⌘Z used a read-then-write across two store calls,
+        // which a raced sync pass (the retry-stuck kicked) could split by
+        // writing `.inflight` in between — the stale `.stuck` snapshot then
+        // clobbered the in-flight create, hiding it so a later pass re-posted
+        // (duplicate entry). setPostingRecord(_:unlessState:) does the check
+        // and the write in ONE locked critical section. This pins its contract
+        // with the interleaving already applied (inflight/posted present).
+        let store = try makeStore()
+        let sid = UUID()
+        let stale = PostingRecord(sessionID: sid, backendID: "pm-a", state: .stuck,
+                                  lastError: "gave up after 5", attempts: 5, updatedAt: t(100))
+
+        // The raced sync pass has just written the in-flight create intent.
+        try store.setPostingRecord(PostingRecord(sessionID: sid, backendID: "pm-a",
+                                                 state: .inflight, updatedAt: t(200)))
+        try expect(!(try store.setPostingRecord(stale, unlessState: [.posted, .inflight])),
+                   "the in-flight create is refused — no clobber")
+        try expectEq(((try? store.postingRecord(session: sid, backendID: "pm-a")) ?? nil)?.state,
+                     .inflight, "the row stays truthful — the reconcile sweep owns it")
+
+        // A clean slot (no newer row) re-quarantines and reports the write.
+        try store.clearPostingRecord(session: sid, backendID: "pm-a")
+        try expect(try store.setPostingRecord(stale, unlessState: [.posted, .inflight]),
+                   "an empty slot re-quarantines")
+        try expectEq(((try? store.postingRecord(session: sid, backendID: "pm-a")) ?? nil)?.state, .stuck)
+
+        // A completed post is protected too — its entry id must survive.
+        try store.setPostingRecord(PostingRecord(sessionID: sid, backendID: "pm-a",
+                                                 state: .posted, entryID: "e-9", updatedAt: t(300)))
+        try expect(!(try store.setPostingRecord(stale, unlessState: [.posted, .inflight])),
+                   "a posted row is not re-quarantined")
+        try expectEq(((try? store.postingRecord(session: sid, backendID: "pm-a")) ?? nil)?.entryID,
+                     "e-9", "its backend entry id survives")
+    }
+
     await c.check("invoice poll is throttled: back-to-back passes ask the backend once") {
         let store = try makeStore()
         store.clock = makeClock()

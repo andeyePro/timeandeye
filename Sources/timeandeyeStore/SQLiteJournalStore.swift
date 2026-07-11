@@ -467,6 +467,22 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
+    /// Atomic conditional upsert: the read and the write share ONE `locked`
+    /// critical section (NSRecursiveLock, so the inner `postingRecord` /
+    /// `setPostingRecord` re-enter it freely), so no other `locked` write —
+    /// e.g. a raced sync pass writing `.inflight` — can slip between the state
+    /// check and the set. Closes the requarantine double-post race.
+    @discardableResult
+    public func setPostingRecord(_ record: PostingRecord,
+                                 unlessState unless: Set<PostingState>) throws -> Bool {
+        try locked {
+            if let current = try postingRecord(session: record.sessionID, backendID: record.backendID),
+               unless.contains(current.state) { return false }
+            try setPostingRecord(record)
+            return true
+        }
+    }
+
     public func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
         var out: Set<String> = []
         try query("SELECT invoice_ref FROM unlocked_invoices WHERE backend_id = ?",

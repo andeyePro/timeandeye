@@ -2,6 +2,14 @@
 
 ## Review-fix cluster (2026-07-11)
 
+- [x] Sync requarantine double-post race — DONE 2026-07-11: `requarantine`
+  read the posting record then wrote the stale `.stuck` snapshot in a separate
+  store call; the retry-stuck-kicked async pass (off the main actor) could
+  write `.inflight` in the gap, get clobbered, and later re-post (duplicate).
+  New atomic `JournalStore.setPostingRecord(_:unlessState:)` does check+write
+  in one critical section (SQLite holds its lock across both); requarantine
+  uses it. A create already on the wire stays truthful (reconcile owns it);
+  undo is a no-op for that row. New ResolvedPosting check.
 - [x] Billing mark undo window — DONE 2026-07-11: `setSessionBillable` awaited
   `syncIfEnabled()` inside the gesture, so an entry mark (which bypasses the
   `since` gate) posted before ⌘Z could fire — a mis-click stuck on the books,

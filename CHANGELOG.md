@@ -2,6 +2,22 @@
 
 ## 2026-07-11
 
+- [x] **Sync: close the requarantine double-post race with an atomic
+  conditional ledger write.** `SyncEngine.requarantine` (the retry-stuck ⌘Z)
+  read the posting record, then — in a SEPARATE store call — wrote the stale
+  `.stuck` snapshot back unless the read showed `.posted`/`.inflight`. Because
+  `SyncEngine` is a plain class, its async posting pass runs OFF the main
+  actor while the synchronous requarantine runs ON it, so the freed retry
+  could write `.inflight` in the gap between that read and write — the stale
+  `.stuck` then clobbered the in-flight create, hiding it, and a later pass
+  re-posted the same time (duplicate backend entry). New `JournalStore`
+  primitive `setPostingRecord(_:unlessState:)` does the state check and the
+  write in ONE critical section (the SQLite store holds its `NSRecursiveLock`
+  across both; a non-atomic default covers the single-threaded in-memory
+  store/mocks). requarantine now uses it, so a create already on the wire
+  stays truthful and the reconcile sweep owns it — the undo is a no-op for
+  that row rather than re-opening the F12 amnesia window. New ResolvedPosting
+  check pins the primitive with the interleaving pre-applied. Suite 862/0.
 - [x] **Billing: a mis-clicked billable mark now has a real undo window.** A
   timeline entry-mark bypasses the prospective-only `since` gate (marking the
   entry IS the consent), so it posts to the finance backend the moment a sync

@@ -294,10 +294,13 @@ public final class SyncEngine {
     /// `.skipped` reject) re-quarantines cleanly.
     public func requarantine(_ rows: [PostingRecord]) {
         for row in rows {
-            if let current = ((try? journal.postingRecord(
-                session: row.sessionID, backendID: row.backendID)) ?? nil),
-                current.state == .posted || current.state == .inflight { continue }
-            try? journal.setPostingRecord(row)
+            // Atomic check-and-set: the store holds its lock across the state
+            // read and the write, so a raced sync pass (the retry-stuck kicked)
+            // writing `.inflight`/`.posted` can't be clobbered by this stale
+            // `.stuck` snapshot. A create already on the wire stays truthful —
+            // the reconcile sweep then owns it — and the undo is a no-op for
+            // that row rather than re-opening the F12 amnesia window.
+            try? journal.setPostingRecord(row, unlessState: [.posted, .inflight])
         }
     }
 

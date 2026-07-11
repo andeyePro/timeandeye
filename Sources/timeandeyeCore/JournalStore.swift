@@ -45,6 +45,17 @@ public protocol JournalStore {
     /// Upsert keyed by (sessionID, backendID) — the idempotency key. A retry
     /// can only ever update its own row.
     func setPostingRecord(_ record: PostingRecord) throws
+    /// Atomic conditional upsert: write `record` ONLY when the current row's
+    /// state is not one of `unless`, with the read and the write in ONE
+    /// critical section. Returns whether it wrote. This closes the
+    /// requarantine ⌘Z race — a plain read-then-`setPostingRecord` can be
+    /// split by a concurrent `.inflight` write (the sync pass a retry-stuck
+    /// kicked), letting a stale `.stuck` snapshot clobber an in-flight create
+    /// and hide it → a later pass re-posts → duplicate backend entry. Default
+    /// is the non-atomic fallback (fine for the single-threaded in-memory
+    /// store/mocks); the SQLite store overrides to hold its lock across both.
+    @discardableResult
+    func setPostingRecord(_ record: PostingRecord, unlessState unless: Set<PostingState>) throws -> Bool
     /// Remove one (session, backend) row so the session re-enters that
     /// backend's queue — the ledger analogue of resetting `pushedToOP` after
     /// a timeline delete/reassign.
@@ -180,6 +191,17 @@ public extension JournalStore {
     /// implement it (or a check double) keeps compiling and behaves as
     /// "nothing to reclaim".
     func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] { [] }
+
+    /// Default conditional set: non-atomic read-then-write. Correct on a
+    /// single-threaded store; the SQLite replica overrides to hold its lock
+    /// across the read and the write so a concurrent mutation cannot split it.
+    @discardableResult
+    func setPostingRecord(_ record: PostingRecord, unlessState unless: Set<PostingState>) throws -> Bool {
+        if let current = try postingRecord(session: record.sessionID, backendID: record.backendID),
+           unless.contains(current.state) { return false }
+        try setPostingRecord(record)
+        return true
+    }
 }
 
 /// 30-day retention for retro-acceptance digests — a receipt trail, not an
