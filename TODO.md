@@ -799,39 +799,6 @@ and recorded rather than fixed blind:
   accumulate windows similar to the current one; a paired [-similar] steps
   the accumulation back so you can undo over-pressing. After [+all].
 
- — from Pro coordination (2026-07-07, website side owns)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
