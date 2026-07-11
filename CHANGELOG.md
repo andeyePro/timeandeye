@@ -77,20 +77,7 @@
   undo payload gained `priorPushedToOP` (optional, lenient-decode). Three
   ContradictionRefile checks pin the certainty rule, the sever decision, and
   the posted-slice apply+undo round-trip. Suite 860/0.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- [x] **Housekeeping ahead of the public flip.**
 - [x] **Tracking: gate the pending-switch revert, de-duplicate the reassign
   teach, show window duration, and tell the boost delta honestly.** Four
   fixes from Martin's 2026-07-11 logs. (1) The main bug: a pending switch
@@ -314,9 +301,7 @@
   honour the user's project picks (`rederiveAll` anchor-hue overrides,
   check-covered); "Manually picked colours" manager with per-row revert +
   revert-all. Review-floor stepper bottoms at the Switch Buffer. ⌘Z
-
-
-
+  explanations swept from all UI copy.
 
 - [x] **Colours settings category — re-derive from scratch + colour sets.**
   preserved pre-engine task colours share no family (each was an
@@ -403,21 +388,6 @@
   stay indexed so search lands on the right category even while hidden.
   Manuals updated (site settings page restructured to the category IA;
   MANUAL.md lead-in). Approved at his. Suite 781/0.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 - [x] **Why-panel truth: BECAUSE anchors on the recorded decision, never on
   a rule learned later.** Martin: "The BECAUSE 'remembered from a past

@@ -29,11 +29,10 @@ OP instances).
 3. **Xero Core tier connection count** – the published material confirms
    Starter = 5 connections free and Core ≈ US$22/month with 10 GB egress,
    but not how many connections Core includes; the number sits behind the
-   developer-dashboard login 
-   
-4. **andeyePro pricing model** – 
-   Xero's API fees are recurring per-connection costs from March 2026 and
-   connector maintenance is ongoing (see the costs section). Confirm.
+   developer-dashboard login.
+4. **Xero connector cost is recurring** – Xero's API fees are
+   per-connection costs from March 2026 and connector maintenance is
+   ongoing (see the costs section).
 5. **Customer-supplied Xero app escape hatch** – Xero's "internal
    innovation" use stays free, so a customer who registers their own Xero
    app and pastes its credentials into andeye costs andeye nothing. In
@@ -227,7 +226,6 @@ Response: the ledger and routing are backend-id-keyed from day one, so the
 later lift is confined to TaskRef scoping plus UI; and one instance per
 company (two Macs / two user accounts) is a workable interim for the one
 known multi-org user.
-
 
 
 

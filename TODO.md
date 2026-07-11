@@ -35,13 +35,7 @@
   (`max` → re-derived `finding.score`). Decision factored to Core
   (`ContradictionRefile.apply`); `RetroDigest.PriorSessionState` gained
   `priorPushedToOP`; 3 new checks.
-
-
-
-
-
-
-
+- [x] Housekeeping ahead of the public flip — DONE 2026-07-11.
 
 ## Tracking fixes (2026-07-11 log cluster)
 
@@ -281,9 +275,8 @@ and recorded rather than fixed blind:
 ## Open
 
 - [ ] Re-shoot the deleted review-drawer screenshot with mocked data.
-  `an old screenshot` was deleted in the pre-public
-  privacy scrub (it showed a third party's personal Gmail address and
-  Martin's personal task list). Nothing referenced it, but a replacement
+  
+  longer in the tree. Nothing referenced it, but a replacement
   capture with fictional fixture data (harborlane.example-style) is wanted
   for the record.
 - [x] Journal the decision SOURCE alongside task+certainty — DONE
@@ -656,26 +649,6 @@ and recorded rather than fixed blind:
   free/paid split is by SPM MODULE, not by repo: if Pro backends go
   closed-source, they move to a private `andeyePro` package the release
   builds depend on — the TaskBackend seam makes that a clean lift.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 - [ ] Safari tab URLs — CODE LANDED 2026-07-08 overnight ("URL of front
   document" branch beside the Chrome-like verb; Opera was already in the
   chrome-like set). HARDWARE-VERIFY pending: first Safari focus should fire
@@ -876,11 +849,6 @@ and recorded rather than fixed blind:
 - [ ] [+similar] button (later, non-critical) — pressable repeatedly to
   accumulate windows similar to the current one; a paired [-similar] steps
   the accumulation back so you can undo over-pressing. After [+all].
-
-
-
-
-
 
 ## Comment-loss edge (2026-07-07, pre-existing, low priority)
 
