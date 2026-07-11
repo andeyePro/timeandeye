@@ -2,6 +2,22 @@
 
 ## 2026-07-11
 
+- [x] **Palettes — colour sets renamed, generic form added.**
+  User-facing "colour set" became "palette" everywhere (Settings section,
+  buttons, ⌘F rows, manuals); `ColourSet` grew into `Palette` (typealias
+  kept) with TWO forms in ONE file format. Full = the old shape verbatim
+  (same coding keys both ways, old files load, new full files open in old
+  builds; literal-fixture check proves the on-disk contract). Generic =
+  ordered colours only, no task/project names: loading seeds the automatic
+  pool via `rederiveAll(paletteColours:)` — colour i becomes project i's
+  anchor in first-seen order (swatch hex verbatim, its OKLCH hue the
+  family's neighbourhood; achromatic seeds keep the swatch but let the
+  engine pick the hue; projects past the palette's end allocate normally,
+  spread away from the seeds), user picks untouched and still steering
+  their family, one ⌘Z restores. "Save generic palette…" derives the file
+  from the current effective project colours in first-seen order. 12 new
+  checks (ColourPalette + a SettingsIA rename/rank check).
+
 - [x] **Mis-filed slices get acted on (his design, approved).** The
   why-panel's "today's rules would say" line grew hands:
   `ContradictionRefile` (pure, 6 checks) re-derives recent slices against

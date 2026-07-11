@@ -180,21 +180,38 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
 
 // MARK: - The engine
 
-/// A saved colour set (Settings ▸ Colours — Martin, 2026-07-11): the user's
-/// explicit picks PLUS the engine's records — everything that determines
-/// what renders, so loading a set reproduces the exact look, automatic
-/// behaviour included.
-public struct ColourSet: Codable, Equatable, Sendable {
+/// A saved palette (Settings ▸ Colours — Martin, 2026-07-11). ONE file
+/// format, two forms:
+///
+/// - FULL: the user's explicit picks PLUS the engine's records — everything
+///   that determines what renders, so loading reproduces the exact look,
+///   automatic behaviour included. Encodes with exactly the keys the
+///   pre-rename builds wrote (this type was born "ColourSet"), so files
+///   saved by those builds load unchanged and files saved today still open
+///   in them.
+/// - GENERIC: an ordered list of colours and nothing else — no project or
+///   task names. Loading one doesn't restore specific picks; it seeds the
+///   automatic assignment pool instead (`rederiveAll(paletteColours:)`):
+///   the colours become project anchors in first-seen order and every
+///   family re-shades around them.
+public struct Palette: Codable, Equatable, Sendable {
     public var version: Int
     /// settings.taskColours — the user's per-task picks (hex by storageKey).
     public var taskOverrides: [String: String]
     /// settings.projectColours — the user's project-swatch picks.
     public var projectOverrides: [String: String]
-    /// The engine store as it stood when saved.
-    public var assignments: ColourAssignments
+    /// The engine store as it stood when saved. nil ⇒ the generic form.
+    public var assignments: ColourAssignments?
+    /// The generic form's ordered colours (hex). nil in the full form.
+    public var colours: [String]?
 
     public static let currentVersion = 1
 
+    /// Generic = carries colours only; loading seeds rather than restores.
+    public var isGeneric: Bool { assignments == nil }
+
+    /// The full form (parameter shape unchanged from the ColourSet days —
+    /// external callers keep compiling).
     public init(taskOverrides: [String: String],
                 projectOverrides: [String: String],
                 assignments: ColourAssignments) {
@@ -202,8 +219,62 @@ public struct ColourSet: Codable, Equatable, Sendable {
         self.taskOverrides = taskOverrides
         self.projectOverrides = projectOverrides
         self.assignments = assignments
+        self.colours = nil
+    }
+
+    /// The generic form.
+    public init(colours: [String]) {
+        self.version = Self.currentVersion
+        self.taskOverrides = [:]
+        self.projectOverrides = [:]
+        self.assignments = nil
+        self.colours = colours
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version, taskOverrides, projectOverrides, assignments, colours
+    }
+
+    /// Lenient decode: every field optional so both forms — and every file
+    /// an older build ever wrote — parse; a file with NEITHER an engine
+    /// store NOR a colour list is not a palette at all and is refused
+    /// (better a clean "couldn't read" than silently loading emptiness).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        taskOverrides = try c.decodeIfPresent(
+            [String: String].self, forKey: .taskOverrides) ?? [:]
+        projectOverrides = try c.decodeIfPresent(
+            [String: String].self, forKey: .projectOverrides) ?? [:]
+        assignments = try c.decodeIfPresent(
+            ColourAssignments.self, forKey: .assignments)
+        colours = try c.decodeIfPresent([String].self, forKey: .colours)
+        guard assignments != nil || colours != nil else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "neither a full nor a generic palette"))
+        }
+    }
+
+    /// Encode each form with only its own keys: full files are
+    /// byte-compatible with the pre-rename ColourSet shape; generic files
+    /// honestly contain nothing but the colours.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(version, forKey: .version)
+        if let assignments {
+            try c.encode(taskOverrides, forKey: .taskOverrides)
+            try c.encode(projectOverrides, forKey: .projectOverrides)
+            try c.encode(assignments, forKey: .assignments)
+        } else {
+            try c.encode(colours ?? [], forKey: .colours)
+        }
     }
 }
+
+/// Source compatibility for external callers (andeyePro) from before the
+/// user-facing rename to "palettes".
+public typealias ColourSet = Palette
 
 public enum ColourEngine {
 
@@ -321,9 +392,20 @@ public enum ColourEngine {
     /// project key (see `overrideAnchorHue`) — a re-derived family shades
     /// around the colour the USER chose for the project, not the engine's
     /// own anchor (Martin, 2026-07-11: re-derive ignored his project pick).
+    /// `paletteColours` (generic palettes, Martin's): ordered hex
+    /// colours that SEED the anchors — colour i becomes project i's anchor
+    /// (first-seen order): its swatch hex verbatim (like a migrated legacy
+    /// colour, it is an explicit human choice the engine must not
+    /// "improve"), its OKLCH hue the neighbourhood the tasks shade. An
+    /// achromatic entry keeps its swatch but steers no hue (a grey's hue is
+    /// quantisation noise — the engine allocates the neighbourhood
+    /// instead), an undecodable entry is skipped, and projects past the
+    /// palette's end allocate normally — the argmax spreads them away from
+    /// the seeded hues automatically.
     public static func rederiveAll(
         groups: [(projectKey: String, memberTaskKeys: [String])],
         anchorHueOverrides: [String: Double] = [:],
+        paletteColours: [String] = [],
         in store: ColourAssignments,
         at now: Date = Date()) -> ColourAssignments {
         var rebuilt = store
@@ -339,9 +421,19 @@ public enum ColourEngine {
             rebuilt.projects[group.projectKey] = nil
             for key in group.memberTaskKeys { rebuilt.tasks[key] = nil }
         }
+        var seeds = paletteColours.compactMap { RGB255(hex: $0) }.makeIterator()
         for group in ordered {
-            _ = projectRecord(group.projectKey, in: &rebuilt,
-                              at: projectSeen(group.projectKey))
+            if let seed = seeds.next() {
+                let c = oklch(from: seed)
+                let hue = c.C >= anchorHueChromaFloor
+                    ? c.H : allocateAnchor(in: rebuilt).hue
+                rebuilt.projects[group.projectKey] = ColourAssignments.ProjectRecord(
+                    hue: hue, bandL: c.L, hex: seed.hex,
+                    firstSeen: projectSeen(group.projectKey), provenance: "auto")
+            } else {
+                _ = projectRecord(group.projectKey, in: &rebuilt,
+                                  at: projectSeen(group.projectKey))
+            }
             let members = group.memberTaskKeys.sorted {
                 (taskSeen($0), $0) < (taskSeen($1), $1)
             }

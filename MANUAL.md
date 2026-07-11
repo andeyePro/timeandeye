@@ -378,9 +378,11 @@ to its category.
 Colours: **Re-derive all automatic colours** rebuilds the whole automatic
 palette cohesively (every project a distinct anchor, its tasks shading
 around it - and around YOUR colour where you've picked one for a project);
-**colour sets** save the complete look to a JSON file and load it back
-later; **Manually picked colours** lists every hand-picked colour with an
-inline editor, per-row revert and a revert-all. A project's swatch popover
+**palettes** save colours to a JSON file and load them back - a full
+palette captures the complete look, task names included, while a generic
+palette is just the colours and loading one re-derives the automatic
+colours around it; **Manually picked colours** lists every hand-picked
+colour with an inline editor, per-row revert and a revert-all. A project's swatch popover
 in the Time Spent legend also offers **Shade tasks around this**.
 
 - **Comments** - whether a note goes to the time entry, the task's feed, or both.

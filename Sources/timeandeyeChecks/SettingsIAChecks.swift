@@ -58,6 +58,19 @@ func settingsIAChecks(_ c: Checks) {
                      "title matches should lead")
     }
 
+    c.check("palette rows: title search finds all three, old name still routes") {
+        // The save/load rows wear "palette" in their visible labels; a user
+        // who remembers the earlier "colour set" wording must land on the
+        // same rows via keywords.
+        let ids = SettingsIA.search("palette").map(\.id)
+        for id in ["colours.save", "colours.saveGeneric", "colours.load"] {
+            try expect(ids.contains(id), "palette should find \(id)")
+        }
+        let old = SettingsIA.search("colour set").map(\.id)
+        try expect(old.contains("colours.save"), "colour set should still find save")
+        try expect(old.contains("colours.load"), "colour set should still find load")
+    }
+
     c.check("multi-token queries require every token") {
         let hits = SettingsIA.search("review floor")
         try expectEq(hits.map(\.id), ["tracking.floor"],

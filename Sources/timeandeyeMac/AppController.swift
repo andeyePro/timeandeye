@@ -3720,21 +3720,58 @@ public final class AppController: ObservableObject {
         objectWillChange.send()
     }
 
-    /// The complete current colour state, for Save colour set….
-    public func currentColourSet() -> ColourSet {
-        ColourSet(taskOverrides: settings.taskColours,
-                  projectOverrides: settings.projectColours,
-                  assignments: colourAssignments)
+    /// The complete current colour state, for Save palette….
+    public func currentPalette() -> Palette {
+        Palette(taskOverrides: settings.taskColours,
+                projectOverrides: settings.projectColours,
+                assignments: colourAssignments)
     }
 
-    /// Replace the whole colour state with a saved set (Load colour set…).
-    /// Undoable as one step — both the overrides and the engine store swap
-    /// back together.
-    public func applyColourSet(_ set: ColourSet) {
+    /// The current look as a GENERIC palette (Save generic palette…): the
+    /// effective project colours — your pick where you made one, else the
+    /// automatic anchor swatch — in first-seen order, and nothing else. No
+    /// task or project names leave the machine, so the file is shareable
+    /// and loads meaningfully over anyone's tasks.
+    public func currentGenericPalette() -> Palette {
+        let colours = colourAssignments.projects
+            .sorted { ($0.value.firstSeen, $0.key) < ($1.value.firstSeen, $1.key) }
+            .map { settings.projectColours[$0.key] ?? $0.value.hex }
+        return Palette(colours: colours)
+    }
+
+    /// Replace colour state with a saved palette (Load palette…), undoable
+    /// as one step. A FULL palette swaps in everything it captured —
+    /// overrides and engine store together. A GENERIC palette restores no
+    /// picks: it re-derives the automatic colours with its colours seeding
+    /// the project anchors (first-seen order), leaving the user's own picks
+    /// untouched — same contract as Re-derive.
+    public func applyPalette(_ palette: Palette) {
+        guard let assignments = palette.assignments else {
+            let before = colourAssignments
+            var groups: [String: [String]] = [:]
+            for task in taskCache {
+                guard let key = projectKey(for: task) else { continue }
+                groups[key, default: []].append(task.ref.storageKey)
+            }
+            registerUndo("load palette") { [weak self] in
+                guard let self else { return }
+                self.colourAssignments = before
+                self.scheduleColoursSave()
+                self.objectWillChange.send()
+            }
+            colourAssignments = ColourEngine.rederiveAll(
+                groups: groups.map { (projectKey: $0.key, memberTaskKeys: $0.value) },
+                anchorHueOverrides: projectAnchorHueOverrides(),
+                paletteColours: palette.colours ?? [],
+                in: colourAssignments)
+            scheduleColoursSave()
+            objectWillChange.send()
+            return
+        }
         let beforeAssignments = colourAssignments
         let beforeTaskOverrides = settings.taskColours
         let beforeProjectOverrides = settings.projectColours
-        registerUndo("load colour set") { [weak self] in
+        registerUndo("load palette") { [weak self] in
             guard let self else { return }
             self.colourAssignments = beforeAssignments
             self.settings.taskColours = beforeTaskOverrides
@@ -3742,9 +3779,9 @@ public final class AppController: ObservableObject {
             self.scheduleColoursSave()
             self.objectWillChange.send()
         }
-        colourAssignments = set.assignments
-        settings.taskColours = set.taskOverrides
-        settings.projectColours = set.projectOverrides
+        colourAssignments = assignments
+        settings.taskColours = palette.taskOverrides
+        settings.projectColours = palette.projectOverrides
         scheduleColoursSave()
         objectWillChange.send()
     }

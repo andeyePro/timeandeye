@@ -459,13 +459,13 @@ struct SettingsView: View {
             }
     }
 
-    @State private var colourSetNote: String?
+    @State private var paletteNote: String?
 
     @ViewBuilder private var coloursSections: some View {
             Section("Automatic colours") {
                 Button("Re-derive all automatic colours") {
                     controller.rederiveAutomaticColours()
-                    colourSetNote = nil
+                    paletteNote = nil
                 }
                 Text("Rebuilds the whole automatic palette cohesively: every project gets a distinct anchor colour and its tasks shade around it. Colours you picked yourself are untouched.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -489,15 +489,22 @@ struct SettingsView: View {
                     .buttonStyle(.link).font(.caption)
                 }
             }
-            Section("Colour sets") {
+            Section("Palettes") {
                 HStack {
-                    Button("Save colour set…") { saveColourSet() }
-                    Button("Load colour set…") { loadColourSet() }
-                    if let note = colourSetNote {
+                    Button("Save palette…") {
+                        savePalette(controller.currentPalette(),
+                                    suggestedName: "timeandeye-palette.json")
+                    }
+                    Button("Save generic palette…") {
+                        savePalette(controller.currentGenericPalette(),
+                                    suggestedName: "timeandeye-generic-palette.json")
+                    }
+                    Button("Load palette…") { loadPalette() }
+                    if let note = paletteNote {
                         Text(note).font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Text("A set is a JSON file capturing every colour — your own picks and the automatic assignments — so you can keep looks and swap between them. Loading replaces everything.")
+                Text("A palette is a JSON file of colours. The full form captures every colour with its task — your picks and the automatic assignments — so loading restores this exact look. A generic palette is just the colours, no names: load one over any tasks and the automatic colours re-derive around it. Load reads either form.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Manually picked colours") {
@@ -579,33 +586,34 @@ struct SettingsView: View {
         }
     }
 
-    private func saveColourSet() {
+    private func savePalette(_ palette: Palette, suggestedName: String) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "timeandeye-colours.json"
+        panel.nameFieldStringValue = suggestedName
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(controller.currentColourSet()).write(to: url)
-            colourSetNote = "Saved"
+            try encoder.encode(palette).write(to: url)
+            paletteNote = "Saved"
         } catch {
-            colourSetNote = "Save failed: \(error.localizedDescription)"
+            paletteNote = "Save failed: \(error.localizedDescription)"
         }
     }
 
-    private func loadColourSet() {
+    private func loadPalette() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let set = try JSONDecoder().decode(ColourSet.self,
-                                               from: Data(contentsOf: url))
-            controller.applyColourSet(set)
-            colourSetNote = "Loaded"
+            let palette = try JSONDecoder().decode(Palette.self,
+                                                   from: Data(contentsOf: url))
+            controller.applyPalette(palette)
+            paletteNote = palette.isGeneric
+                ? "Loaded — automatic colours re-derived around it" : "Loaded"
         } catch {
-            colourSetNote = "Couldn't read that file as a colour set"
+            paletteNote = "Couldn't read that file as a palette"
         }
     }
 

@@ -155,6 +155,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("LiveAdjacency", liveAdjacencyChecks),
     ("Provenance", provenanceChecks),
     ("ColourRederive", colourRederiveChecks),
+    ("ColourPalette", colourPaletteChecks),
     ("ContradictionRefile", contradictionRefileChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [

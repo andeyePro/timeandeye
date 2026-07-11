@@ -44,9 +44,13 @@ its category.
   Colours you picked yourself are untouched. Edit any single colour from the
   Time Spent legend (click its swatch) or the timeline editor; a project's
   swatch popover also offers **Shade tasks around this**.
-- **Colour sets** - save the complete current look (your picks plus the
-  automatic assignments) to a JSON file, and load one back later - loading
-  replaces everything.
+- **Palettes** - save colours to a JSON file and load them back. **Save
+  palette** captures the complete current look (your picks plus the
+  automatic assignments, task names included); loading it restores that
+  look exactly. **Save generic palette** keeps just the colours, no names -
+  loading one re-derives the automatic colours around it, so a favourite
+  scheme can colour any set of tasks, and your own picks stay. **Load
+  palette** reads either form; one undo restores what was there.
 - **Manually picked colours** - every hand-picked colour in one collapsed
   list, each with an inline editor and a revert to automatic, plus a
   revert-all.

@@ -1,11 +1,12 @@
 import Foundation
 import timeandeyeCore
 
-/// Re-derive from scratch + colour sets (Settings ▸ Colours — Martin,
+/// Re-derive from scratch + full palettes (Settings ▸ Colours — Martin,
 /// 2026-07-11): the cure for preserved pre-engine hues that share no family.
 /// These prove the rebuild is deterministic, produces cohesive per-project
 /// families, preserves what it wasn't asked to touch, and that a saved
-/// colour set round-trips exactly.
+/// full palette round-trips exactly. (Generic palettes and old-file
+/// compatibility live in ColourPaletteChecks.)
 func colourRederiveChecks(_ c: Checks) {
     let t0 = Date(timeIntervalSince1970: 1_750_000_000)
 
@@ -85,12 +86,12 @@ func colourRederiveChecks(_ c: Checks) {
         }
     }
 
-    c.check("colour set round-trips exactly through JSON") {
-        let set = ColourSet(taskOverrides: ["p1/a": "#ABCDEF"],
-                            projectOverrides: ["p1": "#012345"],
-                            assignments: legacyStore())
-        let data = try JSONEncoder().encode(set)
-        let decoded = try JSONDecoder().decode(ColourSet.self, from: data)
-        try expectEq(decoded, set)
+    c.check("full palette round-trips exactly through JSON") {
+        let palette = Palette(taskOverrides: ["p1/a": "#ABCDEF"],
+                              projectOverrides: ["p1": "#012345"],
+                              assignments: legacyStore())
+        let data = try JSONEncoder().encode(palette)
+        let decoded = try JSONDecoder().decode(Palette.self, from: data)
+        try expectEq(decoded, palette)
     }
 }
