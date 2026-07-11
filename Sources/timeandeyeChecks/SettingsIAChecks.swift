@@ -82,9 +82,11 @@ func settingsIAChecks(_ c: Checks) {
 
     c.check("category sidebar order is stable and complete") {
         // Declaration order IS the sidebar order; a re-sort or a dropped case
-        // would silently reshuffle the window.
-        try expectEq(SettingsIA.Category.allCases.first, .backend)
+        // would silently reshuffle the window. Tracking leads (Martin,
+        // 2026-07-11: the backend connection is not the front page).
+        try expectEq(SettingsIA.Category.allCases.first, .tracking)
         try expectEq(SettingsIA.Category.allCases.last, .about)
         try expectEq(SettingsIA.Category.allCases.count, 10)
+        try expectEq(SettingsIA.Category.backend.title, "Connections")
     }
 }

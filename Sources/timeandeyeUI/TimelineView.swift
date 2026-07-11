@@ -1201,15 +1201,24 @@ struct TimelineView: View {
                         .background(.green.opacity(0.3), in: Capsule())
                 }
                 Spacer()
-                Button { editing = nil } label: { Image(systemName: "xmark.circle") }
-                    .keyboardShortcut(.cancelAction)   // Esc cancels
-                    .buttonStyle(.plain)
-                    .help("Close the editor without saving (esc)")
+                // Colour controls sit together, the ✕ apart on the far right
+                // — the old ✕-beside-swatch read as "reset colour" when it
+                // was really "close without saving" (Martin, 2026-07-11).
                 ColorPicker("", selection: Binding(
                     get: { Color(nsColor: controller.colour(for: editTask ?? session.task)) },
                     set: { controller.setColour(NSColor($0), for: editTask ?? session.task) }))
                     .labelsHidden().frame(width: 28)
                     .help("Task colour")
+                Button { controller.resetColour(for: editTask ?? session.task) } label: {
+                    Image(systemName: "arrow.uturn.backward.circle")
+                }
+                    .buttonStyle(.plain)
+                    .help("Reset this task's colour to automatic")
+                Spacer().frame(width: 8)
+                Button { editing = nil } label: { Image(systemName: "xmark.circle") }
+                    .keyboardShortcut(.cancelAction)   // Esc cancels
+                    .buttonStyle(.plain)
+                    .help("Close the editor without saving (esc)")
             }
             HStack(spacing: 16) {
                 DatePicker("Start", selection: $editStart, displayedComponents: .hourAndMinute)

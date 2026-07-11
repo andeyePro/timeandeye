@@ -75,8 +75,9 @@ struct EvidenceCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if host == .timeline {
-                Text("\(signal.app)\(signal.windowTitle.map { " – \($0)" } ?? "")")
+                Text("\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")")
                     .font(.caption).bold().lineLimit(1)
+                    .padding(.trailing, 18)   // clear of the copy button
             }
             becauseSection
             seesSection
@@ -97,6 +98,53 @@ struct EvidenceCardView: View {
         .background(.quaternary.opacity(host == .popover ? 0.5 : 1),
                     in: RoundedRectangle(cornerRadius: 6))
         .textSelection(.enabled)
+        // Drag-selection across the card is unreliable (grouped rows swallow
+        // the drag, one line at a time was all Martin could grab — 2026-07-11)
+        // so the copy button is the guaranteed verbatim path for reports.
+        .overlay(alignment: .topTrailing) { copyCardButton.padding(5) }
+    }
+
+    @State private var cardCopied = false
+    private var copyCardButton: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(cardText, forType: .string)
+            cardCopied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { cardCopied = false }
+        } label: {
+            Image(systemName: cardCopied ? "checkmark" : "doc.on.doc").font(.caption2)
+        }
+        .buttonStyle(.borderless)
+        .help("Copy the whole card as text")
+    }
+
+    /// Plain-text rendering of everything the card shows, in display order.
+    private var cardText: String {
+        var lines = ["\(signal.app)\(cleanTitle.map { " – \($0)" } ?? "")"]
+        lines.append("BECAUSE \(anchoredBecauseLabel)")
+        if recordContradicted {
+            lines.append("today's rules would say: \(becauseLabel) – not what decided this slice")
+        }
+        if let prior = explanation.priorToCorrection {
+            lines.append("before your correction: \(priorLabel(prior))")
+        }
+        if let rule = explanation.matchedEmailRule { lines.append(ruleProvenance(rule)) }
+        if let rule = explanation.matchedSiteRule { lines.append(siteRuleProvenance(rule)) }
+        if let pin = explanation.matchedPin { lines.append("pinned: \(pin.rule.shortLabel)") }
+        if let surface = explanation.matchedSurface { lines.append(surfaceProvenance(surface)) }
+        if let u = unlearn {
+            lines.append("\(forgetLabel(u)) → would then fall back to: \(fallbackText(u))")
+        }
+        lines.append("sees: " + seesLine)
+        let items = candidateItems
+        if !items.isEmpty { lines.append("candidates: " + items.joined(separator: " · ")) }
+        return lines.joined(separator: "\n")
+    }
+
+    /// A captured-but-empty window title renders as nothing, not a dangling
+    /// "App – " (Martin's 2026-07-11 card had exactly that from Chrome).
+    private var cleanTitle: String? {
+        signal.windowTitle.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     // MARK: - BECAUSE
@@ -170,7 +218,10 @@ struct EvidenceCardView: View {
                             Text(forgetFallbackLabel(fu)).font(.caption2)
                         }
                         .buttonStyle(.borderless)
-                        .foregroundStyle(.orange)
+                        // Same grey as its sibling forget control — the
+                        // orange accent read as an alert amid an otherwise
+                        // grey card (Martin, twice, + 2026-07-11).
+                        .foregroundStyle(.secondary)
                         .help("Also remove the fallback itself, so it's never offered again (undoable, ⌘Z)")
                     }
                 }

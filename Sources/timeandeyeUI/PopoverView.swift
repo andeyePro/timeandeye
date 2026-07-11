@@ -407,7 +407,12 @@ struct PopoverView: View {
                 // rightmost control, since users instinctively hit the
                 // rightmost icon — it must be the confirm, not the ✕ dismiss
                 // (2026-07 hardware-test feedback).
-                Button { cancelPinning() } label: { Image(systemName: "xmark.circle.fill") }
+                // Editing an existing pin: the control UNPINS, so it wears a
+                // struck-through pin, not the same ✕ as plain dismiss
+                // (Martin, 2026-07-11 — the two ✕s were indistinguishable).
+                Button { cancelPinning() } label: {
+                    Image(systemName: pinEditingID != nil ? "pin.slash.fill" : "xmark.circle.fill")
+                }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                     .help(pinEditingID != nil ? "Unpin (esc)" : "Don't pin (esc)")
                 Menu {

@@ -11,11 +11,14 @@ public enum SettingsIA {
     // MARK: Categories (sidebar order = declaration order)
 
     public enum Category: String, CaseIterable, Codable, Identifiable, Sendable {
-        case backend
+        // Declaration order = sidebar order. Tracking leads (the app's core;
+        // Martin, 2026-07-11: the backend connection is not the front page)
+        // and the connection panel wears a plain-English name.
         case tracking
         case behaviour
         case menuBar
         case localTasks
+        case backend
         case billing
         case emailCalendar
         case maintenance
@@ -26,7 +29,7 @@ public enum SettingsIA {
 
         public var title: String {
             switch self {
-            case .backend:       return "Backend"
+            case .backend:       return "Connections"
             case .tracking:      return "Tracking"
             case .behaviour:     return "Behaviour"
             case .menuBar:       return "Menu bar"
@@ -82,7 +85,8 @@ public enum SettingsIA {
     public static let items: [Item] = [
         // Backend
         Item("backend.url", "Instance URL",
-             ["openproject", "server", "address", "connect", "http", "backend"], .backend),
+             ["openproject", "server", "address", "connect", "http", "backend",
+              "connections"], .backend),
         Item("backend.apiKey", "API key",
              ["token", "secret", "openproject", "connect", "password"], .backend),
         Item("backend.activity", "Default activity",

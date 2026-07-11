@@ -46,7 +46,7 @@ struct SettingsView: View {
 
     /// Which category the sidebar shows; nil only transiently (a sidebar List
     /// selection is Optional) — the detail falls back to .backend.
-    @State private var selectedCategory: SettingsIA.Category? = .backend
+    @State private var selectedCategory: SettingsIA.Category? = .tracking
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
 
@@ -55,7 +55,7 @@ struct SettingsView: View {
             sidebar
         } detail: {
             Form {
-                switch selectedCategory ?? .backend {
+                switch selectedCategory ?? .tracking {
                 case .backend:       backendSections
                 case .tracking:      trackingSections
                 case .behaviour:     behaviourSections
@@ -90,7 +90,7 @@ struct SettingsView: View {
             HStack(spacing: 4) {
                 Image(systemName: "magnifyingglass")
                     .font(.caption).foregroundStyle(.secondary)
-                TextField("Search settings (⌘F)", text: $searchText)
+                TextField("Search settings", text: $searchText)
                     .textFieldStyle(.plain)
                     .focused($searchFocused)
                     .onExitCommand { searchText = ""; searchFocused = false }
@@ -232,12 +232,16 @@ struct SettingsView: View {
     @ViewBuilder private var trackingSections: some View {
             Section("Auto-push") {
                 let threshold = controller.settings.certaintyAutoPushThreshold
-                Slider(value: $controller.settings.certaintyAutoPushThreshold, in: 0.5...1.01)
+                Slider(value: $controller.settings.certaintyAutoPushThreshold, in: 0.5...1.01) {
+                    Text("Auto-push threshold")
+                }
                 Text(threshold > 1.0 ? "Never auto-push (review everything)"
                      : "Auto-push sessions ≥ \(Int((threshold * 100).rounded()))% certain")
                     .font(.caption).foregroundStyle(.secondary)
                 let reviewThreshold = controller.settings.reviewThreshold
-                Slider(value: $controller.settings.reviewThreshold, in: 0.0...1.0)
+                Slider(value: $controller.settings.reviewThreshold, in: 0.0...1.0) {
+                    Text("Review threshold")
+                }
                 Text("Queue for review below \(Int((reviewThreshold * 100).rounded()))% certain "
                      + "· auto-push at \(Int((threshold * 100).rounded()))% and above "
                      + "· in between, Time&I journals but neither asks nor posts")
@@ -271,10 +275,12 @@ struct SettingsView: View {
 
     @ViewBuilder private var menuBarSections: some View {
             Section("Menu bar") {
-                TextField("Low-certainty colour (hex)", text: $controller.settings.colourLow)
-                    .textFieldStyle(.roundedBorder)
-                TextField("High-certainty colour (hex)", text: $controller.settings.colourHigh)
-                    .textFieldStyle(.roundedBorder)
+                // Stock pickers, not raw hex (Martin, 2026-07-11): the value
+                // still persists as hex in settings.
+                ColorPicker("Low-certainty colour",
+                            selection: hexColourBinding(\.colourLow, fallback: .systemRed))
+                ColorPicker("High-certainty colour",
+                            selection: hexColourBinding(\.colourHigh, fallback: .systemGreen))
                 Text("Set both to the same colour to disable the signalling.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
@@ -705,6 +711,22 @@ struct SettingsView: View {
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
+    }
+
+    /// A hex-backed settings colour as a stock-picker binding (
+    /// every colour entry uses the standard macOS picker, never raw hex).
+    private func hexColourBinding(_ keyPath: WritableKeyPath<AndeyeSettings, String>,
+                                  fallback: NSColor) -> Binding<Color> {
+        Binding(
+            get: { Color(nsColor: NSColor(hex: controller.settings[keyPath: keyPath]) ?? fallback) },
+            set: { picked in
+                let rgb = NSColor(picked).usingColorSpace(.sRGB) ?? fallback
+                controller.settings[keyPath: keyPath] = String(
+                    format: "#%02X%02X%02X",
+                    Int(rgb.redComponent * 255),
+                    Int(rgb.greenComponent * 255),
+                    Int(rgb.blueComponent * 255))
+            })
     }
 
     /// Reorder the email-matching specificity ladder (persists via settings didSet).
