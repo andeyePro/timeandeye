@@ -214,13 +214,14 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                     self.inFullscreenTransition = false
                     // Settle margin: AppKit finishes rearranging Spaces a
                     // beat after `did…` fires; mutating immediately can
-                    // still catch the tail of the animation.
+                    // still catch the tail of the animation. NO fresh grace
+                    // here — grace means the auxiliary pose, and auxiliary
+                    // windows can't green-button into their own fullscreen,
+                    // which broke an immediate re-fullscreen after an exit
+                    // (Martin, 2026-07-11). Exiting lands on a desktop; the
+                    // 1 Hz decide() re-floats it if the screen genuinely
+                    // still looks fullscreen.
                     self.transitionHoldUntil = ProcessInfo.processInfo.systemUptime + 2
-                    // Fresh grace once the hold lapses, so the window
-                    // re-decides its pose from a clean slate exactly like a
-                    // reopen (and never settles at normal level over a
-                    // fullscreen app it exited next to).
-                    self.pose.restartGrace(at: ProcessInfo.processInfo.systemUptime)
                 })
             }
         }

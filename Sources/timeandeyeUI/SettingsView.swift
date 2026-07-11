@@ -250,13 +250,21 @@ struct SettingsView: View {
                      + "· auto-push at \(Int((threshold * 100).rounded()))% and above "
                      + "· in between, Time&I journals but neither asks nor posts")
                     .font(.caption).foregroundStyle(.secondary)
-                let reviewFloor = controller.settings.reviewFloorSeconds
+                // The floor's meaningful range starts AT the Switch Buffer:
+                // anything briefer never journals, so a sub-buffer floor is
+                // inert — the stepper now says so instead of offering dead
+                // values (Martin, 2026-07-11).
+                let buffer = controller.settings.switchGraceSeconds
+                let reviewFloor = max(controller.settings.reviewFloorSeconds, buffer)
                 Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
-                        value: $controller.settings.reviewFloorSeconds, in: 0...600, step: 15)
-                Text(reviewFloor > 0
-                     ? "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review "
-                       + "– briefer glances stay tracked, just never queue"
-                     : "Every uncertain slice asks for review, however brief")
+                        value: Binding(
+                            get: { max(controller.settings.reviewFloorSeconds, buffer) },
+                            set: { controller.settings.reviewFloorSeconds = max($0, buffer) }),
+                        in: buffer...600, step: 15)
+                Text(reviewFloor <= buffer
+                     ? "Every uncertain slice asks for review (visits briefer than the \(Int(buffer))s Switch Buffer never journal at all)"
+                     : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review "
+                       + "– briefer glances stay tracked, just never queue")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Auto-comment time entries (apps/docs used)",
                        isOn: $controller.settings.autoComment)
