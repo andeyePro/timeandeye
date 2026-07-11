@@ -1209,11 +1209,18 @@ struct TimelineView: View {
                     set: { controller.setColour(NSColor($0), for: editTask ?? session.task) }))
                     .labelsHidden().frame(width: 28)
                     .help("Task colour")
-                Button { controller.resetColour(for: editTask ?? session.task) } label: {
-                    Image(systemName: "arrow.uturn.backward.circle")
+                // "auto" tags an untouched swatch; the revert control only
+                // exists once there IS a manual pick to revert.
+                if controller.hasColourOverride(for: editTask ?? session.task) {
+                    Button { controller.resetColour(for: editTask ?? session.task) } label: {
+                        Image(systemName: "arrow.uturn.backward.circle")
+                    }
+                        .buttonStyle(.plain)
+                        .help("Reset this task's colour to automatic")
+                } else {
+                    Text("auto").font(.caption2).foregroundStyle(.secondary)
+                        .help("This task's colour is automatic — pick one in the swatch to override")
                 }
-                    .buttonStyle(.plain)
-                    .help("Reset this task's colour to automatic")
                 Spacer().frame(width: 8)
                 Button { editing = nil } label: { Image(systemName: "xmark.circle") }
                     .keyboardShortcut(.cancelAction)   // Esc cancels
