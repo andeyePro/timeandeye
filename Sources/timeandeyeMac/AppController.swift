@@ -2638,8 +2638,21 @@ public final class AppController: ObservableObject {
             return
         }
         let attributor = self.attributor
+        // Fetch every span the pass will need in ONE query rather than a fresh
+        // uncached SELECT per session inside dominantSpan (up to `scanCap`
+        // sequential MainActor round-trips — ~2 s after a cold launch or a teach
+        // burst). The window spans the earliest scanned session start to the
+        // latest end so each session's [start, end] is fully covered and the
+        // bucketed selection is identical to the per-session fetch; results stay
+        // ORDER BY start, so the longest-span/earliest-tie rule is preserved.
+        // At ~a few thousand spans over a 14-day horizon (spans close on each
+        // surface switch), a single materialised array is comfortably cheap.
+        let fetchFrom = sessions.map(\.start).min() ?? horizon
+        let fetchTo = sessions.map(\.end).max() ?? now
+        let horizonSpans = (try? journal.spans(from: fetchFrom, to: fetchTo)) ?? []
         let scoring: (Session) -> (target: Target, score: Double)? = { [weak self] session in
-            guard let self, let span = self.dominantSpan(of: session) else { return nil }
+            guard let self,
+                  let span = self.dominantSpan(of: session, among: horizonSpans) else { return nil }
             let explanation = attributor.explain(span.signal, tasks: cache,
                                                  now: session.start)
             guard let chosen = explanation.chosen else { return nil }
@@ -4430,8 +4443,19 @@ public final class AppController: ObservableObject {
     /// The longest focus span inside a session — the surface that dominated it,
     /// for teaching a durable window→task (or →don't-track) association.
     private func dominantSpan(of session: Session) -> FocusSpan? {
-        ((try? journal.spans(from: session.start, to: session.end)) ?? [])
-            .max { $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start) }
+        dominantSpan(of: session,
+                     among: (try? journal.spans(from: session.start, to: session.end)) ?? [])
+    }
+
+    /// Batch-friendly variant: pick this session's dominant span out of a slice
+    /// already fetched over a wider window, so a pass over many sessions can run
+    /// ONE `journal.spans` query instead of one synchronous SELECT per session
+    /// (the contradiction pass, up to 300 sessions, on the MainActor). Selection
+    /// is identical to the fetching variant — same overlap filter, same rule —
+    /// provided `spans` covers each session's [start, end] window, which the
+    /// caller guarantees by fetching from the earliest session start.
+    private func dominantSpan(of session: Session, among spans: [FocusSpan]) -> FocusSpan? {
+        FocusSpan.dominant(among: spans, from: session.start, to: session.end)
     }
 
     /// Teach the attributor the dominant surface→task association inside a

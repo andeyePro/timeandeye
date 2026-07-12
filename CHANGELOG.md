@@ -2,6 +2,28 @@
 
 ## 2026-07-12
 
+- [x] **The contradiction pass fetches spans once instead of N+1 SELECTs on the
+  MainActor.** Scoring each scanned session called `dominantSpan(of:)`, and that
+  ran a fresh uncached `journal.spans(from:to:)` SELECT per session – up to
+  `contradictionScanCap` (300) sequential synchronous main-actor queries every
+  pass, ~2 s after a cold launch and after each teach burst. `runContradictionPass`
+  now issues ONE `journal.spans` query spanning the earliest scanned session start
+  to the latest end (so every session's [start, end] window is fully covered), and
+  the scoring closure buckets that slice per session in memory via a new
+  `dominantSpan(of:among:)`. The span-selection rule – longest FULL-span duration
+  wins, a duration tie keeps the earliest start, overlap is `end > from && start <
+  to` – moved once into a pure `FocusSpan.dominant(among:from:to:)` in
+  `timeandeyeCore`; the fetching `dominantSpan(of:)` now delegates to it, so its
+  other callers (`teachAssociation`, `markSessionDoNotTrack`) keep their exact
+  behaviour. Because the wide fetch stays `ORDER BY start` and the per-session
+  filter preserves that order, the bucketed winner is identical to the old
+  per-session fetch. Over a 14-day horizon spans number in the low thousands
+  (one closes per surface switch), so a single materialised array is cheap – no
+  chunking needed. New `DominantSpan` check suite pins the selection rule
+  (longest wins, earliest-start tie, full-span-not-clipped, overlap exclusion,
+  bucket-equals-narrow-fetch). Scope: the span-fetch path only; scoring, `plan()`
+  and the completeness guard are untouched.
+
 - [x] **The cold-start contradiction pass no longer races the OpenProject
   fetch.** At launch `startUp` fires `refreshTasks()` unawaited and schedules
   the contradiction pass on a fixed 2 s debounce. On a fetch slower than 2 s the

@@ -196,3 +196,61 @@ func contradictionRefileChecks(_ c: Checks) {
         try expect(backend.values.filter { $0 == .op(2) }.isEmpty, "no orphan op(2) entry survives undo")
     }
 }
+
+/// FocusSpan.dominant is the once-only home of the "which span dominated a
+/// window" rule, shared by AppController's per-session fetch and the batch
+/// contradiction pass (which fetches the whole horizon once, then buckets by
+/// session). These pin the rule so the batch path can never drift from the
+/// original: longest FULL-span duration wins; a duration tie keeps the
+/// earliest start (fetch order); overlap is end > from && start < to.
+func dominantSpanChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func t(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+    func span(_ tag: String, _ from: TimeInterval, _ to: TimeInterval) -> FocusSpan {
+        FocusSpan(target: .task(.op(1)), certainty: 1,
+                  signal: ActivitySignal(app: tag, timestamp: t(from)),
+                  start: t(from), end: t(to))
+    }
+
+    c.check("longest overlapping span wins") {
+        let spans = [span("short", 0, 60), span("long", 100, 500), span("mid", 600, 800)]
+        let win = try unwrap(FocusSpan.dominant(among: spans, from: t(0), to: t(1000)))
+        try expectEq(win.signal.app, "long")
+    }
+
+    c.check("duration tie keeps the earliest start (fetch order)") {
+        // Two equal 300 s spans; the earlier one must win — this is the exact
+        // guarantee `max(by:)` gives on ORDER BY start input, and the batch
+        // path must not reorder and flip it.
+        let spans = [span("first", 0, 300), span("second", 400, 700)]
+        let win = try unwrap(FocusSpan.dominant(among: spans, from: t(0), to: t(1000)))
+        try expectEq(win.signal.app, "first")
+    }
+
+    c.check("full-span duration counts, not the clipped overlap") {
+        // "wide" is 500 s but only its first 50 s fall in the window; "inside"
+        // is a fully-contained 200 s. The historical rule ranks by whole-span
+        // length, so "wide" still dominates.
+        let spans = [span("inside", 100, 300), span("wide", 350, 850)]
+        let win = try unwrap(FocusSpan.dominant(among: spans, from: t(0), to: t(400)))
+        try expectEq(win.signal.app, "wide")
+    }
+
+    c.check("non-overlapping spans are excluded; empty window -> nil") {
+        let spans = [span("before", 0, 100), span("after", 900, 1000)]
+        // Window [200,800) touches neither (end > from && start < to both fail).
+        try expectNil(FocusSpan.dominant(among: spans, from: t(200), to: t(800)))
+        try expectNil(FocusSpan.dominant(among: [], from: t(0), to: t(1000)))
+    }
+
+    c.check("bucketed slice matches a window-scoped fetch exactly") {
+        // The batch pass filters ONE wide fetch per session; the winner must be
+        // the same span a narrow per-session fetch would have surfaced.
+        let wide = [span("A", 0, 120), span("B", 130, 500), span("C", 520, 560),
+                    span("D", 600, 1400)]
+        // Session window [100, 560): C's whole 40 s and B's whole 370 s overlap;
+        // D starts at 600 so it is out. B wins.
+        let win = try unwrap(FocusSpan.dominant(among: wide, from: t(100), to: t(560)))
+        try expectEq(win.signal.app, "B")
+    }
+}

@@ -283,6 +283,24 @@ public struct FocusSpan: Equatable, Codable, Sendable {
     }
 }
 
+extension FocusSpan {
+    /// The dominant (longest) focus span overlapping a `[from, to)` window —
+    /// the surface that held it longest. Overlap is `span.end > from &&
+    /// span.start < to`; the winner is the largest *full-span* duration
+    /// (not the clipped overlap), matching the historical rule. Ties resolve
+    /// toward the earliest start: callers pass spans ordered by start, and
+    /// `max(by:)` keeps the first of several equal maxima.
+    ///
+    /// The selection lives here, once, so both the per-session fetch and the
+    /// batch contradiction pass (which fetches the whole scan horizon in one
+    /// query and reuses this against each session's window) pick identically.
+    public static func dominant(among spans: [FocusSpan], from: Date, to: Date) -> FocusSpan? {
+        spans.lazy
+            .filter { $0.end > from && $0.start < to }
+            .max { $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start) }
+    }
+}
+
 /// A closed, journalled stretch of tracked time on one task.
 /// WHO or what decided a slice's task — recorded at flush (2026-07-10,
 /// why-panel follow-up) so the Evidence Card can tell the original story
