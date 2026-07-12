@@ -2,6 +2,34 @@
 
 ## 2026-07-12
 
+- [x] **The cold-start contradiction pass no longer races the OpenProject
+  fetch.** At launch `startUp` fires `refreshTasks()` unawaited and schedules
+  the contradiction pass on a fixed 2 s debounce. On a fetch slower than 2 s the
+  pass ran against a cache still seeded locals-only (the fetched OP tasks had not
+  landed), and nothing re-ran it once they did – the `taskCache` didSet only
+  invalidates the pick list. Two failures followed: a session whose incumbent OP
+  task was absent from the shrunken candidate set could have a local rival
+  renormalise over the auto-push bar, and with `.auto` refile mode that severed
+  the unpushed OP linkage and silently withdrew the slice from posting. Two
+  layers close it. Layer 1 – re-trigger: `refreshTasks` now calls
+  `scheduleRetroPass()` on its success path, after `taskCache` is replaced with
+  the full fetched-plus-local set; the same 2 s debounce coalesces with the
+  startup timer on a fast fetch and re-runs the pass with the complete cache on a
+  slow one. The startup kick stays, so pure-local users (who never reach the
+  fetch success path) are unaffected. Layer 2 – completeness guard:
+  `runContradictionPass` now skips any session whose current task is not
+  resolvable in the captured cache (a single set lookup per session, at the
+  scan/filter stage so `ContradictionRefile.plan` stays pure), because the pass
+  cannot honestly judge contradiction when the incumbent candidate is missing;
+  those self-correct on the re-triggered pass. Unknown-task sessions are exempt –
+  the sentinel is never a scored candidate, so a confident real answer
+  legitimately contradicts it and there is no shrunken-set distortion. Scope:
+  startUp/refreshTasks/runContradictionPass plumbing only; the billable paths,
+  refile guard internals and review threshold are untouched. No new Core
+  behaviour to pin – both layers are AppController plumbing not reachable from
+  `timeandeyeChecks`; `ContradictionRefile.plan`'s lane semantics remain pinned
+  by the existing contradiction-refile checks, which the guard leaves unchanged.
+
 - [x] **The billable widen gestures now get a real ⌘Z window.** Commit 860a137
   gave a bare entry mark an undo window by debouncing its finance sync 4 s, but
   the widen gestures – "mark this entry AND its task/project billable" – still

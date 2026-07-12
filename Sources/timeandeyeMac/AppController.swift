@@ -2595,13 +2595,30 @@ public final class AppController: ObservableObject {
         let horizon = now.addingTimeInterval(-Self.contradictionScanDays)
         let recent = ((try? journal.sessions(from: horizon, to: now)) ?? [])
             .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
-        let sessions = Array(recent.suffix(Self.contradictionScanCap))
+        let scanned = Array(recent.suffix(Self.contradictionScanCap))
+        let cache = taskCache
+        // FINDING 4 completeness guard: on a slow OP fetch the cache is seeded
+        // locals-only, so a session whose CURRENT task hasn't loaded yet would be
+        // scored against a candidate set missing its own incumbent — softmax
+        // renormalised over the shrunk set can push a rival over the bar and the
+        // .auto lane would then sever the unpushed OP linkage. Skip any session
+        // whose incumbent isn't resolvable in the captured cache: the pass cannot
+        // honestly judge contradiction without the incumbent candidate present.
+        // refreshTasks re-triggers the pass once the full cache lands (layer 1),
+        // and these self-correct then. Single set lookup per session.
+        // Unknown is a sentinel, never a scored candidate, so it is exempt: a
+        // confident real answer legitimately contradicts "we didn't know", and
+        // there is no shrunken-set distortion when the incumbent was never in
+        // the attributor's candidate set to begin with.
+        let resolvable = Set(cache.map(\.ref))
+        let sessions = scanned.filter {
+            $0.task == WorkTask.unknown.ref || resolvable.contains($0.task)
+        }
         guard !sessions.isEmpty else {
             refileSuggestions = []
             contradictedPostedCount = 0
             return
         }
-        let cache = taskCache
         let attributor = self.attributor
         let scoring: (Session) -> (target: Target, score: Double)? = { [weak self] session in
             guard let self, let span = self.dominantSpan(of: session) else { return nil }
@@ -4912,6 +4929,7 @@ public final class AppController: ObservableObject {
             // the cache and a wholesale replace was silently dropping it.
             let recency = Dictionary(uniqueKeysWithValues:
                 taskCache.compactMap { task in task.lastConfirmedAt.map { (task.ref, $0) } })
+            let refsBeforeRefresh = Set(taskCache.map(\.ref))
             var fetched = try await backend.fetchTasks()
             for i in fetched.indices {
                 if let last = recency[fetched[i].ref] {
@@ -4937,6 +4955,18 @@ public final class AppController: ObservableObject {
                 }
             }
             lastError = nil
+            // FINDING 4 (cold-start race): the startup contradiction pass fires
+            // on a fixed 2 s debounce and can run before this fetch replaces the
+            // locals-only seed cache. Re-kick the pass on the SUCCESS path, but
+            // only when the resolvable task set actually changed — this path
+            // also runs on the 60 s refresh timer, and an unconditional kick
+            // would re-score up to 300 sessions every minute for nothing. On
+            // cold start the locals-only seed always differs from the fetched
+            // set, so the slow-fetch case still re-runs with the full cache;
+            // the startup kick stays for pure-local users, who never get here.
+            if Set(taskCache.map(\.ref)) != refsBeforeRefresh {
+                scheduleRetroPass()
+            }
         } catch {
             lastError = "\(backend.displayName) fetch failed: \(error)"
         }
