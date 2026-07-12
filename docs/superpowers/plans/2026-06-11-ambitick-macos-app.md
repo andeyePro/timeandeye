@@ -1,6 +1,6 @@
 # Ambitick macOS App Implementation Plan (Plan 2)
 
-> Historical record: "Ambitick" was the working name — the app is now **andeyeTT** (user-facing brand "andeye"; see `docs/superpowers/specs/2026-07-02-andeye-rename-plan.md`). Module/file names below are the pre-rename ones (Ambitick* → AndeyeTT*).
+> Historical record: "Ambitick" was the working name — the app is now **andeyeTT** (user-facing brand "andeye"). Module/file names below are the pre-rename ones (Ambitick* → AndeyeTT*).
 
 > Executed inline overnight 2026-06-11 by the same agent that wrote it; compact
 > by design — full architectural context lives in the spec

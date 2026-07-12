@@ -370,8 +370,7 @@ and recorded rather than fixed blind:
   and AndeyeMark/AndeyeMarkView (first in-app SwiftUI renderer of the
   AndeyeLogo geometry — reveal + wink animatable, SVG-scaled stroke).
   timeandeyeUI consumes it; AndeyeColors stays as a compatibility spelling.
-  4 render-contract checks; suite 669/0. Mon pin: branch FableMax until
-  main; 
+  4 render-contract checks; suite 669/0.
 - [ ] Invoice NUMBER for the invoice-lock ref needs the Xero Accounting API
   (Projects API doesn't expose it — verified 2026-07-08); until then locks
   group under the single ref "Xero".
@@ -772,7 +771,7 @@ and recorded rather than fixed blind:
   Unknown-guarded), TaskRanker calendar term feeding BOTH the attributor's
   ranked fallback (bounded by the 0.9 cap) and the pick list, clock badge
   on the live-matched task, popover mismatch banner with Switch, quiet
-  menu-bar flash (ships OFF pending Martin's), review-stack hint chips
+  menu-bar flash (ships OFF pending Martin's OK), review-stack hint chips
   from past events. Later per spec §10: segmented ledger + manual rule
   form, screen-share suppression, iOS glance, next-event lookahead.
 - [x] Calendar defaults confirmed + meeting alerts (Martin's answers,

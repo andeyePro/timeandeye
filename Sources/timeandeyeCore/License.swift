@@ -24,9 +24,8 @@ public enum LicenseTier: String, Codable, Sendable, CaseIterable, Comparable {
     }
 }
 
-/// The signed payload inside a licence key — schema v2 (spec
-///  §1, the locked
-/// cross-repo contract; andeyePro's generator mirrors it VERBATIM).
+/// The signed payload inside a licence key — schema v2 (the locked
+/// cross-repo licence contract; andeyePro's generator mirrors it VERBATIM).
 ///
 /// ALL nine fields are REQUIRED — there are no optionals, so a payload
 /// missing any field fails the decode and the verifier returns `.malformed`:

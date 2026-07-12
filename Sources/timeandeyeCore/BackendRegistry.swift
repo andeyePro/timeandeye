@@ -46,7 +46,7 @@ public struct RegisteredBackend {
 
 /// What an entitlement-bearing (Pro) connector requires of the licence. A
 /// cross-repo lockstep shape — andeyePro's connectors carry it, this
-/// registry reads it (spec 2026-07-07-license-entitlement.md §2.1).
+/// registry reads it (the locked cross-repo licence contract).
 public struct BackendEntitlementRequirement: Equatable, Sendable {
     /// Minimum tier CLASS floor. A STANDARD connector (Xero) sets `.plus` —
     /// "any paid tier" — so the Plus-Lifetime key's one listed connector

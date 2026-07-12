@@ -4,8 +4,8 @@ import timeandeyeCore
 import CryptoKit
 #endif
 
-/// v2 licence suite — the spec's acceptance criteria 1–14
-/// ( §5). Checks mint
+/// v2 licence suite — the licence contract's acceptance criteria 1–14.
+/// Checks mint
 /// with throwaway keypairs + throwaway kids; the production PRIVATE keys
 /// exist only in the pro repo's channels.
 func licenseChecks(_ c: Checks) {
