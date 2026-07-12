@@ -112,8 +112,14 @@ package enum ContradictionRefile {
     /// `score` re-derives the slice's best answer at its own moment (the
     /// controller feeds the dominant span through the attributor's explain
     /// path — same numbers a human sees opening the card). `suggestFloor`
-    /// keeps noise out of the suggestion row (the review threshold is the
-    /// natural choice). `dismissed` holds `Finding.dismissalKey` strings.
+    /// keeps noise out of the suggestion row. CONSTRAINT: it is deliberately
+    /// BELOW `bar` (the controller passes 0.5 against a 0.8 default bar), NOT
+    /// equal to it — an unpushed engine-decided contradiction scoring in
+    /// `[suggestFloor, bar)` surfaces as a SUGGESTION (this enum's contract,
+    /// see the type doc: "below the bar … is a suggestion only"). Collapsing
+    /// the two would delete that documented below-bar suggestion lane, so the
+    /// parameter is load-bearing, not redundant. `dismissed` holds
+    /// `Finding.dismissalKey` strings.
     package static func plan(sessions: [Session], bar: Double, suggestFloor: Double,
                             dismissed: Set<String>,
                             score: (Session) -> (target: Target, score: Double)?) -> Plan {

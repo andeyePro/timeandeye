@@ -157,9 +157,11 @@ public enum TimelineMath {
 
     /// Merge same-task sessions that butt up against each other (end ≈ start,
     /// within `tolerance`) into one, losing no data: the survivor spans both,
-    /// keeps the earliest start / latest end, joins comments, takes the lower
-    /// certainty, and is flagged for re-push. Survivor keeps the FIRST id;
-    /// callers delete the absorbed ids. Pure / unit-checkable.
+    /// keeps the earliest start / latest end, joins comments, blends certainty
+    /// by DURATION-WEIGHTED MEAN (spec §Folds: confidence blends by time — not
+    /// the min of its parts, not the max), and is flagged for re-push.
+    /// Survivor keeps the FIRST id; callers delete the absorbed ids. Pure /
+    /// unit-checkable.
     public static func mergeAdjacent(_ sessions: [Session],
                                      tolerance: TimeInterval = 2) -> [Session] {
         let sorted = sessions.sorted { $0.start < $1.start }
@@ -167,9 +169,17 @@ public enum TimelineMath {
         for s in sorted {
             if var last = out.last, last.task == s.task,
                abs(s.start.timeIntervalSince(last.end)) <= tolerance {
+                // Weight by each part's own duration BEFORE extending the
+                // survivor (`last` already spans everything merged so far, so
+                // this accumulates the correct running mean over the chain).
+                let lastDur = last.end.timeIntervalSince(last.start)
+                let sDur = s.end.timeIntervalSince(s.start)
+                let total = lastDur + sDur
                 last.end = Swift.max(last.end, s.end)
                 last.comment = joinComments([last.comment, s.comment])
-                last.certainty = Swift.min(last.certainty, s.certainty)
+                last.certainty = total > 0
+                    ? (last.certainty * lastDur + s.certainty * sDur) / total
+                    : last.certainty
                 last.pushedToOP = false
                 out[out.count - 1] = last
             } else {

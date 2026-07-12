@@ -200,8 +200,13 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// extracts nothing; its rules go dormant (kept, listed greyed).
     package var siteRecipesDisabled: [String]
 
+    /// The auto-push threshold's default (spec threshold table). Shared with
+    /// `TrackerConfig.reviewBelow`'s default so the review bar can never carry
+    /// a number independent of the push bar.
+    package static let certaintyAutoPushDefault: Double = 0.8
+
     package init(opBaseURL: String,
-                certaintyAutoPushThreshold: Double = 0.8,
+                certaintyAutoPushThreshold: Double = AndeyeSettings.certaintyAutoPushDefault,
                 colourLow: String = "#FF3B30",
                 colourHigh: String = "#34C759",
                 showPercent: Bool = false,

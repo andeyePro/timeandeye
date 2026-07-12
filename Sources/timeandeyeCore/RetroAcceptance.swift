@@ -1,5 +1,32 @@
 import Foundation
 
+/// The ONE low-certainty eligibility gate every retro-style pass shares
+/// (attribution-calculus spec §thresholds: "one shared predicate — unpushed,
+/// below the bar, overlapping the segment — so the three paths cannot
+/// drift"). Used by `RetroAcceptance.plan`'s lift gate, `UnknownSweep`, and
+/// `ReviewConfirm.plan`. ReviewConfirm layers its own `!claimed` on top; the
+/// unpushed + below-bar + overlap core is identical everywhere.
+package enum RetroEligibility {
+    /// Does the session's `[start, end)` overlap `[segStart, segEnd)`?
+    package static func overlaps(_ session: Session, _ segStart: Date, _ segEnd: Date) -> Bool {
+        session.start < segEnd && session.end > segStart
+    }
+
+    /// Unpushed, below `bar`, and overlapping the one segment `[segStart, segEnd)`.
+    package static func eligible(_ session: Session, below bar: Double,
+                                segStart: Date, segEnd: Date) -> Bool {
+        !session.pushedToOP && session.certainty < bar
+            && overlaps(session, segStart, segEnd)
+    }
+
+    /// Unpushed, below `bar`, and overlapping ANY of `segments`.
+    package static func eligible(_ session: Session, below bar: Double,
+                                anyOf segments: [ReviewSegment]) -> Bool {
+        !session.pushedToOP && session.certainty < bar
+            && segments.contains { overlaps(session, $0.start, $0.end) }
+    }
+}
+
 /// One pending segment the retro pass auto-clears — its best-scored target
 /// met (or beat) the retro bar.
 package struct RetroClearance: Equatable, Sendable {
@@ -88,8 +115,16 @@ package enum RetroAcceptance {
             guard case .task(let ref) = clearance.target,
                   let segment = segmentsByID[clearance.segmentID] else { continue }
             for session in sessions
-            where session.certainty < bar
-                && session.start < segment.end && session.end > segment.start {
+            where RetroEligibility.eligible(session, below: bar,
+                                            segStart: segment.start, segEnd: segment.end) {
+                // OWNERSHIP (spec §The ownership rule): the lift re-points the
+                // session to the cleared target `ref`. The gate guarantees the
+                // session is below `bar` and the clearance guarantees its score
+                // is at or above `bar`, so `max(current, score) == score`
+                // ALWAYS here — the lift REPLACES certainty with the new
+                // target's own score (honouring "task change ⇒ replace") while
+                // reading as the monotone-up form the spec lists for a same-task
+                // re-affirmation. Both collapse to `score` under this gate.
                 let newCertainty = max(session.certainty, clearance.score)
                 if let existing = bestLift[session.id], existing.newCertainty >= newCertainty {
                     continue
@@ -109,14 +144,19 @@ package enum RetroAcceptance {
 package struct UnknownRepoint: Equatable, Sendable {
     package var sessionID: UUID
     package var priorTask: TaskRef
+    /// The session's certainty before the sweep — the sweep writes the
+    /// human-word 1.0 (the user filed it as Unknown), so the undo must put the
+    /// exact prior number back.
+    package var priorCertainty: Double
     /// What decided the session before the sweep — restored on ⌘Z so the
     /// undo really is "as it stood" (in-memory only, like the repoint).
     package var priorProvenance: SessionProvenance?
 
-    package init(sessionID: UUID, priorTask: TaskRef,
+    package init(sessionID: UUID, priorTask: TaskRef, priorCertainty: Double = 0,
                 priorProvenance: SessionProvenance? = nil) {
         self.sessionID = sessionID
         self.priorTask = priorTask
+        self.priorCertainty = priorCertainty
         self.priorProvenance = priorProvenance
     }
 }
@@ -124,23 +164,25 @@ package struct UnknownRepoint: Equatable, Sendable {
 /// Unknown task category (2026-07-09), §4: when a review stack sweeps to
 /// Unknown, its overlapping UNPUSHED low-certainty sessions re-point to the
 /// Unknown task too — otherwise the drawer row would clear while the actual
-/// tracked time kept pointing at the old guessed task. Certainty never
-/// moves: this is tidying (the same time, filed under an honest "don't
-/// know"), not a confidence gain, so it deliberately does NOT reuse
-/// `RetroAcceptance`'s lift-to-max-certainty shape. Pure: the caller
-/// (AppController) applies the repoint through the journal.
+/// tracked time kept pointing at the old guessed task. Sweeping is a HUMAN
+/// gesture ("I don't know what this was — file it as Unknown"), so the
+/// controller writes the human-word certainty (1.0) at apply time, exactly as
+/// a review confirm does (spec §The three tiers: Unknown-sweep repoint is a
+/// human-word producer) — NOT the engine's lift-to-max shape. This planning
+/// step only names WHICH sessions repoint; the human-word write lives in the
+/// controller. Pure: the caller (AppController) applies the repoint through
+/// the journal.
 package enum UnknownSweep {
     /// A session qualifies when it overlaps ANY of the just-swept segments,
-    /// hasn't posted yet, and is still below `bar` (mirrors the retro pass's
-    /// own definition of "low-certainty" — `RetroAcceptance.plan`'s lift
-    /// gate uses the same threshold).
+    /// hasn't posted yet, and is still below `bar` — the one shared retro
+    /// eligibility gate (`RetroEligibility`), same as the retro lift and the
+    /// review confirm.
     package static func sessionsToRepoint(segments: [ReviewSegment], sessions: [Session],
                                          bar: Double) -> [UnknownRepoint] {
-        sessions.filter { session in
-            !session.pushedToOP && session.certainty < bar
-                && segments.contains { session.start < $0.end && session.end > $0.start }
-        }.map { UnknownRepoint(sessionID: $0.id, priorTask: $0.task,
-                               priorProvenance: $0.provenance) }
+        sessions.filter { RetroEligibility.eligible($0, below: bar, anyOf: segments) }
+            .map { UnknownRepoint(sessionID: $0.id, priorTask: $0.task,
+                                  priorCertainty: $0.certainty,
+                                  priorProvenance: $0.provenance) }
     }
 }
 

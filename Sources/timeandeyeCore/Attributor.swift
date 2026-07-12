@@ -204,9 +204,14 @@ package final class Attributor {
     /// losing primed associations on relaunch dropped session certainty
     /// below the push threshold (found 2026-06-11).
     package var primedSurfaces: [Surface: TaskRef] = [:]
-    /// Explicit user pins. EVERYTHING unpinned caps at 0.95; a pin is the only
-    /// thing that returns 1.0, and it overrides the ranker, learning, soft
-    /// primes and even a work-package URL. Each pin carries a rule (component
+    /// Explicit user pins. Within `attribute()` a pin is the only producer
+    /// that returns `humanWord` (1.0): every inferred source caps at
+    /// `inferredCeiling`, the ranked fallback at `rankedCeiling`. But 1.0 is
+    /// the HUMAN-WORD tier, not the pin's alone — the controller's review
+    /// confirm, timeline reassign and Unknown-sweep gestures write it too (a
+    /// person asserted the assignment), so a pin is the sole 1.0 the ENGINE
+    /// derives, not the sole 1.0 in the journal. A pin overrides the ranker,
+    /// learning, soft primes and even a work-package URL. Each pin carries a rule (component
     /// prefix or boolean expression). Set only by the explicit pin editor,
     /// never by an ordinary correction (those stay soft primes). When several
     /// match, the most specific wins (manual `priority` first, then leaf count,
@@ -269,9 +274,19 @@ package final class Attributor {
         self.ranker = ranker
     }
 
-    /// Inferred certainty ceiling: everything that isn't an explicit pin tops
-    /// out here. 1.0 is reserved for "the user told me outright" (a pin).
+    /// The three tier ceilings (attribution-calculus spec §The three tiers).
+    /// Only a HUMAN WORD (`humanWord`, 1.0 — a pin, manual start, review
+    /// confirm, timeline reassign or Unknown-sweep repoint) reaches 1.0. A
+    /// learned/structural rule (sticky, OP URL/title, email/site rule, primed
+    /// surface, idle-gap claim, adjacency-corroborated lift) caps at
+    /// `inferredCeiling`; an uncorroborated engine ranking at `rankedCeiling`.
+    /// The floor is 0 — no producer journals a negative certainty.
+    package static let humanWord = 1.0
     package static let inferredCeiling = 0.95
+    package static let rankedCeiling = 0.9
+    /// A just-opened OP task priming the NEXT surface — a hypothesis, scored
+    /// below the inferred rules it may become so it never masquerades as one.
+    package static let pendingPrimeScore = 0.7
 
     /// What the clock is running on, as an attribution prior (Martin,
     /// 2026-07-10, his): the tracker passes the COMMITTED task of the
@@ -370,12 +385,15 @@ package final class Attributor {
         if let pending = pendingPrime, pending.surface == surface,
            now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
             ranked.removeAll { $0.target == .task(pending.task) }
-            ranked.insert(Candidate(target: .task(pending.task), score: 0.7), at: 0)
+            ranked.insert(Candidate(target: .task(pending.task), score: Self.pendingPrimeScore), at: 0)
             primeSource = (.task(pending.task), .pendingPrime)
         } else if let primed = primedSurfaces[surface] {
             if pendingPrime?.surface == surface { pendingPrime = nil }   // expired: dead hypothesis
             ranked.removeAll { $0.target == .task(primed) }
-            ranked.insert(Candidate(target: .task(primed), score: 0.95), at: 0)
+            // A primed surface is a remembered correction — an inferred rule,
+            // same rung as email/site rules, so the ceiling constant (not a
+            // bare 0.95) keeps it moving in lockstep if that rung is retuned.
+            ranked.insert(Candidate(target: .task(primed), score: Self.inferredCeiling), at: 0)
             primeSource = (.task(primed), .primedSurface)
         }
         applyLiveAdjacency(&ranked, continuity: continuity, tasks: tasks, now: now)
@@ -402,6 +420,12 @@ package final class Attributor {
     private func applyLiveAdjacency(_ ranked: inout [Candidate],
                                     continuity: Continuity?,
                                     tasks: [WorkTask], now: Date) {
+        // TIER CROSSING (spec §The three tiers, boundary rule 1): the running
+        // task's candidate is a ranked one (≤ rankedCeiling), but live-adjacency
+        // corroboration is rule-grade evidence — a neighbour agreeing lifts it
+        // INTO the inferred tier, capped at inferredCeiling (AdjacencyBoost's
+        // default ceiling), never above. This is the ONLY sanctioned ranked→
+        // inferred crossing; nothing here may reach humanWord.
         guard let continuity, case .task(let ref) = continuity.target else { return }
         let gap = max(0, now.timeIntervalSince(continuity.lastActive))
         guard AdjacencyBoost.strength(gap: gap) > 0 else { return }
@@ -803,10 +827,15 @@ package final class Attributor {
             // without ever claiming a boost that didn't happen.
             let calendarRaw: Double = {
                 guard let m = currentCalendarMatch, m.task == task.ref else { return 0 }
-                return 0.3 * (m.tentative ? 0.5 : 1.0)
+                return CalendarWeight.weight * (m.tentative ? CalendarWeight.tentativeFactor : 1.0)
             }()
             let calendarPart = priorWeight * calendarRaw / maxPrior
-            out.append(.init(target: .task(task.ref), score: min(0.9, learnedPart + priorPart),
+            // Ranked cap AND a floor at 0: `priorPart` can go negative (the
+            // others'-task −10 ranking penalty flows through here), but a
+            // penalty is a sort key, not a confidence — no candidate may
+            // journal a negative certainty (spec §floor / P2).
+            out.append(.init(target: .task(task.ref),
+                             score: max(0, min(Self.rankedCeiling, learnedPart + priorPart)),
                              learned: learnedPart, prior: priorPart, calendarPart: calendarPart))
         }
         let dntLearned = 0.7 * (learned[.doNotTrack] ?? 0)
@@ -860,11 +889,13 @@ package final class Attributor {
         let surface = Surface(signal: signal)
         if let pending = pendingPrime, pending.surface == surface,
            now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
-            return .init(source: .pendingPrime, chosen: .task(pending.task), chosenScore: 0.7,
+            return .init(source: .pendingPrime, chosen: .task(pending.task),
+                         chosenScore: Self.pendingPrimeScore,
                          lines: lines, features: feats, matchedSurface: surface)
         }
         if let primed = primedSurfaces[surface] {
-            return .init(source: .primedSurface, chosen: .task(primed), chosenScore: 0.95,
+            return .init(source: .primedSurface, chosen: .task(primed),
+                         chosenScore: Self.inferredCeiling,
                          lines: lines, features: feats, matchedSurface: surface)
         }
         return .init(source: lines.isEmpty ? .none : .ranked, chosen: lines.first?.target,

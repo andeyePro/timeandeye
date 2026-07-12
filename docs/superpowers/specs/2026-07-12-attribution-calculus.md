@@ -25,6 +25,12 @@ slices agreeing is rule-grade evidence, so the lift's ceiling is
 `inferredCeiling`, not the ranked cap). And `1.0` is reserved for the human
 tier: no inference, boost, or fold may produce it.
 
+One deliberate exception: a relabel or confirm of the *live, still-running*
+slice writes `inferredCeiling`, not `1.0` – the run stays under engine
+control and may legitimately re-switch, so the human word there covers the
+moment, not the slice. Human corrections to *journalled* slices are the
+`1.0` tier.
+
 The floor is `0`. No producer may journal a negative certainty (the
 others'-task ranking penalty is a sort key, not a confidence, and is clamped
 before it becomes one).
@@ -72,16 +78,20 @@ value; the Evidence Card shows both without pretending otherwise.
 | `rankedCeiling` | `0.9` | Attributor | ranked producer cap |
 | `inferredCeiling` | `0.95` | Attributor | rule/prime/adjacency cap, pin floor at flush |
 
-Ordering invariant, which must hold for every legal configuration:
-`0 ≤ switchBar < certaintyAutoPushThreshold(min 0.5) ≤ idleResumeBar ≤
-rankedCeiling < inferredCeiling < 1.0` – with the single sentinel exception
-that the push slider's `> 1.0` position means "never auto-push" and sits
-outside the scale on purpose.
+Ordering invariant: the constant chain `0 ≤ switchBar < idleResumeBar ≤
+rankedCeiling < inferredCeiling < 1.0` always holds. The user's push bar
+ranges over `0.5…1.01` independently: it normally sits above `switchBar`
+(the default 0.8 does), the `> 1.0` position is the "never auto-push"
+sentinel, and slider positions at or below `switchBar` are legal but simply
+mean every committed switch is already post-eligible.
 
 There is exactly one review bar and it is the push bar: a slice below it
 queues for review, at or above it is push-eligible. `reviewBelow` exists as
 tracker plumbing but always carries the push bar's value; it must never grow
-its own number again. The eligibility gate for retro-style passes (review
+its own number again. The contradiction pass additionally keeps a lower
+`suggestFloor` (0.5): a contradicting re-derivation scoring in
+`[suggestFloor, bar)` surfaces as a suggestion only – a documented lane, not
+a drift. The eligibility gate for retro-style passes (review
 walk, Unknown sweep, retro lift) is one shared predicate – unpushed, below
 the bar, overlapping the segment – so the three paths cannot drift.
 

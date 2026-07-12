@@ -182,10 +182,8 @@ package enum ReviewConfirm {
             if case .task = target {
                 let segments = segmentsByTarget[target] ?? []
                 for session in sessions
-                where !claimed.contains(session.id) && !session.pushedToOP
-                    && session.certainty < bar
-                    && segments.contains(
-                        where: { session.start < $0.end && session.end > $0.start }) {
+                where !claimed.contains(session.id)
+                    && RetroEligibility.eligible(session, below: bar, anyOf: segments) {
                     claimed.insert(session.id)
                     stamps.append(RetroDigest.PriorSessionState(
                         id: session.id, task: session.task,

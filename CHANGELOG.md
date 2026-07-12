@@ -2,6 +2,32 @@
 
 ## 2026-07-12
 
+- [x] **Made the attribution engine conform to the certainty calculus – one
+  number, one set of rules.** Behaviour changes first: (i) a human correction
+  now marks its slice with the human-word certainty (1.0), so it becomes
+  push-eligible at once – a timeline reassign (task-change edit and
+  `reassignTimelineSessions`) and an Unknown-sweep repoint previously kept the
+  slice's OLD engine-derived number, leaving a corrected slice stuck below the
+  push bar; both now write 1.0 exactly as review-confirm already did (undo
+  restores the exact prior number – `UnknownRepoint` gained a `priorCertainty`).
+  (ii) The retro-lift eligibility gate gained `!pushedToOP`: the retro pass no
+  longer re-scores an already-posted session (it shares the one
+  `RetroEligibility` predicate with the review walk and the Unknown sweep now,
+  so the three cannot drift). (iii) Fold unification – the two stray many-to-one
+  certainty folds now match the flush: `JournalPrune`'s rollup (was max) and
+  `TimelineMath.mergeAdjacent` (was min) both blend by the DURATION-WEIGHTED
+  MEAN, so a long confident slice is neither dragged down nor oversold by a
+  brief uncertain one. Non-behavioural conformance and hygiene: the ranked cap
+  is now a named `rankedCeiling` (0.9) beside `inferredCeiling`, with a `0`
+  FLOOR clamp so the others'-task −10 ranking penalty can never journal a
+  negative certainty; the primed-surface and pending-prime scores, the tracker
+  switch bar / idle-resume bar, and the duplicated calendar weights are all
+  named constants referenced from one home (the timeline's span opacity now
+  reads the tracker's `switchBar`); `reviewBelow` no longer carries an
+  independent 0.9 – it defaults to the push bar's own default. New
+  `CertaintyCalculusChecks` pins the seven invariants (tier ceilings, floor,
+  human word, ownership, fold, one gate, ordering) as properties, not examples.
+  Contract: `docs/superpowers/specs/2026-07-12-attribution-calculus.md`.
 - [x] **Sealed the package's public API to a three-tier contract ahead of the
   public release.** Almost every cross-module type was `public` only because a
   sibling target in the same package read it – indistinguishable, from outside,

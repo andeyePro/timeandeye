@@ -160,6 +160,7 @@ let suites: [(String, (Checks) -> Void)] = [
     ("ColourPalette", colourPaletteChecks),
     ("ContradictionRefile", contradictionRefileChecks),
     ("DominantSpan", dominantSpanChecks),
+    ("CertaintyCalculus", certaintyCalculusChecks),
 ]
 let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

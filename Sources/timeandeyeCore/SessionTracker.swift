@@ -1,6 +1,15 @@
 import Foundation
 
 package struct TrackerConfig: Equatable, Sendable {
+    /// The live SWITCH bar (attribution-calculus spec threshold table): a
+    /// candidate below this can't take, hold or resume the clock. Fixed at
+    /// 0.6; the timeline's span-opacity threshold references this same
+    /// constant so the two never drift (it is the `uncertainBelow` default).
+    package static let switchBar: Double = 0.6
+    /// The idle-resume bar (spec threshold table): on idle resume a best
+    /// target at or above this auto-switches; below it falls to the switch
+    /// bar's idle-context branch. Consumed in `handleFocus`'s `.stopped` case.
+    package static let idleResumeBar: Double = 0.9
     package var minSegmentSeconds: TimeInterval
     package var primeDwellSeconds: TimeInterval
     package var idleThresholdSeconds: TimeInterval
@@ -30,8 +39,14 @@ package struct TrackerConfig: Equatable, Sendable {
     package init(minSegmentSeconds: TimeInterval = 20,
                 primeDwellSeconds: TimeInterval = 30,
                 idleThresholdSeconds: TimeInterval = 600,
-                uncertainBelow: Double = 0.6,
-                reviewBelow: Double = 0.9,
+                uncertainBelow: Double = TrackerConfig.switchBar,
+                // `reviewBelow` is tracker plumbing that ALWAYS carries the
+                // push bar's value (set via `setReviewBelow`, wired to the
+                // slider) — it must never carry an independent number again
+                // (spec §thresholds). Its default is therefore the push bar's
+                // OWN default, not a separate 0.9, so a bare TrackerConfig()
+                // and the app path agree on one review bar.
+                reviewBelow: Double = AndeyeSettings.certaintyAutoPushDefault,
                 nonWorkTracksLocally: Bool = false,
                 leisureTask: TaskRef? = nil,
                 switchGraceSeconds: TimeInterval = 30,
@@ -504,7 +519,7 @@ package final class SessionTracker {
             // morning's first click would just seed the queue with junk.
             guard !stoppedManually else { return }
             let idleContext = idleStoppedTargetAt.map { now.timeIntervalSince($0) <= 30 * 60 } ?? false
-            if let best = attribution.best, best.score >= 0.9,
+            if let best = attribution.best, best.score >= TrackerConfig.idleResumeBar,
                case .task(let task) = best.target {
                 lastInput = now
                 idleStoppedTarget = nil
@@ -1012,9 +1027,11 @@ package final class SessionTracker {
                 if let p = span.provenance { provenanceDurations[p, default: 0] += d }
             }
             // A pinned run is user-attested work: floor its certainty at the
-            // manual-confidence level whatever the attribution scored it.
+            // inferred ceiling whatever the attribution scored it (spec §Folds:
+            // the flush fold is the duration-weighted mean, floored at
+            // inferredCeiling when a pin governed the run).
             let certainty = max(totalDuration > 0 ? weighted / totalDuration : 0,
-                                run.pinned ? 0.95 : 0)
+                                run.pinned ? Attributor.inferredCeiling : 0)
             let comment = commentText(for: (run.target, run.start, run.end), in: clipped)
             // The slice's provenance is its DOMINANT decider by covered
             // duration (ties break on the raw name for determinism); a

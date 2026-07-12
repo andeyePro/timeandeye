@@ -2071,9 +2071,10 @@ public final class AppController: ObservableObject {
 
     package func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
         // Unknown task category §4: sweeping to Unknown also re-points its
-        // overlapping unpushed low-certainty sessions (no lift — tidying,
-        // not a confidence gain), computed BEFORE the segments' own state
-        // changes so the overlap check sees the queue as it stood.
+        // overlapping unpushed low-certainty sessions to the human-word
+        // certainty (the user's own filing decision — spec §The three tiers),
+        // computed BEFORE the segments' own state changes so the overlap check
+        // sees the queue as it stood.
         let repoints = target == .task(WorkTask.unknown.ref)
             ? repointSessionsToUnknown(ids) : []
         if undoable {
@@ -2088,6 +2089,9 @@ public final class AppController: ObservableObject {
                 for r in repoints {
                     if var s = try? self.journal.session(id: r.sessionID) {
                         s.task = r.priorTask
+                        // The sweep raised certainty to the human-word 1.0;
+                        // ⌘Z restores the exact prior number.
+                        s.certainty = r.priorCertainty
                         s.provenance = r.priorProvenance
                         try? self.journal.update(s)
                     }
@@ -2135,9 +2139,10 @@ public final class AppController: ObservableObject {
     }
 
     /// Unknown task category §4: sessions overlapping the just-swept
-    /// segments, unpushed and still below the push bar, re-point to Unknown
-    /// at their CURRENT certainty. Returns what changed so the caller's undo
-    /// closure can restore each session's prior task.
+    /// segments, unpushed and still below the push bar, re-point to Unknown at
+    /// the human-word certainty (the user's filing decision). Returns what
+    /// changed — incl. each prior certainty — so the caller's undo closure can
+    /// restore each session exactly.
     private func repointSessionsToUnknown(_ ids: [UUID]) -> [UnknownRepoint] {
         let sweptSegments = pendingReview.filter { ids.contains($0.id) }
         guard !sweptSegments.isEmpty else { return [] }
@@ -2147,6 +2152,11 @@ public final class AppController: ObservableObject {
         for r in repoints {
             if var s = try? journal.session(id: r.sessionID) {
                 s.task = WorkTask.unknown.ref
+                // Sweeping to Unknown is the user's word ("I don't know what
+                // this was — file it as Unknown"), a human-word producer (spec
+                // §The three tiers): full certainty, exactly as a review
+                // confirm. The prior number is captured in the repoint for undo.
+                s.certainty = Attributor.humanWord
                 s.provenance = .userAssigned
                 try? journal.update(s)
             }
@@ -2250,10 +2260,10 @@ public final class AppController: ObservableObject {
                 for prior in stamps {
                     guard var s = try? journal.session(id: prior.id) else { continue }
                     s.task = ref
-                    // The user viewed it and said so: their word, full
-                    // certainty (what a live pick sets), push-eligible
-                    // through the normal sync path.
-                    s.certainty = 1.0
+                    // The user viewed it and said so: their word, the
+                    // human-word certainty (spec §The three tiers), push-
+                    // eligible through the normal sync path.
+                    s.certainty = Attributor.humanWord
                     s.provenance = ReviewConfirm.stampProvenance
                     try? journal.update(s)
                 }
@@ -4387,11 +4397,13 @@ public final class AppController: ObservableObject {
                     restore.pushedToOP = current.pushedToOP
                 }
                 await self.applyTimelineEdit(restore, undoable: false)
-                // applyTimelineEdit re-stamps .userAssigned when the task
-                // changed; put the pre-edit provenance back so ⌘Z restores
-                // the row exactly as it stood (mirrors reassignTimelineSessions).
+                // applyTimelineEdit re-stamps .userAssigned AND the human-word
+                // certainty when the task changed; put the pre-edit provenance
+                // and certainty back so ⌘Z restores the row exactly as it stood
+                // (mirrors reassignTimelineSessions).
                 if var s = try? self.journal.session(id: previous.id) {
                     s.provenance = previous.provenance
+                    s.certainty = previous.certainty
                     try? self.journal.update(s)
                 }
                 restoreLearning?()
@@ -4410,6 +4422,12 @@ public final class AppController: ObservableObject {
             session.opTimeEntryID = nil
             session.pushedToOP = false
             session.provenance = .userAssigned   // reassigned in the editor
+            // A human re-pointing a slice is the user's word: the new task
+            // carries the human-word certainty (spec §The ownership rule:
+            // "task change ⇒ replace" with the human-word 1.0), not the number
+            // derived for the OLD task — that would be dishonest AND leave a
+            // corrected slice stuck below the push bar.
+            session.certainty = Attributor.humanWord
             clearPrimaryPosting(session.id)   // re-enter the pm queue
             teachAssociation(for: session)
         }
@@ -4524,10 +4542,12 @@ public final class AppController: ObservableObject {
                     await self.reassignTimelineSessions(
                         (try? self.journal.allSessions())?.filter { $0.id == original.id } ?? [],
                         to: original.task, undoable: false)
-                    // The re-run above stamps userAssigned; put the pre-
-                    // reassign provenance back so ⌘Z is "as it stood".
+                    // The re-run above stamps userAssigned and the human-word
+                    // certainty; put the pre-reassign provenance AND certainty
+                    // back so ⌘Z is "as it stood".
                     if var s = try? self.journal.session(id: original.id) {
                         s.provenance = original.provenance
+                        s.certainty = original.certainty
                         try? self.journal.update(s)
                     }
                 }
@@ -4547,6 +4567,10 @@ public final class AppController: ObservableObject {
             session.opTimeEntryID = nil
             session.pushedToOP = false
             session.provenance = .userAssigned
+            // Human re-pointing → the human-word certainty on the new task
+            // (spec §The ownership rule: task change replaces, with 1.0), not
+            // the old task's number carried across.
+            session.certainty = Attributor.humanWord
             clearPrimaryPosting(session.id)   // recreate under the new task
             try? journal.update(session)
             try? journal.escalateOrigin(session.id, to: .edited)

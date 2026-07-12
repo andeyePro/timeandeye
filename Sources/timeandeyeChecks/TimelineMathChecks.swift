@@ -187,7 +187,8 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(merged[0].start, t(0))
         try expectEq(merged[0].end, t(600))
         try expectEq(merged[0].comment, "first; second")
-        try expectClose(merged[0].certainty, 0.7)
+        // Duration-weighted mean (spec §Folds): both 300 s, so (0.9 + 0.7)/2.
+        try expectClose(merged[0].certainty, 0.8)
         try expect(!merged[0].pushedToOP)
         try expectEq(merged.map(\.task), [.op(1), .op(2), .op(1)])
     }

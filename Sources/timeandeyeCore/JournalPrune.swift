@@ -24,9 +24,11 @@ package enum JournalPrune {
     /// - A (day, task) group of ONE stays untouched (no gain, losing its
     ///   remote-entry link would only hurt).
     /// - The rollup keeps: summed duration (anchored at the group's first
-    ///   start), max certainty, folded distinct comments, pushed=true (the
-    ///   sources were), and drops per-entry backend ids (ancient history —
-    ///   edits that old re-push rather than PATCH).
+    ///   start), the DURATION-WEIGHTED MEAN certainty (spec §Folds: every
+    ///   many-to-one fold blends confidence by time — not max, not min),
+    ///   folded distinct comments, pushed=true (the sources were), and drops
+    ///   per-entry backend ids (ancient history — edits that old re-push
+    ///   rather than PATCH).
     package static func plan(sessions: [Session], olderThanDays days: Int,
                             now: Date = Date(),
                             calendar: Calendar = .current) -> Plan {
@@ -73,12 +75,18 @@ package enum JournalPrune {
                 }
             }
             let rollupID = SessionMerge.fragmentID(parent: UUID(uuid: acc), index: 0)
+            // Duration-weighted mean certainty (spec §Folds), the one fold rule
+            // shared with the flush and mergeAdjacent — a long confident slice
+            // is not dragged down by a brief uncertain one, nor oversold by it.
+            let weightedCertainty = total > 0
+                ? sorted.reduce(0.0) { $0 + $1.certainty * $1.end.timeIntervalSince($1.start) } / total
+                : (sorted.map(\.certainty).max() ?? 1)
             create.append(Session(
                 id: rollupID,
                 task: sorted[0].task,
                 start: sorted[0].start,
                 end: sorted[0].start.addingTimeInterval(total),
-                certainty: sorted.map(\.certainty).max() ?? 1,
+                certainty: weightedCertainty,
                 pushedToOP: true,
                 comment: comment))
             deleteIDs += sorted.map(\.id)

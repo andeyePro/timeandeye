@@ -1,5 +1,21 @@
 import Foundation
 
+/// The live-calendar prior's shared weights (attribution-calculus spec, the
+/// "duplicated calendar constants" note): the calendar term's ceiling
+/// contribution and its tentative discount. ONE home referenced by BOTH
+/// `TaskRanker.score` (which folds it into the ranking `prior`) and
+/// `Attributor.scoredComponents` (which re-derives the same term as the
+/// Evidence Card's separable "calendar share"), so the two can never drift
+/// out of lockstep — the calendar term is inside `prior`, so the Attributor's
+/// re-derivation must use the identical numbers.
+package enum CalendarWeight {
+    /// The calendar term's ceiling contribution (kept below recency's 2×
+    /// weight: a live meeting nudges the ranking, it never dominates).
+    package static let weight = 0.3
+    /// Half weight for a tentative (unconfirmed) calendar match.
+    package static let tentativeFactor = 0.5
+}
+
 package struct RankingConfig: Codable, Equatable, Sendable {
     package var statusOrder: [String]
     package var recencyHalfLifeDays: Double
@@ -50,9 +66,9 @@ package struct TaskRanker: Sendable {
         }
         var calendarScore = 0.0
         if let calendarMatch, calendarMatch.task == task.ref {
-            calendarScore = calendarMatch.tentative ? 0.5 : 1.0   // half weight for tentative
+            calendarScore = calendarMatch.tentative ? CalendarWeight.tentativeFactor : 1.0
         }
-        var score = statusScore + 2 * recencyScore + todScore + 0.3 * calendarScore
+        var score = statusScore + 2 * recencyScore + todScore + CalendarWeight.weight * calendarScore
         if let assignee = task.assignee, let me = config.currentUser,
            assignee != me, task.lastConfirmedAt == nil {
             score -= 10   // someone else's task: bottom of the list until tracked

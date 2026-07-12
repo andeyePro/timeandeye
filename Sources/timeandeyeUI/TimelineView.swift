@@ -1573,7 +1573,7 @@ struct TimelineView: View {
         let selected = selectedSpanIdx.contains(index)
         return Rectangle()
             .fill(Color(nsColor: controller.colour(for: task))
-                .opacity(span.certainty >= 0.6 ? 0.8 : 0.35))
+                .opacity(span.certainty >= TrackerConfig.switchBar ? 0.8 : 0.35))
             .overlay {
                 if secs * stripPxPerSec > 44 {
                     Text(label).font(.system(size: 9)).lineLimit(1).padding(.horizontal, 3)

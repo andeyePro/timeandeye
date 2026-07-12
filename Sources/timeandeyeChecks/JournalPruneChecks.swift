@@ -15,7 +15,7 @@ func journalPruneChecks(_ c: Checks) {
                 certainty: certainty, pushedToOP: pushed, comment: comment)
     }
 
-    c.check("old same-day same-task slices roll up: duration summed, comments folded, max certainty") {
+    c.check("old same-day same-task slices roll up: duration summed, comments folded, duration-weighted mean certainty") {
         let a = s(.op(1), start: daysAgo(800, 9 * 3600), minutes: 30,
                   certainty: 0.8, comment: "morning")
         let b = s(.op(1), start: daysAgo(800, 14 * 3600), minutes: 45,
@@ -27,7 +27,8 @@ func journalPruneChecks(_ c: Checks) {
         try expectEq(r.task, .op(1))
         try expectEq(r.start, a.start, "anchored at the day's first slice")
         try expectEq(r.end.timeIntervalSince(r.start), 75 * 60, "durations summed")
-        try expectEq(r.certainty, 0.95)
+        // Duration-weighted mean (spec §Folds), not max: (0.8·30 + 0.95·45)/75.
+        try expectClose(r.certainty, (0.8 * 30 + 0.95 * 45) / 75)
         try expect(r.pushedToOP)
         try expectNil(r.opTimeEntryID, "ancient rollups drop per-entry backend ids")
         try expectEq(r.comment, "morning; afternoon (consolidated 2 slices)")
