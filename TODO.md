@@ -310,8 +310,9 @@ and recorded rather than fixed blind:
 
 ## Open
 
-- [ ] 
-  
+- [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus the
+  follow-up audit's fixes, across 10 local commits; details per-entry in
+  CHANGELOG under 2026-07-12. The publish steps themselves stay manual.
 - [ ] Light-mode contrast: `AndeyeColors.highlight` needs a light-scheme
   variant (light blue reads weak on white/blue; dark mode confirmed good).
 - [ ] Re-shoot the deleted review-drawer screenshot with mocked data.
