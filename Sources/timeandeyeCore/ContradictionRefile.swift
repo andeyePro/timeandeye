@@ -13,10 +13,11 @@ import Foundation
 ///     into the same undoable digest the retro pass uses, so being right
 ///     costs nothing and being wrong costs one undo.
 ///   - Posted (and therefore invoice-lockable) slices are FLAGGED, never
-///     moved — money doesn't move off the back of a bulk pass.
-///   - Below the bar — or when the slice predates provenance journalling,
-///     where "engine-decided" cannot be proven — it's a suggestion only:
-///     one review row, refile-all or dismiss-for-good.
+///     moved — money doesn't move off the back of a bulk pass, whatever the
+///     score or provenance. This lane takes precedence over the two below.
+///   - An unpushed slice below the bar — or one that predates provenance
+///     journalling, where "engine-decided" cannot be proven — is a suggestion
+///     only: one review row, refile-all or dismiss-for-good.
 /// How the engine treats past entries that later evidence contradicts
 ///: update them automatically, leave them entirely alone,
 /// or queue every contradiction for his review. String-raw + lenient
@@ -56,9 +57,10 @@ public enum ContradictionRefile {
     public struct Plan: Equatable, Sendable {
         /// ≥ bar, provably engine-decided, unpushed: refile now.
         public var refiles: [Finding]
-        /// Contradicted at/above the bar but already posted: flag only.
+        /// Already posted (invoice-lockable): flag only, whatever the score or
+        /// provenance — money never moves off a bulk pass.
         public var postedFlags: [Finding]
-        /// Suggest-only: below the bar, or provenance unknown.
+        /// Suggest-only: unpushed, and below the bar or provenance unknown.
         public var suggestions: [Finding]
 
         public init(refiles: [Finding] = [], postedFlags: [Finding] = [],
@@ -132,12 +134,16 @@ public enum ContradictionRefile {
                                   newTask: newRef, score: result.score)
             if dismissed.contains(finding.dismissalKey) { continue }
             let provablyEngine = provenanceRaw != nil
-            if result.score >= bar && provablyEngine {
-                if session.pushedToOP {
-                    plan.postedFlags.append(finding)
-                } else {
-                    plan.refiles.append(finding)
-                }
+            // A posted (invoice-lockable) slice is FLAGGED, never actioned —
+            // money never moves off a bulk pass, whatever the score or the
+            // provenance. This must precede the refile/suggest split: a posted
+            // slice with nil provenance or a below-bar score would otherwise
+            // fall through to suggestions, where "Refile all" deletes billed
+            // time. Deliberate per-slice moves stay on the timeline-edit path.
+            if session.pushedToOP {
+                plan.postedFlags.append(finding)
+            } else if result.score >= bar && provablyEngine {
+                plan.refiles.append(finding)
             } else {
                 plan.suggestions.append(finding)
             }

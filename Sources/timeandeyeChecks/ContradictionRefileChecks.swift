@@ -69,6 +69,36 @@ func contradictionRefileChecks(_ c: Checks) {
         try expect(low.isEmpty)
     }
 
+    c.check("a POSTED slice always flags — never refiles, never suggests, whatever score or provenance") {
+        // FINDING 1 (2026-07-12, money path): posted, invoice-lockable time
+        // must never reach an actionable lane on a bulk pass. Before the fix a
+        // posted slice with nil provenance (rows journalled before provenance
+        // stamping) or a below-bar score fell through to suggestions → the
+        // ReviewView "Refile all" gesture → a backend delete of billed time.
+        // Every posted slice now routes to postedFlags regardless of score or
+        // provenance; the deliberate per-slice move stays on the timeline path.
+        func posted(_ id: UUID, prov: SessionProvenance?) -> Session {
+            session(id, task: .op(1), certainty: 0.7, pushed: true, provenance: prov)
+        }
+        let hi: (Session) -> (target: Target, score: Double)? = { _ in (.task(.op(2)), 0.95) }
+        let lo: (Session) -> (target: Target, score: Double)? = { _ in (.task(.op(2)), 0.7) }
+        func flagsOnly(_ s: Session, _ score: @escaping (Session) -> (target: Target, score: Double)?,
+                       _ id: UUID, _ why: String) throws {
+            let p = ContradictionRefile.plan(sessions: [s], bar: 0.9, suggestFloor: 0.6,
+                                             dismissed: [], score: score)
+            try expectEq(p.postedFlags.map(\.sessionID), [id], why)
+            try expect(p.suggestions.isEmpty && p.refiles.isEmpty, "\(why): nothing actionable")
+        }
+        // (a) posted + nil provenance + below-bar: the exact money-path row.
+        try flagsOnly(posted(a, prov: nil), lo, a, "posted+nil+below-bar")
+        // (b) posted + nil provenance + above-bar: still flags, never suggests.
+        try flagsOnly(posted(b, prov: nil), hi, b, "posted+nil+above-bar")
+        // (c) posted + engine provenance + below-bar: flags, not a suggestion.
+        try flagsOnly(posted(d, prov: SessionProvenance(source: .ranked)), lo, d, "posted+engine+below-bar")
+        // (d) posted + engine provenance + above-bar: unchanged, pinned.
+        try flagsOnly(posted(e, prov: SessionProvenance(source: .ranked)), hi, e, "posted+engine+above-bar")
+    }
+
     c.check("agreement is silence — the same task never contradicts itself") {
         let agrees: (Session) -> (target: Target, score: Double)? = { s in (.task(s.task), 0.99) }
         let sessions = [session(a, task: .op(1), certainty: 0.5,

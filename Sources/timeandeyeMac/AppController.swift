@@ -2634,8 +2634,22 @@ public final class AppController: ObservableObject {
         var priorSessions: [RetroDigest.PriorSessionState] = []
         var entriesToDelete: [RemoteEntryID] = []
         var severedAny = false
+        var lockedSkipped = 0
         for finding in findings {
             guard var session = try? journal.session(id: finding.sessionID) else { continue }
+            // DEFENCE IN DEPTH (finding 1, money path): never let a bulk refile
+            // delete invoice-locked, billed time. plan() already keeps posted
+            // slices out of the actionable lanes, but a posted slice that reaches
+            // here (a race, a future caller) whose ledger row is invoice-locked —
+            // the same lockedInvoiceRef guard SyncEngine's amendment loop honours
+            // — is skipped whole: no journal write, no ledger row cleared, no
+            // remote delete. Count it so the pass surfaces the untouched slice.
+            if session.pushedToOP,
+               let records = try? journal.postingRecords(session: finding.sessionID),
+               records.contains(where: { $0.lockedInvoiceRef != nil }) {
+                lockedSkipped += 1
+                continue
+            }
             priorSessions.append(RetroDigest.PriorSessionState(
                 id: finding.sessionID, task: finding.priorTask,
                 certainty: finding.priorCertainty,
@@ -2661,6 +2675,10 @@ public final class AppController: ObservableObject {
             session.provenance = .retro
             try? journal.update(session)
         }
+        // Surface any invoice-locked slices we refused to move on the same
+        // Posting-health count the flagged-posted contradictions already use —
+        // it survives the empty-batch early return below.
+        if lockedSkipped > 0 { contradictedPostedCount += lockedSkipped }
         guard !priorSessions.isEmpty else { return }
         let digest = RetroDigest(
             clearedSegmentIDs: [],

@@ -2,6 +2,20 @@
 
 ## 2026-07-12
 
+- [x] **Bulk refile can no longer delete invoice-locked time.** The
+  contradiction pass routed a posted slice to an actionable lane whenever its
+  provenance was unstamped (rows journalled before provenance) or its score sat
+  below the auto-push bar – from there "Refile all" severed the ledger row
+  carrying the invoice lock and deleted the billed backend entry, with no lock
+  consultation on the direct path. `ContradictionRefile.plan` now flags every
+  posted slice regardless of score or provenance, so money never moves off a
+  bulk pass; deliberate per-slice moves stay on the timeline-edit path. As
+  defence in depth `applyRefiles` consults the posting ledger before acting and
+  skips any invoice-locked slice whole – no journal write, no ledger clear, no
+  remote delete – counting it onto the Posting-health surface. New
+  ContradictionRefile checks pin the plan lanes across the posted × score ×
+  provenance matrix.
+
 - [x] **Restore the local-state ignore rules.** `.gitignore` again excludes
   
   
