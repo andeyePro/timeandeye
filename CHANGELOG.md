@@ -43,6 +43,26 @@
   binaries, so a routine broad `git add` cannot stage per-machine or working
   material. 
 
+- [x] **install-timeandeye.command no longer self-clobbers on a loose .app
+  source.** The self-clobber guard compared `$NEW` and `$DEST` as raw
+  strings, so any textually-different spelling of the same installed bundle
+  – a trailing slash from tab completion, a symlinked `~/Applications`, an
+  absolute `/Users/<name>/Applications` path – passed the guard, `rm -rf
+  "$DEST"` deleted the bundle, and `ditto "$NEW" "$DEST"` then read from the
+  just-deleted source and aborted under `set -e`, leaving no installed app
+  at all. Both sides are now canonicalised with a portable `cd`-and-`pwd -P`
+  helper before the compare, so equivalent spellings resolve to the same
+  path and the guard correctly treats them as identical; an unresolvable
+  `$DEST` (fresh install, nothing there yet) is treated as "different" so
+  the install proceeds as before. The canon helper is written to always
+  exit 0 even when `cd` fails, since a failing command-substitution
+  assignment would otherwise abort the whole script under `set -e` right
+  when `$DEST` doesn't exist yet – the exact fresh-install case the fix
+  needs to keep working. Verified with `bash -n`, a shellcheck diff against
+  HEAD (no new warnings), and a sandbox harness exercising the extracted
+  canon+guard logic against trailing-slash, symlinked-parent, genuinely-
+  different, and missing-`$DEST` path shapes.
+
 ## 2026-07-11
 
 - [x] **Undo: inverses run in order; groups don't swallow strangers.** (F3-3) `undo()` fired each inverse as a detached Task, so rapid ⌘Z⌘Z interleaved their awaits and inverse N+1's writes could race N's (last-writer-wins on the same rows). Inverses now chain — inverse N completes before N+1 starts — off the caller so the UI never blocks. (F3-4) `UndoStack.group` bodies that await yield the main actor, and any UNRELATED registration that interleaved during the suspension folded into the open group (one ⌘Z then reverted a stranger's edit under the wrong label). A task-local group token now scopes the fold to the group's own call context; a stray registration lands as its own ⌘Z step. New interleave check drives a group parked mid-await while an out-of-context registration arrives. (F3-7) `applyReconcile`'s per-id delete swallowed backend failures with `try?`, then undo unconditionally recreated every entry — manufacturing a duplicate for any delete that hadn't actually landed. It now tracks which deletes succeeded, undo recreates only those, and a failed delete surfaces via `lastError`. Suite 864/0; release `timeandeyeApp` build clean.

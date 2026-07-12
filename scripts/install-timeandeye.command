@@ -113,8 +113,20 @@ for OLD in "/Applications/andeye.app" "/Applications/timeandeye.app"; do
     fi
 done
 # Don't clobber the install with itself if someone points this at the already
-# installed copy.
-if [ "$NEW" != "$DEST" ]; then
+# installed copy. Canonicalise both sides first (cd + pwd -P) so a trailing
+# slash, a symlinked ~/Applications, or any other equivalent spelling of the
+# same directory is recognised as "same" — a raw string compare here would
+# let rm -rf delete the only copy of the bundle out from under its own
+# source, with ditto then reading nothing and set -e aborting the install.
+canon() { (cd "$1" 2>/dev/null && pwd -P) || true; }
+NEW_CANON="$(canon "$NEW")"
+DEST_CANON="$(canon "$DEST")"
+if [ -z "$DEST_CANON" ] || [ "$NEW_CANON" != "$DEST_CANON" ]; then
+    if [ ! -e "$NEW" ]; then
+        echo "Source vanished before install: $NEW"
+        read -r -p "Press return to close. "
+        exit 1
+    fi
     rm -rf "$DEST"
     ditto "$NEW" "$DEST"
 fi
