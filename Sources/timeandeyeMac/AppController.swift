@@ -1789,7 +1789,9 @@ public final class AppController: ObservableObject {
     }
 
     private func persistAssociations() {
-        invalidatePickList()   // every learning/pin/rule write lands here
+        invalidatePickList()        // every learning/pin/rule write lands here
+        invalidateSliceDetails()    // …and stales the slice-detail memo too, or
+                                    // an open disclosure keeps pre-rule certainty
         try? learningStore.save(attributor.learning)
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
@@ -2221,6 +2223,10 @@ public final class AppController: ObservableObject {
         let plan = ReviewConfirm.plan(viewed: reviewWalk.viewed, pending: pendingReview,
                                       sessions: sessions, bar: bar, score: scoring)
         guard !plan.assignments.isEmpty else { return }
+        // Did we stamp any session push-eligible? If so the confirm must kick
+        // sync itself — unlike the live-assign paths, nothing downstream fires
+        // it, so without this the stamped time waits for the 60 s retry timer.
+        var stampedAny = false
         undoStack.groupSync("confirm \(plan.confirmedCount) reviewed slices") {
             for assignment in plan.assignments {
                 let stamps = assignment.sessionStamps
@@ -2251,10 +2257,12 @@ public final class AppController: ObservableObject {
                     s.provenance = ReviewConfirm.stampProvenance
                     try? journal.update(s)
                 }
+                if !stamps.isEmpty { stampedAny = true }
             }
         }
         undoCount = undoStack.count
         updateJournalSummary()
+        if stampedAny { Task { await syncIfEnabled() } }
     }
 
     /// Push the settings' own-address list into the capture engine (never
@@ -2492,11 +2500,21 @@ public final class AppController: ObservableObject {
         // and the slice-detail cache would show yesterday's neighbours. The
         // generation bump makes open disclosures re-request lazily.
         adjacencyScoreCache = nil
+        invalidateSliceDetails()
+        updateJournalSummary()
+    }
+
+    /// Drop every memoised slice-detail row and bump the generation so open
+    /// disclosures re-request lazily. Any write that changes what a slice's
+    /// detail would say must call this: a review reload, AND a learning/pin/
+    /// rule write via `persistAssociations` — otherwise an open disclosure
+    /// keeps showing pre-change certainty until the next reload (indefinitely
+    /// when the retro pass is disabled by a high auto-push threshold).
+    private func invalidateSliceDetails() {
         sliceDetails.removeAll()
         sliceDetailQueue.removeAll()
         sliceDetailQueued.removeAll()
         sliceDetailGeneration += 1
-        updateJournalSummary()
     }
 
     // MARK: - Retro-acceptance (approvals-drawer spec §3)

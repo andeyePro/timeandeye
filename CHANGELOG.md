@@ -123,6 +123,30 @@
   No check ever read the field, so the suite count is unchanged. Bridge
   suite: 865 passed, 0 failed, before and after.
 
+- [x] **Duration captions unified; slice-detail and sync gaps after a review
+  confirm closed.** Three small correctness fixes from the 2026-07-12 review.
+  (1) Two caption sites did their own duration maths that disagreed with the
+  menu-bar clock: the Evidence Card's window chip rounded minutes with no hours
+  bracket (a 2 h 05 m window read "125m"), and the timeline strip tooltip
+  truncated with no hours bracket (a 90 s span read "1m" where the card said
+  "2m"). Both now route through `MenuTitle.text(elapsed:certainty:showPercent:)`
+  – the same formatter the today/tracked/selected/spent captions already use –
+  so seconds/minutes/hours read identically everywhere. No new entry point, so
+  the existing MenuTitle bracket checks still cover it; suite count unchanged.
+  (2) `persistAssociations` cleared the pick-list cache after a grain "Remember"
+  but never the slice-detail memo, so an open review disclosure kept showing
+  pre-rule certainty – self-healing on the next retro pass, but sticking
+  indefinitely when a high auto-push threshold disables that pass. The two
+  invalidation lines `reloadReview` already ran are now a private
+  `invalidateSliceDetails()` called from both paths, so the caches can't drift
+  again. (3) `confirmViewedSlices` stamped confirmed sessions push-eligible but,
+  unlike the live-assign paths, never kicked sync – the stamped time waited for
+  the 60 s retry timer. It now fires one `syncIfEnabled()` after the confirm
+  loop, only when at least one session was actually stamped. Scope: the two UI
+  caption sites and AppController plumbing; no public API renames, no changes to
+  the contradiction pass, billable setters or Settings. Bridge suite 865/0
+  before and after; release `timeandeyeApp` build clean.
+
 ## 2026-07-11
 
 - [x] **Undo: inverses run in order; groups don't swallow strangers.** (F3-3) `undo()` fired each inverse as a detached Task, so rapid ⌘Z⌘Z interleaved their awaits and inverse N+1's writes could race N's (last-writer-wins on the same rows). Inverses now chain — inverse N completes before N+1 starts — off the caller so the UI never blocks. (F3-4) `UndoStack.group` bodies that await yield the main actor, and any UNRELATED registration that interleaved during the suspension folded into the open group (one ⌘Z then reverted a stranger's edit under the wrong label). A task-local group token now scopes the fold to the group's own call context; a stray registration lands as its own ⌘Z step. New interleave check drives a group parked mid-await while an out-of-context registration arrives. (F3-7) `applyReconcile`'s per-id delete swallowed backend failures with `try?`, then undo unconditionally recreated every entry — manufacturing a duplicate for any delete that hadn't actually landed. It now tracks which deletes succeeded, undo recreates only those, and a failed delete surfaces via `lastError`. Suite 864/0; release `timeandeyeApp` build clean.

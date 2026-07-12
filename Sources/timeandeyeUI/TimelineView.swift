@@ -1582,7 +1582,7 @@ struct TimelineView: View {
             }
             .overlay(Rectangle().stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
             .frame(width: max(secs * stripPxPerSec, 3), height: 28)
-            .help("\(label)\n\(secs < 60 ? "\(Int(secs))s" : "\(Int(secs/60))m")  ·  \(span.start.formatted(date: .omitted, time: .standard))")
+            .help("\(label)\n\(MenuTitle.text(elapsed: secs, certainty: nil, showPercent: false))  ·  \(span.start.formatted(date: .omitted, time: .standard))")
             .onTapGesture { selectSpan(index) }
     }
 

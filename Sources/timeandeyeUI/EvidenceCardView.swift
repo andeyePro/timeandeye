@@ -71,7 +71,7 @@ struct EvidenceCardView: View {
     private var recordedRanText: String? {
         guard let r = recorded, let end = r.end else { return nil }
         let secs = end.timeIntervalSince(r.at)
-        let dur = secs < 60 ? "\(Int(secs))s" : "\(Int((secs / 60).rounded()))m"
+        let dur = MenuTitle.text(elapsed: secs, certainty: nil, showPercent: false)
         return "\(r.at.formatted(date: .omitted, time: .shortened)) – "
             + "\(end.formatted(date: .omitted, time: .shortened)) · \(dur)"
     }
