@@ -6,7 +6,7 @@ import Foundation
 /// site-recipes spec §6).
 ///
 ///   email:   Gmail ▸ harborlane.example ▸ r.naismith@… ▸ "Insurance Renewals"
-///   recipe:  github.com ▸ ◆Aqueum ▸ ◆a private notes repo ▸ ◆issues ▸ ◆"Pin editor loses focus"
+///   recipe:  github.com ▸ ◆example-org ▸ ◆example-repo ▸ ◆issues ▸ ◆"Pin editor loses focus"
 ///   plain:   forum.example.com ▸ andeyePro ▸ timeandeye ▸ issues
 ///   app:     Ghostty ▸ timeandeye ▸ Attributor.swift
 ///
@@ -60,8 +60,8 @@ public struct ContextIdentity: Sendable, Equatable {
     ///    root plus one ◆ `recipeField` segment per declared field (ghosts
     ///    for missing values, content last) — REPLACING the raw path
     ///    segments, not splicing alongside them: the fields ARE the path,
-    ///    structured (a splice would render `github.com ▸ ◆Aqueum ▸ ◆a private notes repo
-    ///    ▸ Aqueum ▸ a private notes repo`).
+    ///    structured (a splice would render `github.com ▸ ◆example-org ▸ ◆example-repo
+    ///    ▸ example-org ▸ example-repo`).
     ///  • Anything else: the PinScope identity — host + path segments for a
     ///    URL, app + window-title segments otherwise (title segments share
     ///    `.app`, the kind of the whole app-window identity).

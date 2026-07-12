@@ -78,8 +78,8 @@ Fold 'web host' in as another ladder level later." This spec is that later.
   grains appear in every teach surface the moment the chain carries them.
   One wrinkle: the current implementation SPLICES recipe segments into the
   PinScope chain at index 1, which for URL-derived fields would duplicate
-  the raw path segments they were parsed from (`github.com ▸ ◆Aqueum ▸
-  ◆a private notes repo ▸ Aqueum ▸ a private notes repo ▸ issues`) – §6 replaces the chain instead.
+  the raw path segments they were parsed from (`github.com ▸ ◆example-org ▸
+  ◆example-repo ▸ example-org ▸ example-repo ▸ issues`) – §6 replaces the chain instead.
 - **The rule shape is proven twice.** `EmailRule` (level ladder, pinned
   flag, provenance metadata, most-specific-wins `EmailMatcher`) and its
   younger sibling `CalendarRule` (2026-07-09 calendar spec §4, which chose
@@ -250,13 +250,13 @@ insufficient TODAY (the policy note's github.com example verbatim).
 | grain (general → specific) | source | example |
 |---|---|---|
 | site | host | github.com |
-| owner | path[0] (denylist: settings, notifications, orgs, marketplace, pulls, issues, search, …) | Aqueum |
-| repo | path[1] | a private notes repo |
+| owner | path[0] (denylist: settings, notifications, orgs, marketplace, pulls, issues, search, …) | example-org |
+| repo | path[1] | example-repo |
 | section | path[2] when in {issues, pulls, actions, wiki, discussions, projects} | issues |
 | item title (content) | titleLeadingSegment(" · ") when path names an issue/PR number | "Pin editor loses focus" |
 
 viewGate: path depth ≥ 1, first segment not in denylist. The money grain
-is **repo** – "example repo → task X" in one correction, which neither `urlPath`
+is **repo** – "example-repo → task X" in one correction, which neither `urlPath`
 learning (owner only) nor anything short of a hand-built pin reaches
 today. The content grain mirrors the email subject: substring match, for
 "anything mentioning 'invoice' in this repo's issues" style rules later.
@@ -364,7 +364,7 @@ public enum SiteMatcher {
   per declared field (ghosts for missing values) + the content field last
   – REPLACING the raw path segments, not splicing alongside them (the
   fields ARE the path, structured; the current insert-at-1 behaviour would
-  render `github.com ▸ ◆Aqueum ▸ ◆a private notes repo ▸ Aqueum ▸ a private notes repo`). Host-only
+  render `github.com ▸ ◆example-org ▸ ◆example-repo ▸ example-org ▸ example-repo`). Host-only
   pages keep today's PinScope chain untouched. Email chains are untouched.
 - **Evidence Card / grain footers / review footer**: nothing structural –
   they render whatever chain ContextIdentity hands them. `SegmentKind

@@ -1449,10 +1449,10 @@
   the tail; lab v5 adds lid-raise/smoothing tuning sliders. Commit c918b02.
 
 - [x] **Licence spec §1 LOCKED (Martin, exact phrase, 15:20).** The v2
-  nine-field payload contract is frozen; §1 mirrored verbatim into a private notes repo
-  the cross-repo note for the Pro side; any future change needs both repos plus
-  a version bump. OpenProject pinned as a community connector (Plus's one
-  connector = one standard connector). Commits 12622ad, daffdbb.
+  nine-field payload contract is frozen; §1 is mirrored to the Pro side as
+  a shared contract; any future change needs both repos plus a version
+  bump. OpenProject pinned as a community connector (Plus's one connector
+  = one standard connector). Commits 12622ad, daffdbb.
 
 - [x] **Pin rules: quoted values with embedded quotes round-trip (B12).** A
   rule whose value contained a double quote (an email subject like
@@ -1977,28 +1977,6 @@
   actually produce in that bracket. NOT COMMITTED — Martin verifies on
   the Mac first.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 - [x] **Front-page copy now lives in one editable file + "Light by design"
   section** (site/src/content/copy/home.md, content.config.ts,
   index.astro). Every owner-editable sentence on the landing page – hero,
@@ -2065,25 +2043,6 @@
   fresh reader (no X→Y change history, no self-flagellation); code-drawn
   illustrations, never screenshots. Adversarial review: clean bar two nits
   (em-dash comments, opener register), fixed.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## 2026-07-05
 
@@ -2156,7 +2115,7 @@
 
 - [x] **Landing: Martin's demo refinements re-applied natively, original
   voice restored.** The mechanics from the directed iterations (story cast
-  with Priya@x-accounts.com, click-to-open emails, four designer windows,
+  with priya@example.com, click-to-open emails, four designer windows,
   macOS traffic-light focus with dimmed background windows, no autoplay,
   working menu bar [winking mark · elapsed · one-word task], line-art Chrome
   tabs incl. the still kitten, clickable timeline + pie, orange hero, varied

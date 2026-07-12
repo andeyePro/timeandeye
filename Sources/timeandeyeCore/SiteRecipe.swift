@@ -313,7 +313,7 @@ public enum SiteRecipes {
 
     // MARK: - The v1 recipes (spec §4)
 
-    /// GitHub (§4.1). The money grain is REPO — "example repo → task X" in one
+    /// GitHub (§4.1). The money grain is REPO — "example-repo → task X" in one
     /// correction, which neither `urlPath` learning (owner only) nor
     /// anything short of a hand-built pin reaches. The denylist keeps
     /// GitHub's reserved top-level surfaces (your notifications, search, …)

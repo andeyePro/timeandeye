@@ -18,9 +18,8 @@ open andeye.xcodeproj          # select your team, build to a device/simulator
 
 STATUS: builds for the iOS Simulator (xcodebuild on the build Mac, Xcode
 26.6) and has had a first on-device test pass. CloudKit entitlements are
-deliberately absent until the Apple organisation conversion completes — do
-not add the iCloud capability before then (assets would mint under the
-personal team).
+deliberately absent until App Store distribution is configured — do
+not add the iCloud capability before then.
 
 ## What's in / out (v1)
 

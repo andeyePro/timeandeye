@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// The shared andeye look for sibling apps (Time&I, a sibling andeye app, …): brand
+/// The shared andeye look for sibling andeye apps: brand
 /// colours, the semantic type scale, and the eye-mark renderer (AndeyeMark).
 /// SwiftUI-only by contract — no AppKit/UIKit — so any andeye app on any
 /// Apple platform can consume this target without dragging the macOS app
-/// layers (the a sibling project's 2026-07-08 coordination request; its local shim
-/// mirrors exactly this surface).
+/// layers.
 public enum AndeyeTheme {
 
     public enum Colours {

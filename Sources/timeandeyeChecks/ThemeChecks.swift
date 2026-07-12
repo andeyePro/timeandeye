@@ -5,7 +5,7 @@ import timeandeyeTheme
 
 func andeyeThemeChecks(_ c: Checks) {
     // The geometry itself is covered by the AndeyeLogo suite; these checks
-    // pin the THEME contract sibling apps (a sibling andeye app) build against — the
+    // pin the THEME contract sibling andeye apps build against — the
     // shape must render the Core geometry into any rect without drift, and
     // the compatibility spelling must stay pointed at the theme value.
 

@@ -48,8 +48,8 @@ func siteRecipeExtractionChecks(_ c: Checks) {
         let site = try unwrap(SiteRecipes.extract(githubIssueSignal()))
         try expectEq(site.recipe?.id, "github")
         try expectEq(site.host, "github.com")
-        try expectEq(site.values["owner"], "Aqueum")
-        try expectEq(site.values["repo"], "a private notes repo")
+        try expectEq(site.values["owner"], "example-org")
+        try expectEq(site.values["repo"], "example-repo")
         try expectEq(site.values["section"], "issues")
         try expectEq(site.values["title"], "Pin editor loses focus")
     }
@@ -66,10 +66,10 @@ func siteRecipeExtractionChecks(_ c: Checks) {
         // The title has no path-named issue/PR, so the content field must
         // ghost — a repo description must never become a "title" rule value.
         let home = urlSignal("https://github.com/example-org/example-repo",
-                             title: "GitHub - example-org/example-repo: an example repo")
+                             title: "GitHub - example-org/example-repo")
         let site = try unwrap(SiteRecipes.extract(home))
-        try expectEq(site.values["owner"], "Aqueum")
-        try expectEq(site.values["repo"], "a private notes repo")
+        try expectEq(site.values["owner"], "example-org")
+        try expectEq(site.values["repo"], "example-repo")
         try expectNil(site.values["section"], "tree/blob/etc are not sections; absent means ABSENT")
         try expectNil(site.values["title"], "no issue number in the path → no content value")
     }
@@ -147,8 +147,8 @@ func siteRecipeExtractionChecks(_ c: Checks) {
     c.check("probeText names the recipe and every field; refuses mail hosts") {
         let text = SiteRecipes.probeText(for: githubIssueSignal())
         try expect(text.contains("GitHub"))
-        try expect(text.contains("Repository: a private notes repo"))
-        try expect(text.contains("Owner: Aqueum"))
+        try expect(text.contains("Repository: example-repo"))
+        try expect(text.contains("Owner: example-org"))
         let home = SiteRecipes.probeText(for: urlSignal("https://github.com/example-org/example-repo",
                                                         title: "GitHub - example-org/example-repo"))
         try expect(home.contains("Section: not captured"), "ghosts are named, never hidden")
@@ -169,7 +169,7 @@ func siteIdentityChecks(_ c: Checks) {
                      [.urlHost, .recipeField("owner"), .recipeField("repo"),
                       .recipeField("section"), .recipeField("title")])
         try expectEq(id.segments.map(\.value),
-                     ["github.com", "Aqueum", "a private notes repo", "issues", "Pin editor loses focus"])
+                     ["github.com", "example-org", "example-repo", "issues", "Pin editor loses focus"])
         try expect(!id.segments.contains { $0.kind == .urlPath },
                    "raw path segments must NOT ride alongside the fields (spec §6)")
         try expect(id.segments[4].display.contains("Pin editor loses focus")
@@ -205,8 +205,8 @@ func siteIdentityChecks(_ c: Checks) {
         // default is declared per recipe, not positional (spec §6).
         try expectEq(ContextIdentity.from(xeroSignal()).siteDefaultGrainIndex, 2)
         // Default field not captured → the host row still commits.
-        try expectEq(ContextIdentity.from(urlSignal("https://github.com/Aqueum",
-                                                    title: "Aqueum")).siteDefaultGrainIndex, 1)
+        try expectEq(ContextIdentity.from(urlSignal("https://github.com/example-org",
+                                                    title: "example-org")).siteDefaultGrainIndex, 1)
     }
 
     c.check("footerDefaultGrainIndex: email default first, recipe default next, host row on ANY web page, nil on app windows (Q2)") {
@@ -247,7 +247,7 @@ func siteIdentityChecks(_ c: Checks) {
                                 start: t0, end: t0.addingTimeInterval(300))
         let id = ContextIdentity.from(row.signal)
         try expectEq(id.footerDefaultGrainIndex, 3)
-        try expectEq(id.segments[2].value, "a private notes repo")
+        try expectEq(id.segments[2].value, "example-repo")
     }
 
     c.check("caller-supplied recipeFields (Tier 1 DOM values, later) still splice after the root") {
@@ -271,41 +271,41 @@ func siteMatcherChecks(_ c: Checks) {
 
     c.check("most specific level wins over the recipe's declared order; site sits below all fields") {
         let rules = [rule("site", "github.com", to: 1),
-                     rule("owner", "aqueum", to: 2),
-                     rule("repo", "a private notes repo", to: 3)]
+                     rule("owner", "example-org", to: 2),
+                     rule("repo", "example-repo", to: 3)]
         try expectEq(SiteMatcher.match(github, rules: rules)?.target, .op(3))
         try expectEq(SiteMatcher.match(github, rules: Array(rules.prefix(2)))?.target, .op(2))
         try expectEq(SiteMatcher.match(github, rules: Array(rules.prefix(1)))?.target, .op(1))
     }
 
     c.check("content field is most specific and matches by case-insensitive SUBSTRING") {
-        let rules = [rule("repo", "a private notes repo", to: 1),
+        let rules = [rule("repo", "example-repo", to: 1),
                      rule("title", "pin editor", to: 2)]
         try expectEq(SiteMatcher.match(github, rules: rules)?.target, .op(2))
         try expectNil(SiteMatcher.match(github, rules: [rule("title", "invoicing", to: 9)]))
     }
 
     c.check("identity fields match by EQUALITY (case-insensitive), never substring") {
-        try expectNil(SiteMatcher.match(github, rules: [rule("repo", "brain", to: 9)]),
-                      "'brain' must not match repo 'a private notes repo'")
-        try expectEq(SiteMatcher.match(github, rules: [rule("repo", "a private notes repo", to: 1)])?.target,
+        try expectNil(SiteMatcher.match(github, rules: [rule("repo", "example-rep", to: 9)]),
+                      "'example-rep' must not match repo 'example-repo'")
+        try expectEq(SiteMatcher.match(github, rules: [rule("repo", "EXAMPLE-REPO", to: 1)])?.target,
                      .op(1))
     }
 
     c.check("pinned beats learned at a level; newest unpinned wins ties (EmailMatcher verbatim)") {
-        let older = rule("repo", "a private notes repo", to: 1, at: t0)
-        let newer = rule("repo", "a private notes repo", to: 2, at: t0.addingTimeInterval(60))
+        let older = rule("repo", "example-repo", to: 1, at: t0)
+        let newer = rule("repo", "example-repo", to: 2, at: t0.addingTimeInterval(60))
         try expectEq(SiteMatcher.match(github, rules: [older, newer])?.target, .op(2))
-        let pinnedRule = rule("repo", "a private notes repo", to: 3, pinned: true)
+        let pinnedRule = rule("repo", "example-repo", to: 3, pinned: true)
         try expectEq(SiteMatcher.match(github, rules: [older, pinnedRule, newer])?.target, .op(3))
     }
 
     c.check("a recipe-field rule never fires on another recipe's page or a host-only context") {
         let xero = SiteRecipes.extract(xeroSignal())!
-        try expectNil(SiteMatcher.match(xero, rules: [rule("repo", "a private notes repo", to: 9)]))
+        try expectNil(SiteMatcher.match(xero, rules: [rule("repo", "example-repo", to: 9)]))
         // Host-only context (recipe disabled): field rules dormant, site rules live.
         let hostOnly = SiteRecipes.context(for: githubIssueSignal(), disabled: ["github"])!
-        try expectNil(SiteMatcher.match(hostOnly, rules: [rule("repo", "a private notes repo", to: 9)]))
+        try expectNil(SiteMatcher.match(hostOnly, rules: [rule("repo", "example-repo", to: 9)]))
         try expectEq(SiteMatcher.match(hostOnly, rules: [rule("site", "github.com", to: 1)])?.target,
                      .op(1))
     }
@@ -326,7 +326,7 @@ func siteRulePrecedenceChecks(_ c: Checks) {
     let tasks = [WorkTask(ref: .op(1), subject: "Repo work", status: "Open"),
                  WorkTask(ref: .op(2), subject: "Other", status: "Open")]
     func repoRule(to id: Int, pinned: Bool = false) -> SiteRule {
-        SiteRule(recipeID: "github", field: "repo", value: "a private notes repo", target: .op(id),
+        SiteRule(recipeID: "github", field: "repo", value: "example-repo", target: .op(id),
                  pinned: pinned, createdAt: t0)
     }
 
@@ -400,7 +400,7 @@ func siteRulePrecedenceChecks(_ c: Checks) {
         try expectEq(e.source, .siteRule)
         try expectEq(e.chosen, .task(.op(1)))
         try expectClose(e.chosenScore, Attributor.inferredCeiling)
-        try expectEq(e.matchedSiteRule?.value, "a private notes repo")
+        try expectEq(e.matchedSiteRule?.value, "example-repo")
     }
 
     c.check("forgettable returns the unpinned site rule that fired; nil for a pinned one") {
@@ -415,7 +415,7 @@ func siteRulePrecedenceChecks(_ c: Checks) {
 
     c.check("forget removes exactly the named rule; explainWithout restores state byte-for-byte") {
         let a = Attributor(instanceHost: host)
-        let keep = SiteRule(recipeID: "github", field: "owner", value: "aqueum",
+        let keep = SiteRule(recipeID: "github", field: "owner", value: "example-org",
                             target: .op(2), createdAt: t0)
         a.siteRules = [repoRule(to: 1), keep]
         let before = a.siteRules
@@ -430,7 +430,7 @@ func siteRulePrecedenceChecks(_ c: Checks) {
     c.check("forgettableWithout exposes the fallback's own forgettable, without mutating") {
         let a = Attributor(instanceHost: host)
         let repo = repoRule(to: 1)
-        let owner = SiteRule(recipeID: "github", field: "owner", value: "aqueum",
+        let owner = SiteRule(recipeID: "github", field: "owner", value: "example-org",
                              target: .op(2), createdAt: t0)
         a.siteRules = [repo, owner]
         try expectEq(a.forgettableWithout(.siteRule(repo), githubIssueSignal(), now: t0),
@@ -440,16 +440,16 @@ func siteRulePrecedenceChecks(_ c: Checks) {
 
     c.check("learnSiteRule replaces an existing UNPINNED same-grain rule; a pinned one survives") {
         let a = Attributor(instanceHost: host)
-        a.learnSiteRule(recipeID: "github", field: "repo", value: "a private notes repo", to: .op(1), now: t0)
+        a.learnSiteRule(recipeID: "github", field: "repo", value: "Example-Repo", to: .op(1), now: t0)
         try expectEq(a.siteRules.count, 1)
-        try expectEq(a.siteRules[0].value, "a private notes repo", "stored lowercased")
-        a.learnSiteRule(recipeID: "github", field: "repo", value: "a private notes repo", to: .op(2), now: t0)
+        try expectEq(a.siteRules[0].value, "example-repo", "stored lowercased")
+        a.learnSiteRule(recipeID: "github", field: "repo", value: "example-repo", to: .op(2), now: t0)
         try expectEq(a.siteRules.count, 1, "the unpinned rule was replaced, not stacked")
         try expectEq(a.siteRules[0].target, .op(2))
-        let pinned = SiteRule(recipeID: "github", field: "repo", value: "a private notes repo",
+        let pinned = SiteRule(recipeID: "github", field: "repo", value: "example-repo",
                               target: .op(3), pinned: true, createdAt: t0)
         a.siteRules.append(pinned)
-        a.learnSiteRule(recipeID: "github", field: "repo", value: "a private notes repo", to: .op(4), now: t0)
+        a.learnSiteRule(recipeID: "github", field: "repo", value: "example-repo", to: .op(4), now: t0)
         try expect(a.siteRules.contains { $0.sameRule(as: pinned) },
                    "a pinned rule is never silently replaced")
     }
@@ -487,13 +487,13 @@ func siteRulePrecedenceChecks(_ c: Checks) {
 func siteFeatureChecks(_ c: Checks) {
     c.check("a recipe-matched signal emits .recipeField features for IDENTITY fields only") {
         let feats = LearningStore.features(from: githubIssueSignal())
-        try expect(feats.contains(Feature(.recipeField, "github.owner=aqueum")))
+        try expect(feats.contains(Feature(.recipeField, "github.owner=example-org")))
         try expect(feats.contains(Feature(.recipeField, "github.repo=example-repo")))
         try expect(feats.contains(Feature(.recipeField, "github.section=issues")))
         try expect(!feats.contains { $0.kind == .recipeField && $0.value.contains("github.title=") },
                    "content fields never become features — a whole issue title would never repeat")
         // The coarse urlPath feature is untouched (owner-level, as before).
-        try expect(feats.contains(Feature(.urlPath, "github.com/Aqueum")))
+        try expect(feats.contains(Feature(.urlPath, "github.com/example-org")))
     }
 
     c.check("a disabled recipe emits no recipe features (spec §8: disabled = extracts nothing)") {
@@ -555,9 +555,9 @@ func siteFeatureChecks(_ c: Checks) {
 func siteLedgerChecks(_ c: Checks) {
     let names: [TaskRef: String] = [.op(1): "Brain work", .op(2): "Accounts"]
     func name(_ ref: TaskRef) -> String { names[ref] ?? "?" }
-    let repo = SiteRule(recipeID: "github", field: "repo", value: "a private notes repo",
+    let repo = SiteRule(recipeID: "github", field: "repo", value: "example-repo",
                         target: .op(1), createdAt: t0, fireCount: 3)
-    let owner = SiteRule(recipeID: "github", field: "owner", value: "aqueum",
+    let owner = SiteRule(recipeID: "github", field: "owner", value: "example-org",
                          target: .op(1), pinned: true, createdAt: t0.addingTimeInterval(-60))
     let org = SiteRule(recipeID: "xero", field: "organisation", value: "!x7kp2",
                        target: .op(2), createdAt: t0, fireCount: 9)
@@ -570,7 +570,7 @@ func siteLedgerChecks(_ c: Checks) {
 
     c.check("search matches value, grain label and task name") {
         try expectEq(SiteRulesLedger.grouped([repo, owner, org], nameOf: name,
-                                             search: "a private notes repo").flatMap(\.rows), [repo])
+                                             search: "example-repo").flatMap(\.rows), [repo])
         try expectEq(SiteRulesLedger.grouped([repo, owner, org], nameOf: name,
                                              search: "organisation").flatMap(\.rows), [org])
         try expectEq(SiteRulesLedger.grouped([repo, owner, org], nameOf: name,
@@ -580,7 +580,7 @@ func siteLedgerChecks(_ c: Checks) {
     c.check("export text: grouped, grain-labelled, provenance on every line") {
         let text = SiteRulesLedger.exportText([repo, org], nameOf: name)
         try expect(text.contains("Brain work"))
-        try expect(text.contains("GitHub repository: a private notes repo"))
+        try expect(text.contains("GitHub repository: example-repo"))
         try expect(text.contains("Xero organisation: !x7kp2"))
         try expect(text.contains("fired 9×"))
         try expect(text.hasSuffix("\n"))

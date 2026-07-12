@@ -720,19 +720,6 @@ and recorded rather than fixed blind:
 - [ ] Martin to verify: timeline edits write back correctly to OpenProject and
   no data (windows etc.) is lost across edit/merge/split/reassign.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## Billable flag + multi-backend (2026-07-06)
 
 - [x] Billable flag (andeyeTT) + multi-backend fan-out (postings ledger,
@@ -861,21 +848,6 @@ and recorded rather than fixed blind:
   left as-is by later edits/deletes (prospective-only by design, but a
   reconcile-style finance read-back tool would close the gap); journal
   summary counts ("awaiting push") remain pm-centric.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## Window detail selection helpers (Martin, 2026-07-07)
 

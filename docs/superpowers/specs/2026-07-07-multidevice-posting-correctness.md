@@ -1,7 +1,7 @@
 # Multi-device posting correctness – design
 
 Status: DESIGN (no code in this commit). Spec date 2026-07-07. Written by the
-Fable review session from findings F8–F19 (`FableReview.md`); resolves them
+Fable review session from findings F8–F19 (a prior internal review); resolves them
 into one buildable architecture. Read with `2026-07-02-sync-design.md` (the
 journal CRDT this builds on) and `2026-07-06-billable-flag-multibackend.md`
 (the posting-ledger fan-out this hardens).
@@ -350,8 +350,8 @@ until then, document that billable flags should be set on the posting owner.
 ## Sequencing
 
 - WITH the CloudKit transport GA (blockers): D1, D2 (all three parts).
-- BEFORE Xero registers on the seam (blockers): D5, D6, plus the licence
-  spec's registration re-evaluation (F16).
+- BEFORE Xero registers on the seam (blockers): D5, D6, plus future
+  licensing work (F16), out of scope here.
 - BEFORE "seamless Xero" is marketed: D3, D4.
 - Later: D7's synced rules; F17's tick-side drift clamp (one-line hardening
   in `HLCClock.tick`: cap `physicalNow` absorption symmetrically).
@@ -411,5 +411,5 @@ zero multi-device users. Response: half of it (D5, D6, F16) is needed for the
 FIRST Xero customer regardless of device count; the other half (D1–D4) is
 exactly the set that cannot be retrofitted after CloudKit sync ships without
 a data-repair migration across customers' journals and their real books —
-the same "do it at the last clean moment" logic as the licence schema, and
-that moment is now.
+the same "do it at the last clean moment" logic as future licensing work
+(F16), out of scope here, and that moment is now.

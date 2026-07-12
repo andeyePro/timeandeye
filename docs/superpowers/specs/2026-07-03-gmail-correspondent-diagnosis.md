@@ -149,7 +149,7 @@ LearningStore.swift:35-53). That feature set is:
   Chrome title like "High memory usage - Gmail" tokenises to `high`, `memory`,
   `usage`, `gmail` — hence the junk. A title like
   "Inbox (23) - martin@example.com - Gmail" tokenises to `inbox`, `martin`,
-  `example`, `org`, `gmail` — hence Martin's OWN address (fragmented) is the
+  `example`, `com`, `gmail` — hence Martin's OWN address (fragmented) is the
   only address he ever sees: it is in Gmail's window title; correspondents
   never are.
 - `urlHost`, `urlPath`, `hourOfDay`.
