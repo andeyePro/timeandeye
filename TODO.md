@@ -927,7 +927,7 @@ and recorded rather than fixed blind:
   recommendations; F1 floor correction applied — standard connectors `.plus`).
   Then commit the v2 build; do NOT sell any plus SKU before the entitlement
   gate ships end-to-end (spec's own launch-blocker rule).
-- [x] FableReview.md triage — DONE 2026-07-11 (vsss iter-36 reconciliation).
+- [x] AI-review triage — DONE 2026-07-11 (vsss iter-36 reconciliation).
   Designs: docs/superpowers/specs/2026-07-07-multidevice-posting-
   correctness.md (D0–D7 + 14 criteria). SHIPPED and code-verified: F8/D1
   resolved view feeds pusher+pie+export (e426b7b; resolvedSessions/

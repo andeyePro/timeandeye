@@ -1026,7 +1026,7 @@
   Swift type names (`Andeye*` — the brand lives on, only TT dies), and
   
   Product-site domain refs aligned to time.andeye.com (astro `site:`,
-  canonical, responder manual link); andeye.com/terms + /privacy left —
+  canonical, manual link); andeye.com/terms + /privacy left —
   Xero-registered, "must not change". Mac to run: `rm -rf .build && swift
   run timeandeyeChecks`.
 
@@ -1667,9 +1667,8 @@
   on stored identity). Mac-verified: 444 passed, 0 failed.
 
 - [x] **Licence v2 + entitlement gate; posting robustness (F12/F19/F21/F22/F23);
-  sync anti-entropy.** The Fable 5 review-and-build session (FableReview.md
-  holds the 23-finding review this implements against; the two specs under
-  docs/superpowers/specs/ dated 2026-07-07 hold the designs). One commit
+  sync anti-entropy.** The Fable 5 review-and-build session (implementing a
+  prior 23-finding internal review against the v2 designs). One commit
   because the edits interleave inside shared functions; per-feature story:
   (1) LICENCE v2 – nine required fields (v, kid, jti, tier, licensee, issued,
   expires, product, connectors[]), fail-closed decode, multi-kid verifier with
