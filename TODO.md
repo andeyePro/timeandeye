@@ -310,6 +310,8 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Light-mode contrast: `AndeyeColors.highlight` needs a light-scheme
+  variant (light blue reads weak on white/blue; dark mode confirmed good).
 - [ ] Re-shoot the deleted review-drawer screenshot with mocked data.
   
   longer in the tree. Nothing referenced it, but a replacement
