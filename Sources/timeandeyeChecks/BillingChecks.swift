@@ -233,6 +233,9 @@ final class FakeBackend: TaskBackend {
     /// Throw on the next N listTimeEntries calls (heals afterwards) — the
     /// reconcile/verify hold-the-claim paths.
     var failNextLists = 0
+    /// Throw a TRANSIENT error on the next N deleteTimeEntry calls (heals
+    /// afterwards) — the compensation-law retract-retry paths.
+    var failNextDeletes = 0
     /// updateTimeEntry calls, in order (the amendment loop's trace).
     var updated: [(id: RemoteEntryID, taskID: String, start: Date, duration: TimeInterval)] = []
     /// Entry ids the backend refuses to touch (invoiced/locked) — update and
@@ -299,6 +302,7 @@ final class FakeBackend: TaskBackend {
     func updateEntryComment(id: RemoteEntryID, comment: String) async throws {}
     func deleteTimeEntry(id: RemoteEntryID) async throws {
         if frozenIDs.contains(id) { throw AmendmentError.frozen("invoiced") }
+        if failNextDeletes > 0 { failNextDeletes -= 1; throw Fail() }
         deleted.append(id)
         held.removeAll { $0.id == id }
     }

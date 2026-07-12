@@ -3103,6 +3103,67 @@ public final class AppController: ObservableObject {
             state: .posted, entryID: entryID))
     }
 
+    /// Sever `session`'s primary-pm linkage honouring the two laws
+    /// (`PostingSever`). Replaces the raw `clearPrimaryPosting` +
+    /// `try? deleteTimeEntry` idiom every mutation path used to inline —
+    /// which was BOTH lock-blind (deleted billed entries) and
+    /// compensation-blind (cleared the row on a swallowed delete failure,
+    /// orphaning a live entry). Reads the cell first, then:
+    ///   - LOCKED → park `.diverged`; the local edit stands, the billed entry
+    ///     is untouched, a human reconciles at invoicing time.
+    ///   - unlocked live entry → delete it now; on SUCCESS clear the row (as
+    ///     before); on FAILURE retain the entryID under a retract intent the
+    ///     engine's next pass completes — never a cleared cell over a live entry.
+    ///   - no linkage → clear the (pending/empty) row.
+    /// Returns true when the caller may re-post under a new task (row cleanly
+    /// cleared), false when it must not (parked, or retraction still pending).
+    @discardableResult
+    private func severPrimaryLinkage(_ session: Session) async -> Bool {
+        let cell = (try? journal.postingRecord(session: session.id,
+                                               backendID: primaryPMLedgerID)) ?? nil
+        switch PostingSever.plan(cell: cell, entryID: session.opTimeEntryID) {
+        case .noLinkage:
+            clearPrimaryPosting(session.id)
+            return true
+        case .locked:
+            parkDiverged(cell)
+            return false
+        case .retract(let entryID):
+            guard let backend else { clearPrimaryPosting(session.id); return true }
+            do {
+                try await backend.deleteTimeEntry(id: entryID)
+                clearPrimaryPosting(session.id)
+                return true
+            } catch {
+                // Compensation law: the entry is still live at the backend, so
+                // the row must NOT be cleared. Retain the entryID under the
+                // retract intent the engine retries; CAS so a racing pass's
+                // in-flight intent is never clobbered.
+                _ = try? journal.setPostingRecord(PostingRecord(
+                    sessionID: session.id, backendID: primaryPMLedgerID,
+                    state: .failed, entryID: entryID,
+                    lastError: PostingSever.retractIntentReason,
+                    updatedAt: Date()), unlessState: [.inflight])
+                return false
+            }
+        }
+    }
+
+    /// Park a cell `.diverged` under the lock law: billed time never moves off
+    /// a user edit; the disagreement surfaces on posting-health for a human to
+    /// reconcile. Preserves `lockedInvoiceRef` and the `entryID` (the human
+    /// needs to know which billed entry). CAS-guarded against a racing pass's
+    /// in-flight intent.
+    private func parkDiverged(_ cell: PostingRecord?) {
+        guard let cell else { return }
+        var parked = cell
+        parked.state = .diverged
+        parked.lastError = "locked by invoice \(cell.lockedInvoiceRef ?? "?") — "
+            + "the local edit and the billed entry disagree; unlock the invoice to reconcile"
+        parked.updatedAt = Date()
+        _ = try? journal.setPostingRecord(parked, unlessState: [.inflight])
+    }
+
     /// One reusable ISO-8601 formatter for OP pushes — it was allocated per
     /// push in several paths (allocating a formatter is not cheap).
 
@@ -3154,13 +3215,22 @@ public final class AppController: ObservableObject {
         if let merged = action.mergedComment {
             try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
         }
+        // Lock law: reconcile never deletes a billed (invoice-locked) entry,
+        // nor moves a billed session onto a different survivor. Gather the
+        // locked entry ids and locked sessions so both loops skip them; a
+        // human reconciles billed duplicates by unlocking the invoice first.
+        let lockedRecords = ((try? journal.postingRecords(
+                state: .posted, backendID: primaryPMLedgerID)) ?? [])
+            .filter { $0.lockedInvoiceRef != nil }
+        let lockedEntryIDs = Set(lockedRecords.compactMap(\.entryID))
+        let lockedSessions = Set(lockedRecords.map(\.sessionID))
         // Track which deletes ACTUALLY landed: a swallowed failure left the
         // duplicate live on the backend, yet undo then recreated it anyway —
         // manufacturing a duplicate. Undo now recreates only the entries this
         // pass truly removed, and a failed delete surfaces instead of
         // silently diverging journal from backend.
         var deletedIDs: Set<RemoteEntryID> = []
-        for id in action.deleteIDs {
+        for id in action.deleteIDs where !lockedEntryIDs.contains(id) {
             do {
                 try await backend.deleteTimeEntry(id: id)
                 deletedIDs.insert(id)
@@ -3168,7 +3238,7 @@ public final class AppController: ObservableObject {
                 lastError = "\(backend.displayName) delete failed: \(error)"
             }
         }
-        for sid in action.repointSessionIDs {
+        for sid in action.repointSessionIDs where !lockedSessions.contains(sid) {
             if var s = try? journal.session(id: sid) {
                 s.opTimeEntryID = action.survivorID
                 try? journal.update(s)
@@ -4416,9 +4486,12 @@ public final class AppController: ObservableObject {
         // id, and let sync recreate under the new task. Also teach the
         // attributor so the same surface stops mis-filing in future.
         if let previous, previous.task != session.task {
-            if let oldEntry = previous.opTimeEntryID, let backend {
-                try? await backend.deleteTimeEntry(id: oldEntry)
-            }
+            // Sever the old linkage honouring the lock + compensation laws
+            // (a locked cell parks `.diverged` and is NOT re-posted below; an
+            // unlocked entry is deleted, or handed to the engine's retract-
+            // retry if the delete fails) instead of the old lock-blind,
+            // orphan-on-failure `try? deleteTimeEntry` + `clearPrimaryPosting`.
+            await severPrimaryLinkage(previous)
             session.opTimeEntryID = nil
             session.pushedToOP = false
             session.provenance = .userAssigned   // reassigned in the editor
@@ -4428,7 +4501,6 @@ public final class AppController: ObservableObject {
             // derived for the OLD task — that would be dishonest AND leave a
             // corrected slice stuck below the push bar.
             session.certainty = Attributor.humanWord
-            clearPrimaryPosting(session.id)   // re-enter the pm queue
             teachAssociation(for: session)
         }
         // A sub-minute session was marked handled without an OP entry; if an
@@ -4521,12 +4593,22 @@ public final class AppController: ObservableObject {
             }
         }
         try? journal.deleteSession(session.id)
-        // The pm entry is deleted below, so the pm row must go too (an undo
-        // restore re-pushes). Finance rows stay: their entries are untouched.
-        clearPrimaryPosting(session.id)
-        if let entryID = session.opTimeEntryID, let backend {
-            try? await backend.deleteTimeEntry(id: entryID)
+        // Session-delete totality (M4): billed time must never quietly outlive
+        // its session. The pm entry goes through the sever helper (lock law +
+        // compensation). Every FINANCE cell is retracted too — not just pm as
+        // before: an unlocked finance row is left `.posted` for the engine's
+        // amendment loop to retract (the session is gone, so it has no journal
+        // support), and a LOCKED finance row parks `.diverged` (its billed
+        // entry is untouched, surfaced for a human).
+        await severPrimaryLinkage(session)
+        for cell in ((try? journal.postingRecords(session: session.id)) ?? [])
+        where cell.backendID != primaryPMLedgerID {
+            if cell.lockedInvoiceRef != nil { parkDiverged(cell) }
+            // unlocked: leave the row; amendDiverged retracts the entry.
         }
+        // Kick a pass so the retractions land promptly rather than waiting for
+        // the 60 s timer (the engine owns the finance/failed-pm wire calls).
+        await syncIfEnabled()
         updateJournalSummary()
     }
 
@@ -4559,10 +4641,12 @@ public final class AppController: ObservableObject {
         }
         for var session in sessions where session.id != Self.liveSessionID {
             // Re-creating under the new task is simpler and more reliable than
-            // PATCHing the work-package link.
-            if let entryID = session.opTimeEntryID, let backend {
-                try? await backend.deleteTimeEntry(id: entryID)
-            }
+            // PATCHing the work-package link. Sever the old linkage honouring
+            // the lock + compensation laws (locked → parked `.diverged`, not
+            // re-posted; unlocked → deleted now or handed to the engine's
+            // retract-retry on failure) rather than the old lock-blind,
+            // orphan-on-failure delete + `clearPrimaryPosting`.
+            await severPrimaryLinkage(session)
             session.task = task
             session.opTimeEntryID = nil
             session.pushedToOP = false
@@ -4571,7 +4655,6 @@ public final class AppController: ObservableObject {
             // (spec §The ownership rule: task change replaces, with 1.0), not
             // the old task's number carried across.
             session.certainty = Attributor.humanWord
-            clearPrimaryPosting(session.id)   // recreate under the new task
             try? journal.update(session)
             try? journal.escalateOrigin(session.id, to: .edited)
             teachAssociation(for: session)   // stop the same window mis-filing again
@@ -4685,8 +4768,11 @@ public final class AppController: ObservableObject {
         let survivors = Set(merged.map(\.id))
         for o in original where !survivors.contains(o.id) {
             try? journal.deleteSession(o.id)
-            clearPrimaryPosting(o.id)   // absorbed: its pm entry is deleted below
-            if let e = o.opTimeEntryID, let backend { try? await backend.deleteTimeEntry(id: e) }
+            // Absorbed: sever its linkage under the two laws (a billed entry
+            // parks `.diverged`; an unlocked one is deleted, or handed to the
+            // engine's retract-retry on failure) instead of the old lock-blind,
+            // orphan-on-failure delete + `clearPrimaryPosting`.
+            await severPrimaryLinkage(o)
         }
         for m in merged where original.first(where: { $0.id == m.id }) != m {
             var survivor = m
@@ -4698,6 +4784,18 @@ public final class AppController: ObservableObject {
             if let backend, backend.owns(survivor.task),
                let taskID = survivor.task.backendTaskID,
                let entryID = survivor.opTimeEntryID {
+                // Lock law: never AMEND billed time. A survivor whose cell is
+                // invoice-locked keeps its billed entry untouched — the merge
+                // stands locally and the cell parks `.diverged` for a human,
+                // rather than PATCHing the extent of an entry an invoice covers.
+                let cell = (try? journal.postingRecord(session: survivor.id,
+                                                       backendID: primaryPMLedgerID)) ?? nil
+                if cell?.lockedInvoiceRef != nil {
+                    parkDiverged(cell)
+                    survivor.pushedToOP = true   // handled; never re-create over billed time
+                    try? journal.update(survivor)
+                    continue
+                }
                 do {
                     try await backend.updateTimeEntry(
                         id: entryID, taskID: taskID, start: survivor.start,

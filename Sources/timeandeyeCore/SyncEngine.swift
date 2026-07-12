@@ -340,6 +340,51 @@ public final class SyncEngine {
             try? journal.setPostingRecord(reopened)
         }
 
+        // Retract-intent sweep (the compensation law's engine half). A user
+        // path severed a linkage but its immediate remote delete failed,
+        // leaving a `.failed` row that still carries the entryID under
+        // `retractIntentReason`. Complete the retraction the controller
+        // couldn't: delete the entry now. Keyed on the REASON, never the bare
+        // `.failed`+entryID state — a resurrection demote wears the same state
+        // but means re-POST, so it must not be swept here. Runs BEFORE the
+        // queue loop (which is why the queue's own guard can trust that a
+        // still-marked row means the retract is unfinished, not un-started).
+        for row in ((try? journal.postingRecords(state: .failed,
+                                                 backendID: entry.id)) ?? []) {
+            guard row.lastError == PostingSever.retractIntentReason,
+                  let entryID = row.entryID else { continue }
+            // Belt-and-braces: the user path parks locked cells `.diverged`,
+            // so a locked retract-intent should not exist — but never delete
+            // billed time even if one somehow does.
+            if row.lockedInvoiceRef != nil { continue }
+            guard budget > 0 else { diverged += 1; continue }
+            budget -= 1
+            do {
+                try await entry.backend.deleteTimeEntry(id: entryID)
+                // The stale entry is gone. If the session still exists (its
+                // task moved to another billable target) drop to a clean
+                // `.failed` so the queue re-posts it fresh under the new task;
+                // if it is gone, `.retracted` rests (the re-open sweep above
+                // re-posts it should the session ever return).
+                let survives = ((try? journal.session(id: row.sessionID)) ?? nil) != nil
+                var settled = row
+                settled.state = survives ? .failed : .retracted
+                settled.entryID = nil
+                settled.lastError = survives
+                    ? nil : "journal side removed — entry deleted at the backend"
+                settled.sessionStamp = ((try? journal.sessionStamp(row.sessionID)) ?? nil)
+                settled.updatedAt = now
+                try? journal.setPostingRecord(settled)
+                retracted += 1
+            } catch let amendment as AmendmentError where amendment != .mustRecreate {
+                parkFrozen(row, entry: entry, now: now)
+                diverged += 1
+            } catch {
+                onDebug("retract-intent delete failed at \(entry.id) for \(row.sessionID): \(error)")
+                diverged += 1   // leave `.failed`+entryID+reason; retry next pass
+            }
+        }
+
         let rows = ((try? journal.postingRecords(state: .posted,
                                                  backendID: entry.id)) ?? [])
         for row in rows {
@@ -666,6 +711,17 @@ public final class SyncEngine {
                                                 atOrAbove: threshold)) ?? [])
                 .filter { !excludedSessionIDs.contains($0.id) }
             sessionLoop: for session in queue {
+                // A retract-intent row that STILL carries its entryID means the
+                // amendment sweep above could not delete the severed entry this
+                // pass (budget, or a failing delete). Do NOT create a fresh
+                // entry over it — that would double the linkage. Wait: once the
+                // sweep clears the entryID the row re-posts on a later pass.
+                if let pending = ((try? journal.postingRecord(
+                        session: session.id, backendID: entry.id)) ?? nil),
+                   pending.state == .failed, pending.entryID != nil,
+                   pending.lastError == PostingSever.retractIntentReason {
+                    continue
+                }
                 // Class routing. Unknown classes receive nothing (safe until
                 // a routing rule for them exists).
                 switch entry.backendClass {
@@ -828,6 +884,24 @@ public final class SyncEngine {
                         : "\(error)"
                     if quarantined { continue }
                     break sessionLoop
+                }
+            }
+            // M5 (mirror coherence, second clause): the legacy pm mirror
+            // (pushedToOP/opTimeEntryID) is written best-effort (`try?`)
+            // alongside the primary-pm cell, so a dropped mirror write can
+            // leave the two out of step (a live `.posted` cell but a stale
+            // pushed=false / wrong-id session). Re-assert the mirror FROM the
+            // cell — the source of truth — for every `.posted` pm row whose
+            // session disagrees. Idempotent: a coherent mirror is untouched.
+            if entry.backendClass == .pm {
+                for row in ((try? journal.postingRecords(state: .posted,
+                                                         backendID: entry.id)) ?? [])
+                where row.entryID != nil {
+                    guard let session = ((try? journal.session(id: row.sessionID)) ?? nil)
+                    else { continue }
+                    if !session.pushedToOP || session.opTimeEntryID != row.entryID {
+                        try? journal.markPushed(row.sessionID, opTimeEntryID: row.entryID)
+                    }
                 }
             }
             reports.append(report)

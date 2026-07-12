@@ -2,6 +2,36 @@
 
 ## 2026-07-12
 
+- [x] **Closed the posting state machine's three user-path holes – timeline
+  edits now honour invoice locks, failed retractions retry instead of
+  orphaning, and deleting a session retracts its finance money too.** Behaviour
+  changes first: (i) the invoice-lock law now covers every mutation path, not
+  just bulk refile – a task-change timeline edit, `deleteTimelineSession`,
+  `reassignTimelineSessions`, `coalesceAdjacent` (absorbed originals AND the
+  survivor's in-place PATCH), and `applyReconcile` all consult
+  `lockedInvoiceRef` before touching a remote entry. A locked cell's billed
+  entry is never deleted or amended; the local edit still stands (the user's
+  word) and the cell parks `.diverged`, surfaced on posting-health for a human
+  to reconcile at invoicing time. (ii) A severed linkage whose immediate remote
+  delete FAILS no longer clears its ledger row and orphans a live backend entry
+  – the row survives `.failed` with the entryID retained under a retract
+  intent, and the engine's next pass completes the retraction (then re-posts
+  under the new task if the session still wants one), retrying until it lands.
+  (iii) Deleting a session now retracts its finance entries as well as pm:
+  unlocked finance rows are handed to the engine's retraction sweep, locked
+  ones park `.diverged` – billed time never quietly outlives its session.
+  Engine mechanics: `amendDiverged` gained a retract-intent sweep over
+  `.failed` rows marked with `PostingSever.retractIntentReason` (kept distinct
+  from the resurrection demote's same-state re-POST intent by the reason
+  string, never the bare state), the create queue skips a session whose
+  retract is still pending so no rival entry is made over an un-retracted
+  linkage, and the pass re-asserts the legacy pm mirror from the primary-pm
+  cell when a best-effort `markPushed` dropped it (M5 second clause). The law
+  itself is pinned in Core (`PostingSever.plan`); the controller's application
+  of it is the @MainActor half. `PostingMachineChecks` gained M2/M3/M4 and the
+  M5 second-clause scenarios (886 → 893). Contract:
+  `docs/superpowers/specs/2026-07-12-posting-state-machine.md`.
+
 - [x] **Made the attribution engine conform to the certainty calculus – one
   number, one set of rules.** Behaviour changes first: (i) a human correction
   now marks its slice with the human-word certainty (1.0), so it becomes

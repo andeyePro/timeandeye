@@ -390,6 +390,182 @@ func postingMachineChecks(_ c: Checks) async {
         let again = try unwrap(try store.session(id: s.id))
         try expectEq(again.opTimeEntryID, m.cell(s.id, primaryPM)?.entryID)
     }
+
+    // ===================================================================
+    // M2 — lock immutability (the LAW, pinned in Core). No sever amends,
+    // deletes, or unlocks-and-forgets a locked cell's remote entry; a local
+    // edit on a locked cell ends `.diverged`. `PostingSever.plan` is the
+    // law's decision point — the controller's APPLICATION of it
+    // (parkDiverged on the timeline edit/delete/reassign/coalesce paths) is
+    // @MainActor and verified by review; the engine half below proves the
+    // retract-intent sweep also refuses billed time.
+    // ===================================================================
+
+    await c.check("M2: PostingSever.plan freezes a locked cell and retracts only an unlocked live entry") {
+        let unlocked = PostingRecord(sessionID: UUID(), backendID: primaryPM,
+                                     state: .posted, entryID: "e9")
+        var locked = unlocked; locked.lockedInvoiceRef = "INV-1"
+        // Locked ⇒ never a retract, whatever the entry: billed time is frozen.
+        try expectEq(PostingSever.plan(cell: locked, entryID: "e9"), .locked)
+        try expectEq(PostingSever.plan(cell: locked, entryID: nil), .locked)
+        // Unlocked with a live entry ⇒ retract THAT entry.
+        try expectEq(PostingSever.plan(cell: unlocked, entryID: "e9"), .retract(entryID: "e9"))
+        // No entry / empty cell ⇒ nothing to sever.
+        try expectEq(PostingSever.plan(cell: nil, entryID: nil), .noLinkage)
+        try expectEq(PostingSever.plan(cell: unlocked, entryID: nil), .noLinkage)
+    }
+
+    await c.check("M2: the retract-intent sweep refuses a LOCKED cell — billed time is never deleted or re-created") {
+        let store = try makeStore(); store.clock = makeClock()
+        let pm = FakeBackend(owns: .op)
+        let m = Machine(store: store, backends: [(primaryPM, .pm, pm)])
+        let s = session(.op(1), 0, 3600); try store.save(s); m.track(s)
+        try await m.mutate("plant a LOCKED retract-intent (must never delete, must never re-create)") {
+            let e = try await pm.createTimeEntry(taskID: "1", start: s.start,
+                duration: 3600, activityID: nil, comment: nil)
+            try store.setPostingRecord(PostingRecord(sessionID: s.id, backendID: primaryPM,
+                state: .failed, entryID: e, lastError: PostingSever.retractIntentReason,
+                updatedAt: t(0), lockedInvoiceRef: "INV-9"))
+        }
+        let heldBefore = pm.held.count
+        try await m.pass("locked retract-intent is inert", now: t(20000))
+        try expectEq(pm.deleted.count, 0, "a locked cell's entry is never deleted")
+        try expectEq(pm.held.count, heldBefore, "the billed entry still stands — and no rival was created")
+    }
+
+    // ===================================================================
+    // M3 — compensation pairing. After any sever, either the remote entry is
+    // gone, a row with its entryID survives in a RETRYABLE state, or the cell
+    // is diverged — never a cleared cell over a live remote entry. The engine
+    // half is the retract-intent sweep a controller hands a FAILED delete to
+    // (a `.failed` row still carrying its entryID under `retractIntentReason`,
+    // distinct from a resurrection demote's same-state re-POST intent).
+    // ===================================================================
+
+    await c.check("M3: a retract-intent's entry is retracted, then the session re-posts fresh under its new task") {
+        let store = try makeStore(); store.clock = makeClock()
+        let pm = FakeBackend(owns: .op)
+        let m = Machine(store: store, backends: [(primaryPM, .pm, pm)])
+        // Posted under task 1; the user moved the slice to task 2 but the
+        // immediate delete of the old entry failed — the controller left this.
+        let old = try await pm.createTimeEntry(taskID: "1", start: t(0),
+            duration: 3600, activityID: nil, comment: nil)
+        let s = session(.op(2), 0, 3600); try store.save(s); m.track(s)
+        try await m.mutate("plant a retract intent carrying the OLD entry") {
+            try store.setPostingRecord(PostingRecord(sessionID: s.id, backendID: primaryPM,
+                state: .failed, entryID: old, lastError: PostingSever.retractIntentReason,
+                updatedAt: t(0)))
+        }
+        try await m.pass("sweep retracts old, queue re-posts under task 2", now: t(20000))
+        try expect(pm.deleted.contains(old ?? "?"), "the stale entry was retracted")
+        try expectEq(pm.held.filter { $0.taskID == "1" }.count, 0, "nothing left under the old task")
+        try expectEq(pm.held.filter { $0.taskID == "2" }.count, 1, "re-posted once under the new task")
+        try expectEq(m.cell(s.id, primaryPM)?.state, .posted, "cell healed to posted")
+    }
+
+    await c.check("M3: a FAILING retract holds entry + row (never cleared over a live entry), re-creates NOTHING, then heals") {
+        let store = try makeStore(); store.clock = makeClock()
+        let pm = FakeBackend(owns: .op)
+        let m = Machine(store: store, backends: [(primaryPM, .pm, pm)])
+        let old = try await pm.createTimeEntry(taskID: "1", start: t(0),
+            duration: 3600, activityID: nil, comment: nil)
+        let s = session(.op(2), 0, 3600); try store.save(s); m.track(s)
+        try await m.mutate("retract intent + the backend refuses the delete once") {
+            pm.failNextDeletes = 1
+            try store.setPostingRecord(PostingRecord(sessionID: s.id, backendID: primaryPM,
+                state: .failed, entryID: old, lastError: PostingSever.retractIntentReason,
+                updatedAt: t(0)))
+        }
+        try await m.pass("delete fails: entry + row survive, nothing re-created", now: t(20000))
+        try expectEq(pm.deleted.count, 0, "the delete failed — entry still live")
+        try expectEq(pm.held.filter { $0.taskID == "2" }.count, 0,
+                     "the create guard held: no fresh entry over an un-retracted linkage")
+        let heldRow = m.cell(s.id, primaryPM)
+        try expectEq(heldRow?.state, .failed, "row survives, retryable")
+        try expectEq(heldRow?.entryID, old, "entryID retained — never cleared over a live entry (M3)")
+        try expectEq(heldRow?.lastError, PostingSever.retractIntentReason, "still marked retract-intent")
+        // Next pass the backend heals: the retract lands, then the re-post.
+        try await m.pass("retract heals, then re-post once", now: t(20100))
+        try expect(pm.deleted.contains(old ?? "?"), "the retry retracted the stale entry")
+        try expectEq(pm.held.filter { $0.taskID == "2" }.count, 1, "re-posted exactly once after retraction")
+    }
+
+    // ===================================================================
+    // M4 — session-delete totality. After a session is deleted, no backend
+    // holds an UNLOCKED live entry for it; a LOCKED entry is left untouched
+    // (billed time never quietly deleted). The controller hands each cell to
+    // the engine (unlocked finance → amendDiverged retracts; locked →
+    // parkDiverged, @MainActor, review-verified); this pins the engine + lock
+    // halves across BOTH backends.
+    // ===================================================================
+
+    await c.check("M4: deleting a session retracts BOTH its pm and finance entries") {
+        let store = try makeStore(); store.clock = makeClock()
+        let pm = FakeBackend(owns: .op)
+        let finance = FakeBackend(owns: .nothing)
+        let m = Machine(store: store, backends: [(primaryPM, .pm, pm), ("fin-b", .finance, finance)])
+        let s = session(.op(1), 0, 3600); try store.save(s); m.track(s)
+        try await m.pass("post to pm + finance", now: t(20000), financeEligible: { _ in true })
+        try expectEq(pm.held.count, 1); try expectEq(finance.held.count, 1)
+        try await m.mutate("session deleted; its ledger rows survive for retraction") {
+            try store.deleteSession(s.id)
+        }
+        try await m.pass("engine retracts every unlocked entry", now: t(20100),
+                         financeEligible: { _ in true })
+        try expectEq(pm.held.count, 0, "pm entry retracted")
+        try expectEq(finance.held.count, 0, "finance entry retracted — billed time never outlives its session")
+    }
+
+    await c.check("M4: a LOCKED finance entry is NOT retracted when its session is deleted") {
+        let store = try makeStore(); store.clock = makeClock()
+        let pm = FakeBackend(owns: .op)
+        let finance = FakeBackend(owns: .nothing)
+        let m = Machine(store: store, backends: [(primaryPM, .pm, pm), ("fin-b", .finance, finance)])
+        let s = session(.op(1), 0, 3600); try store.save(s); m.track(s)
+        try await m.pass("post to both", now: t(20000), financeEligible: { _ in true })
+        let finEntry = finance.held.first?.id
+        try await m.mutate("the finance entry is invoice-locked, then the session is deleted") {
+            var cell = try unwrap(m.cell(s.id, "fin-b"))
+            cell.lockedInvoiceRef = "INV-7"
+            try store.setPostingRecord(cell)
+            try store.deleteSession(s.id)
+        }
+        try await m.pass("locked finance survives; pm still retracts", now: t(20100),
+                         financeEligible: { _ in true })
+        try expectEq(pm.held.count, 0, "the unlocked pm entry is retracted")
+        try expectEq(finance.held.count, 1, "the LOCKED finance entry is untouched — billed time preserved")
+        try expect(finance.held.first?.id == finEntry, "the same billed entry still stands")
+    }
+
+    // ===================================================================
+    // M5 (SECOND CLAUSE) — a best-effort pm mirror write that FAILED
+    // (markPushed is `try?`) leaves a live `.posted` cell but a stale mirror
+    // (pushed=false / wrong id). The next pass re-asserts the mirror FROM the
+    // cell — the source of truth. Reproduced by planting the post-markPushed-
+    // failure state directly: a posted cell whose mirror was never set.
+    // ===================================================================
+
+    await c.check("M5 (second clause): a pass re-asserts a stale pm mirror from the primary-pm cell") {
+        let store = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        let m = Machine(store: store, backends: [(primaryPM, .pm, pm)])
+        let s = session(.op(1), 0, 3600); try store.save(s); m.track(s)
+        try await m.mutate("cell posted, but the mirror write was dropped (pushed=false, id nil)") {
+            let e = try await pm.createTimeEntry(taskID: "1", start: s.start,
+                duration: 3600, activityID: nil, comment: nil)
+            try store.setPostingRecord(PostingRecord(sessionID: s.id, backendID: primaryPM,
+                state: .posted, entryID: e, updatedAt: t(0),
+                postedStart: s.start, postedDuration: 3600))
+        }
+        let before = try unwrap(try store.session(id: s.id))
+        try expect(!before.pushedToOP, "mirror starts stale (the dropped markPushed)")
+        try await m.pass("re-assert the mirror", now: t(20000))
+        let after = try unwrap(try store.session(id: s.id))
+        let cell = try unwrap(m.cell(s.id, primaryPM))
+        try expectEq(after.pushedToOP, true, "mirror re-asserted: pushedToOP ⟺ cell posted")
+        try expectEq(after.opTimeEntryID, cell.entryID, "mirror id re-asserted from the cell")
+        try expectEq(pm.created.count, 1, "no re-post — the cell was already posted (mirror-only fix)")
+    }
 }
 
 /// A JournalStore double whose `migrateSingleSlotPostings` can be made to
