@@ -1,49 +1,22 @@
-# >>> vibe-managed runtime exclusions (auto-added; do not edit body) >>>
-# Files vibe writes to /workspace at runtime. Committing them
-# leaks per-machine state into the repo (PR-review-noise risk).
-# Opt out: set VIBE_AUTO_GITIGNORE=0 before container start, or
-# delete this entire block (won't be re-added once removed).
-.claude/settings.local.json
-# <<< vibe-managed <<<
-
-# local-only
+# macOS / editors
 .DS_Store
 
 # SwiftPM build products
 .build/
 *.app/
 
-# Pro-tier staging area — NEVER committed here. Xero/paid-backend code lives
-# in the private andeyePro/Pro repo; this folder only stages it until that
-# repo exists on this machine.
-/pro/
+# Per-machine Xcode state
+xcuserdata/
+*.xcuserstate
 
-# site/ – Astro + Starlight product site, built by Cloudflare Pages
+# Product website (Astro) build output
 site/node_modules/
 site/dist/
 site/.astro/
 
-# /vs harness state
-.vs/cycle-*/
-__pycache__/
-*.pyc
+# Local tool state
+.claude/settings.local.json
 
-# Per-machine Xcode state (public-repo hygiene)
-xcuserdata/
-*.xcuserstate
-
-# The whole andeyePro repo
+# The paid tier lives in the private andeyePro repo, never here
+/pro/
 andeyePro/
-
-# runtime state (sessions/ IS committed; these are per-machine)
-andeyeTT
-timeandeye
-
-# Strategy surface — never public (Martin, 2026-07-11): candid working/audit
-
-/.vs/
-/the run log
-/the plan
-
-
-

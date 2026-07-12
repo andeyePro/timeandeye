@@ -85,19 +85,18 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
     /// synchronously, BEFORE the window is first ordered front. The previous
     /// deferred (async) apply lost the race: macOS decides the Space
     /// transition when the window is shown, so behaviours set a runloop later
-    /// changed nothing and opening over a fullscreen app still switched Space
-    /// (Martin, 2026-07-09 — twice).
+    /// changed nothing and opening over a fullscreen app still switched Space.
     /// The zoom (green) button's replacement action: whatever pose the
     /// window is in, make it CAPABLE of its own fullscreen Space first,
     /// then enter fullscreen — the overlay pose otherwise downgrades green
-    /// to a plain zoom that squats over the fullscreen app underneath
-    /// (Martin, 2026-07-11). Inside its own fullscreen, green just exits.
+    /// to a plain zoom that squats over the fullscreen app underneath.
+    /// Inside its own fullscreen, green just exits.
     /// Trade accepted: option-click zoom is gone; green means fullscreen.
     final class GreenButtonHelper: NSObject {
         weak var window: NSWindow?
         /// The owning view, for its fullscreen-transition state. Mutating
         /// collectionBehavior/level or toggling fullscreen WHILE macOS is
-        /// still animating a Space wedges the window solid (fix thirteen) —
+        /// still animating a Space wedges the window solid —
         /// the timer path already holds off in that gap (applyToWindow), and
         /// a green click must too.
         weak var owner: SpaceJoiningView?
@@ -107,8 +106,8 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             // window while the Space is still settling (same hold the 1 Hz
             // timer path applies). Transitions are brief; the next click lands.
             if owner?.isMidFullscreenTransition == true { return }
-            // Mac-native nuances stay native (Martin, 2026-07-11): option-
-            // click means zoom, and green inside fullscreen exits.
+            // Mac-native nuances stay native: option-click means zoom, and
+            // green inside fullscreen exits.
             if NSEvent.modifierFlags.contains(.option) {
                 w.zoom(sender)
                 return
@@ -136,29 +135,30 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
         /// re-renders for that proved uneven: clock-driven windows re-render
         /// ~1Hz, but the review drawer re-renders only on queue changes, so
         /// its level never updated after attach and it alone failed to float
-        /// over fullscreen apps (Martin, 2026-07-10 — timeline and settings
-        /// floated, the drawer didn't). A timer owned HERE gives every
-        /// window the same cadence regardless of how often SwiftUI renders.
+        /// over fullscreen apps (the timeline and settings windows floated
+        /// fine; only the drawer, with no clock to drive it, did not). A timer
+        /// owned HERE gives every window the same cadence regardless of how
+        /// often SwiftUI renders.
         private var recheck: Timer?
         private var screenObserver: NSObjectProtocol?
         private var openObserver: NSObjectProtocol?
-        /// Fullscreen fix thirteen (Martin, 2026-07-11): a green-buttoned
-        /// window came back from Esc frozen, unclickable and sinking behind
-        /// other windows. Cause: .fullScreen leaves the styleMask BEFORE the
-        /// exit animation completes, so the styleMask guard below stopped
-        /// protecting the window mid-transition and the 1 Hz timer mutated
-        /// collectionBehavior/level while macOS was still animating the
+        /// Fullscreen-transition guard: without it, a green-buttoned window
+        /// returning from Esc could come back frozen, unclickable and sinking
+        /// behind other windows. .fullScreen leaves the styleMask BEFORE the
+        /// exit animation completes, so the styleMask guard below stops
+        /// protecting the window mid-transition and the 1 Hz timer would
+        /// mutate collectionBehavior/level while macOS was still animating the
         /// Space — which wedges the window. These track the transition via
         /// the will/did notifications and hold every mutation until it ends,
         /// plus a settle margin.
         private var transitionObservers: [NSObjectProtocol] = []
         private var inFullscreenTransition = false
         private var transitionHoldUntil: TimeInterval = 0
-        /// Re-front back-off (Martin's 06:52 log): a window macOS refuses to
-        /// pull onto the active Space was orderFrontRegardless'd — and logged
-        /// — every single second. The first few ticks after it lands off-Space
-        /// still fix it fast; after that, retry only every 10 s, and log only
-        /// when the off-Space state first appears.
+        /// Re-front back-off: a window macOS refuses to pull onto the active
+        /// Space would be orderFrontRegardless'd — and logged — every single
+        /// second. The first few ticks after it lands off-Space still fix it
+        /// fast; after that, retry only every 10 s, and log only when the
+        /// off-Space state first appears.
         private var wasOffActiveSpace = false
         private var refrontAttempts = 0
         private var lastRefrontAt: TimeInterval = 0
@@ -170,12 +170,11 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 || ProcessInfo.processInfo.systemUptime < transitionHoldUntil
         }
         private let greenHelper = GreenButtonHelper()
-        /// Fix nine (Martin, 2026-07-10 morning) closed two blind spots:
-        /// the popover's menu-bar reveal blinded the heuristic at exactly
-        /// open time (fresh windows attached at normal level and macOS
-        /// evicted them to another Space), and canJoinAllSpaces was
-        /// permanent (every themed window followed the user to every
-        /// Space). The review pass then moved the whole decision into
+        /// Two blind spots the pose logic must close: the popover's menu-bar
+        /// reveal blinds the heuristic at exactly open time (fresh windows
+        /// attach at normal level and macOS evicts them to another Space),
+        /// and a permanent canJoinAllSpaces makes every themed window follow
+        /// the user to every Space. The whole decision therefore lives in
         /// `FullscreenPose.decide` (timeandeyeMac — pure, check-covered):
         /// open/reopen grace, a TIME-based sticky settle (~5 s continuous,
         /// immune to apply bursts), an explicit popover-open hold, hidden-
@@ -240,7 +239,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 // On-main proven by the guard above; assumeIsolated makes
                 // that visible to the compiler (the bare call was warning
                 // 'main actor-isolated method in a synchronous nonisolated
-                // context' on every build — Martin's 04:14 paste).
+                // context' on every build).
                 MainActor.assumeIsolated {
                     // Scoped: only the window being opened re-graces (see
                     // AndeyeWindows.openGrantApplies) — granting every window
@@ -253,11 +252,11 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                     self.applyToWindow()
                     // Arrival must be instant, not next-tick: AppKit takes a
                     // beat to honour fresh Space flags, and waiting for the
-                    // 1 Hz timer read as "very slow" (Martin, 2026-07-11).
+                    // 1 Hz timer reads as "very slow".
                     self.burstApply()
                 }
             }
-            // Fullscreen fix thirteen: bracket macOS's enter/exit animations.
+            // Bracket macOS's enter/exit animations.
             let starts = [NSWindow.willEnterFullScreenNotification,
                           NSWindow.willExitFullScreenNotification]
             let ends = [NSWindow.didEnterFullScreenNotification,
@@ -278,8 +277,8 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                     // still catch the tail of the animation. NO fresh grace
                     // here — grace means the auxiliary pose, and auxiliary
                     // windows can't green-button into their own fullscreen,
-                    // which broke an immediate re-fullscreen after an exit
-                    // (Martin, 2026-07-11). Exiting lands on a desktop; the
+                    // which broke an immediate re-fullscreen after an exit.
+                    // Exiting lands on a desktop; the
                     // 1 Hz decide() re-floats it if the screen genuinely
                     // still looks fullscreen.
                     self.transitionHoldUntil = ProcessInfo.processInfo.systemUptime + 2
@@ -320,8 +319,7 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             if let title, w.title != title {
                 w.title = title
             }
-            // The green button MUST fullscreen, from any pose (Martin,
-            // 2026-07-11: "from anywhere… it just maximises"). In the
+            // The green button MUST fullscreen, from any pose. In the
             // overlay pose (auxiliary + canJoinAllSpaces) macOS downgrades
             // green to zoom, so the button is retargeted at a helper that
             // re-poses the window primary and enters fullscreen itself.
@@ -368,9 +366,8 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
             if w.styleMask.contains(.fullScreen) { return }
             // …and so does a window mid enter/exit ANIMATION: .fullScreen
             // drops from the styleMask before the exit finishes, and
-            // mutating flags in that gap wedged a window solid (fix
-            // thirteen — Martin, 2026-07-11). Hold until the transition
-            // ends plus a settle margin.
+            // mutating flags in that gap wedges a window solid. Hold until
+            // the transition ends plus a settle margin.
             if isMidFullscreenTransition { return }
             // Fullscreen-look heuristic: menu bar hidden ⇒ visibleFrame
             // reaches the top of the screen. Blind while the menu bar is
@@ -395,27 +392,27 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                 state: pose)
             let wantFullscreenPose = pose.floating
             // Hidden retained windows are MAINTAINED, silently: AppKit
-            // re-asserts flags on them (per-second churn in Martin's 11:18
-            // grep, 2026-07-10), so a pose parked once on hide would not
-            // stick — the sets below keep running, but the log lines are
+            // re-asserts flags on them roughly once a second, so a pose
+            // parked once on hide would not stick — the sets below keep
+            // running, but the log lines are
             // gated to visible windows or actual decision changes.
             let logworthy = visible || before != wantFullscreenPose
-            // Flag history, all evidenced by Martin's log pastes (2026-07-09):
-            // SwiftUI Window scenes ship with .fullScreenNone set, which
-            // poisoned every insert-only fix (raw 131841); moveToActiveSpace
-            // never targets a fullscreen Space; the one arrangement PROVEN to
-            // overlay fullscreen apps on this machine is the notification
-            // panel's canJoinAllSpaces + fullScreenAuxiliary + a floating
-            // LEVEL (normal-level windows are simply evicted). The pose is
+            // Why these flags: SwiftUI Window scenes ship with .fullScreenNone
+            // set, which must be REMOVED rather than merely overridden (an
+            // insert-only approach never takes); moveToActiveSpace never
+            // targets a fullscreen Space; the one arrangement that overlays
+            // fullscreen apps is the notification panel's canJoinAllSpaces +
+            // fullScreenAuxiliary + a floating LEVEL (normal-level windows are
+            // simply evicted). The pose is
             // CONDITIONAL: canJoinAllSpaces + floating while the screen
             // looks fullscreen (or during the open/reopen grace), plain
             // fullScreenAuxiliary + normal level once settled on an ordinary
             // desktop — so windows neither follow the user across Spaces nor
             // squat above other apps in normal use.
             // The green button needs .fullScreenPrimary to create the
-            // window's OWN fullscreen Space — the unconditional strip left
-            // it zooming over whatever it floated above instead (Martin,
-            // 2026-07-10 afternoon). Primary and auxiliary are exclusive:
+            // window's OWN fullscreen Space; without it, the button only
+            // zooms over whatever it floated above instead of spawning a
+            // Space. Primary and auxiliary are exclusive:
             // the desktop pose is a normal window (primary — green button
             // works), the fullscreen-capable pose is an auxiliary overlay
             // (green-buttoning WHILE floating over another app's fullscreen
@@ -440,10 +437,10 @@ private struct ActiveSpaceWindow: NSViewRepresentable {
                     DebugLog.write("window \(windowID ?? w.title): behaviours -> \(w.collectionBehavior.rawValue), level \(w.level.rawValue), visible \(visible), onActiveSpace \(w.isOnActiveSpace)")
                 }
             }
-            // Martin's 06:52 log (2026-07-11): a freshly-granted settings
-            // window sat visible-but-NOT-on-the-active-Space and stayed
-            // there until the grace demoted it — invisible to him, "gear
-            // needs two clicks". While the window WEARS the everywhere pose
+            // A freshly-granted settings window can sit
+            // visible-but-NOT-on-the-active-Space and stay there until the
+            // grace demotes it — invisible, the "gear needs two clicks"
+            // symptom. While the window WEARS the everywhere pose
             // it belongs on the active Space by definition; if AppKit
             // hasn't caught up, order it front again (cheap, idempotent,
             // and only while the fullscreen-capable pose is on).
@@ -507,7 +504,7 @@ extension View {
 /// have its windows — and SwiftUI's `openWindow` is asynchronous, so the old
 /// open-then-activate pairs activated a still-window-less app and switched
 /// away from fullscreen apps regardless of any collectionBehavior flag on the
-/// window itself (Martin, 2026-07-09, after two window-flag fixes weren't it).
+/// window itself.
 /// Call AFTER `openWindow`: it waits — runloop turns, not wall time — until a
 /// normal-level window is visible on the CURRENT Space (the flags applied at
 /// first attach put it there), then activates; at that point activation has
@@ -524,9 +521,9 @@ enum AndeyeWindows {
     /// open sites funnel through `activateOnceVisible`). A window the user
     /// left OPEN on a desktop Space is visible + settled, so neither the
     /// hidden-window maintenance nor the show-transition grace protects it
-    /// — and the popover blinds promotion at exactly click time. Result
-    /// (Martin, 2026-07-10 afternoon): clicking a popover icon over a
-    /// fullscreen app needed several clicks before the window surfaced.
+    /// — and the popover blinds promotion at exactly click time. The result
+    /// otherwise: clicking a popover icon over a fullscreen app needs several
+    /// clicks before the window surfaces.
     /// Every SpaceJoiningView restarts its open grace on this note, in the
     /// SAME runloop turn as the click — ahead of SwiftUI's deferred
     /// order-front, so the window is fullscreen-capable when macOS decides
@@ -535,12 +532,12 @@ enum AndeyeWindows {
     static let openRequested = Notification.Name("andeyeThemedWindowOpenRequested")
 
     /// True when a SpaceJoiningView with `windowID` should honour an open
-    /// grant for the openWindow scene `opened`. Scoped (Martin, 2026-07-10
-    /// late afternoon): the original all-windows grant put EVERY window
-    /// into the auxiliary overlay pose for 4s on any open, and auxiliary
-    /// windows cannot enter their own fullscreen — his green button worked
-    /// or failed depending on whether anything had been opened in the
-    /// previous few seconds. Nil on either side stays permissive (an
+    /// grant for the openWindow scene `opened`. Scoped deliberately: an
+    /// all-windows grant would put EVERY window into the auxiliary overlay
+    /// pose for 4s on any open, and auxiliary windows cannot enter their own
+    /// fullscreen — the green button would then work or fail depending on
+    /// whether anything had been opened in the previous few seconds. Nil on
+    /// either side stays permissive (an
     /// unidentified view or an unlabelled open grants broadly — safe, just
     /// less precise). Every themed window (Time included) now carries its
     /// SCENE id, so an open grant is a plain identity match — a "time" open
@@ -560,8 +557,7 @@ enum AndeyeWindows {
         // Floating counts: over a fullscreen app the themed windows live at
         // .floating (SpaceJoiningView), and a gate that only accepted
         // .normal never fired there — the open finished without activation
-        // and the window was left behind on another Space (Martin,
-        // 2026-07-10 morning).
+        // and the window was left behind on another Space.
         let acceptable: (NSWindow) -> Bool = {
             $0.isVisible && $0.isOnActiveSpace
                 && ($0.level == .normal || $0.level == .floating)
@@ -569,7 +565,7 @@ enum AndeyeWindows {
         // With an id, activate THE WINDOW BEING OPENED and make it key —
         // activating the app on the first acceptable window brought some
         // OTHER window forward while the requested one stayed buried, which
-        // read as "the settings gear needs two clicks" (Martin, 2026-07-11).
+        // read as "the settings gear needs two clicks".
         if let id = opened {
             // Deliberately NOT gated on isOnActiveSpace: a retained window
             // living on another Space never satisfies that gate before the
@@ -585,7 +581,7 @@ enum AndeyeWindows {
                 target.makeKeyAndOrderFront(nil)
                 // The big hammer: shows the window even when activation is
                 // racing the popover's own dismissal — the settings gear
-                // was still needing two clicks without it (2026-07-11).
+                // otherwise still needs two clicks without it.
                 target.orderFrontRegardless()
                 DebugLog.write("activate: fronted \(target.identifier?.rawValue ?? target.title) for open '\(id)'")
             } else if retriesLeft > 0 {

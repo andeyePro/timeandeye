@@ -12,8 +12,8 @@ let package = Package(
         .library(name: "timeandeyeStore", targets: ["timeandeyeStore"]),
         .library(name: "timeandeyePhone", targets: ["timeandeyePhone"]),
         // The shared andeye look (colours, type scale, eye-mark renderer) —
-        // SwiftUI-only, no AppKit, so sibling apps (a sibling andeye app etc.) consume
-        // theme without the macOS app deps. Surface contract: the cross-repo note.
+        // SwiftUI-only, no AppKit, so sibling andeye apps consume theme
+        // without the macOS app deps.
         .library(name: "timeandeyeTheme", targets: ["timeandeyeTheme"]),
     ],
     targets: [

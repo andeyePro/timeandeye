@@ -1,21 +1,57 @@
 #!/bin/bash
-# Double-click this to update Time&I (timeandeye.app). No passwords, no
-# rename dance.
+# Double-click this to install or update Time&I (timeandeye.app). No
+# passwords, no rename dance.
 #
-# Claude ships the build as a ZIP (not a loose .app) so there is never a second
-# unpacked bundle with the same id sitting where Spotlight/LaunchServices will
-# index it — that duplicate-id confusion is what mislabelled the app as
-# "andeye+". This installer unpacks the zip into your OWN ~/Applications (your
-# folder → no admin prompt) and relaunches. The stable signature and bundle id
-# mean keychain and Accessibility grants survive updates; an app-identity
-# change (a new bundle id) is the one case that re-asks, once.
+# It installs from a locally built or downloaded bundle. Point it at either a
+# zipped app or a loose timeandeye.app; if you give it nothing, it looks for
+# one next to this script and then in your Downloads folder. Build a fresh
+# bundle with scripts/make-app.sh, or download the release zip.
+#
+# The app is installed into your OWN ~/Applications (your folder → no admin
+# prompt) and relaunched. A zip is preferred over a loose .app so there is
+# never a second unpacked bundle with the same id sitting where
+# Spotlight/LaunchServices will index it — that duplicate-id confusion is what
+# can mislabel the app as "andeye+". The stable signature and bundle id mean
+# keychain and Accessibility grants survive updates; an app-identity change (a
+# new bundle id) is the one case that re-asks, once.
 set -euo pipefail
 
-SRC="/Users/Shared/timeandeye-build.zip"
 DEST="$HOME/Applications/timeandeye.app"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 
-if [ ! -f "$SRC" ]; then
-    echo "No build found at $SRC — ask Claude to build it first."
+# Resolve the source. Priority: explicit argument, then a bundle/zip next to
+# this script, then one in ~/Downloads. Accepts either timeandeye.app or a zip
+# containing it.
+find_source() {
+    if [ "$#" -ge 1 ] && [ -n "${1:-}" ]; then
+        printf '%s\n' "$1"
+        return 0
+    fi
+    for CANDIDATE in \
+        "$HERE/timeandeye.app" \
+        "$HERE/timeandeye.zip" \
+        "$HERE/timeandeye-build.zip" \
+        "$HOME/Downloads/timeandeye.app" \
+        "$HOME/Downloads/timeandeye.zip" \
+        "$HOME/Downloads/timeandeye-build.zip"; do
+        if [ -e "$CANDIDATE" ]; then
+            printf '%s\n' "$CANDIDATE"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! SRC="$(find_source "${1:-}")"; then
+    echo "No timeandeye.app (or a zip of it) found."
+    echo "Pass one as an argument, or drop it next to this script or in your"
+    echo "Downloads folder. Build one with scripts/make-app.sh, or download the"
+    echo "release zip."
+    read -r -p "Press return to close. "
+    exit 1
+fi
+if [ ! -e "$SRC" ]; then
+    echo "Nothing at: $SRC"
     read -r -p "Press return to close. "
     exit 1
 fi
@@ -40,17 +76,25 @@ if pgrep -xq andeye; then
     exit 1
 fi
 
-# Unpack the zip and install at the canonical path in your own account. The
-# trap cleans the scratch dir on EVERY exit (including the aborts below).
+# Stage the bundle to install. A loose .app is used in place; a zip is
+# unpacked into a scratch dir. The trap cleans the scratch dir on EVERY exit
+# (including the aborts below).
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-ditto -x -k "$SRC" "$TMP"
-NEW="$TMP/timeandeye.app"
-# Verify the extracted bundle BEFORE touching the installed copy: a zip with
-# a different root (e.g. a stale pre-rename build) must abort with the
-# current install intact, not leave you with no app at all.
+case "$SRC" in
+    *.zip)
+        ditto -x -k "$SRC" "$TMP"
+        NEW="$TMP/timeandeye.app"
+        ;;
+    *)
+        NEW="$SRC"
+        ;;
+esac
+# Verify the bundle BEFORE touching the installed copy: a zip with a different
+# root (e.g. a stale pre-rename build) must abort with the current install
+# intact, not leave you with no app at all.
 if [ ! -d "$NEW" ] || [ ! -f "$NEW/Contents/Info.plist" ]; then
-    echo "The zip at $SRC doesn't contain timeandeye.app — ask Claude for a fresh build."
+    echo "$SRC doesn't contain a valid timeandeye.app."
     echo "Your installed copy is untouched."
     read -r -p "Press return to close. "
     exit 1
@@ -68,8 +112,12 @@ for OLD in "/Applications/andeye.app" "/Applications/timeandeye.app"; do
         echo "      so launchers don't show two copies of Time&I."
     fi
 done
-rm -rf "$DEST"
-ditto "$NEW" "$DEST"
+# Don't clobber the install with itself if someone points this at the already
+# installed copy.
+if [ "$NEW" != "$DEST" ]; then
+    rm -rf "$DEST"
+    ditto "$NEW" "$DEST"
+fi
 
 # Make this app THE registration for its bundle id, so its name resolves to
 # "Time&I" (not a stray duplicate).
@@ -77,4 +125,4 @@ LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/L
 [ -x "$LSREG" ] && "$LSREG" -f "$DEST" >/dev/null 2>&1 || true
 
 open "$DEST"
-echo "Updated Time&I → $DEST and relaunched."
+echo "Installed Time&I → $DEST and relaunched."

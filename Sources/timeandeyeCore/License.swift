@@ -101,9 +101,9 @@ public enum LicenseError: Error, Equatable {
 
 /// Offline verification of `ANDEYE1.<base64url payload>.<base64url sig>` keys
 /// (dot-separated, JWT-style — "-" and "_" belong to base64url itself).
-/// Ed25519 over the exact payload bytes; the private keys live ONLY in the
-/// pro repo's channels (Martin's password manager; the web-sales function's
-/// secret store) — this side can verify but never mint. Verification is pure
+/// Ed25519 over the exact payload bytes; the private keys live only in the
+/// private pro repo's secret store — this side can verify but never mint.
+/// Verification is pure
 /// and offline: no phone-home, works forever, works air-gapped. Absence of
 /// network never denies a good key.
 public struct LicenseVerifier: Sendable {
@@ -125,7 +125,7 @@ public struct LicenseVerifier: Sendable {
         self.denylist = denylist
     }
 
-    /// PENDING Martin's lock of spec open Q3 — proposal `"time.andeye"`.
+    /// This app's product id.
     public static let timeAndeyeProductID = "time.andeye"
     /// Direct/manual + lifetime sales keypair id.
     public static let directKID = "direct-2026"
@@ -133,11 +133,8 @@ public struct LicenseVerifier: Sendable {
     /// added to `production.keys` when the pro repo mints it).
     public static let webKID = "web-2026"
 
-    /// The production key set. The direct pair was ROTATED 2026-07-02
-    /// (Martin minted it himself; private half lives only in Apple
-    /// Passwords). The first pair was retired unused after transiting a
-    /// plaintext file. The web-2026 public half lands here when the pro
-    /// repo's Cloudflare channel mints its keypair.
+    /// The production key set. The web-2026 public half is added here when
+    /// the private pro repo provisions its web-sales keypair.
     public static let production = LicenseVerifier(
         keys: [directKID: Data(base64Encoded: "hGcCOyMchBHEdj3xgNJJplJQwv1oK+Gseju7ZaCnf1w=")!],
         productID: timeAndeyeProductID,
