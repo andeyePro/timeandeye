@@ -8,35 +8,35 @@ import Foundation
 /// would have to erase exactly the part that differs; the protocol refactor
 /// is now justified with three verses in — a dedicated later pass, not this
 /// feature).
-public struct SiteRule: Equatable, Codable, Sendable {
+package struct SiteRule: Equatable, Codable, Sendable {
     /// The reserved recipe-less level: the rule keys on the URL host itself
     /// — the ambiguous-web-page policy note's "one correction generalises
     /// the whole host", learnable on every non-mail page.
-    public static let siteField = "site"
+    package static let siteField = "site"
 
     /// The recipe whose field this rule keys on; nil for the `site`
     /// (host-level) rule, which needs no recipe.
-    public let recipeID: String?
+    package let recipeID: String?
     /// `Self.siteField`, or a recipe field name ("repo", "organisation").
-    public let field: String
+    package let field: String
     /// Lowercased. Identity fields match by equality; content fields by
     /// case-insensitive substring (the rule value is the substring).
-    public let value: String
-    public let target: TaskRef
+    package let value: String
+    package let target: TaskRef
     /// True for explicit user pins (which outrank a learned rule at the same
     /// level). Still capped at the 0.95 inferred ceiling in attribution —
     /// distinct from a PinScope host pin (1.0, standing law), which remains
     /// the "Always" form for the host row.
-    public let pinned: Bool
+    package let pinned: Bool
     /// Provenance metadata, verbatim `EmailRule`'s block: decodes with
     /// defaults so a future field addition can't brick siterules.json.
-    public var createdAt: Date
-    public var origin: EmailRule.Origin
+    package var createdAt: Date
+    package var origin: EmailRule.Origin
     /// Bumped by the Attributor each time this rule WINS an attribution.
-    public var fireCount: Int
-    public var lastFired: Date?
+    package var fireCount: Int
+    package var lastFired: Date?
 
-    public init(recipeID: String?, field: String, value: String, target: TaskRef,
+    package init(recipeID: String?, field: String, value: String, target: TaskRef,
                 pinned: Bool = false, createdAt: Date = Date(),
                 origin: EmailRule.Origin = .correction,
                 fireCount: Int = 0, lastFired: Date? = nil) {
@@ -53,7 +53,7 @@ public struct SiteRule: Equatable, Codable, Sendable {
 
     /// Custom decode ONLY for the metadata defaults; encoding stays
     /// synthesized (always writes the full form) — `EmailRule`'s pattern.
-    public init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         recipeID = try c.decodeIfPresent(String.self, forKey: .recipeID)
         field = try c.decode(String.self, forKey: .field)
@@ -69,13 +69,13 @@ public struct SiteRule: Equatable, Codable, Sendable {
     /// The identity of a rule for replace/forget purposes: what it matches
     /// and where it points, NOT its metadata (a fireCount bump must not make
     /// a rule "different" from the snapshot a card captured).
-    public func sameRule(as other: SiteRule) -> Bool {
+    package func sameRule(as other: SiteRule) -> Bool {
         recipeID == other.recipeID && field == other.field
             && target == other.target && pinned == other.pinned
             && value.caseInsensitiveCompare(other.value) == .orderedSame
     }
 
-    public func matches(_ context: SiteContext) -> Bool {
+    package func matches(_ context: SiteContext) -> Bool {
         guard !value.isEmpty else { return false }
         if field == Self.siteField {
             return value.caseInsensitiveCompare(context.host) == .orderedSame
@@ -94,7 +94,7 @@ public struct SiteRule: Equatable, Codable, Sendable {
     /// The rule's grain caption for the ledger/notices — "GitHub repository"
     /// / "Site". Falls back to the raw field name for a rule whose recipe is
     /// no longer shipped (the rule is kept, never silently dropped).
-    public var grainLabel: String {
+    package var grainLabel: String {
         if field == Self.siteField { return "Site" }
         guard let recipe = SiteRecipes.builtIn.first(where: { $0.id == recipeID }),
               let fieldDef = recipe.fields.first(where: { $0.name == field }) else {
@@ -104,13 +104,13 @@ public struct SiteRule: Equatable, Codable, Sendable {
     }
 }
 
-public enum SiteMatcher {
+package enum SiteMatcher {
     /// The winning rule for `context`: the most specific level with any
     /// match wins, over the ladder `["site"] + the matched recipe's declared
     /// field order` (general → specific). At one level a pinned rule beats a
     /// learned one; otherwise the newest unpinned wins ties —
     /// `EmailMatcher.match()`'s semantics verbatim (spec §5).
-    public static func match(_ context: SiteContext, rules: [SiteRule]) -> SiteRule? {
+    package static func match(_ context: SiteContext, rules: [SiteRule]) -> SiteRule? {
         for level in context.ladder.reversed() {
             let here = rules.filter { $0.field == level && $0.matches(context) }
             if here.isEmpty { continue }

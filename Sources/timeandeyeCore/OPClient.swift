@@ -18,23 +18,23 @@ public struct OPTimeActivity: Equatable, Codable, Sendable {
     }
 }
 
-public enum OPClientError: Error {
+package enum OPClientError: Error {
     case httpStatus(Int, String)
     case malformedResponse(String)
 }
 
-public final class OPClient {
+package final class OPClient {
     private let baseURL: URL
     private let apiKey: String
     private let transport: HTTPTransport
 
-    public init(baseURL: URL, apiKey: String, transport: HTTPTransport) {
+    package init(baseURL: URL, apiKey: String, transport: HTTPTransport) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.transport = transport
     }
 
-    public var instanceHost: String { baseURL.host ?? "" }
+    package var instanceHost: String { baseURL.host ?? "" }
 
     // MARK: - Requests
 
@@ -104,7 +104,7 @@ public final class OPClient {
     /// closed ones (the API defaults to open-only, which hid actively-used
     /// Closed tasks like Timesheets). NB: OpenProject's `offset` query
     /// parameter is a 1-BASED PAGE NUMBER, not an element offset.
-    public func fetchTasks(pageSize: Int = 100) async throws -> [WorkTask] {
+    package func fetchTasks(pageSize: Int = 100) async throws -> [WorkTask] {
         var tasks: [WorkTask] = []
         var page = 1
         while true {
@@ -130,7 +130,7 @@ public final class OPClient {
 
     /// Who the API key authenticates as — time entries are attributed to this
     /// user, so surfacing it prevents silent wrong-account logging.
-    public func fetchMe() async throws -> String {
+    package func fetchMe() async throws -> String {
         struct Me: Decodable { let name: String }
         let data = try await send(request(path: "api/v3/users/me"))
         return try decode(Me.self, from: data).name
@@ -153,7 +153,7 @@ public final class OPClient {
     }
 
     /// Allowed activities come from the time-entry creation form schema.
-    public func fetchActivities() async throws -> [OPTimeActivity] {
+    package func fetchActivities() async throws -> [OPTimeActivity] {
         let data = try await send(request(path: "api/v3/time_entries/form",
                                           method: "POST", body: Data("{}".utf8)))
         return try decode(FormResponse.self, from: data)
@@ -168,7 +168,7 @@ public final class OPClient {
     /// sent when non-nil because instances can have the feature disabled.
     /// Returns the created entry's id so timeline edits can PATCH it later.
     @discardableResult
-    public func createTimeEntry(workPackageID: Int, start: Date, duration: TimeInterval,
+    package func createTimeEntry(workPackageID: Int, start: Date, duration: TimeInterval,
                                 activityID: Int?, comment: String?,
                                 startTime: String? = nil) async throws -> Int? {
         let body = try Self.timeEntryPayload(workPackageID: workPackageID, start: start,
@@ -185,7 +185,7 @@ public final class OPClient {
     }
 
     /// Timeline edits: rewrite an existing entry in place.
-    public func updateTimeEntry(id: Int, workPackageID: Int, start: Date,
+    package func updateTimeEntry(id: Int, workPackageID: Int, start: Date,
                                 duration: TimeInterval, activityID: Int?,
                                 comment: String?, startTime: String? = nil) async throws {
         let body = try Self.timeEntryPayload(workPackageID: workPackageID, start: start,
@@ -197,20 +197,20 @@ public final class OPClient {
     /// Post a comment to a work package's activity feed (the task's journal),
     /// so a 'comment to task' note is findable on the task itself rather than
     /// buried on a single time entry.
-    public func addWorkPackageComment(id: Int, text: String) async throws {
+    package func addWorkPackageComment(id: Int, text: String) async throws {
         let body = try JSONSerialization.data(
             withJSONObject: ["comment": ["raw": text]])
         _ = try await send(request(path: "api/v3/work_packages/\(id)/activities",
                                    method: "POST", body: body))
     }
 
-    public func deleteTimeEntry(id: Int) async throws {
+    package func deleteTimeEntry(id: Int) async throws {
         _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "DELETE"))
     }
 
     /// PATCH only the comment (used by the duplicate-reconcile, which folds the
     /// deleted entries' comments into the survivor without touching its times).
-    public func updateTimeEntryComment(id: Int, comment: String) async throws {
+    package func updateTimeEntryComment(id: Int, comment: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["comment": ["raw": comment]])
         _ = try await send(request(path: "api/v3/time_entries/\(id)", method: "PATCH", body: body))
     }
@@ -242,7 +242,7 @@ public final class OPClient {
     /// Read back the current user's time entries spent in [from, to] — the input
     /// to the duplicate-entry reconcile (the MCP exposes neither start times nor
     /// a delete verb, so this has to come straight from the API).
-    public func listTimeEntries(from: Date, to: Date, pageSize: Int = 200) async throws -> [OPTimeEntry] {
+    package func listTimeEntries(from: Date, to: Date, pageSize: Int = 200) async throws -> [OPTimeEntry] {
         let fromDay = Self.dayFormatter.string(from: from)
         let toDay = Self.dayFormatter.string(from: to)
         let filters = "[{\"spentOn\":{\"operator\":\"<>d\",\"values\":[\"\(fromDay)\",\"\(toDay)\"]}},"

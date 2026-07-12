@@ -23,25 +23,25 @@ import Foundation
 /// Integer channels (not CGFloat) so a persisted hex round-trips
 /// byte-identically: restart and store round-trip must return IDENTICAL
 /// colours, and integers can't drift.
-public struct RGB255: Equatable, Sendable {
-    public var r: Int
-    public var g: Int
-    public var b: Int
+package struct RGB255: Equatable, Sendable {
+    package var r: Int
+    package var g: Int
+    package var b: Int
 
-    public init(r: Int, g: Int, b: Int) {
+    package init(r: Int, g: Int, b: Int) {
         self.r = r
         self.g = g
         self.b = b
     }
 
-    public init?(hex: String) {
+    package init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.hasPrefix("#") { s.removeFirst() }
         guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
         self.init(r: Int((v >> 16) & 0xFF), g: Int((v >> 8) & 0xFF), b: Int(v & 0xFF))
     }
 
-    public var hex: String {
+    package var hex: String {
         String(format: "#%02X%02X%02X",
                min(max(r, 0), 255), min(max(g, 0), 255), min(max(b, 0), 255))
     }
@@ -49,12 +49,12 @@ public struct RGB255: Equatable, Sendable {
 
 /// A colour in OKLCH (lightness, chroma, hue-degrees) — the space every
 /// allocation decision is made in.
-public struct OKLCH: Equatable, Sendable {
-    public var L: Double
-    public var C: Double
-    public var H: Double
+package struct OKLCH: Equatable, Sendable {
+    package var L: Double
+    package var C: Double
+    package var H: Double
 
-    public init(L: Double, C: Double, H: Double) {
+    package init(L: Double, C: Double, H: Double) {
         self.L = L
         self.C = C
         self.H = H
@@ -69,15 +69,15 @@ public struct OKLCH: Equatable, Sendable {
 /// identity (`TaskRef.storageKey`; `BillableRules` project keys), never on
 /// labels, so renames keep colour. Sync (future): whole-record LWW like
 /// `Pin`, per the 2026-07-02 sync design.
-public struct ColourAssignments: Codable, Equatable, Sendable {
+package struct ColourAssignments: Codable, Equatable, Sendable {
     /// A project's hue anchor. `hue`/`bandL` are the canonical allocation
     /// coordinates (what spacing decisions score against); `hex` is the
     /// resolved display swatch (contrast-adjusted lightness at that hue).
-    public struct ProjectRecord: Codable, Equatable, Sendable {
-        public var hue: Double
-        public var bandL: Double
-        public var hex: String
-        public var firstSeen: Date
+    package struct ProjectRecord: Codable, Equatable, Sendable {
+        package var hue: Double
+        package var bandL: Double
+        package var hex: String
+        package var firstSeen: Date
         /// "auto" = engine pick; "migrated" = the colour the project ring was
         /// ALREADY showing pre-engine (a child task's legacy colour),
         /// snapshotted so the upgrade never changes a colour the user saw.
@@ -86,9 +86,9 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
         /// stability promise — `repairProjectAnchor` repairs exactly these
         /// (while the store-level repair window is open; see
         /// `ColourAssignments.version`).
-        public var provenance: String?
+        package var provenance: String?
 
-        public init(hue: Double, bandL: Double, hex: String, firstSeen: Date,
+        package init(hue: Double, bandL: Double, hex: String, firstSeen: Date,
                     provenance: String? = nil) {
             self.hue = hue
             self.bandL = bandL
@@ -101,17 +101,17 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
     /// A task's assigned colour. Engine picks carry their exact OKLCH
     /// coordinates so later allocations score against the unrounded value
     /// (lab parity); migrated legacy-hash snapshots carry hex only.
-    public struct TaskRecord: Codable, Equatable, Sendable {
-        public var hex: String
-        public var L: Double?
-        public var C: Double?
-        public var H: Double?
+    package struct TaskRecord: Codable, Equatable, Sendable {
+        package var hex: String
+        package var L: Double?
+        package var C: Double?
+        package var H: Double?
         /// "auto" = engine pick; "migrated" = pre-engine hash colour
         /// snapshotted so the upgrade never changes a colour the user saw.
-        public var provenance: String
-        public var firstSeen: Date
+        package var provenance: String
+        package var firstSeen: Date
 
-        public init(hex: String, L: Double? = nil, C: Double? = nil, H: Double? = nil,
+        package init(hex: String, L: Double? = nil, C: Double? = nil, H: Double? = nil,
                     provenance: String, firstSeen: Date) {
             self.hex = hex
             self.L = L
@@ -123,9 +123,9 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
     }
 
     /// Stable project key (BillableRules key builders) → anchor.
-    public var projects: [String: ProjectRecord]
+    package var projects: [String: ProjectRecord]
     /// `TaskRef.storageKey` → colour.
-    public var tasks: [String: TaskRecord]
+    package var tasks: [String: TaskRecord]
     /// Store schema version. nil = the file was last SAVED by a pre-version
     /// build (the broken 2026-07-09 engine or the 2026-07-10 interim repair)
     /// — every "auto" project record in such a store predates the
@@ -136,12 +136,12 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
     /// stamp alone can't close the repair era — the controller pairs it with
     /// a one-time marker file OUTSIDE this JSON that old binaries never
     /// touch (see AppController.finalizeColourRepairsIfComplete).
-    public var version: Int?
+    package var version: Int?
 
     /// What this build writes into `version`.
-    public static let currentVersion = 2
+    package static let currentVersion = 2
 
-    public init(projects: [String: ProjectRecord] = [:],
+    package init(projects: [String: ProjectRecord] = [:],
                 tasks: [String: TaskRecord] = [:],
                 version: Int? = nil) {
         self.projects = projects
@@ -153,18 +153,18 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
     /// cache, no project title). They share one "unfiled" neighbourhood
     /// rather than scattering, and keep their colour if the project later
     /// becomes known (task records never re-derive).
-    public static let unfiledKey = "unfiled"
+    package static let unfiledKey = "unfiled"
 
     /// Total record count — the cheap "did an allocation just happen?" probe
     /// controllers use to decide whether to persist.
-    public var recordCount: Int { projects.count + tasks.count }
+    package var recordCount: Int { projects.count + tasks.count }
 
     /// Title-key → id-key project-record migration, mirroring
     /// `BillableRules.migrateProjectKeys` (the two stores share the key
     /// convention, so they migrate on the same trigger). An already-populated
     /// id key wins — never clobbered. Idempotent. Returns how many moved.
     @discardableResult
-    public mutating func migrateProjectKeys(_ mapping: [String: String]) -> Int {
+    package mutating func migrateProjectKeys(_ mapping: [String: String]) -> Int {
         var moved = 0
         for (titleKey, idKey) in mapping {
             guard let record = projects[titleKey] else { continue }
@@ -194,25 +194,25 @@ public struct ColourAssignments: Codable, Equatable, Sendable {
 ///   automatic assignment pool instead (`rederiveAll(paletteColours:)`):
 ///   the colours become project anchors in first-seen order and every
 ///   family re-shades around them.
-public struct Palette: Codable, Equatable, Sendable {
-    public var version: Int
+package struct Palette: Codable, Equatable, Sendable {
+    package var version: Int
     /// settings.taskColours — the user's per-task picks (hex by storageKey).
-    public var taskOverrides: [String: String]
+    package var taskOverrides: [String: String]
     /// settings.projectColours — the user's project-swatch picks.
-    public var projectOverrides: [String: String]
+    package var projectOverrides: [String: String]
     /// The engine store as it stood when saved. nil ⇒ the generic form.
-    public var assignments: ColourAssignments?
+    package var assignments: ColourAssignments?
     /// The generic form's ordered colours (hex). nil in the full form.
-    public var colours: [String]?
+    package var colours: [String]?
 
-    public static let currentVersion = 1
+    package static let currentVersion = 1
 
     /// Generic = carries colours only; loading seeds rather than restores.
-    public var isGeneric: Bool { assignments == nil }
+    package var isGeneric: Bool { assignments == nil }
 
     /// The full form (parameter shape unchanged from the ColourSet days —
     /// external callers keep compiling).
-    public init(taskOverrides: [String: String],
+    package init(taskOverrides: [String: String],
                 projectOverrides: [String: String],
                 assignments: ColourAssignments) {
         self.version = Self.currentVersion
@@ -223,7 +223,7 @@ public struct Palette: Codable, Equatable, Sendable {
     }
 
     /// The generic form.
-    public init(colours: [String]) {
+    package init(colours: [String]) {
         self.version = Self.currentVersion
         self.taskOverrides = [:]
         self.projectOverrides = [:]
@@ -239,7 +239,7 @@ public struct Palette: Codable, Equatable, Sendable {
     /// an older build ever wrote — parse; a file with NEITHER an engine
     /// store NOR a colour list is not a palette at all and is refused
     /// (better a clean "couldn't read" than silently loading emptiness).
-    public init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         taskOverrides = try c.decodeIfPresent(
@@ -259,7 +259,7 @@ public struct Palette: Codable, Equatable, Sendable {
     /// Encode each form with only its own keys: full files are
     /// byte-compatible with the pre-rename ColourSet shape; generic files
     /// honestly contain nothing but the colours.
-    public func encode(to encoder: Encoder) throws {
+    package func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(version, forKey: .version)
         if let assignments {
@@ -274,17 +274,17 @@ public struct Palette: Codable, Equatable, Sendable {
 
 /// Source compatibility for external callers (andeyePro) from before the
 /// user-facing rename to "palettes".
-public typealias ColourSet = Palette
+package typealias ColourSet = Palette
 
-public enum ColourEngine {
+package enum ColourEngine {
 
     // MARK: Palette constants (colour-lab strategy C)
 
     /// Worst-case CVD-aware pairwise distance below which two colours are
     /// treated as no longer legibly distinct (the lab's demo floor).
-    public static let legibilityFloor = 0.02
+    package static let legibilityFloor = 0.02
     /// Chosen-label WCAG contrast every auto colour must reach (spec §9).
-    public static let labelContrastFloor = 4.5
+    package static let labelContrastFloor = 4.5
 
     /// Canonical anchor chroma/lightness. Band 1 is the lab's wheel; band 2
     /// opens on hue exhaustion (spec §7): when the best free band-1 hue's
@@ -318,7 +318,7 @@ public enum ColourEngine {
     /// `store.recordCount` grew). Overrides NEVER write a record here — they
     /// live in settings exactly as before this engine existed, so existing
     /// saved overrides keep working unchanged.
-    public static func effectiveHex(taskKey: String, projectKey: String?,
+    package static func effectiveHex(taskKey: String, projectKey: String?,
                                     override: String?,
                                     anchorHueOverride: Double? = nil,
                                     in store: inout ColourAssignments,
@@ -335,7 +335,7 @@ public enum ColourEngine {
     /// chose is the family new work joins. Existing records are returned
     /// untouched either way — the override steers first sight only.
     @discardableResult
-    public static func taskHex(_ taskKey: String, projectKey: String?,
+    package static func taskHex(_ taskKey: String, projectKey: String?,
                                anchorHueOverride: Double? = nil,
                                in store: inout ColourAssignments,
                                at now: Date = Date()) -> String {
@@ -354,7 +354,7 @@ public enum ColourEngine {
     /// is (near-)achromatic, where the hue is quantisation noise (see
     /// `anchorHueChromaFloor`), so a grey pick steers nothing and the
     /// anchor record's hue stays in charge. nil for undecodable hex too.
-    public static func overrideAnchorHue(hex: String) -> Double? {
+    package static func overrideAnchorHue(hex: String) -> Double? {
         guard let rgb = RGB255(hex: hex) else { return nil }
         let c = oklch(from: rgb)
         return c.C >= anchorHueChromaFloor ? c.H : nil
@@ -363,7 +363,7 @@ public enum ColourEngine {
     /// Stored-or-allocated project anchor. The record's `hex` is the swatch
     /// the project itself renders with (pie project ring, legend row).
     @discardableResult
-    public static func projectRecord(_ key: String,
+    package static func projectRecord(_ key: String,
                                      in store: inout ColourAssignments,
                                      at now: Date = Date()) -> ColourAssignments.ProjectRecord {
         if let existing = store.projects[key] { return existing }
@@ -402,7 +402,7 @@ public enum ColourEngine {
     /// instead), an undecodable entry is skipped, and projects past the
     /// palette's end allocate normally — the argmax spreads them away from
     /// the seeded hues automatically.
-    public static func rederiveAll(
+    package static func rederiveAll(
         groups: [(projectKey: String, memberTaskKeys: [String])],
         anchorHueOverrides: [String: Double] = [:],
         paletteColours: [String] = [],
@@ -451,7 +451,7 @@ public enum ColourEngine {
     /// hash pick) as this task's permanent assignment, so the store upgrade
     /// keeps exactly the colour the user already associates with the task.
     /// Never overwrites an existing record.
-    public static func snapshotLegacy(taskKey: String, hex: String,
+    package static func snapshotLegacy(taskKey: String, hex: String,
                                       in store: inout ColourAssignments,
                                       at now: Date = Date()) {
         guard store.tasks[taskKey] == nil, RGB255(hex: hex) != nil else { return }
@@ -518,7 +518,7 @@ public enum ColourEngine {
     /// free hue — a sensible fresh neighbourhood, since an all-grey project
     /// gave the user no hue association to preserve).
     @discardableResult
-    public static func repairProjectAnchor(projectKey: String,
+    package static func repairProjectAnchor(projectKey: String,
                                            memberTaskKeys: [String],
                                            overrides: [String: String] = [:],
                                            storeLoadedPreV2: Bool,
@@ -591,7 +591,7 @@ public enum ColourEngine {
     /// repairable forever. Colours are kept as-is: with no migrated member
     /// resolvable there is no older colour to restore.
     @discardableResult
-    public static func adoptUnrepairedAnchors(in store: inout ColourAssignments) -> Int {
+    package static func adoptUnrepairedAnchors(in store: inout ColourAssignments) -> Int {
         var adopted = 0
         for key in store.projects.keys where store.projects[key]?.provenance == nil {
             store.projects[key]?.provenance = "auto"
@@ -751,7 +751,7 @@ public enum ColourEngine {
     /// The app's existing black-or-white label rule (NSColor
     /// .readableTextColour), replicated on integer sRGB so the engine can
     /// guarantee the label the UI will actually choose reaches 4.5:1.
-    public static func labelIsBlack(on colour: RGB255) -> Bool {
+    package static func labelIsBlack(on colour: RGB255) -> Bool {
         let lum = (0.299 * Double(colour.r) + 0.587 * Double(colour.g)
             + 0.114 * Double(colour.b)) / 255
         return lum > 0.6
@@ -759,7 +759,7 @@ public enum ColourEngine {
 
     /// WCAG contrast ratio between a swatch and the label colour the rule
     /// above picks for it.
-    public static func labelContrastRatio(on colour: RGB255) -> Double {
+    package static func labelContrastRatio(on colour: RGB255) -> Double {
         let label = labelIsBlack(on: colour)
             ? RGB255(r: 0, g: 0, b: 0) : RGB255(r: 255, g: 255, b: 255)
         let a = wcagLuminance(colour)
@@ -778,11 +778,11 @@ public enum ColourEngine {
     /// worst-case viewer" (spec §9). No colour-blind MODE exists: the metric
     /// is always on, because a toggle that changes allocations would fight
     /// stability.
-    public static func worstCaseDistance(_ a: OKLCH, _ b: OKLCH) -> Double {
+    package static func worstCaseDistance(_ a: OKLCH, _ b: OKLCH) -> Double {
         worstOverModes(perModeOklab(a), perModeOklab(b))
     }
 
-    public static func worstCaseDistance(hexA: String, hexB: String) -> Double {
+    package static func worstCaseDistance(hexA: String, hexB: String) -> Double {
         guard let a = RGB255(hex: hexA), let b = RGB255(hex: hexB) else {
             return 0
         }
@@ -840,7 +840,7 @@ public enum ColourEngine {
 
     /// OKLCH → rounded sRGB, gamut-clipped exactly like the lab (clamp in
     /// linear light, then encode).
-    public static func rgb(from c: OKLCH) -> RGB255 {
+    package static func rgb(from c: OKLCH) -> RGB255 {
         let lin = oklabToLinear(oklab(c))
         return RGB255(r: Int((linearToSrgb(lin.r) * 255).rounded()),
                       g: Int((linearToSrgb(lin.g) * 255).rounded()),
@@ -856,7 +856,7 @@ public enum ColourEngine {
     /// sRGB → OKLCH, the inverse edge `repairProjectAnchor` needs: a
     /// migrated hex must yield real allocation coordinates (hue for the task
     /// neighbourhood, L for anchor spacing), not a guessed band.
-    public static func oklch(from c: RGB255) -> OKLCH {
+    package static func oklch(from c: RGB255) -> OKLCH {
         let lab = oklab(c)
         let h = atan2(lab.b, lab.a) * 180 / Double.pi
         return OKLCH(L: lab.L, C: (lab.a * lab.a + lab.b * lab.b).squareRoot(),

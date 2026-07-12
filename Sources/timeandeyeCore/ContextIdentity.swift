@@ -14,8 +14,8 @@ import Foundation
 /// the ladder in Settings reorders every card and strip app-wide. Segments are
 /// never hidden: a field the capture didn't supply renders as an UNAVAILABLE
 /// ghost row — its absence IS the coverage/privacy signal (spec §5.5).
-public struct ContextIdentity: Sendable, Equatable {
-    public enum SegmentKind: Sendable, Equatable {
+package struct ContextIdentity: Sendable, Equatable {
+    package enum SegmentKind: Sendable, Equatable {
         case app, urlHost, urlPath          // today's PinScope segments
         case emailSystem                    // "Gmail"
         case correspondentDomain            // "harborlane.example"
@@ -24,18 +24,18 @@ public struct ContextIdentity: Sendable, Equatable {
         case recipeField(String)            // ◆ extracted; assoc = field name ("client")
     }
 
-    public struct Segment: Sendable, Equatable {
-        public var kind: SegmentKind
+    package struct Segment: Sendable, Equatable {
+        package var kind: SegmentKind
         /// The matchable value (lowercased/normalised where the matcher is).
-        public var value: String
+        package var value: String
         /// Pretty form for UI ("Gmail", the raw subject).
-        public var display: String
+        package var display: String
         /// gmail.com et al. — shared webmail, matches everyone; caution tint.
-        public var shared: Bool
+        package var shared: Bool
         /// false = "not captured" ghost row (no recipe / capture off).
-        public var available: Bool
+        package var available: Bool
 
-        public init(kind: SegmentKind, value: String, display: String,
+        package init(kind: SegmentKind, value: String, display: String,
                     shared: Bool = false, available: Bool = true) {
             self.kind = kind
             self.value = value
@@ -46,9 +46,9 @@ public struct ContextIdentity: Sendable, Equatable {
     }
 
     /// General → specific.
-    public var segments: [Segment]
+    package var segments: [Segment]
 
-    public init(segments: [Segment]) {
+    package init(segments: [Segment]) {
         self.segments = segments
     }
 
@@ -68,7 +68,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// `recipeFields` remains the splice-after-root extension point for
     /// CALLER-SUPPLIED fields (Tier 1 DOM-sourced values, later) — Tier 0
     /// URL/title fields come from the internal recipe branch above.
-    public static func from(_ signal: ActivitySignal,
+    package static func from(_ signal: ActivitySignal,
                             order: [EmailMatchLevel] = EmailMatchLevel.defaultOrder,
                             recipeFields: [(name: String, value: String)] = [],
                             disabledRecipes: Set<String> = []) -> ContextIdentity {
@@ -152,7 +152,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// AVAILABLE segment (spec §5.5 — a ghost is never the default, since it
     /// can't be committed). 1-based, matching the Components strip's blue
     /// prefix length; 0 only if every segment is a ghost.
-    public var defaultGrainCount: Int {
+    package var defaultGrainCount: Int {
         segments.lastIndex(where: \.available).map { $0 + 1 } ?? 0
     }
 
@@ -162,7 +162,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// blue prefix length); `narrower` is true for → / false for ←. Staying put
     /// (returning `count`) when there is no available segment in that
     /// direction is the correct "can't go further" behaviour, not a bug.
-    public func steppedGrainCount(from count: Int, narrower: Bool) -> Int {
+    package func steppedGrainCount(from count: Int, narrower: Bool) -> Int {
         guard !segments.isEmpty else { return count }
         let current = max(0, min(count, segments.count) - 1)
         let candidates = narrower
@@ -182,7 +182,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// when the chain carries no email grain at all (a plain surface), where
     /// the card degrades to the PinScope chain and `defaultGrainCount` applies
     /// instead.
-    public var cardDefaultGrainIndex: Int? {
+    package var cardDefaultGrainIndex: Int? {
         guard segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
         if let i = segments.firstIndex(where: { $0.kind == .correspondentDomain && $0.available && !$0.shared }) {
             return i + 1
@@ -204,7 +204,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// organisation — email-style conservatism, never the content field),
     /// falling back to the host row when that field wasn't captured. nil for
     /// every non-recipe chain (email, plain URL, app window).
-    public var siteDefaultGrainIndex: Int? {
+    package var siteDefaultGrainIndex: Int? {
         guard segments.first?.kind == .urlHost,
               segments.contains(where: { if case .recipeField = $0.kind { return true }
                                           return false }),
@@ -223,7 +223,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// plain URL chain (site-recipes spec §0 Q2 — "this site → task" is
     /// learnable everywhere). nil on app windows, where no site rule
     /// applies and the footer stays away.
-    public var footerDefaultGrainIndex: Int? {
+    package var footerDefaultGrainIndex: Int? {
         if let i = cardDefaultGrainIndex { return i }
         if let i = siteDefaultGrainIndex { return i }
         return segments.first?.kind == .urlHost ? 1 : nil
@@ -234,7 +234,7 @@ public struct ContextIdentity: Sendable, Equatable {
     /// nothing finer, the shared `site` grain is still worth offering. nil
     /// for mail hosts (email keeps its own footer path) and URL-less
     /// signals.
-    public static func siteHostChain(of signal: ActivitySignal) -> ContextIdentity? {
+    package static func siteHostChain(of signal: ActivitySignal) -> ContextIdentity? {
         guard let context = SiteRecipes.context(for: signal) else { return nil }
         return ContextIdentity(segments: [
             Segment(kind: .urlHost, value: context.host, display: context.host),
@@ -253,7 +253,7 @@ extension ContextIdentity {
     /// case-insensitively de-duplicated — the checkbox list source for the
     /// grain footer / Evidence Card. Empty for a signal with no email
     /// context at all.
-    public static func correspondentChoices(_ signal: ActivitySignal) -> [String] {
+    package static func correspondentChoices(_ signal: ActivitySignal) -> [String] {
         guard let ctx = EmailContext.from(signal) else { return [] }
         var seen = Set<String>()
         return ctx.correspondents.filter { seen.insert($0).inserted }
@@ -264,7 +264,7 @@ extension ContextIdentity {
     /// `correspondentChoices` — so the commit order is stable and `chosen`
     /// is matched case-insensitively (a checkbox label is the lowercased
     /// display value, but a caller shouldn't have to know that).
-    public static func correspondentRuleValues(_ signal: ActivitySignal,
+    package static func correspondentRuleValues(_ signal: ActivitySignal,
                                                chosen: Set<String>) -> [String] {
         let chosenLower = Set(chosen.map { $0.lowercased() })
         return correspondentChoices(signal).filter { chosenLower.contains($0.lowercased()) }
@@ -277,7 +277,7 @@ extension ContextIdentity.SegmentKind {
     /// PinScope one (app/urlHost/urlPath) and the later recipe extension
     /// point. Drives the pin editor's choice between the classic Components
     /// strip and the email grain ladder (pin-editor slice, 2026-07-03 spec).
-    public var isEmailGrain: Bool {
+    package var isEmailGrain: Bool {
         switch self {
         case .emailSystem, .correspondentDomain, .correspondent, .subject: return true
         case .app, .urlHost, .urlPath, .recipeField: return false
@@ -293,7 +293,7 @@ extension ContextIdentity.SegmentKind {
     /// the system row — spec §5.4: "Always writes a PINNED EmailRule for
     /// email grains, or a Pin for the site-section grain on a non-email
     /// surface."
-    public var emailMatchLevel: EmailMatchLevel? {
+    package var emailMatchLevel: EmailMatchLevel? {
         switch self {
         case .emailSystem: return .emailSystem
         case .correspondentDomain: return .correspondentDomain
@@ -313,7 +313,7 @@ extension ContextIdentity.Segment {
     /// committable) and for every kind that stays on the PinScope path —
     /// `emailSystem` included, since "this whole site" is exactly what a
     /// PinScope root pin already means.
-    public var pinPredicate: Predicate? {
+    package var pinPredicate: Predicate? {
         guard available else { return nil }
         switch kind {
         case .correspondentDomain: return .leaf(field: .sender, op: .contains, value: value)
@@ -328,14 +328,14 @@ extension ContextIdentity.Segment {
     /// "everything in Gmail", so the committed rule must scope to Gmail (an
     /// empty value would match every mail system, disagreeing with the label
     /// the user clicked; `EmailRule.matches` treats a named system exactly).
-    public var emailMatchValue: String { value }
+    package var emailMatchValue: String { value }
 }
 
 extension Attributor {
     /// The identity chain for a signal, ordered per THIS attributor's
     /// user-configured email ladder and honouring its per-recipe toggles —
     /// what the Evidence Card renders.
-    public func identity(of signal: ActivitySignal) -> ContextIdentity {
+    package func identity(of signal: ActivitySignal) -> ContextIdentity {
         ContextIdentity.from(signal, order: emailMatchOrder,
                              disabledRecipes: disabledSiteRecipes)
     }

@@ -113,7 +113,7 @@ func contradictionRefileChecks(_ c: Checks) {
         let sessions = [session(f, task: .op(1), certainty: 0.95, provenance: nil)]
         let key = ContradictionRefile.Finding(
             sessionID: f, priorTask: .op(1), priorCertainty: 0.95,
-            priorProvenance: nil, newTask: .op(2), score: 0.95).dismissalKey
+            newTask: .op(2), score: 0.95).dismissalKey
         let dismissed = ContradictionRefile.plan(sessions: sessions, bar: 0.9,
                                                  suggestFloor: 0.6,
                                                  dismissed: [key], score: says)
@@ -138,7 +138,7 @@ func contradictionRefileChecks(_ c: Checks) {
                         provenance: SessionProvenance(source: .ranked))
         let finding = ContradictionRefile.Finding(
             sessionID: a, priorTask: .op(1), priorCertainty: 0.99,
-            priorProvenance: s.provenance, newTask: .op(2), score: 0.7)
+            newTask: .op(2), score: 0.7)
         let applied = ContradictionRefile.apply(finding, to: s)
         try expectEq(applied.certainty, 0.7, "0.99 on the OLD task must not inflate the new target")
         try expectEq(applied.newTask, .op(2))
@@ -149,7 +149,7 @@ func contradictionRefileChecks(_ c: Checks) {
                         provenance: SessionProvenance(source: .ranked))
         let applied = ContradictionRefile.apply(
             ContradictionRefile.Finding(sessionID: a, priorTask: .op(1), priorCertainty: 0.5,
-                priorProvenance: s.provenance, newTask: .op(2), score: 0.95), to: s)
+                newTask: .op(2), score: 0.95), to: s)
         try expect(!applied.severBackendLinkage)
         try expectNil(applied.entryToDelete)
     }
@@ -163,7 +163,7 @@ func contradictionRefileChecks(_ c: Checks) {
 
         let finding = ContradictionRefile.Finding(
             sessionID: a, priorTask: .op(1), priorCertainty: 0.6,
-            priorProvenance: s.provenance, newTask: .op(2), score: 0.95)
+            newTask: .op(2), score: 0.95)
         // The digest payload snapshots the prior linkage BEFORE the apply.
         let priorPushed = s.pushedToOP   // → PriorSessionState.priorPushedToOP
         let applied = ContradictionRefile.apply(finding, to: s)

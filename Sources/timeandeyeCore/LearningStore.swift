@@ -1,7 +1,7 @@
 import Foundation
 
-public struct Feature: Hashable, Codable, Sendable {
-    public enum Kind: String, Codable, Sendable {
+package struct Feature: Hashable, Codable, Sendable {
+    package enum Kind: String, Codable, Sendable {
         case app, titleToken, urlHost, urlPath, hourOfDay
         /// Email counterparty address / its domain (2026-07-03). Sensor-observed
         /// (the capture reads them off the user's own screen), so compliant with
@@ -26,14 +26,14 @@ public struct Feature: Hashable, Codable, Sendable {
         /// `.unknown` rather than failing the store's whole decode — the
         /// additive-migration guarantee the correspondent kinds promised,
         /// made structural.
-        public init(from decoder: Decoder) throws {
+        package init(from decoder: Decoder) throws {
             let raw = try decoder.singleValueContainer().decode(String.self)
             self = Kind(rawValue: raw) ?? .unknown
         }
     }
-    public var kind: Kind
-    public var value: String
-    public init(_ kind: Kind, _ value: String) {
+    package var kind: Kind
+    package var value: String
+    package init(_ kind: Kind, _ value: String) {
         self.kind = kind
         self.value = value
     }
@@ -51,15 +51,15 @@ public struct Feature: Hashable, Codable, Sendable {
 /// keys hold TaskRefs (opaque ids used as class labels, i.e. references, not
 /// trained-on content). Frozen by the "backend text never becomes a learned
 /// feature" check.
-public struct LearningStore: Codable, Equatable, Sendable {
+package struct LearningStore: Codable, Equatable, Sendable {
     private var counts: [Feature: [Target: Double]] = [:]
     private var totals: [Target: Double] = [:]
 
-    public init() {}
+    package init() {}
 
-    public var isEmpty: Bool { totals.isEmpty }
+    package var isEmpty: Bool { totals.isEmpty }
 
-    public static func features(from signal: ActivitySignal,
+    package static func features(from signal: ActivitySignal,
                                 calendar: Calendar = Calendar(identifier: .gregorian),
                                 disabledRecipes: Set<String> = []) -> [Feature] {
         var out = [Feature(.app, signal.app.lowercased())]
@@ -102,7 +102,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
         return out
     }
 
-    public mutating func learn(_ signal: ActivitySignal, target: Target, weight: Double = 1,
+    package mutating func learn(_ signal: ActivitySignal, target: Target, weight: Double = 1,
                                disabledRecipes: Set<String> = []) {
         for f in Self.features(from: signal, disabledRecipes: disabledRecipes) {
             counts[f, default: [:]][target, default: 0] += weight
@@ -112,7 +112,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
 
     /// A correction teaches harder than a confirmation: subtract from the wrong
     /// target, add double to the right one.
-    public mutating func correct(_ signal: ActivitySignal, from old: Target, to new: Target,
+    package mutating func correct(_ signal: ActivitySignal, from old: Target, to new: Target,
                                  disabledRecipes: Set<String> = []) {
         learn(signal, target: old, weight: -1, disabledRecipes: disabledRecipes)
         learn(signal, target: new, weight: 2, disabledRecipes: disabledRecipes)
@@ -126,7 +126,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
     /// through these features, and leaving it makes the smoothing term
     /// (0.1/(total+1)) HARSHER for the erased features — exactly the suppression
     /// wanted. Learning on other features/targets is unaffected.
-    public mutating func forget(target: Target, features: [Feature]) {
+    package mutating func forget(target: Target, features: [Feature]) {
         for f in features {
             counts[f]?[target] = nil
             if counts[f]?.isEmpty == true { counts[f] = nil }
@@ -134,7 +134,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
     }
 
     /// Softmax-normalised scores (sum to 1) over `candidates` for this signal.
-    public func scores(for signal: ActivitySignal, among candidates: [Target],
+    package func scores(for signal: ActivitySignal, among candidates: [Target],
                        disabledRecipes: Set<String> = []) -> [Target: Double] {
         guard !candidates.isEmpty else { return [:] }
         let feats = Self.features(from: signal, disabledRecipes: disabledRecipes)
@@ -188,7 +188,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
     /// largest positive count total on the signal's features, nil when nothing
     /// positive is learned on them. Drives `Attributor.forgettable`'s
     /// rankedAssociation case (what a [✕ suppress] would counter-teach).
-    public func dominantAssociation(for signal: ActivitySignal,
+    package func dominantAssociation(for signal: ActivitySignal,
                                     disabledRecipes: Set<String> = []) -> Target? {
         var sums: [Target: Double] = [:]
         for f in Self.features(from: signal, disabledRecipes: disabledRecipes) {
@@ -201,7 +201,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
 
     /// Fraction of a target's confirmed weight that fell in this hour
     /// (time-of-day prior for the ranker).
-    public func hourAffinity(for target: Target, hour: Int) -> Double {
+    package func hourAffinity(for target: Target, hour: Int) -> Double {
         let c = max(counts[Feature(.hourOfDay, String(hour))]?[target] ?? 0, 0)
         let total = max(totals[target] ?? 0, 0)
         return total > 0 ? c / total : 0
@@ -213,7 +213,7 @@ public struct LearningStore: Codable, Equatable, Sendable {
     /// do in a "voting" window has learned titleToken "voting", so typing
     /// "voting" can find it even when its OP subject never says the word. Only
     /// strictly-positive associations count, so a value corrected away drops out.
-    public func learnedValues(for target: Target,
+    package func learnedValues(for target: Target,
                               kinds: Set<Feature.Kind> = [.titleToken, .urlHost, .app]) -> [String] {
         var out: Set<String> = []
         for (feature, targets) in counts where kinds.contains(feature.kind) {

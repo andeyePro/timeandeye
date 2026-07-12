@@ -2,8 +2,8 @@ import Foundation
 
 /// Forgiving task search: substring beats subsequence beats nothing, so
 /// "tim" finds Timesheets and "aeml" still finds "andeye email triage".
-public enum FuzzyMatch {
-    public static func isSubsequence(_ needle: String, of haystack: String) -> Bool {
+package enum FuzzyMatch {
+    package static func isSubsequence(_ needle: String, of haystack: String) -> Bool {
         var iterator = haystack.folding(options: [.diacriticInsensitive, .caseInsensitive],
                                         locale: nil).makeIterator()
         outer: for ch in needle.folding(options: [.diacriticInsensitive, .caseInsensitive],
@@ -16,7 +16,7 @@ public enum FuzzyMatch {
         return true
     }
 
-    public static func score(_ query: String, in text: String) -> Int {
+    package static func score(_ query: String, in text: String) -> Int {
         // Diacritic folding (reviewer B15): "cafe" finds "Café accounts".
         let q = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
         let t = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
@@ -39,7 +39,7 @@ public enum FuzzyMatch {
     /// subsequence hit on a learned token is too weak to admit a task whose
     /// visible text doesn't match at all. `learnedValues` defaults to none, so
     /// existing callers keep pure subject/project behaviour.
-    public static func filter(_ tasks: [WorkTask], query: String,
+    package static func filter(_ tasks: [WorkTask], query: String,
                               learnedValues: (TaskRef) -> [String] = { _ in [] }) -> [WorkTask] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return tasks }
         return tasks

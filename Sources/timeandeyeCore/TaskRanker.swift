@@ -1,13 +1,13 @@
 import Foundation
 
-public struct RankingConfig: Codable, Equatable, Sendable {
-    public var statusOrder: [String]
-    public var recencyHalfLifeDays: Double
+package struct RankingConfig: Codable, Equatable, Sendable {
+    package var statusOrder: [String]
+    package var recencyHalfLifeDays: Double
     /// The local user's display name: tasks assigned to OTHERS sink to the
     /// bottom of every list until the user actually tracks time on them.
-    public var currentUser: String?
+    package var currentUser: String?
 
-    public init(statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
+    package init(statusOrder: [String] = ["Now", "Next", "Open", "Closed"],
                 recencyHalfLifeDays: Double = 7,
                 currentUser: String? = nil) {
         self.statusOrder = statusOrder
@@ -16,10 +16,10 @@ public struct RankingConfig: Codable, Equatable, Sendable {
     }
 }
 
-public struct TaskRanker: Sendable {
-    public var config: RankingConfig
+package struct TaskRanker: Sendable {
+    package var config: RankingConfig
 
-    public init(config: RankingConfig = RankingConfig()) {
+    package init(config: RankingConfig = RankingConfig()) {
         self.config = config
     }
 
@@ -31,7 +31,7 @@ public struct TaskRanker: Sendable {
     /// other task and for the no-match case (calendar signal spec §5). The
     /// 0.3 ceiling keeps the term below recency's 2× weight – a live meeting
     /// nudges the ranking, it never dominates demonstrably-recent work.
-    public func score(_ task: WorkTask, at now: Date, learning: LearningStore? = nil,
+    package func score(_ task: WorkTask, at now: Date, learning: LearningStore? = nil,
                       calendar: Calendar = Calendar(identifier: .gregorian),
                       calendarMatch: (task: TaskRef, tentative: Bool)? = nil) -> Double {
         var statusScore = 0.0
@@ -60,7 +60,7 @@ public struct TaskRanker: Sendable {
         return score
     }
 
-    public func ranked(_ tasks: [WorkTask], at now: Date, learning: LearningStore? = nil,
+    package func ranked(_ tasks: [WorkTask], at now: Date, learning: LearningStore? = nil,
                        calendarMatch: (task: TaskRef, tentative: Bool)? = nil) -> [WorkTask] {
         tasks.sorted {
             score($0, at: now, learning: learning, calendarMatch: calendarMatch)
@@ -76,7 +76,7 @@ public struct TaskRanker: Sendable {
     /// `calendarMatch` flows through to the ranked tail exactly as it does in
     /// `score()` – it's what makes a live meeting surface its task without a
     /// separate proposal mechanism (calendar signal spec §5).
-    public func recentThenRanked(_ tasks: [WorkTask], at now: Date, learning: LearningStore? = nil,
+    package func recentThenRanked(_ tasks: [WorkTask], at now: Date, learning: LearningStore? = nil,
                                  calendarMatch: (task: TaskRef, tentative: Bool)? = nil) -> [WorkTask] {
         // The built-in Unknown sentinel is review-only — never offered as a
         // pick, however it got into the incoming list. Defense-in-depth: the

@@ -7,17 +7,17 @@ import Foundation
 /// address is available). `tentative` is the local user's own RSVP status;
 /// `allDay` events are excluded from the live prior but still qualify for
 /// the review-queue hint (calendar signal spec §3).
-public struct CalendarEvent: Equatable, Sendable {
-    public let id: String
-    public let title: String
-    public let calendarName: String
-    public let attendees: [String]
-    public let start: Date
-    public let end: Date
-    public let tentative: Bool
-    public let allDay: Bool
+package struct CalendarEvent: Equatable, Sendable {
+    package let id: String
+    package let title: String
+    package let calendarName: String
+    package let attendees: [String]
+    package let start: Date
+    package let end: Date
+    package let tentative: Bool
+    package let allDay: Bool
 
-    public init(id: String, title: String, calendarName: String, attendees: [String],
+    package init(id: String, title: String, calendarName: String, attendees: [String],
                 start: Date, end: Date, tentative: Bool = false, allDay: Bool = false) {
         self.id = id
         self.title = title
@@ -35,16 +35,16 @@ public struct CalendarEvent: Equatable, Sendable {
 /// match one event (its calendar, an attendee, a word in the title); the
 /// MOST SPECIFIC matching rule wins. The order is a setting so the user can
 /// retune it; `defaultOrder` is general → specific.
-public enum CalendarMatchLevel: String, CaseIterable, Codable, Sendable {
+package enum CalendarMatchLevel: String, CaseIterable, Codable, Sendable {
     case calendarName   // "all events in this calendar" – broadest
     case attendee        // a specific person's email/name on the invite
     case titleKeyword    // a word/phrase in the event title – most specific
 
     /// Low (general) → high (specific). The last element wins ties of presence.
-    public static let defaultOrder: [CalendarMatchLevel] =
+    package static let defaultOrder: [CalendarMatchLevel] =
         [.calendarName, .attendee, .titleKeyword]
 
-    public var label: String {
+    package var label: String {
         switch self {
         case .calendarName: return "Calendar"
         case .attendee: return "Attendee"
@@ -56,23 +56,23 @@ public enum CalendarMatchLevel: String, CaseIterable, Codable, Sendable {
 /// One calendar→task rule, learned (from a correction) or pinned (explicit).
 /// Mirrors `EmailRule` exactly, including provenance metadata and its
 /// back-compat decode (calendar signal spec §4).
-public struct CalendarRule: Equatable, Codable, Sendable {
-    public let level: CalendarMatchLevel
-    public let value: String
-    public let target: TaskRef
+package struct CalendarRule: Equatable, Codable, Sendable {
+    package let level: CalendarMatchLevel
+    package let value: String
+    package let target: TaskRef
     /// True for explicit user pins (which outrank a learned rule at the same level).
-    public let pinned: Bool
+    package let pinned: Bool
     /// Provenance metadata, same shape as `EmailRule`'s: decodes with
     /// defaults so a calendarrules.json written before they existed still
     /// loads: createdAt → .distantPast, origin → .migrated, fireCount → 0,
     /// lastFired → nil.
-    public var createdAt: Date
-    public var origin: EmailRule.Origin
+    package var createdAt: Date
+    package var origin: EmailRule.Origin
     /// Bumped by the matcher's caller each time this rule WINS a match.
-    public var fireCount: Int
-    public var lastFired: Date?
+    package var fireCount: Int
+    package var lastFired: Date?
 
-    public init(level: CalendarMatchLevel, value: String, target: TaskRef, pinned: Bool = false,
+    package init(level: CalendarMatchLevel, value: String, target: TaskRef, pinned: Bool = false,
                 createdAt: Date = Date(), origin: EmailRule.Origin = .correction,
                 fireCount: Int = 0, lastFired: Date? = nil) {
         self.level = level
@@ -87,7 +87,7 @@ public struct CalendarRule: Equatable, Codable, Sendable {
 
     /// Custom decode ONLY for the metadata defaults; encoding stays synthesized
     /// (always writes the full metadata form).
-    public init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         level = try c.decode(CalendarMatchLevel.self, forKey: .level)
         value = try c.decode(String.self, forKey: .value)
@@ -102,12 +102,12 @@ public struct CalendarRule: Equatable, Codable, Sendable {
     /// The identity of a rule for replace/forget purposes: what it matches and
     /// where it points, NOT its metadata (a fireCount bump must not make a rule
     /// "different" from the snapshot a card captured).
-    public func sameRule(as other: CalendarRule) -> Bool {
+    package func sameRule(as other: CalendarRule) -> Bool {
         level == other.level && target == other.target && pinned == other.pinned
             && value.caseInsensitiveCompare(other.value) == .orderedSame
     }
 
-    public func matches(_ event: CalendarEvent) -> Bool {
+    package func matches(_ event: CalendarEvent) -> Bool {
         switch level {
         case .calendarName:
             return !value.isEmpty && value.caseInsensitiveCompare(event.calendarName) == .orderedSame
@@ -120,7 +120,7 @@ public struct CalendarRule: Equatable, Codable, Sendable {
     }
 }
 
-public extension CalendarEvent {
+package extension CalendarEvent {
     /// The identity of one OCCURRENCE for alert deduplication. EventKit gives
     /// every instance of a recurring series the SAME `eventIdentifier`, so
     /// `id` alone would let one standup silence every future standup — the
@@ -132,7 +132,7 @@ public extension CalendarEvent {
 /// What the menu-bar mark should be doing about upcoming meetings right now
 /// (calendar signal, Martin's 2026-07-09 alert design): a quiet slow pulse
 /// in the lead-up window, one violent flash at start, silence otherwise.
-public enum CalendarAlertPhase: Equatable, Sendable {
+package enum CalendarAlertPhase: Equatable, Sendable {
     case none
     /// Inside `[start − lead, start)` of an upcoming event: the quiet pulse.
     case preMeeting(CalendarEvent)
@@ -144,22 +144,22 @@ public enum CalendarAlertPhase: Equatable, Sendable {
 /// The time-based meeting alerts' pure decision core — platform-free so the
 /// checks can drive every edge with seeded `CalendarEvent`s (no EventKit, no
 /// clock). The Mac side owns the animations; this owns WHEN.
-public enum CalendarAlerts {
+package enum CalendarAlerts {
     /// The start flash only fires within this window after an event's start.
     /// Launching the app (or waking the Mac) later than this into a meeting
     /// gives NO retroactive flash — a violent alert about something that
     /// began ten minutes ago is noise, not help. Landing inside the window
     /// still flashes: you're only just late, and the flash is still the
     /// nudge it was designed to be.
-    public static let startGraceSeconds: TimeInterval = 60
+    package static let startGraceSeconds: TimeInterval = 60
 
     /// The Settings picker's lead-time choices, in minutes (default 5).
-    public static let leadMinuteChoices: [Int] = [1, 2, 5, 10, 15]
+    package static let leadMinuteChoices: [Int] = [1, 2, 5, 10, 15]
 
     /// Alert-worthy at all: all-day events never alert (an all-day "Annual
     /// leave" banner has no meaningful start to be late for). Declined
     /// events never reach here — the bridge drops them at fetch.
-    public static func qualifies(_ event: CalendarEvent) -> Bool { !event.allDay }
+    package static func qualifies(_ event: CalendarEvent) -> Bool { !event.allDay }
 
     /// The alert phase for `events` at `now`. `leadSeconds` is the
     /// pre-meeting window (pass 0 when the pre-meeting alert is off — no
@@ -173,7 +173,7 @@ public enum CalendarAlerts {
     /// wins — back-to-back events each get their own lead-up. A tentative
     /// invite pulses (you may still need to decide to go) but never gets
     /// the violent flash: "maybe" shouldn't shout as loud as "yes".
-    public static func phase(events: [CalendarEvent], at now: Date,
+    package static func phase(events: [CalendarEvent], at now: Date,
                              leadSeconds: TimeInterval,
                              alreadyFired: Set<String>) -> CalendarAlertPhase {
         if let due = events
@@ -196,7 +196,7 @@ public enum CalendarAlerts {
     /// its lead window, starting, exhausting its start grace, or ending
     /// (ends kept for the live prior's boundary timer, which shares this).
     /// nil = nothing ahead — no timer needed until the window refreshes.
-    public static func nextBoundary(events: [CalendarEvent], after now: Date,
+    package static func nextBoundary(events: [CalendarEvent], after now: Date,
                                     leadSeconds: TimeInterval) -> Date? {
         events.flatMap {
             [$0.start.addingTimeInterval(-leadSeconds), $0.start,
@@ -207,12 +207,12 @@ public enum CalendarAlerts {
     }
 }
 
-public enum CalendarMatcher {
+package enum CalendarMatcher {
     /// The winning rule for `event`: the most-specific level (per `order`,
     /// general → specific) that has a matching rule. At one level a pinned
     /// rule beats a learned one; otherwise the newest unpinned wins ties –
     /// exactly `EmailMatcher.match()`'s resolution (calendar signal spec §4).
-    public static func bestRule(rules: [CalendarRule], event: CalendarEvent,
+    package static func bestRule(rules: [CalendarRule], event: CalendarEvent,
                                 order: [CalendarMatchLevel] = CalendarMatchLevel.defaultOrder)
         -> CalendarRule? {
         for level in order.reversed() {
@@ -227,7 +227,7 @@ public enum CalendarMatcher {
     /// while `event` is live: a `titleKeyword` rule from the event's own
     /// title – the narrowest, safest grain (calendar signal spec §4). Never
     /// pinned; the caller supplies provenance/timestamp for the teach path.
-    public static func learnableRule(event: CalendarEvent, for task: TaskRef,
+    package static func learnableRule(event: CalendarEvent, for task: TaskRef,
                                      origin: EmailRule.Origin = .correction,
                                      now: Date = Date()) -> CalendarRule {
         CalendarRule(level: .titleKeyword, value: event.title, target: task,

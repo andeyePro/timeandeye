@@ -8,10 +8,10 @@ import Foundation
 /// session". A sticky outranks every INFERRED source (email rules, primes,
 /// URL recognition, ranker); only an explicit pin (1.0, standing law) sits
 /// above it. Ephemeral by design: dies at end of day or app relaunch.
-public struct SessionSticky: Equatable, Sendable {
+package struct SessionSticky: Equatable, Sendable {
     /// Hashable so the pre-correction snapshot store can key on it (see
     /// `Attributor.displacedByCorrection`).
-    public enum Key: Hashable, Sendable {
+    package enum Key: Hashable, Sendable {
         /// Email thread identity: the normalised subject (re:/fwd: stripped,
         /// lowercased). Chosen over the raw Surface because a draft's window
         /// title mutates as you type — the subject is what stays put.
@@ -21,36 +21,36 @@ public struct SessionSticky: Equatable, Sendable {
         /// Any non-email context: the focus surface.
         case surface(Surface)
     }
-    public var key: Key
-    public var target: Target
+    package var key: Key
+    package var target: Target
     /// Start of the local day it was created; valid only that day.
-    public var day: Date
+    package var day: Date
 
-    public init(key: Key, target: Target, day: Date) {
+    package init(key: Key, target: Target, day: Date) {
         self.key = key
         self.target = target
         self.day = day
     }
 }
 
-public struct Candidate: Equatable, Sendable {
-    public var target: Target
-    public var score: Double
-    public init(target: Target, score: Double) {
+package struct Candidate: Equatable, Sendable {
+    package var target: Target
+    package var score: Double
+    package init(target: Target, score: Double) {
         self.target = target
         self.score = score
     }
 }
 
-public struct Attribution: Equatable, Sendable {
-    public var best: Candidate?
-    public var ranked: [Candidate]
+package struct Attribution: Equatable, Sendable {
+    package var best: Candidate?
+    package var ranked: [Candidate]
     /// Which source decided `best` (+ the matched rule/key when one
     /// existed) — journalled at flush so the Evidence Card can name the
     /// original decider verbatim. Defaults keep older call sites compiling.
-    public var provenance: SessionProvenance?
-    public var certainty: Double { best?.score ?? 0 }
-    public init(best: Candidate?, ranked: [Candidate],
+    package var provenance: SessionProvenance?
+    package var certainty: Double { best?.score ?? 0 }
+    package init(best: Candidate?, ranked: [Candidate],
                 provenance: SessionProvenance? = nil) {
         self.best = best
         self.ranked = ranked
@@ -75,16 +75,16 @@ public struct AttributionExplanation: Equatable, Sendable {
         case none
     }
     /// One candidate task and how its score broke down (learned vs prior).
-    public struct Line: Equatable, Sendable {
-        public var target: Target
-        public var score: Double
-        public var learned: Double   // contribution from learned associations
-        public var prior: Double     // contribution from status/recency/time-of-day
+    package struct Line: Equatable, Sendable {
+        package var target: Target
+        package var score: Double
+        package var learned: Double   // contribution from learned associations
+        package var prior: Double     // contribution from status/recency/time-of-day
         /// Contribution from a live calendar match (calendar signal spec §5)
         /// – defaults to 0 so every existing call site stays source-compatible;
         /// the Attributor's scoring path sets it once wired.
-        public var calendarPart: Double
-        public init(target: Target, score: Double, learned: Double, prior: Double,
+        package var calendarPart: Double
+        package init(target: Target, score: Double, learned: Double, prior: Double,
                     calendarPart: Double = 0) {
             self.target = target; self.score = score; self.learned = learned; self.prior = prior
             self.calendarPart = calendarPart
@@ -95,42 +95,42 @@ public struct AttributionExplanation: Equatable, Sendable {
     /// Evidence Card can keep the story straight instead of pretending it
     /// always agreed (2026-07-05 hardware-test report: "I'm confident it's
     /// X" → correction → "I'm confident it's Y, I never thought it was X").
-    public struct Prior: Equatable, Sendable {
-        public var source: Source
-        public var chosen: Target
-        public var score: Double
-        public init(source: Source, chosen: Target, score: Double) {
+    package struct Prior: Equatable, Sendable {
+        package var source: Source
+        package var chosen: Target
+        package var score: Double
+        package init(source: Source, chosen: Target, score: Double) {
             self.source = source; self.chosen = chosen; self.score = score
         }
     }
-    public var source: Source
-    public var chosen: Target?
-    public var chosenScore: Double
+    package var source: Source
+    package var chosen: Target?
+    package var chosenScore: Double
     /// Ranked alternatives with their score breakdown (empty for pin/OP sources,
     /// where the decision bypasses scoring).
-    public var lines: [Line]
+    package var lines: [Line]
     /// The signal features the learner keys on (e.g. "app=chrome",
     /// "title=insurance") — what you'd correct to change the outcome.
-    public var features: [String]
+    package var features: [String]
     /// The exact rule/pin that fired, when the source is .emailRule /
     /// .siteRule / .pin — carried here (with its metadata) so the Evidence
     /// Card never re-derives them and can never disagree with the decision.
-    public var matchedEmailRule: EmailRule?
-    public var matchedSiteRule: SiteRule?
-    public var matchedPin: Pin?
+    package var matchedEmailRule: EmailRule?
+    package var matchedSiteRule: SiteRule?
+    package var matchedPin: Pin?
     /// The remembered surface that matched, when the source is
     /// .primedSurface / .pendingPrime — carried so the card can SHOW the
     /// key that fired: an over-broad prime (e.g. a whole mail tab keyed by
     /// its URL fragment, or a title-less window keyed by app alone) is
     /// invisible — and effectively unforgettable — unless the matched key
     /// is on the card (Martin's 2026-07-10 why-panel report).
-    public var matchedSurface: Surface?
+    package var matchedSurface: Surface?
     /// Set only when the source is a correction (`.sessionSticky`) that
     /// displaced a real prior belief — the card's "before your correction:
     /// Apple 71% (learned)" history line. nil when the engine already agreed
     /// with the pick, or believed nothing.
-    public var priorToCorrection: Prior?
-    public init(source: Source, chosen: Target?, chosenScore: Double,
+    package var priorToCorrection: Prior?
+    package init(source: Source, chosen: Target?, chosenScore: Double,
                 lines: [Line], features: [String],
                 matchedEmailRule: EmailRule? = nil, matchedSiteRule: SiteRule? = nil,
                 matchedPin: Pin? = nil, priorToCorrection: Prior? = nil,
@@ -153,12 +153,12 @@ public struct AttributionExplanation: Equatable, Sendable {
     /// decided). True when this re-derivation contradicts the record — the
     /// why-panel must then anchor BECAUSE on the record and demote this
     /// explanation to "what today's rules would say".
-    public func contradicts(recorded: Target) -> Bool {
+    package func contradicts(recorded: Target) -> Bool {
         chosen != recorded
     }
 }
 
-public extension AttributionExplanation.Source {
+package extension AttributionExplanation.Source {
     /// A plain word for where a certainty comes from — the review drawer's
     /// shared vocabulary (compressed `EvidenceCardView.becauseLabel`), used
     /// by the slice detail line and the assign buttons' hover build alike
@@ -181,16 +181,16 @@ public extension AttributionExplanation.Source {
 /// Turns one ActivitySignal into a ranked list of targets.
 /// Source strength order (spec): OP task URL > primed surface > pending prime
 /// > learned associations + priors.
-public final class Attributor {
+package final class Attributor {
     /// Mutable so the app can apply a changed OP URL without a relaunch.
-    public var instanceHost: String
+    package var instanceHost: String
     /// Override for non-OP backends; nil = the default OP recognizer built
     /// from `instanceHost`. Standalone: `NoPageRecognizer()`.
-    public var customRecognizer: BackendPageRecognizer?
+    package var customRecognizer: BackendPageRecognizer?
     private var recognizer: BackendPageRecognizer {
         customRecognizer ?? OPPageRecognizer(instanceHost: instanceHost)
     }
-    public private(set) var learning: LearningStore
+    package private(set) var learning: LearningStore
     private let ranker: TaskRanker
 
     private var lastOpenedBackendTask: TaskRef?
@@ -203,7 +203,7 @@ public final class Attributor {
     /// Public so the app can persist and restore it across launches —
     /// losing primed associations on relaunch dropped session certainty
     /// below the push threshold (found 2026-06-11).
-    public var primedSurfaces: [Surface: TaskRef] = [:]
+    package var primedSurfaces: [Surface: TaskRef] = [:]
     /// Explicit user pins. EVERYTHING unpinned caps at 0.95; a pin is the only
     /// thing that returns 1.0, and it overrides the ranker, learning, soft
     /// primes and even a work-package URL. Each pin carries a rule (component
@@ -211,25 +211,25 @@ public final class Attributor {
     /// never by an ordinary correction (those stay soft primes). When several
     /// match, the most specific wins (manual `priority` first, then leaf count,
     /// then most-recently-added). See `Pin` / `PinRule`.
-    public var pins: [Pin] = []
+    package var pins: [Pin] = []
     /// Learned email correspondent→task rules (the auto-learner's deterministic
     /// ladder). Populated by corrections on email surfaces; matched most-specific
     /// first per `emailMatchOrder`. Caps at 0.95 like any inferred source.
-    public var emailRules: [EmailRule] = []
+    package var emailRules: [EmailRule] = []
     /// The user-editable specificity order the email ladder resolves through
     /// (mirrors the setting; defaults general→specific).
-    public var emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder
+    package var emailMatchOrder: [EmailMatchLevel] = EmailMatchLevel.defaultOrder
     /// Learned/pinned site rules (recipe field / host → task) — the third
     /// rule domain (2026-07-09 site-recipes spec §5), on the SAME 0.95 rung
     /// as `emailRules`; the two are host-disjoint (mail hosts never produce
     /// a SiteContext), so no page can ever match both. Persisted to
     /// siterules.json by the app, like the other stores.
-    public var siteRules: [SiteRule] = []
+    package var siteRules: [SiteRule] = []
     /// Per-recipe capture toggles, mirrored from the setting (spec §0 Q4:
     /// recipes ship enabled; the ledger's recipe strip can turn each off). A
     /// disabled recipe extracts nothing — its rules go dormant (kept, never
     /// deleted) and it emits no identity segments or learned features.
-    public var disabledSiteRecipes: Set<String> = []
+    package var disabledSiteRecipes: Set<String> = []
     /// Fires exactly once per rule's lifetime, the moment it wins its FIRST
     /// attribution ever (fireCount 0 → 1) — the popover's First-FIRE toast
     /// hook (2026-07-03 spec §6 "later polish", brought forward: "the user
@@ -238,20 +238,20 @@ public final class Attributor {
     /// rule that's forgotten then re-taught fires again (it's a fresh
     /// `EmailRule` with fireCount reset to 0, not the same rule). Wired in
     /// `AppController` to publish a popover notice.
-    public var onFirstFire: ((EmailRule) -> Void)?
+    package var onFirstFire: ((EmailRule) -> Void)?
     /// `onFirstFire`'s site-rule twin — same once-per-rule-lifetime
     /// semantics, driven only by a real `attribute()` win.
-    public var onFirstSiteFire: ((SiteRule) -> Void)?
+    package var onFirstSiteFire: ((SiteRule) -> Void)?
     /// The live calendar match (2026-07-09 calendar-signal spec §5), set by
     /// the platform layer whenever the bridge's event window or a boundary
     /// crossing changes it. Feeds the ranker's calendar term inside
     /// `scoredComponents`, so a live meeting nudges the ranked fallback —
     /// bounded by the existing 0.9 cap, never above a pin/sticky/URL/email
     /// match.
-    public var currentCalendarMatch: (task: TaskRef, tentative: Bool)?
+    package var currentCalendarMatch: (task: TaskRef, tentative: Bool)?
     /// Today's explicit categorisations, by context (see SessionSticky).
     /// Deliberately not persisted — a sticky is a same-day working decision.
-    public private(set) var sessionStickies: [SessionSticky] = []
+    package private(set) var sessionStickies: [SessionSticky] = []
     /// What the engine believed before a correction displaced it, keyed by
     /// the sticky that correction wrote — the Evidence Card's "before your
     /// correction: Apple 71%" history line, so a correction never rewrites
@@ -260,9 +260,9 @@ public final class Attributor {
     /// exactly (pruned at day rollover, removed on forget, dies at relaunch).
     /// Public var, like the other stores, so the app's undo can snapshot and
     /// restore it wholesale.
-    public var displacedByCorrection: [SessionSticky.Key: AttributionExplanation.Prior] = [:]
+    package var displacedByCorrection: [SessionSticky.Key: AttributionExplanation.Prior] = [:]
 
-    public init(instanceHost: String, learning: LearningStore = LearningStore(),
+    package init(instanceHost: String, learning: LearningStore = LearningStore(),
                 ranker: TaskRanker = TaskRanker()) {
         self.instanceHost = instanceHost
         self.learning = learning
@@ -271,7 +271,7 @@ public final class Attributor {
 
     /// Inferred certainty ceiling: everything that isn't an explicit pin tops
     /// out here. 1.0 is reserved for "the user told me outright" (a pin).
-    public static let inferredCeiling = 0.95
+    package static let inferredCeiling = 0.95
 
     /// What the clock is running on, as an attribution prior (Martin,
     /// 2026-07-10, his): the tracker passes the COMMITTED task of the
@@ -279,13 +279,13 @@ public final class Attributor {
     /// task's candidate by the one-sided adjacency boost. Only the ranked
     /// fallback is touched — a pin, sticky, backend URL/title or learned
     /// rule is definitive evidence and returns before this applies.
-    public struct Continuity: Equatable, Sendable {
-        public let target: Target
+    package struct Continuity: Equatable, Sendable {
+        package let target: Target
         /// The last moment activity actually fed the running slice; the
         /// boost decays over the gap to `now` exactly like a journal
         /// neighbour's (full ≤30s, zero at 15min).
-        public let lastActive: Date
-        public init(target: Target, lastActive: Date) {
+        package let lastActive: Date
+        package init(target: Target, lastActive: Date) {
             self.target = target
             self.lastActive = lastActive
         }
@@ -294,9 +294,9 @@ public final class Attributor {
     /// The live boost the most recent `attribute` call applied — nil when
     /// none. The tracker logs it (reasoning + sizes) so the shared constants
     /// can later be FITTED from correction outcomes.
-    public private(set) var lastLiveBoost: AdjacencyBoost?
+    package private(set) var lastLiveBoost: AdjacencyBoost?
 
-    public func attribute(_ signal: ActivitySignal, tasks: [WorkTask], now: Date,
+    package func attribute(_ signal: ActivitySignal, tasks: [WorkTask], now: Date,
                           continuity: Continuity? = nil) -> Attribution {
         lastLiveBoost = nil
         // An explicit pin is law: it wins over a work-package URL and the
@@ -419,7 +419,7 @@ public final class Attributor {
 
     /// SessionTracker calls this when a surface has held focus beyond the
     /// prime-dwell threshold. Consumes lastOpenedBackendTask ("immediately following").
-    public func noteDwell(_ signal: ActivitySignal, at now: Date = Date()) {
+    package func noteDwell(_ signal: ActivitySignal, at now: Date = Date()) {
         if let url = signal.tabURL, recognizer.taskRef(inURL: url) != nil {
             return
         }
@@ -439,7 +439,7 @@ public final class Attributor {
 
     /// The sticky covering this signal today, if any. Prunes expired entries
     /// as a side effect (they are dead weight once the day rolls over).
-    public func stickyMatch(for signal: ActivitySignal, now: Date) -> SessionSticky? {
+    package func stickyMatch(for signal: ActivitySignal, now: Date) -> SessionSticky? {
         sessionStickies.removeAll { !Calendar.current.isDate(now, inSameDayAs: $0.day) }
         // The pre-correction snapshot shares its sticky's lifetime: prune any
         // whose sticky is gone (day rollover above, or a forget).
@@ -541,7 +541,7 @@ public final class Attributor {
     /// surfaces or when no rule matches). Pure — explain()/forgettable() call it
     /// too, so the provenance bump lives in `recordFire`, driven only by
     /// `attribute()` (the real decision).
-    public func emailRuleMatch(_ signal: ActivitySignal) -> EmailRule? {
+    package func emailRuleMatch(_ signal: ActivitySignal) -> EmailRule? {
         guard !emailRules.isEmpty, let ctx = EmailContext.from(signal) else { return nil }
         return EmailMatcher.match(ctx, rules: emailRules, order: emailMatchOrder)
     }
@@ -559,7 +559,7 @@ public final class Attributor {
     /// surfaces, mail hosts, or when nothing matches). Pure — explain()/
     /// forgettable() call it too, so the provenance bump lives in
     /// `recordSiteFire`, driven only by `attribute()` (the real decision).
-    public func siteRuleMatch(_ signal: ActivitySignal) -> SiteRule? {
+    package func siteRuleMatch(_ signal: ActivitySignal) -> SiteRule? {
         guard !siteRules.isEmpty,
               let context = SiteRecipes.context(for: signal,
                                                 disabled: disabledSiteRecipes)
@@ -582,7 +582,7 @@ public final class Attributor {
     /// here, unlike `learnEmailRule`'s legacy default). Replaces any
     /// existing UNPINNED rule with the same recipe+field+value (a pinned
     /// rule is never silently replaced). `value` is stored lowercased.
-    public func learnSiteRule(recipeID: String?, field: String, value: String,
+    package func learnSiteRule(recipeID: String?, field: String, value: String,
                               to task: TaskRef, pinned: Bool = false,
                               origin: EmailRule.Origin = .card, now: Date = Date()) {
         let stored = value.lowercased()
@@ -614,7 +614,7 @@ public final class Attributor {
     /// context-rules spec §5.4 — a plain correction proposes via the card /
     /// footer instead of writing a durable rule behind the user's back); the
     /// conservative auto-detect path stays available for direct callers.
-    public func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef,
+    package func learnEmailRule(_ signal: ActivitySignal, to task: TaskRef,
                                level: EmailMatchLevel? = nil, value: String? = nil,
                                pinned: Bool = false, origin: EmailRule.Origin = .correction,
                                now: Date = Date()) {
@@ -645,7 +645,7 @@ public final class Attributor {
     /// today's fix. `tasks` lets the pre-correction snapshot capture a
     /// ranked belief's real score ([] degrades gracefully: rule/prime/URL
     /// sources still snapshot correctly).
-    public func confirm(_ signal: ActivitySignal, task: TaskRef,
+    package func confirm(_ signal: ActivitySignal, task: TaskRef,
                         tasks: [WorkTask] = [], now: Date = Date()) {
         let displaced = recordDisplaced(signal, by: .task(task), tasks: tasks, now: now)
         recordSticky(signal, target: .task(task), now: now)
@@ -662,7 +662,7 @@ public final class Attributor {
     }
 
     /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
-    public func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double) {
+    package func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double) {
         let surface = Surface(signal: signal)
         primedSurfaces[surface] = task
         if pendingPrime?.surface == surface { pendingPrime = nil }
@@ -677,7 +677,7 @@ public final class Attributor {
     /// so it never calls this (Target.teachesAttributor, 2026-07-10).
     /// A durable email rule is no longer written here either (2026-07-03 spec
     /// §5.4) — see `confirm` (including its `tasks` note).
-    public func assign(_ signal: ActivitySignal, target: Target,
+    package func assign(_ signal: ActivitySignal, target: Target,
                        tasks: [WorkTask] = [], now: Date = Date()) {
         let displaced = recordDisplaced(signal, by: target, tasks: tasks, now: now)
         recordSticky(signal, target: target, now: now)
@@ -697,7 +697,7 @@ public final class Attributor {
     }
 
     /// Add or update a pin (by id). New pins go last → most recent for ties.
-    public func upsert(_ pin: Pin) {
+    package func upsert(_ pin: Pin) {
         if let i = pins.firstIndex(where: { $0.id == pin.id }) {
             pins.remove(at: i)
         }
@@ -705,13 +705,13 @@ public final class Attributor {
     }
 
     /// Lift a pin by id (the popover badge's ✕).
-    public func unpin(id: UUID) {
+    package func unpin(id: UUID) {
         pins.removeAll { $0.id == id }
     }
 
     /// The winning pin covering this signal: most specific wins — manual
     /// priority first, then leaf count, then most-recently-added (array order).
-    public func matchingPin(for signal: ActivitySignal) -> Pin? {
+    package func matchingPin(for signal: ActivitySignal) -> Pin? {
         let candidates = pins.enumerated().filter { $0.element.matches(signal) }
         return candidates.max { a, b in
             let (pa, pb) = (a.element.priority ?? 0, b.element.priority ?? 0)
@@ -730,7 +730,7 @@ public final class Attributor {
     /// Does this task belong to the URL-hinted project? Matches the stable
     /// project id exactly, or the slugified project title (OP slugs are
     /// usually the kebab-cased title).
-    public static func projectMatches(task: WorkTask, hint: String) -> Bool {
+    package static func projectMatches(task: WorkTask, hint: String) -> Bool {
         if let id = task.projectID, id == hint { return true }
         guard let title = task.project else { return false }
         return Self.slugified(title) == hint.lowercased()
@@ -738,7 +738,7 @@ public final class Attributor {
 
     /// Lowercase, non-alphanumerics → "-", collapsed and trimmed — OP's
     /// default identifier shape for a title.
-    public static func slugified(_ title: String) -> String {
+    package static func slugified(_ title: String) -> String {
         var out = ""
         var lastDash = true
         for ch in title.lowercased() {
@@ -821,7 +821,7 @@ public final class Attributor {
     /// (see `AttributionExplanation.contradicts(recorded:)` — the caller
     /// holding a recorded outcome must reconcile against it). Read-only:
     /// never bumps fire counts, never prunes stickies.
-    public func explain(_ signal: ActivitySignal, tasks: [WorkTask],
+    package func explain(_ signal: ActivitySignal, tasks: [WorkTask],
                         now: Date) -> AttributionExplanation {
         let feats = LearningStore.features(from: signal, disabledRecipes: disabledSiteRecipes)
             .map { "\($0.kind.rawValue)=\($0.value)" }
@@ -883,7 +883,7 @@ public final class Attributor {
     /// 2026-07-03 diagnosis names. Pins and OP-URL recognition are absent by
     /// design: they aren't learned (pins are lifted via the pin editor), and a
     /// pinned EmailRule counts as a pin for this purpose.
-    public enum Unlearn: Equatable, Sendable {
+    package enum Unlearn: Equatable, Sendable {
         case emailRule(EmailRule)
         case siteRule(SiteRule)
         case primedSurface(Surface)
@@ -898,7 +898,7 @@ public final class Attributor {
     /// learned fired (pin / OP-URL / pending prime / pure-prior ranking).
     /// Mirrors `attribute()`'s ladder exactly, so the item returned is the one
     /// that actually decided.
-    public func forgettable(for signal: ActivitySignal, now: Date) -> Unlearn? {
+    package func forgettable(for signal: ActivitySignal, now: Date) -> Unlearn? {
         if matchingPin(for: signal) != nil { return nil }
         // Non-mutating lookup, like explain(): a read must never prune.
         if let sticky = stickyLookup(for: signal, now: now) { return .sessionSticky(sticky.key) }
@@ -924,7 +924,7 @@ public final class Attributor {
     /// Remove exactly what an Unlearn names. `signal` supplies the features a
     /// rankedAssociation suppression erases. Persist + reevaluate afterwards
     /// (the caller's job, as with every other mutation here).
-    public func forget(_ u: Unlearn, signal: ActivitySignal) {
+    package func forget(_ u: Unlearn, signal: ActivitySignal) {
         switch u {
         case .emailRule(let rule):
             emailRules.removeAll { $0.sameRule(as: rule) }
@@ -946,7 +946,7 @@ public final class Attributor {
     /// Preview WITHOUT mutating: `explain()` as if `u` were removed — the
     /// card's live "would then fall back to …" line. State is snapshotted,
     /// the removal applied, the explanation taken, and everything restored.
-    public func explainWithout(_ u: Unlearn, _ signal: ActivitySignal,
+    package func explainWithout(_ u: Unlearn, _ signal: ActivitySignal,
                                tasks: [WorkTask], now: Date) -> AttributionExplanation {
         let savedRules = emailRules
         let savedSiteRules = siteRules
@@ -973,7 +973,7 @@ public final class Attributor {
     /// the Evidence Card's "forget that fallback too" affordance so the user
     /// can strip an upsetting old rule out of the escape path WITHOUT first
     /// forgetting the thing that's currently (correctly) firing.
-    public func forgettableWithout(_ u: Unlearn, _ signal: ActivitySignal,
+    package func forgettableWithout(_ u: Unlearn, _ signal: ActivitySignal,
                                    now: Date) -> Unlearn? {
         let savedRules = emailRules
         let savedSiteRules = siteRules
@@ -998,7 +998,7 @@ public final class Attributor {
 
 extension Attributor {
     /// Persistence/test hook: swap in a loaded LearningStore.
-    public func replaceLearning(_ store: LearningStore) {
+    package func replaceLearning(_ store: LearningStore) {
         learning = store
     }
 
@@ -1007,7 +1007,7 @@ extension Attributor {
     /// instead of approximating them with a fresh re-assert. Day-rollover
     /// pruning still applies on the next read, so restoring a snapshot can
     /// never resurrect yesterday's stickies.
-    public func replaceSessionStickies(_ stickies: [SessionSticky]) {
+    package func replaceSessionStickies(_ stickies: [SessionSticky]) {
         sessionStickies = stickies
     }
 }

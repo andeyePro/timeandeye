@@ -1,33 +1,33 @@
 import Foundation
 
-public struct TrackerConfig: Equatable, Sendable {
-    public var minSegmentSeconds: TimeInterval
-    public var primeDwellSeconds: TimeInterval
-    public var idleThresholdSeconds: TimeInterval
+package struct TrackerConfig: Equatable, Sendable {
+    package var minSegmentSeconds: TimeInterval
+    package var primeDwellSeconds: TimeInterval
+    package var idleThresholdSeconds: TimeInterval
     /// The SWITCHING confidence floor: a candidate below this can't switch
     /// or resume the clock. Fixed internally since 2026-07-11 — it used to
     /// double as the review-queue gate, which left slices between it and
     /// the push bar in silent limbo (journalled, never asked, never posted;
     /// Martin's verdict: no purpose survives scrutiny).
-    public var uncertainBelow: Double
+    package var uncertainBelow: Double
     /// The REVIEW-QUEUE gate: closed spans below this certainty queue for
     /// review. Fed by the auto-push threshold, so everything that doesn't
     /// post by itself gets asked about (the review floor still keeps brief
     /// visits quiet).
-    public var reviewBelow: Double
-    public var nonWorkTracksLocally: Bool
-    public var leisureTask: TaskRef?
+    package var reviewBelow: Double
+    package var nonWorkTracksLocally: Bool
+    package var leisureTask: TaskRef?
     /// A detected task switch only commits after the new target has held
     /// focus this long; briefer excursions merge back into the current task.
     /// Direct OP-page signals and manual picks bypass the grace.
-    public var switchGraceSeconds: TimeInterval
+    package var switchGraceSeconds: TimeInterval
     /// A sleep shorter than this does NOT stop the clock: waking within the
     /// window continues the task that was being tracked (stepped away to read
     /// or to another device, not finished). A longer sleep stops as-of the
     /// moment activity ceased, like idle.
-    public var sleepGraceSeconds: TimeInterval
+    package var sleepGraceSeconds: TimeInterval
 
-    public init(minSegmentSeconds: TimeInterval = 20,
+    package init(minSegmentSeconds: TimeInterval = 20,
                 primeDwellSeconds: TimeInterval = 30,
                 idleThresholdSeconds: TimeInterval = 600,
                 uncertainBelow: Double = 0.6,
@@ -48,12 +48,12 @@ public struct TrackerConfig: Equatable, Sendable {
     }
 }
 
-public enum TrackerState: Equatable, Sendable {
+package enum TrackerState: Equatable, Sendable {
     case stopped
     case tracking(Target, certainty: Double)
 }
 
-public enum TrackerPrompt: Equatable, Sendable {
+package enum TrackerPrompt: Equatable, Sendable {
     case resumeAfterIdle(stoppedAt: Date)
     case callEnded(segments: [ReviewSegment])
     case taskChanged(to: Target)
@@ -61,19 +61,19 @@ public enum TrackerPrompt: Equatable, Sendable {
 
 /// Event-driven state machine. Single-threaded by contract: callers (the app's
 /// sensor loop, or checks) deliver events in timestamp order on one actor/queue.
-public final class SessionTracker {
-    public private(set) var state: TrackerState = .stopped {
+package final class SessionTracker {
+    package private(set) var state: TrackerState = .stopped {
         didSet { if state != oldValue { onState(state) } }
     }
-    public var onSession: (Session) -> Void = { _ in }
-    public var onReview: (ReviewSegment) -> Void = { _ in }
-    public var onState: (TrackerState) -> Void = { _ in }
-    public var onPrompt: (TrackerPrompt) -> Void = { _ in }
+    package var onSession: (Session) -> Void = { _ in }
+    package var onReview: (ReviewSegment) -> Void = { _ in }
+    package var onState: (TrackerState) -> Void = { _ in }
+    package var onPrompt: (TrackerPrompt) -> Void = { _ in }
     /// Diagnostic narration of decisions (attribution best, pending switches,
     /// commits, auto-starts). Wired to the app's debug log.
-    public var onDebug: (String) -> Void = { _ in }
+    package var onDebug: (String) -> Void = { _ in }
     /// Every closed focus span, for the timeline's window-level detail strip.
-    public var onSpanClosed: (FocusSpan) -> Void = { _ in }
+    package var onSpanClosed: (FocusSpan) -> Void = { _ in }
 
     private let attributor: Attributor
     private var config: TrackerConfig
@@ -83,7 +83,7 @@ public final class SessionTracker {
     /// too slow for the launch path. The controller starts with a cached
     /// value and applies the fresh reading here when it arrives; the
     /// threshold is a pure comparison bound, safe to move mid-tracking.
-    public func setIdleThreshold(_ seconds: TimeInterval) {
+    package func setIdleThreshold(_ seconds: TimeInterval) {
         config.idleThresholdSeconds = seconds
     }
 
@@ -99,7 +99,7 @@ public final class SessionTracker {
 
     /// The window/app currently in focus, so the controller can teach the
     /// attributor a durable association when the user picks "Reassign".
-    public var currentFocusSignal: ActivitySignal? { currentSignal }
+    package var currentFocusSignal: ActivitySignal? { currentSignal }
     private var currentStart: Date?
     private var lastInput: Date?
     private var pendingReview: ReviewSegment?
@@ -143,7 +143,7 @@ public final class SessionTracker {
     /// excursions that re-tag spans, so the timeline's live slice spans the
     /// whole ongoing stretch — exactly what a flush would journal — instead of
     /// jumping forward to the latest visit and leaving a phantom gap.
-    public var liveSliceStart: Date? {
+    package var liveSliceStart: Date? {
         (spans.map(\.start) + [currentStart].compactMap { $0 }).min()
     }
 
@@ -153,7 +153,7 @@ public final class SessionTracker {
     /// the task being left until the switch commits. The menu clock checks
     /// this so it never pairs the old slice's elapsed with the new task's
     /// name ("11m Studi" while the 11m is the andeye slice).
-    public var liveSliceOwner: Target? {
+    package var liveSliceOwner: Target? {
         if let p = pendingSwitch { return p.from }
         if case .tracking(let target, _) = state { return target }
         return nil
@@ -170,7 +170,7 @@ public final class SessionTracker {
     /// *committed* switch clears it. A pending non-work STOP is deliberately
     /// excluded: it isn't a task the timeline draws, so there is nothing to
     /// hatch. Pure state read; nothing here mutates the tracker.
-    public var pendingSwitchSince: Date? {
+    package var pendingSwitchSince: Date? {
         guard let p = pendingSwitch, p.target != .doNotTrack else { return nil }
         return p.since
     }
@@ -181,11 +181,11 @@ public final class SessionTracker {
     /// undecided. Past
     /// this instant the run journals to the new task on the next input tick, so
     /// the hatch caps here and solidifies.
-    public var graceEndsAt: Date? {
+    package var graceEndsAt: Date? {
         pendingSwitchSince.map { $0.addingTimeInterval(sliceFloor) }
     }
 
-    public init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
+    package init(attributor: Attributor, config: TrackerConfig = TrackerConfig(),
                 tasks: @escaping () -> [WorkTask]) {
         self.attributor = attributor
         self.config = config
@@ -194,7 +194,7 @@ public final class SessionTracker {
 
     // MARK: - Public controls
 
-    public func start(task: TaskRef, at date: Date) {
+    package func start(task: TaskRef, at date: Date) {
         flushSessions(asOf: date)
         lastInput = date
         // Accrual begins NOW (reviewer B1): while stopped, focus changes kept
@@ -210,7 +210,7 @@ public final class SessionTracker {
         currentDecision = .userAssigned
     }
 
-    public func stop(at date: Date, manual: Bool = true) {
+    package func stop(at date: Date, manual: Bool = true) {
         pendingSwitch = nil
         pendingNotify = nil
         stoppedManually = manual
@@ -222,7 +222,7 @@ public final class SessionTracker {
 
     /// Timeline edit of the live slice: move the current visit's start.
     /// Clamped so it cannot overlap the previous closed span.
-    public func adjustCurrentStart(to date: Date) {
+    package func adjustCurrentStart(to date: Date) {
         guard case .tracking = state, currentStart != nil else { return }
         currentStart = max(date, spans.last?.end ?? date)
     }
@@ -232,7 +232,7 @@ public final class SessionTracker {
     /// live slice back to fold in a prior same-task slice. A synthetic span
     /// covers the gap so the flush spans the whole stretch; the real window
     /// detail still comes from the journal's span table.
-    public func backdateSessionStart(to date: Date) {
+    package func backdateSessionStart(to date: Date) {
         guard case .tracking(let target, let cert) = state else { return }
         let earliest = (spans.map(\.start) + [currentStart].compactMap { $0 }).min() ?? date
         guard date < earliest else { return }
@@ -249,7 +249,7 @@ public final class SessionTracker {
     /// without it the undo group's journal inverses restore the folded rows
     /// but the live slice stays stretched over them (an overlap). No-op
     /// when stopped or when `date` wouldn't actually shrink the slice.
-    public func trimSessionStart(to date: Date) {
+    package func trimSessionStart(to date: Date) {
         guard case .tracking = state else { return }
         spans.removeAll { $0.end <= date }
         for i in spans.indices where spans[i].start < date {
@@ -262,7 +262,7 @@ public final class SessionTracker {
     /// closed slice, then keep tracking the SAME task with a fresh run from
     /// `date`. Lets the timeline materialise the live slice into a real,
     /// editable slice without the user having to stop the clock.
-    public func commitLive(at date: Date) {
+    package func commitLive(at date: Date) {
         guard case .tracking = state else { return }
         let signal = currentSignal
         endCurrentSpan(at: date)
@@ -276,7 +276,7 @@ public final class SessionTracker {
     /// future), confirm the association, and hold the clock. Distinct from
     /// confirm/switch — used by the popover's "Reassign" to correct a
     /// mis-attributed running session without resetting it.
-    public func relabelCurrentSession(to task: TaskRef) {
+    package func relabelCurrentSession(to task: TaskRef) {
         guard case .tracking = state else { return }
         pendingSwitch = nil
         pendingNotify = nil
@@ -332,7 +332,7 @@ public final class SessionTracker {
     /// user just pinned this window) so the live certainty/target reflect it
     /// immediately instead of only on the next focus change. Re-tags the open
     /// spans if the pin moves the target.
-    public func reevaluate() {
+    package func reevaluate() {
         guard case .tracking(let displayTarget, _) = state,
               let signal = currentSignal else { return }
         let attribution = attributor.attribute(signal, tasks: tasks(),
@@ -382,7 +382,7 @@ public final class SessionTracker {
     /// User picked a task (popover/prompt) for the surface currently in focus.
     /// This is the UI's confirm entry point: it teaches the attributor AND
     /// lifts the in-flight span to confirmed certainty.
-    public func confirm(task: TaskRef, at date: Date) {
+    package func confirm(task: TaskRef, at date: Date) {
         pendingSwitch = nil
         pendingNotify = nil
         if let signal = currentSignal {
@@ -398,9 +398,9 @@ public final class SessionTracker {
 
     /// "I'm leaving my desk": pin the current task and keep tracking it,
     /// ignoring focus changes, idle, sleep and calls until cleared.
-    public var away = false
+    package var away = false
 
-    public func handle(_ event: SensorEvent) {
+    package func handle(_ event: SensorEvent) {
         // Lock state is resolved even while away: a locked screen must not keep
         // attributing the last window. Close the open span at lock and record
         // no window detail until unlock. The session itself keeps running (away
@@ -676,7 +676,7 @@ public final class SessionTracker {
     /// The controller calls this when a comment is committed. `target` is
     /// what the popover DISPLAYS (during a grace-pending switch that is the
     /// pending task, which matches the spans being written right now).
-    public func pinCurrentVisit(target: Target, at date: Date = Date()) {
+    package func pinCurrentVisit(target: Target, at date: Date = Date()) {
         guard case .tracking = state, case .task = target else { return }
         // Close and reopen the in-flight span so the pinned moment is
         // guaranteed to sit inside a CLOSED span carrying today's target —
@@ -813,7 +813,7 @@ public final class SessionTracker {
 
     /// The auto-push threshold moved at runtime (Settings slider) — the
     /// review gate follows without a relaunch.
-    public func setReviewBelow(_ value: Double) {
+    package func setReviewBelow(_ value: Double) {
         config.reviewBelow = value
     }
 

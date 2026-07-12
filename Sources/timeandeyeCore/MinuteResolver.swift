@@ -1,10 +1,10 @@
 import Foundation
 
-public enum MinuteResolver {
-    public struct Minute: Equatable, Sendable {
-        public var minuteStart: Date
-        public var target: Target
-        public init(minuteStart: Date, target: Target) {
+package enum MinuteResolver {
+    package struct Minute: Equatable, Sendable {
+        package var minuteStart: Date
+        package var target: Target
+        package init(minuteStart: Date, target: Target) {
             self.minuteStart = minuteStart
             self.target = target
         }
@@ -13,7 +13,7 @@ public enum MinuteResolver {
     /// Buckets spans into wall-clock minutes; each minute goes wholly to the
     /// target that held it longest (spec: "the dominant task wins the whole
     /// minute"). Ties break toward the target seen earliest.
-    public static func dominantPerMinute(_ spans: [FocusSpan]) -> [Minute] {
+    package static func dominantPerMinute(_ spans: [FocusSpan]) -> [Minute] {
         guard !spans.isEmpty else { return [] }
         var seconds: [Double: [Target: Double]] = [:]   // minuteEpoch -> target -> s
         var firstSeen: [Target: Date] = [:]

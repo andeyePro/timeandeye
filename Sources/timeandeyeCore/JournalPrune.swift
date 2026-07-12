@@ -6,14 +6,14 @@ import Foundation
 /// what's traded away. Pure planning only: the caller applies the plan
 /// through the journal (deletes become sync tombstones, creates sync
 /// normally), shows it for confirmation first, and NEVER touches recent data.
-public enum JournalPrune {
-    public struct Plan: Equatable, Sendable {
+package enum JournalPrune {
+    package struct Plan: Equatable, Sendable {
         /// Rollup sessions to create (one per day+task with ≥2 sources, or
         /// kept-as-is singles are simply not planned at all).
-        public var create: [Session]
+        package var create: [Session]
         /// The consolidated originals to delete.
-        public var deleteIDs: [UUID]
-        public var isEmpty: Bool { create.isEmpty && deleteIDs.isEmpty }
+        package var deleteIDs: [UUID]
+        package var isEmpty: Bool { create.isEmpty && deleteIDs.isEmpty }
     }
 
     /// Consolidate everything strictly older than `olderThanDays`.
@@ -27,7 +27,7 @@ public enum JournalPrune {
     ///   start), max certainty, folded distinct comments, pushed=true (the
     ///   sources were), and drops per-entry backend ids (ancient history —
     ///   edits that old re-push rather than PATCH).
-    public static func plan(sessions: [Session], olderThanDays days: Int,
+    package static func plan(sessions: [Session], olderThanDays days: Int,
                             now: Date = Date(),
                             calendar: Calendar = .current) -> Plan {
         let cutoff = calendar.startOfDay(
@@ -94,7 +94,7 @@ public enum JournalPrune {
     /// (`SessionMerge.isDerivedID`) are NEVER candidates — deleting them
     /// barely helps (they're already ~1% of the size) and would destroy the
     /// exact history (b) exists to protect. A no-op when already under cap.
-    public static func hardCapPlan(sessions: [Session], capBytes: Int) -> Plan {
+    package static func hardCapPlan(sessions: [Session], capBytes: Int) -> Plan {
         let encoder = JSONEncoder()
         func encodedSize(_ s: Session) -> Int { (try? encoder.encode(s).count) ?? 400 }
         let sized = sessions.map { ($0, encodedSize($0)) }

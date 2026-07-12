@@ -4,7 +4,7 @@ import Foundation
 /// window-content field — we see the app name, the titlebar text, and (browsers
 /// only) the active tab URL, nothing inside the page. A `content` case will be
 /// added if/when opt-in "look inside" apps land (see TODO).
-public enum PinField: String, Codable, Sendable, CaseIterable {
+package enum PinField: String, Codable, Sendable, CaseIterable {
     case app, title, url, sender, subject, any
 
     /// The string(s) this field exposes on a signal. Most fields are
@@ -13,7 +13,7 @@ public enum PinField: String, Codable, Sendable, CaseIterable {
     /// correspondent. A leaf matches when ANY of these values matches. A nil
     /// `correspondents` yields `[]` (no match, no crash); a nil `emailSubject`
     /// yields `[""]`, which never matches a non-empty query.
-    public func values(of signal: ActivitySignal) -> [String] {
+    package func values(of signal: ActivitySignal) -> [String] {
         switch self {
         case .app:     return [signal.app]
         case .title:   return [signal.windowTitle ?? ""]
@@ -28,15 +28,15 @@ public enum PinField: String, Codable, Sendable, CaseIterable {
 
     /// A single representative value (the first), retained for callers/tests
     /// that want one string. Multi-valued matching goes through `values(of:)`.
-    public func value(of signal: ActivitySignal) -> String {
+    package func value(of signal: ActivitySignal) -> String {
         values(of: signal).first ?? ""
     }
 }
 
-public enum PinOp: String, Codable, Sendable, CaseIterable {
+package enum PinOp: String, Codable, Sendable, CaseIterable {
     case equals, contains, startsWith, regex
 
-    public func test(_ field: String, _ value: String) -> Bool {
+    package func test(_ field: String, _ value: String) -> Bool {
         switch self {
         case .equals:     return field.caseInsensitiveCompare(value) == .orderedSame
         case .contains:   return field.range(of: value, options: .caseInsensitive) != nil
@@ -60,13 +60,13 @@ public enum PinOp: String, Codable, Sendable, CaseIterable {
 /// A boolean predicate over the observable fields. `contains` and `regex` are
 /// just operators here — there is no separate "contains rule" or "regex rule".
 /// This is what the Boolean editor and the AI mode both produce.
-public indirect enum Predicate: Codable, Equatable, Sendable {
+package indirect enum Predicate: Codable, Equatable, Sendable {
     case leaf(field: PinField, op: PinOp, value: String)
     case and([Predicate])
     case or([Predicate])
     case not(Predicate)
 
-    public func evaluate(_ signal: ActivitySignal) -> Bool {
+    package func evaluate(_ signal: ActivitySignal) -> Bool {
         switch self {
         case .leaf(let f, let op, let v): return f.values(of: signal).contains { op.test($0, v) }
         case .and(let ps): return ps.allSatisfy { $0.evaluate(signal) }
@@ -77,7 +77,7 @@ public indirect enum Predicate: Codable, Equatable, Sendable {
 
     /// Specificity proxy: how many leaf conditions constrain the match. More
     /// conditions = more specific = wins ties against looser rules.
-    public var leafCount: Int {
+    package var leafCount: Int {
         switch self {
         case .leaf: return 1
         case .and(let ps), .or(let ps): return ps.reduce(0) { $0 + $1.leafCount }
@@ -89,7 +89,7 @@ public indirect enum Predicate: Codable, Equatable, Sendable {
     /// with `try?` — an invalid pattern silently never matches, which reads
     /// as "my pin doesn't work" — so the EDITORS validate at save time and
     /// surface these instead of persisting a dead rule.
-    public var invalidRegexPatterns: [String] {
+    package var invalidRegexPatterns: [String] {
         switch self {
         case .leaf(_, .regex, let value):
             return (try? NSRegularExpression(pattern: value)) == nil ? [value] : []
@@ -102,29 +102,29 @@ public indirect enum Predicate: Codable, Equatable, Sendable {
 
 /// One pin: a rule, the task it forces, and (optional, Advanced) a manual
 /// priority that overrides specificity-based precedence.
-public struct Pin: Codable, Equatable, Sendable, Identifiable {
-    public var id: UUID
-    public var rule: PinRule
-    public var task: TaskRef
-    public var priority: Int?
+package struct Pin: Codable, Equatable, Sendable, Identifiable {
+    package var id: UUID
+    package var rule: PinRule
+    package var task: TaskRef
+    package var priority: Int?
 
-    public init(id: UUID = UUID(), rule: PinRule, task: TaskRef, priority: Int? = nil) {
+    package init(id: UUID = UUID(), rule: PinRule, task: TaskRef, priority: Int? = nil) {
         self.id = id
         self.rule = rule
         self.task = task
         self.priority = priority
     }
 
-    public func matches(_ signal: ActivitySignal) -> Bool { rule.matches(signal) }
+    package func matches(_ signal: ActivitySignal) -> Bool { rule.matches(signal) }
 }
 
 /// A pin rule is either the friendly component-prefix form (the blue/grey
 /// editor) or a general boolean expression. Both reduce to a match test.
-public enum PinRule: Codable, Equatable, Sendable {
+package enum PinRule: Codable, Equatable, Sendable {
     case components(PinScope)
     case expression(Predicate)
 
-    public func matches(_ signal: ActivitySignal) -> Bool {
+    package func matches(_ signal: ActivitySignal) -> Bool {
         switch self {
         case .components(let s): return s.matches(signal)
         case .expression(let p): return p.evaluate(signal)
@@ -134,7 +134,7 @@ public enum PinRule: Codable, Equatable, Sendable {
     /// Higher = more specific; used to pick a winner when several pins match.
     /// Only comparable WITHIN a kind — `prefix.count` and `leafCount` are not
     /// commensurable (see `sameKind(as:)`).
-    public var specificity: Int {
+    package var specificity: Int {
         switch self {
         case .components(let s): return s.prefix.count
         case .expression(let p): return p.leafCount
@@ -144,7 +144,7 @@ public enum PinRule: Codable, Equatable, Sendable {
     /// Same rule kind, so the two specificities mean the same thing. A 2-leaf
     /// expression isn't "more specific" than a 3-segment component pin, so the
     /// tiebreak only applies the specificity comparison within a kind.
-    public func sameKind(as other: PinRule) -> Bool {
+    package func sameKind(as other: PinRule) -> Bool {
         switch (self, other) {
         case (.components, .components), (.expression, .expression): return true
         default: return false
@@ -152,7 +152,7 @@ public enum PinRule: Codable, Equatable, Sendable {
     }
 
     /// Short human label for the badge (the most specific identifying bit).
-    public var shortLabel: String {
+    package var shortLabel: String {
         switch self {
         case .components(let s): return s.prefix.last ?? ""
         case .expression(let p): return p.shortLabel

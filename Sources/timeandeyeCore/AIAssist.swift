@@ -3,24 +3,24 @@ import Foundation
 /// Cold-start AI assist. v0.1 has NO API integration: the app copies a prompt
 /// to the clipboard, the user pastes it into the AI of their choice, then
 /// pastes the response back. Strict validation on the way back in.
-public enum AIAssist {
-    public struct Assignment: Equatable, Sendable {
-        public var segmentID: UUID
-        public var target: Target
-        public init(segmentID: UUID, target: Target) {
+package enum AIAssist {
+    package struct Assignment: Equatable, Sendable {
+        package var segmentID: UUID
+        package var target: Target
+        package init(segmentID: UUID, target: Target) {
             self.segmentID = segmentID
             self.target = target
         }
     }
 
-    public enum ParseError: Error {
+    package enum ParseError: Error {
         case notJSON
         case badShape(String)
         case unknownSegment(String)
         case badTask(String)
     }
 
-    public static func classificationPrompt(tasks: [WorkTask],
+    package static func classificationPrompt(tasks: [WorkTask],
                                             segments: [ReviewSegment]) -> String {
         var lines: [String] = []
         lines.append("You are classifying time-tracking log segments against a task list.")
@@ -50,7 +50,7 @@ public enum AIAssist {
 
     /// The default guidance seeded into the pin AI prompt — nudges the model
     /// toward a robust rule rather than one keyed on a volatile window title.
-    public static let defaultPinAdvice =
+    package static let defaultPinAdvice =
         "Prefer a stable title or URL pattern. If the title looks volatile " +
         "(it has counts, timestamps, or document names that change), key on a " +
         "more robust field, or suggest a setup change that would make it stable."
@@ -58,7 +58,7 @@ public enum AIAssist {
     /// Build the clipboard prompt that asks an AI to write ONE pin rule (a boolean
     /// expression in the app's grammar) for the given window. `advice` is the
     /// editable guidance box (see `defaultPinAdvice`).
-    public static func pinRulePrompt(app: String, title: String?, url: String?,
+    package static func pinRulePrompt(app: String, title: String?, url: String?,
                                      advice: String) -> String {
         var lines: [String] = []
         lines.append("You are writing ONE matching rule for a macOS time-tracker.")
@@ -88,7 +88,7 @@ public enum AIAssist {
 
     /// Clean an AI's pin-rule reply down to the single expression line: strips
     /// ``` fences and takes the first non-empty line (models sometimes add a note).
-    public static func cleanRuleReply(_ raw: String) -> String {
+    package static func cleanRuleReply(_ raw: String) -> String {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.hasPrefix("```") {
             text = text
@@ -133,7 +133,7 @@ public enum AIAssist {
     /// build it from the live task cache. Ids the model hallucinated are
     /// SKIPPED like unknown segment uuids (never fabricate a task ref: the
     /// old blind `.op(n)` mapping could invent a nonexistent work package).
-    public static func parseResponse(_ raw: String,
+    package static func parseResponse(_ raw: String,
                                      validSegmentIDs: Set<UUID>,
                                      taskRefByID: [String: TaskRef]) throws -> [Assignment] {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -177,7 +177,7 @@ public enum AIAssist {
     }
 
     /// The lookup `parseResponse` needs, from the live task cache.
-    public static func taskRefLookup(_ tasks: [WorkTask]) -> [String: TaskRef] {
+    package static func taskRefLookup(_ tasks: [WorkTask]) -> [String: TaskRef] {
         // uniquingKeysWith, not uniqueKeysWithValues: .op(5) and .remote("5")
         // both key "5", and a fatalError over a task-id collision would take
         // the whole app down (C17). First wins deterministically (cache order).

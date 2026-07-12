@@ -5,13 +5,13 @@ import Foundation
 /// time OUT of andeye. Pure and deterministic — the caller supplies the
 /// sessions (already filtered to the wanted period, minus the live checkpoint
 /// row) and a task-name resolver.
-public enum TimesheetExport {
+package enum TimesheetExport {
     /// Task + project display names for a ref (project nil → blank column).
-    public typealias NameResolver = (TaskRef) -> (task: String, project: String?)
+    package typealias NameResolver = (TaskRef) -> (task: String, project: String?)
 
     /// One line per session, oldest first:
     /// `date,start,end,duration,project,task,comment` with RFC-4180 quoting.
-    public static func csv(sessions: [Session], names: NameResolver,
+    package static func csv(sessions: [Session], names: NameResolver,
                            calendar: Calendar = .current) -> String {
         var out = ["date,start,end,duration,project,task,comment"]
         for s in sessions.sorted(by: { $0.start < $1.start }) {
@@ -31,7 +31,7 @@ public enum TimesheetExport {
 
     /// Day-grouped Markdown with per-day and grand totals — the human-readable
     /// companion to the CSV (paste into an email / invoice note).
-    public static func markdown(sessions: [Session], names: NameResolver,
+    package static func markdown(sessions: [Session], names: NameResolver,
                                 calendar: Calendar = .current) -> String {
         let sorted = sessions.sorted { $0.start < $1.start }
         guard !sorted.isEmpty else { return "No tracked time in this period.\n" }
@@ -74,7 +74,7 @@ public enum TimesheetExport {
     }
 
     /// "H:MM" (matches the menu-bar clock's vocabulary, no seconds).
-    public static func durationText(_ seconds: TimeInterval) -> String {
+    package static func durationText(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         return "\(total / 3600):" + String(format: "%02d", (total % 3600) / 60)
     }

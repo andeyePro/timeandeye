@@ -2,6 +2,42 @@
 
 ## 2026-07-12
 
+- [x] **Sealed the package's public API to a three-tier contract ahead of the
+  public release.** Almost every cross-module type was `public` only because a
+  sibling target in the same package read it – indistinguishable, from outside,
+  from the handful of symbols a genuinely separate package links against. Using
+  Swift `package` access (tools 5.10), the public surface now shrinks to exactly:
+  (i) the `timeandeyeCore` connector seam (`TaskBackend`, `HTTPTransport`,
+  `BackendPageRecognizer`/`NoPageRecognizer`, `BackendRegistry`, `BackendClass`,
+  `BackendEntitlementRequirement`, `FinanceMapping`/`FinanceMappingStore`,
+  `SyncEngine`, `WorkTask`, `TaskRef`, `RemoteTimeEntry`/`RemoteEntryID`,
+  `TimeActivity`, `AmendmentError`, `PermanentPostError`) plus its signature
+  closure; (ii) the licence/entitlement family (`License*`, `EntitlementDecision`,
+  `EntitlementDenialReason`, `AndeyeScenes`), kept public per their cross-repo doc
+  contracts; and (iii) the iOS companion surface (`PhoneController` and the Core
+  logic/value types the iOS sources drive, including `AppSupport.directory()`
+  reached through `PhoneController.init`'s default argument). Everything else in
+  `timeandeyeCore`, `timeandeyeStore`, `timeandeyePhone`, `timeandeyeMac` and
+  `timeandeyeTheme` demoted `public` → `package` – ~1,370 declarations, including
+  `AppController`'s entire ~175-member UI-facing surface (its type stays public
+  only because `AndeyeScenes.body(controller:)` names it), the InMemory* test
+  doubles, the public `Array`/`NSColor` extensions, `DebugLog`, `EmailSignalProbe`,
+  and the settings knobs bag (only `opBaseURL` and `taskColours` stay public, for
+  the phone UI). `timeandeyeUI` was already sealed behind `AndeyeScenes`. No renames –
+  access levels only. New spec: `docs/superpowers/specs/2026-07-12-public-api-surface.md`
+  (the contract, the `package`-by-default rule, and a `TaskBackend` extension how-to).
+- [x] **Removed the write-only `ContradictionRefile.Finding.priorProvenance`
+  field.** The field, its `init` parameter and `plan()`'s capture of it had zero
+  readers (the undo payload's provenance is snapshotted onto
+  `RetroDigest.PriorSessionState` instead); dropped it and the write-only uses in
+  `ContradictionRefileChecks`. `plan()`/`apply()` behaviour unchanged.
+- [x] **The greyed Pro-connector row sources its denial reason from the
+  entitlement seam.** `SettingsView` replaced a bare `license == nil` test with
+  `BackendRegistry.entitlement(license:requires:)`, mapping each
+  `EntitlementDenialReason` (`noLicense`, `notInConnectors`, `tierBelowFloor`) to
+  its own accurate one-liner – which is what the decision type's doc comment says
+  it exists to drive. Section layout and string tone unchanged.
+
 - [x] **The contradiction pass fetches spans once instead of N+1 SELECTs on the
   MainActor.** Scoring each scanned session called `dominantSpan(of:)`, and that
   ran a fresh uncached `journal.spans(from:to:)` SELECT per session – up to

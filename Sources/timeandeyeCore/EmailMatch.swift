@@ -9,17 +9,17 @@ import Foundation
 /// "Correspondent" is the OTHER party, in either direction: the sender of an
 /// inbound message, or the recipient(s) of one you sent. So a rule learned from a
 /// mail you received from a company also fires on a mail you send to it.
-public enum EmailMatchLevel: String, CaseIterable, Codable, Sendable {
+package enum EmailMatchLevel: String, CaseIterable, Codable, Sendable {
     case emailSystem          // "all mail in this system" — the broad catch-all
     case correspondentDomain  // e.g. harborlane.example
     case correspondent        // e.g. r.naismith@harborlane.example
     case subject              // e.g. contains "Insurance Renewals" — most specific
 
     /// Low (general) → high (specific). The last element wins ties of presence.
-    public static let defaultOrder: [EmailMatchLevel] =
+    package static let defaultOrder: [EmailMatchLevel] =
         [.emailSystem, .correspondentDomain, .correspondent, .subject]
 
-    public var label: String {
+    package var label: String {
         switch self {
         case .emailSystem: return "Email system"
         case .correspondentDomain: return "Correspondent domain"
@@ -32,18 +32,18 @@ public enum EmailMatchLevel: String, CaseIterable, Codable, Sendable {
 /// What we know about the focused email, normalised for matching. The
 /// correspondents are the external parties (sender+recipients minus yourself) —
 /// see `EmailSignal.counterparties`. Addresses are stored lowercased.
-public struct EmailContext: Equatable, Sendable {
-    public let system: EmailSystem
-    public let correspondents: [String]
-    public let subject: String?
+package struct EmailContext: Equatable, Sendable {
+    package let system: EmailSystem
+    package let correspondents: [String]
+    package let subject: String?
 
-    public init(system: EmailSystem, correspondents: [String], subject: String?) {
+    package init(system: EmailSystem, correspondents: [String], subject: String?) {
         self.system = system
         self.correspondents = correspondents.map { $0.lowercased() }
         self.subject = subject
     }
 
-    public var correspondentDomains: [String] {
+    package var correspondentDomains: [String] {
         var seen = Set<String>(); var out: [String] = []
         for c in correspondents {
             if let d = EmailSignal.domain(of: c), seen.insert(d).inserted { out.append(d) }
@@ -54,7 +54,7 @@ public struct EmailContext: Equatable, Sendable {
     /// Build a context from a focus signal, or nil if it carries no email info
     /// (the common case — only email surfaces have correspondents/subject). The
     /// system is detected from the tab URL host.
-    public static func from(_ signal: ActivitySignal) -> EmailContext? {
+    package static func from(_ signal: ActivitySignal) -> EmailContext? {
         let correspondents = signal.correspondents ?? []
         guard !correspondents.isEmpty || (signal.emailSubject?.isEmpty == false) else { return nil }
         let host = signal.tabURL.flatMap { URL(string: $0)?.host }
@@ -65,32 +65,32 @@ public struct EmailContext: Equatable, Sendable {
 
 /// One email→task rule, learned (from a correction) or pinned (explicit). `value`
 /// is empty for `emailSystem` ("any mail in the system").
-public struct EmailRule: Equatable, Codable, Sendable {
+package struct EmailRule: Equatable, Codable, Sendable {
     /// Where a rule came from — the Evidence Card's provenance line
     /// ("learned 12 Jun from your correction").
-    public enum Origin: String, Codable, Sendable {
+    package enum Origin: String, Codable, Sendable {
         case correction   // learned silently by a teach path (confirm/assign)
         case card         // Evidence Card "Remember"/"Always"
         case ledger       // Rules Ledger "+ rule"
         case migrated     // decoded from a pre-metadata emailrules.json
     }
 
-    public let level: EmailMatchLevel
-    public let value: String
-    public let target: TaskRef
+    package let level: EmailMatchLevel
+    package let value: String
+    package let target: TaskRef
     /// True for explicit user pins (which outrank a learned rule at the same level).
-    public let pinned: Bool
+    package let pinned: Bool
     /// Provenance metadata (2026-07-03). All four decode with defaults so an
     /// emailrules.json written before they existed (stale 2026-06-30 rules are
     /// known to be on disk) still loads: createdAt → .distantPast,
     /// origin → .migrated, fireCount → 0, lastFired → nil.
-    public var createdAt: Date
-    public var origin: Origin
+    package var createdAt: Date
+    package var origin: Origin
     /// Bumped by the Attributor each time this rule WINS an attribution.
-    public var fireCount: Int
-    public var lastFired: Date?
+    package var fireCount: Int
+    package var lastFired: Date?
 
-    public init(level: EmailMatchLevel, value: String, target: TaskRef, pinned: Bool = false,
+    package init(level: EmailMatchLevel, value: String, target: TaskRef, pinned: Bool = false,
                 createdAt: Date = Date(), origin: Origin = .correction,
                 fireCount: Int = 0, lastFired: Date? = nil) {
         self.level = level
@@ -105,7 +105,7 @@ public struct EmailRule: Equatable, Codable, Sendable {
 
     /// Custom decode ONLY for the metadata defaults; encoding stays synthesized
     /// (always writes the full metadata form).
-    public init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         level = try c.decode(EmailMatchLevel.self, forKey: .level)
         value = try c.decode(String.self, forKey: .value)
@@ -120,12 +120,12 @@ public struct EmailRule: Equatable, Codable, Sendable {
     /// The identity of a rule for replace/forget purposes: what it matches and
     /// where it points, NOT its metadata (a fireCount bump must not make a rule
     /// "different" from the snapshot a card captured).
-    public func sameRule(as other: EmailRule) -> Bool {
+    package func sameRule(as other: EmailRule) -> Bool {
         level == other.level && target == other.target && pinned == other.pinned
             && value.caseInsensitiveCompare(other.value) == .orderedSame
     }
 
-    public func matches(_ context: EmailContext) -> Bool {
+    package func matches(_ context: EmailContext) -> Bool {
         let v = value.lowercased()
         switch level {
         case .emailSystem:
@@ -142,11 +142,11 @@ public struct EmailRule: Equatable, Codable, Sendable {
     }
 }
 
-public enum EmailMatcher {
+package enum EmailMatcher {
     /// The winning rule for `context`: the most-specific level (per `order`,
     /// general → specific) that has a matching rule. At one level a pinned rule
     /// beats a learned one; otherwise the first match wins.
-    public static func match(_ context: EmailContext, rules: [EmailRule],
+    package static func match(_ context: EmailContext, rules: [EmailRule],
                              order: [EmailMatchLevel] = EmailMatchLevel.defaultOrder)
         -> EmailRule? {
         for level in order.reversed() {

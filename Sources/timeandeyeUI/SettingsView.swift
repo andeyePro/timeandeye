@@ -181,8 +181,9 @@ struct SettingsView: View {
                     HStack {
                         Text("Xero").foregroundStyle(.tertiary)
                         Spacer()
-                        Text(controller.license == nil
-                             ? "needs a licence —" : "not in your licence —")
+                        Text(connectorDenialCaption(
+                            BackendEntitlementRequirement(requiredTier: .plus,
+                                                          connectorID: "xero")))
                             .font(.caption).foregroundStyle(.tertiary)
                         Button("upgrade") {
                             openURL(URL(string: "https://time.andeye.com/pro")!)
@@ -195,6 +196,21 @@ struct SettingsView: View {
             Section("Premium connectors") {
                 Text("None yet.").font(.caption).foregroundStyle(.tertiary)
             }
+    }
+
+    /// The greyed Pro-connector row's reason line, sourced from the entitlement
+    /// seam (`BackendRegistry.entitlement`) rather than a bare `license == nil`
+    /// test — the decision's `EntitlementDenialReason` exists to drive exactly
+    /// this copy, so each reason gets its own accurate one-liner.
+    private func connectorDenialCaption(
+        _ requires: BackendEntitlementRequirement) -> String {
+        switch BackendRegistry.entitlement(license: controller.license, requires: requires) {
+        case .allowed: return "add the andeyePro app —"
+        case .denied(.noLicense): return "needs a licence —"
+        case .denied(.notInConnectors): return "not in your licence —"
+        case .denied(.tierBelowFloor(let required)):
+            return "needs \(required.rawValue.capitalized) —"
+        }
     }
 
     /// Licence moved from About to the top of Connections — the

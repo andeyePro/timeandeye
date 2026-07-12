@@ -11,15 +11,15 @@ import timeandeyeCore
 /// INERT until the app is built with a real signing identity + the iCloud
 /// entitlement (the CLT ad-hoc build has neither); nothing constructs this
 /// class until Settings' journal-sync toggle ships alongside that build.
-public final class CloudKitSyncTransport: SyncTransport {
-    public static let zoneName = "AndeyeJournal"
+package final class CloudKitSyncTransport: SyncTransport {
+    package static let zoneName = "AndeyeJournal"
     static let recordType = "SessionRevision"
 
     private let database: CKDatabase
     private let zoneID: CKRecordZone.ID
     private var zoneReady = false
 
-    public init(container: CKContainer = .default()) {
+    package init(container: CKContainer = .default()) {
         self.database = container.privateCloudDatabase
         self.zoneID = CKRecordZone.ID(zoneName: Self.zoneName,
                                       ownerName: CKCurrentUserDefaultName)
@@ -66,7 +66,7 @@ public final class CloudKitSyncTransport: SyncTransport {
 
     // MARK: - SyncTransport
 
-    public func push(_ revisions: [SessionRevision]) async throws {
+    package func push(_ revisions: [SessionRevision]) async throws {
         try await ensureZone()
         let encoder = JSONEncoder()
         let records = try revisions.map {
@@ -78,7 +78,7 @@ public final class CloudKitSyncTransport: SyncTransport {
                                              savePolicy: .allKeys)
     }
 
-    public func pull(since token: SyncToken?) async throws -> (changes: [SessionRevision], token: SyncToken) {
+    package func pull(since token: SyncToken?) async throws -> (changes: [SessionRevision], token: SyncToken) {
         try await ensureZone()
         let startToken = token.flatMap {
             try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self,

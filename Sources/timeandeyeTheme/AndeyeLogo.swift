@@ -9,21 +9,21 @@ import Foundation
 /// its M point hand-draws the mark; a wink is an eyelid close — the left
 /// side and the eye's corners stay fixed while the top lid sweeps down and
 /// the bottom lid rises a little, the two meeting along one gentle ‿ arc.
-public enum AndeyeLogo {
+package enum AndeyeLogo {
 
-    public struct Point: Equatable, Sendable {
-        public var x: Double
-        public var y: Double
-        public init(_ x: Double, _ y: Double) { self.x = x; self.y = y }
+    package struct Point: Equatable, Sendable {
+        package var x: Double
+        package var y: Double
+        package init(_ x: Double, _ y: Double) { self.x = x; self.y = y }
     }
 
     /// One cubic bezier segment: p0 → p1 steered by c1/c2.
-    public struct Cubic: Equatable, Sendable {
-        public var p0: Point
-        public var c1: Point
-        public var c2: Point
-        public var p1: Point
-        public init(_ p0: Point, _ c1: Point, _ c2: Point, _ p1: Point) {
+    package struct Cubic: Equatable, Sendable {
+        package var p0: Point
+        package var c1: Point
+        package var c2: Point
+        package var p1: Point
+        package init(_ p0: Point, _ c1: Point, _ c2: Point, _ p1: Point) {
             self.p0 = p0; self.c1 = c1; self.c2 = c2; self.p1 = p1
         }
     }
@@ -32,11 +32,11 @@ public enum AndeyeLogo {
 
     /// SVG viewBox is 365 × 235; everything normalises by the WIDTH, so the
     /// mark lives in a box 1 wide and `aspect` tall (y up).
-    public static let aspect = 235.0 / 365.0
+    package static let aspect = 235.0 / 365.0
 
     /// Stroke width from the SVG (17px on a 365-wide viewBox), as a fraction
     /// of the box width.
-    public static let strokeWidth = 17.0 / 365.0
+    package static let strokeWidth = 17.0 / 365.0
 
     /// The SVG's group transform: translate(18.0915, 17.9436).
     static let translate = Point(18.0915, 17.9436)
@@ -99,7 +99,7 @@ public enum AndeyeLogo {
     /// close, not a squash. The lid control points lerp toward the closed
     /// pose above and the tail trims into the left corner; the flourish's
     /// sweep and the mark's footprint hold still through a blink.
-    public static func fullStroke(wink: Double) -> [Cubic] {
+    package static func fullStroke(wink: Double) -> [Cubic] {
         let w = min(max(wink, 0), 1)
         func lerp(_ a: Point, _ b: Point) -> Point {
             Point(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w)
@@ -122,12 +122,12 @@ public enum AndeyeLogo {
     /// first and the reveal grows back through the flourish toward the tail
     /// (the menu bar's certainty draw-in — Martin's 326: "start with the
     /// eye, rather than starting with the &").
-    public enum RevealFrom: Sendable { case tail, eye }
+    package enum RevealFrom: Sendable { case tail, eye }
 
     /// The eye's share of the mark's total arc length: segments 2 (top lid)
     /// and 3 (bottom lid) of the open mark — the almond an `.eye` reveal
     /// completes first, before any of the & flourish appears.
-    public static let eyeFraction: Double = {
+    package static let eyeFraction: Double = {
         let segs = fullStroke(wink: 0)
         return (length(of: segs[2]) + length(of: segs[3])) / length(of: segs)
     }()
@@ -138,7 +138,7 @@ public enum AndeyeLogo {
     /// a signal) and the flourish grows with certainty until the full &I at
     /// 1, so every sub-1 certainty is visibly partial. nil (not tracking)
     /// shows the complete mark. Certainty clamps to [0, 1].
-    public static func drawInReveal(certainty: Double?) -> Double {
+    package static func drawInReveal(certainty: Double?) -> Double {
         guard let certainty else { return 1 }
         let c = min(max(certainty, 0), 1)
         return eyeFraction + c * (1 - eyeFraction)
@@ -148,7 +148,7 @@ public enum AndeyeLogo {
     /// closed mark; `wink` closes the eyelids as above; `from` picks which
     /// end the reveal grows from (`.tail`, the default, is the original
     /// draw-on). t and wink clamp to [0, 1].
-    public static func stroke(t rawT: Double, wink rawWink: Double = 0,
+    package static func stroke(t rawT: Double, wink rawWink: Double = 0,
                               from end: RevealFrom = .tail) -> [Cubic] {
         let t = min(max(rawT, 0), 1)
         let wink = min(max(rawWink, 0), 1)
@@ -161,7 +161,7 @@ public enum AndeyeLogo {
 
     // MARK: - Bezier arithmetic (exposed for the checks)
 
-    public static func point(on c: Cubic, at u: Double) -> Point {
+    package static func point(on c: Cubic, at u: Double) -> Point {
         let v = 1 - u
         let a = v * v * v, b = 3 * v * v * u, d = 3 * v * u * u, e = u * u * u
         return Point(a * c.p0.x + b * c.c1.x + d * c.c2.x + e * c.p1.x,
@@ -169,7 +169,7 @@ public enum AndeyeLogo {
     }
 
     /// Flattened (24-sample) arc length — plenty for reveal timing.
-    public static func length(of c: Cubic) -> Double {
+    package static func length(of c: Cubic) -> Double {
         var total = 0.0
         var prev = c.p0
         for i in 1...24 {
@@ -181,7 +181,7 @@ public enum AndeyeLogo {
         return total
     }
 
-    public static func length(of segs: [Cubic]) -> Double {
+    package static func length(of segs: [Cubic]) -> Double {
         segs.reduce(0) { $0 + length(of: $1) }
     }
 

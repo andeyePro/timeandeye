@@ -5,9 +5,9 @@ import timeandeyeCore
 import timeandeyeTheme    // AndeyeLogo geometry for the menu-bar draw-in
 
 /// Pure title/cadence logic, kept out of the controller so it is checkable.
-public enum MenuTitle {
+package enum MenuTitle {
     /// 1 Hz for the first minute after a task change, then once per minute.
-    public static func refreshInterval(sinceTaskChange: TimeInterval) -> TimeInterval {
+    package static func refreshInterval(sinceTaskChange: TimeInterval) -> TimeInterval {
         sinceTaskChange < 60 ? 1 : 60
     }
 
@@ -19,7 +19,7 @@ public enum MenuTitle {
     /// same width and the logo beside it stays still. Minutes/hours don't pad —
     /// their width changes are once-a-minute, not a 1 Hz jiggle, and reserving
     /// for "1h 59m" would waste menu-bar space all day.
-    public static func text(elapsed: TimeInterval, certainty: Double?,
+    package static func text(elapsed: TimeInterval, certainty: Double?,
                             showPercent: Bool) -> String {
         let total = Int(elapsed.rounded())
         let body: String
@@ -52,7 +52,7 @@ public enum MenuTitle {
     /// Crossing INTO the next bracket (59s -> 1m, 59m -> 1h 00m) is a real,
     /// infrequent width change and is deliberately left unreserved — the same
     /// call already made against padding minutes to a "1h 59m" worst case.
-    public static func sizingTemplates(elapsed: TimeInterval, certainty: Double?,
+    package static func sizingTemplates(elapsed: TimeInterval, certainty: Double?,
                                        showPercent: Bool) -> [String] {
         let total = Int(elapsed.rounded())
         let bodies: [String]
@@ -71,7 +71,7 @@ public enum MenuTitle {
     /// the task name, so a glance reads "21m andey" rather than just "21m".
     /// No ellipsis — the truncation is implicit and it saves a character.
     /// Empty name or chars <= 0 leaves the body alone.
-    public static func withTaskName(_ name: String?, chars: Int, body: String) -> String {
+    package static func withTaskName(_ name: String?, chars: Int, body: String) -> String {
         guard let name, chars > 0 else { return body }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return body }
@@ -85,7 +85,7 @@ public enum MenuTitle {
     /// to OP. The banked+running fallback wins when there is no live slice (slice
     /// just committed: the tracker reset to `now` while the controller re-banked
     /// the committed time to keep the clock continuous), so take the larger.
-    public static func displayedElapsed(liveSliceStart: Date?, bankedFallback: TimeInterval,
+    package static func displayedElapsed(liveSliceStart: Date?, bankedFallback: TimeInterval,
                                         running: TimeInterval, now: Date) -> TimeInterval {
         let fallback = bankedFallback + running
         guard let start = liveSliceStart else { return fallback }
@@ -93,7 +93,7 @@ public enum MenuTitle {
     }
 
     /// Linear blend between the user's two gradient colours; grey when stopped.
-    public static func colour(certainty: Double?, lowHex: String, highHex: String) -> NSColor {
+    package static func colour(certainty: Double?, lowHex: String, highHex: String) -> NSColor {
         guard let certainty else { return .systemGray }
         let low = NSColor(hex: lowHex) ?? .systemRed
         let high = NSColor(hex: highHex) ?? .systemGreen
@@ -106,7 +106,7 @@ public enum MenuTitle {
     }
 }
 
-public extension NSColor {
+package extension NSColor {
     /// Black on light backgrounds, white on dark — by perceived luminance.
     var readableTextColour: NSColor {
         let c = usingColorSpace(.sRGB) ?? self
@@ -127,22 +127,22 @@ public extension NSColor {
 
 
 /// An idle/away stretch that defaulted to untracked, offered for one-tap claim.
-public struct IdleGap: Equatable, Sendable {
-    public var task: TaskRef
-    public var from: Date
-    public var to: Date
+package struct IdleGap: Equatable, Sendable {
+    package var task: TaskRef
+    package var from: Date
+    package var to: Date
 }
 
 /// Owns the whole pipeline: sensors -> tracker -> journal -> sync, plus the
 /// published state the SwiftUI layer renders.
 @MainActor
 public final class AppController: ObservableObject {
-    @Published public private(set) var trackerState: TrackerState = .stopped
-    @Published public private(set) var menuText = "–"
+    @Published package private(set) var trackerState: TrackerState = .stopped
+    @Published package private(set) var menuText = "–"
     /// Hidden-text sizing candidates for menuText — see MenuTitle.sizingTemplates
     /// and RootScenes' ZStack. Empty while stopped: "–" never changes width, so
     /// there's nothing to reserve against.
-    @Published public private(set) var menuSizingTemplates: [String] = []
+    @Published package private(set) var menuSizingTemplates: [String] = []
     /// AppKit-measured reserved width for the menu-bar text (points, 0 = none):
     /// the widest of the sizing templates AND the current text, measured with
     /// the same monospaced-digit system font SwiftUI's .monospacedDigit()
@@ -152,15 +152,15 @@ public final class AppController: ObservableObject {
     /// as an explicit minWidth: measured reservation the label can't undercut,
     /// while content sizing remains the fallback if measurement ever runs low
     /// (minWidth can't clip, unlike a fixed frame).
-    @Published public private(set) var menuReservedWidth: CGFloat = 0
+    @Published package private(set) var menuReservedWidth: CGFloat = 0
     /// Elapsed time only (no task name) for the popover, which shows the task as
     /// its headline — see refreshTitle.
-    @Published public private(set) var elapsedText = "–"
-    @Published public private(set) var menuColour = NSColor.systemGray
+    @Published package private(set) var elapsedText = "–"
+    @Published package private(set) var menuColour = NSColor.systemGray
     /// The menu-bar mark: the andeye ampersand-eye tinted with menuColour.
     /// Starts blank; startUp plays the draw-on which ends at the full mark.
-    @Published public private(set) var logoImage = NSImage()
-    @Published public private(set) var taskCache: [WorkTask] = [] {
+    @Published package private(set) var logoImage = NSImage()
+    @Published package private(set) var taskCache: [WorkTask] = [] {
         didSet {
             invalidatePickList()
             // Keep the finance-mapping store's source-task→project-key
@@ -176,26 +176,26 @@ public final class AppController: ObservableObject {
                 uniquingKeysWith: { first, _ in first }))
         }
     }
-    @Published public private(set) var pendingReview: [ReviewSegment] = []
+    @Published package private(set) var pendingReview: [ReviewSegment] = []
     /// Retro-acceptance receipts, newest first — the drawer's "Recently
     /// cleared" section (approvals-drawer spec §3). Loaded at startup,
     /// refreshed after every pass and after undo.
-    @Published public private(set) var retroDigest: [RetroDigest] = []
-    @Published public private(set) var activities: [TimeActivity] = []
-    @Published public private(set) var lastPrompt: TrackerPrompt?
+    @Published package private(set) var retroDigest: [RetroDigest] = []
+    @Published package private(set) var activities: [TimeActivity] = []
+    @Published package private(set) var lastPrompt: TrackerPrompt?
     /// An idle stretch that defaulted to "break" (untracked). A single tap in
     /// the popover claims it as the task you were on — no timeline needed. It
     /// survives auto-resume and stays offered for `idleBackfillWindowSeconds`.
-    @Published public private(set) var pendingGap: IdleGap?
-    @Published public private(set) var lastError: String?
+    @Published package private(set) var pendingGap: IdleGap?
+    @Published package private(set) var lastError: String?
     /// backendID → count of posted entries whose journal side has since
     /// moved (D4 detection; empty = books match the journal).
-    @Published public private(set) var postingDivergences: [String: Int] = [:]
-    @Published public private(set) var journalSummary = ""
+    @Published package private(set) var postingDivergences: [String: Int] = [:]
+    @Published package private(set) var journalSummary = ""
     /// (a) iCloud quota stewardship: Settings ▸ Maintenance's honest footprint
     /// line — updated alongside `journalSummary` on every journal mutation.
-    @Published public private(set) var journalFootprintSummary = ""
-    @Published public private(set) var connectedAs: String? {
+    @Published package private(set) var journalFootprintSummary = ""
+    @Published package private(set) var connectedAs: String? {
         didSet { invalidatePickList() }   // RankingConfig.currentUser input
     }
     /// The live calendar match (calendar-signal spec §5): whichever task the
@@ -203,17 +203,17 @@ public final class AppController: ObservableObject {
     /// that event is only tentative. nil when the signal is off, nothing is
     /// live right now, or nothing matched. Drives the pick-list clock badge,
     /// the ranker boost, and the mismatch banner below.
-    @Published public private(set) var currentCalendarMatch: (task: TaskRef, eventTitle: String, tentative: Bool)? {
+    @Published package private(set) var currentCalendarMatch: (task: TaskRef, eventTitle: String, tentative: Bool)? {
         didSet { invalidatePickList() }   // TaskRanker.recentThenRanked's calendarMatch input
     }
     /// True once a live calendar match has disagreed with the tracked task
     /// for the settle window (§6) — drives the popover's one-line
     /// "Calendar: <event> – Switch" banner.
-    @Published public private(set) var calendarMismatchActive = false
+    @Published package private(set) var calendarMismatchActive = false
     /// The validated licence, or nil for Community (no key / bad key / expired
     /// — `licenseProblem` says which). Pro builds gate paid backends on this.
-    @Published public private(set) var license: License?
-    @Published public private(set) var licenseProblem: String?
+    @Published package private(set) var license: License?
+    @Published package private(set) var licenseProblem: String?
     /// The speech-bubble note: replaces the auto comment on sessions closing
     /// while it is set; cleared when tracking stops.
     /// The speech-bubble note. NOT @Published: binding a TextField to a
@@ -226,11 +226,11 @@ public final class AppController: ObservableObject {
     /// returning from an excursion accumulated onto the PRE-excursion part of
     /// the base slice — the carve splits one task's time into several slices,
     /// so each slice must consume only the comments typed within ITS span).
-    public var manualNotes: [TaskRef: [(text: String, at: Date)]] = [:]
+    package var manualNotes: [TaskRef: [(text: String, at: Date)]] = [:]
     /// Display-target shim over `manualNotes` — the live-slice comment the
     /// timeline editor and legacy paths read/write. Keyed by the task the
     /// popover currently shows; empty/ignored when not tracking a task.
-    public var manualNote: String {
+    package var manualNote: String {
         get {
             guard case .task(let ref) = currentTarget else { return "" }
             return Self.joinedNote(manualNotes[ref])
@@ -248,7 +248,7 @@ public final class AppController: ObservableObject {
     static func joinedNote(_ entries: [(text: String, at: Date)]?) -> String {
         (entries ?? []).reduce("") { CommentRouting.accumulateComment(existing: $0, adding: $1.text) }
     }
-    @Published public var settings: AndeyeSettings {
+    @Published package var settings: AndeyeSettings {
         didSet {
             invalidatePickList()   // statusOrder / localTasks feed the ranker
             try? settingsStore.save(settings)
@@ -322,7 +322,7 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public let journal: any JournalStore
+    package let journal: any JournalStore
     private let attributor: Attributor
     private var tracker: SessionTracker!
     private let sensors = SensorHub()
@@ -379,7 +379,7 @@ public final class AppController: ObservableObject {
     /// Settings edits it; the Pro flavour hands it to its finance connector
     /// at registration (the connector translates internally). The
     /// source-task→project-key snapshot refreshes with the task cache.
-    public let financeMappings = FinanceMappingStore()
+    package let financeMappings = FinanceMappingStore()
     /// All registered backends (the community build registers at most the
     /// one pm OpenProject entry; andeyePro adds its connectors through
     /// `register(backend:id:class:)`). Empty = standalone — nothing syncs,
@@ -448,18 +448,18 @@ public final class AppController: ObservableObject {
     /// How long a mismatch must hold before the banner goes live.
     private static let calendarMismatchSettleSeconds: TimeInterval = 60
 
-    public static func supportDirectory() -> URL {
+    package static func supportDirectory() -> URL {
         AppSupport.directory()
     }
 
     /// Forwarder kept for the checks' temp-dir exercises; the logic (and the
     /// rename migration) lives in timeandeyeStore.AppSupport so EVERY on-disk
     /// consumer shares it (see the post-rename API-key bug).
-    public nonisolated static func supportDirectory(under base: URL) -> URL {
+    package nonisolated static func supportDirectory(under base: URL) -> URL {
         AppSupport.directory(under: base)
     }
 
-    public init() {
+    package init() {
         let dir = Self.supportDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         settingsStore = JSONFileStore<AndeyeSettings>(url: dir.appendingPathComponent("settings.json"))
@@ -825,7 +825,7 @@ public final class AppController: ObservableObject {
     /// "this surface is this task", and the same-name reuse path below returns
     /// before any priming so re-typing an existing name never re-primes.
     @discardableResult
-    public func addLocalTask(name: String, isLeisure: Bool, project: String? = nil,
+    package func addLocalTask(name: String, isLeisure: Bool, project: String? = nil,
                             primeToCurrentSurface: Bool = false) -> TaskRef {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Reuse an existing local task of the same name instead of duplicating.
@@ -873,7 +873,7 @@ public final class AppController: ObservableObject {
     /// its id, so its history, colour and learned associations all carry over —
     /// only the display + grouping change (the local-task analogue of renaming
     /// a work package in OpenProject).
-    public func updateLocalTask(_ id: UUID, name: String? = nil, project: String? = nil,
+    package func updateLocalTask(_ id: UUID, name: String? = nil, project: String? = nil,
                                 isLeisure: Bool? = nil) {
         guard let i = settings.localTasks.firstIndex(where: { $0.id == id }) else { return }
         let prior = settings.localTasks[i]
@@ -892,7 +892,7 @@ public final class AppController: ObservableObject {
 
     /// Distinct local project names already in use, for offering as quick picks
     /// in the editor (free text is still allowed).
-    public func localProjectNames() -> [String] {
+    package func localProjectNames() -> [String] {
         var seen: [String] = []
         for def in settings.localTasks where !seen.contains(def.projectName) {
             seen.append(def.projectName)
@@ -900,7 +900,7 @@ public final class AppController: ObservableObject {
         return seen
     }
 
-    public func removeLocalTask(_ id: UUID, undoable: Bool = true) {
+    package func removeLocalTask(_ id: UUID, undoable: Bool = true) {
         if undoable, let idx = settings.localTasks.firstIndex(where: { $0.id == id }) {
             let def = settings.localTasks[idx]
             registerUndo("remove local task \(def.name)") { [weak self] in
@@ -1118,7 +1118,7 @@ public final class AppController: ObservableObject {
     ///   (bypassing `owns()`), and never sees non-billable projects or
     ///   personal tasks. Registering the same id again replaces the entry
     ///   (reconnects are idempotent).
-    public func register(backend: any TaskBackend, id: String,
+    package func register(backend: any TaskBackend, id: String,
                          class backendClass: BackendClass) {
         registry.register(backend, id: id, class: backendClass)
         Task { await syncIfEnabled() }
@@ -1127,7 +1127,7 @@ public final class AppController: ObservableObject {
     /// Remove a registered backend. Its ledger rows stay (history of what was
     /// posted where is never destroyed); re-registering the same id resumes
     /// exactly where it left off.
-    public func unregister(backendID: String) {
+    package func unregister(backendID: String) {
         registry.remove(id: backendID)
     }
 
@@ -1139,13 +1139,13 @@ public final class AppController: ObservableObject {
     /// if refused, never nag"). A refusal leaves the setting off, so
     /// Settings always reflects what's actually running — no silent
     /// partial-enable.
-    public func enableCalendarSignal() {
+    package func enableCalendarSignal() {
         calendarBridge.requestAccess { [weak self] granted in
             Task { @MainActor in self?.settings.calendarSignalEnabled = granted }
         }
     }
 
-    public func disableCalendarSignal() {
+    package func disableCalendarSignal() {
         settings.calendarSignalEnabled = false   // the didSet does the actual teardown
     }
 
@@ -1339,7 +1339,7 @@ public final class AppController: ObservableObject {
     /// prefilled with it"). All-day and free-marked events count here even
     /// though they never drive the live prior (§7 — "Annual leave"
     /// overlapping a queued day is still a legitimate allocation hint).
-    public func calendarHint(for stack: ReviewStack) -> (eventTitle: String, target: TaskRef?)? {
+    package func calendarHint(for stack: ReviewStack) -> (eventTitle: String, target: TaskRef?)? {
         guard let event = calendarLookbackEvents()
             .first(where: { $0.start < stack.last && $0.end > stack.first }) else { return nil }
         let rule = CalendarMatcher.bestRule(rules: calendarRules, event: event,
@@ -1358,7 +1358,7 @@ public final class AppController: ObservableObject {
     /// "a genuine problem". Detection is deliberately conservative; a missed
     /// share suppresses nothing worse than before, a false positive costs
     /// one banner.
-    public private(set) var presenting = false
+    package private(set) var presenting = false
     private var micLive = false
     private var displayMirrored = false
 
@@ -1393,12 +1393,12 @@ public final class AppController: ObservableObject {
 
     // MARK: - Away ("I'm leaving my desk") and scheduled stop
 
-    @Published public private(set) var away = false
+    @Published package private(set) var away = false
     private var scheduledStop: Date?
 
     /// Keep tracking the current task no matter what (idle, app switches,
     /// sleep) until cleared. Optionally lock the Mac as you leave.
-    public func setAway(_ on: Bool) {
+    package func setAway(_ on: Bool) {
         guard case .tracking = trackerState else { away = false; tracker.away = false; return }
         away = on
         tracker.away = on
@@ -1416,7 +1416,7 @@ public final class AppController: ObservableObject {
 
     /// Auto-stop at a future time (the live slice's end dragged forward, e.g.
     /// a meeting end). nil clears it.
-    public func scheduleStop(at date: Date?) {
+    package func scheduleStop(at date: Date?) {
         scheduledStop = date
         if let date { DebugLog.write("scheduled stop at \(date)") }
     }
@@ -1433,7 +1433,7 @@ public final class AppController: ObservableObject {
 
     // MARK: - Lifecycle
 
-    public func startUp() {
+    package func startUp() {
         installCrashTraps()
         installUndoKey()
         installAwayHotKey()
@@ -1650,7 +1650,7 @@ public final class AppController: ObservableObject {
     /// tracked time survives even an unclean exit.
     static let liveCheckpointID = UUID(uuidString: "00000000-0000-0000-0000-0000C0FFEE00")!
 
-    public func checkpointLive() {
+    package func checkpointLive() {
         // Anchor at the tracker's OWNED live slice, not the display target
         // (reviewer B3): the display flips at PEND time, before any flush, so
         // a checkpoint keyed to targetSince was destroyed by every
@@ -1691,7 +1691,7 @@ public final class AppController: ObservableObject {
 
     // MARK: - User actions
 
-    public func currentTaskName() -> String {
+    package func currentTaskName() -> String {
         if case .tracking(let target, _) = trackerState { return name(of: target) }
         return "Not tracking"
     }
@@ -1702,12 +1702,12 @@ public final class AppController: ObservableObject {
     /// pick-list row does. Limitation: a ref not in `taskCache` yields nil, so
     /// no billable glyph shows for it — the cache is the only project-context
     /// source the popover has.
-    public func currentTask() -> WorkTask? {
+    package func currentTask() -> WorkTask? {
         guard case .tracking(.task(let ref), _) = trackerState else { return nil }
         return taskCache.first { $0.ref == ref }
     }
 
-    public func name(of target: Target) -> String {
+    package func name(of target: Target) -> String {
         switch target {
         case .doNotTrack: return "Do not track"
         case .task(let ref):
@@ -1756,7 +1756,7 @@ public final class AppController: ObservableObject {
     /// The popover / picker ordering: recently-confirmed tasks first (most
     /// recent first), then everything else ranked. The whole list — it's
     /// scrollable and filterable, so there's no recent/likely cap any more.
-    public func fullPickList() -> [WorkTask] {
+    package func fullPickList() -> [WorkTask] {
         let now = Date()
         if let c = pickListCache, now.timeIntervalSince(c.at) < 5 { return c.tasks }
         let ranked = TaskRanker(config: RankingConfig(statusOrder: settings.statusOrder,
@@ -1767,7 +1767,7 @@ public final class AppController: ObservableObject {
         return ranked
     }
 
-    public func userPicked(_ task: WorkTask) {
+    package func userPicked(_ task: WorkTask) {
         // "Auto-dismisses after ~8s or on next pick" (spec §6) — a fresh pick
         // always closes out a leftover learn/fire notice from the one before.
         learnNotice = nil
@@ -1804,7 +1804,7 @@ public final class AppController: ObservableObject {
     /// The full broad→narrow identity of the current focus surface plus the
     /// smart default prefix length — the pin editor's starting state. nil when
     /// there's nothing to pin (no current surface).
-    public func pinDraft() -> (kind: PinScope.Kind, segments: [String], defaultCount: Int)? {
+    package func pinDraft() -> (kind: PinScope.Kind, segments: [String], defaultCount: Int)? {
         guard let signal = tracker.currentFocusSignal,
               let id = PinScope.identity(of: signal) else { return nil }
         return (id.kind, id.segments,
@@ -1817,7 +1817,7 @@ public final class AppController: ObservableObject {
     /// (pin-editor slice of the 2026-07-03 context-rules spec, §5.1/Option B).
     /// nil for a plain surface, where the classic Components strip (fed by
     /// `pinDraft()`) is unaffected.
-    public func pinEmailIdentity() -> ContextIdentity? {
+    package func pinEmailIdentity() -> ContextIdentity? {
         guard let signal = tracker.currentFocusSignal else { return nil }
         let identity = attributor.identity(of: signal)
         guard identity.segments.contains(where: { $0.kind.isEmailGrain }) else { return nil }
@@ -1827,7 +1827,7 @@ public final class AppController: ObservableObject {
     /// Commit a component-prefix pin: the chosen prefix is ALWAYS `ref` at
     /// 100 %. When `replacingID` is given (editing an existing pin) the same id
     /// is reused, so a changed scope updates in place instead of duplicating.
-    public func commitPin(kind: PinScope.Kind, prefix: [String], to ref: TaskRef,
+    package func commitPin(kind: PinScope.Kind, prefix: [String], to ref: TaskRef,
                           replacingID: UUID? = nil, priority: Int? = nil) {
         guard !prefix.isEmpty else { return }
         commitPin(rule: .components(PinScope(kind: kind, prefix: prefix)),
@@ -1837,7 +1837,7 @@ public final class AppController: ObservableObject {
     /// Commit any pin rule (components OR a boolean expression) — the general
     /// path the Expression editor and the AI mode both feed into. `replacingID`
     /// reuses the id so editing updates in place instead of duplicating.
-    public func commitPin(rule: PinRule, to ref: TaskRef, replacingID: UUID? = nil,
+    package func commitPin(rule: PinRule, to ref: TaskRef, replacingID: UUID? = nil,
                           priority: Int? = nil) {
         let savedPins = attributor.pins   // upsert may REPLACE — snapshot, don't just unpin
         let pin = Pin(id: replacingID ?? UUID(), rule: rule, task: ref, priority: priority)
@@ -1856,7 +1856,7 @@ public final class AppController: ObservableObject {
 
     /// The pin (+ its task) covering the current focus surface, if any — drives
     /// the popover's 📌 badge. nil for ranked / soft-primed surfaces.
-    public var currentPin: (pin: Pin, task: WorkTask)? {
+    package var currentPin: (pin: Pin, task: WorkTask)? {
         guard let signal = tracker.currentFocusSignal,
               let pin = attributor.matchingPin(for: signal),
               let task = taskCache.first(where: { $0.ref == pin.task }) else { return nil }
@@ -1864,7 +1864,7 @@ public final class AppController: ObservableObject {
     }
 
     /// Clear the pin covering the current focus surface (the badge's ✕).
-    public func unpinCurrentSurface() {
+    package func unpinCurrentSurface() {
         guard let signal = tracker.currentFocusSignal,
               let pin = attributor.matchingPin(for: signal) else { return }
         let savedPins = attributor.pins
@@ -1880,7 +1880,7 @@ public final class AppController: ObservableObject {
         objectWillChange.send()
     }
 
-    public func userStopped() {
+    package func userStopped() {
         if away { away = false; tracker.away = false }
         scheduledStop = nil
         tracker.stop(at: Date())
@@ -1889,7 +1889,7 @@ public final class AppController: ObservableObject {
     /// "Reassign": relabel the RUNNING session to `ref`, keeping its elapsed
     /// time (the mis-attributed time moves to the right task, the clock does
     /// not reset). Distinct from userPicked, which starts a fresh session.
-    public func changeCurrentTask(to ref: TaskRef, undoable: Bool = true) {
+    package func changeCurrentTask(to ref: TaskRef, undoable: Bool = true) {
         guard case .tracking(let oldTarget, _) = trackerState, .task(ref) != oldTarget else { return }
         // "Auto-dismisses after ~8s or on next pick" (spec §6) — a genuine
         // reassign counts as the next pick too.
@@ -1948,7 +1948,7 @@ public final class AppController: ObservableObject {
         refreshTitle(force: true)
     }
 
-    public func userPostponed() {
+    package func userPostponed() {
         lastPrompt = nil
     }
 
@@ -1956,7 +1956,7 @@ public final class AppController: ObservableObject {
     /// now, while continuing to track the same task from now — so the live track
     /// can be edited without stopping it. Returns the just-journalled slice.
     @discardableResult
-    public func commitLiveSlice() -> Session? {
+    package func commitLiveSlice() -> Session? {
         guard case .tracking(.task(let ref), _) = trackerState else { return nil }
         let now = Date()
         let from = tracker.liveSliceStart ?? targetSince ?? now
@@ -1983,7 +1983,7 @@ public final class AppController: ObservableObject {
 
     /// One-tap: the idle gap WAS work — record it on its task, keeping the
     /// window detail that was captured around it. Zero taps leaves it a break.
-    public func claimIdleGap() {
+    package func claimIdleGap() {
         guard let g = pendingGap else { return }
         pendingGap = nil
         Task {
@@ -2006,7 +2006,7 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func dismissIdleGap() { pendingGap = nil }
+    package func dismissIdleGap() { pendingGap = nil }
 
     /// One committed comment from the popover bar (enter pressed). Two
     /// destinations, deliberately split (Martin, 2026-07-09 — his
@@ -2018,7 +2018,7 @@ public final class AppController: ObservableObject {
     ///   PREVIOUS task.
     /// - The tracked-time comment still rides the slice (accumulated into
     ///   manualNote, consumed at flush) — it belongs to the time entry.
-    public func commitComment(_ text: String) {
+    package func commitComment(_ text: String) {
         guard case .tracking(let target, _) = trackerState,
               case .task(let ref) = target else { return }
         let priorNotes = manualNotes[ref]
@@ -2069,7 +2069,7 @@ public final class AppController: ObservableObject {
         DebugLog.write("stored local task comment for \(ref.storageKey)")
     }
 
-    public func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
+    package func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
         // Unknown task category §4: sweeping to Unknown also re-points its
         // overlapping unpushed low-certainty sessions (no lift — tidying,
         // not a confidence gain), computed BEFORE the segments' own state
@@ -2156,20 +2156,20 @@ public final class AppController: ObservableObject {
 
     /// The drawer's default shape (Martin's stack-by-default choice): every
     /// pending row collapsed to ONE decision per distinct surface.
-    public func reviewStacks() -> [ReviewStack] {
+    package func reviewStacks() -> [ReviewStack] {
         pendingReview.stacked()
     }
 
     /// The drawer badge's count — stacks, not raw rows (Hick's law: present
     /// ~5 decisions, never 1,040).
-    public var pendingDecisionCount: Int {
+    package var pendingDecisionCount: Int {
         reviewStacks().count
     }
 
     /// Accept a whole stack at once: assigns every segment in it via the
     /// existing `assignReview`, which already teaches from every distinct
     /// surface it covers (a stack IS one surface, so this teaches once).
-    public func assignStack(_ stack: ReviewStack, to target: Target) {
+    package func assignStack(_ stack: ReviewStack, to target: Target) {
         assignReview(stack.segments.map(\.id), to: target)
     }
 
@@ -2181,18 +2181,18 @@ public final class AppController: ObservableObject {
     /// the drawer within the app run; a relaunch starts a fresh walk (the
     /// simple honest option — mere attention is never journalled).
     /// `reloadReview` keeps it pruned to the live queue.
-    @Published public private(set) var reviewWalk = ReviewWalk()
+    @Published package private(set) var reviewWalk = ReviewWalk()
 
     /// Arrow step (the drawer's ◀ ▶ / ⌘[ ⌘] / bare arrows). The view reads
     /// `reviewWalk.current` straight after to reveal and scroll to it.
-    public func walkStep(_ direction: ReviewWalk.Direction) {
+    package func walkStep(_ direction: ReviewWalk.Direction) {
         reviewWalk.step(direction)
     }
 
     /// Explicit attention on one slice — a click on its row or an opened
     /// detail disclosure. Bulk gestures (Expand all, whole-group selection)
     /// deliberately do NOT come here: rendering is not viewing.
-    public func walkVisit(_ id: UUID) {
+    package func walkVisit(_ id: UUID) {
         reviewWalk.visit(id)
     }
 
@@ -2206,7 +2206,7 @@ public final class AppController: ObservableObject {
     /// ONE ⌘Z (the AI-apply `groupSync` shape). Viewed slices the scorer
     /// has no answer for stay queued — nothing on show, no word to take —
     /// and everything unviewed is untouched by construction.
-    public func confirmViewedSlices() {
+    package func confirmViewedSlices() {
         let bar = settings.certaintyAutoPushThreshold
         let cache = taskCache
         let attributor = self.attributor
@@ -2280,7 +2280,7 @@ public final class AppController: ObservableObject {
     /// own reconstruction so the email evidence captured at queue time rides
     /// along — that evidence is what lets the footer offer correspondent/
     /// domain/subject grains rather than only the whole mail system.
-    public func signal(for segment: ReviewSegment) -> ActivitySignal {
+    package func signal(for segment: ReviewSegment) -> ActivitySignal {
         segment.signal
     }
 
@@ -2293,11 +2293,11 @@ public final class AppController: ObservableObject {
     /// from this cache only — a row whose detail isn't here yet shows a
     /// placeholder and calls `requestSliceDetail`; opening structure
     /// (chevrons, Expand all) therefore costs nothing per row.
-    @Published public private(set) var sliceDetails: [UUID: ReviewSliceDetail] = [:]
+    @Published package private(set) var sliceDetails: [UUID: ReviewSliceDetail] = [:]
     /// Bumped whenever the cache is invalidated (every `reloadReview` —
     /// assigns and journal writes change both explanations and neighbours),
     /// so open disclosures re-request against fresh data.
-    @Published public private(set) var sliceDetailGeneration = 0
+    @Published package private(set) var sliceDetailGeneration = 0
     private var sliceDetailQueue: [ReviewSegment] = []
     private var sliceDetailQueued = Set<UUID>()
     private var sliceDetailPump: Task<Void, Never>?
@@ -2311,7 +2311,7 @@ public final class AppController: ObservableObject {
     /// spanning the lot, partitioned in memory (`SliceNeighbours.batch`),
     /// then the per-slice ranker explains chunked with yields. Results land
     /// in `sliceDetails` and re-render the rows as they arrive.
-    public func requestSliceDetail(for segment: ReviewSegment) {
+    package func requestSliceDetail(for segment: ReviewSegment) {
         guard sliceDetails[segment.id] == nil,
               !sliceDetailQueued.contains(segment.id) else { return }
         sliceDetailQueued.insert(segment.id)
@@ -2391,7 +2391,7 @@ public final class AppController: ObservableObject {
     /// see these numbers (see `AdjacencyBoost`). ONE journal range query
     /// spans every slice; the per-slice neighbour lookup then filters in
     /// memory, so a big selection costs one query, not one per slice.
-    public func adjacencyScores(for segments: [ReviewSegment])
+    package func adjacencyScores(for segments: [ReviewSegment])
         -> [TaskRef: (certainty: Double, hover: String)] {
         guard !segments.isEmpty else { return [:] }
         let key = segments.map { $0.id.uuidString }.sorted().joined(separator: ",")
@@ -2592,10 +2592,10 @@ public final class AppController: ObservableObject {
 
     /// Suggestions awaiting the user (below-bar or unprovable-provenance
     /// contradictions) — the review drawer's "look mis-filed" row.
-    @Published public private(set) var refileSuggestions: [ContradictionRefile.Finding] = []
+    @Published package private(set) var refileSuggestions: [ContradictionRefile.Finding] = []
     /// Posted slices today's rules confidently contradict — flagged in
     /// Posting health, never moved.
-    @Published public private(set) var contradictedPostedCount = 0
+    @Published package private(set) var contradictedPostedCount = 0
 
     /// Re-derive recent slices against today's rules and act per the
     /// approved design: engine-decided ≥ bar refile as ONE undoable digest;
@@ -2754,7 +2754,7 @@ public final class AppController: ObservableObject {
 
     /// The suggestion row's "refile all": apply every current suggestion as
     /// one digest (one undo), whatever their scores — the user just said so.
-    public func applyRefileSuggestions() {
+    package func applyRefileSuggestions() {
         let findings = refileSuggestions
         guard !findings.isEmpty else { return }
         refileSuggestions = []
@@ -2764,7 +2764,7 @@ public final class AppController: ObservableObject {
 
     /// The suggestion row's "dismiss": these session+target pairs never
     /// resurface (a DIFFERENT suggested target for the same slice may).
-    public func dismissRefileSuggestions() {
+    package func dismissRefileSuggestions() {
         let keys = refileSuggestions.map(\.dismissalKey)
         guard !keys.isEmpty else { return }
         settings.refileDismissals.append(contentsOf: keys)
@@ -2842,7 +2842,7 @@ public final class AppController: ObservableObject {
     /// Undo one retro-acceptance pass: restores every cleared segment to
     /// pending, restores every lifted session's prior task+certainty, and
     /// removes the digest — "nothing is lost" (spec §8 criterion 1).
-    public func undoRetroDigest(_ id: UUID) {
+    package func undoRetroDigest(_ id: UUID) {
         guard let digest = retroDigest.first(where: { $0.id == id }) else { return }
         try? journal.assign(digest.clearedSegmentIDs, to: nil)
         var needsResync = false
@@ -2877,7 +2877,7 @@ public final class AppController: ObservableObject {
     /// slice), so a view can invalidate a cached journal read without polling —
     /// even when the summary STRING is unchanged (e.g. a same-duration
     /// reassign).
-    @Published public private(set) var journalRevision = 0
+    @Published package private(set) var journalRevision = 0
 
     private func updateJournalSummary() {
         // COUNT queries instead of decoding the whole table. The checkpoint row
@@ -2914,7 +2914,7 @@ public final class AppController: ObservableObject {
     /// semantics live in Core (UndoStack, checked); this owns the sounds,
     /// the notification and the published count.
     private let undoStack = UndoStack()
-    @Published public private(set) var undoCount = 0
+    @Published package private(set) var undoCount = 0
 
     private func registerUndo(_ label: String, inverse: @escaping () async -> Void) {
         undoStack.register(label, inverse: inverse)
@@ -2924,7 +2924,7 @@ public final class AppController: ObservableObject {
     /// Bundle every mutation in `body` into ONE undo step (a handle drag that
     /// overwrites several records, or an overlap save that trims a neighbour
     /// and moves a slice, undoes in a single ⌘Z). Nestable.
-    public func undoGroup(_ label: String, _ body: () async -> Void) async {
+    package func undoGroup(_ label: String, _ body: () async -> Void) async {
         await undoStack.group(label, body)
         undoCount = undoStack.count
     }
@@ -2935,7 +2935,7 @@ public final class AppController: ObservableObject {
     /// previous one — ordered, and still off the caller so the UI never blocks.
     private var undoChain: Task<Void, Never>?
 
-    public func undo() {
+    package func undo() {
         guard let last = undoStack.pop() else {
             NSSound(named: "Funk")?.play()
             return
@@ -3002,7 +3002,7 @@ public final class AppController: ObservableObject {
     /// timeline's fetch, so a viewport can span midnight / several days — plus
     /// the synthetic live slice (folded into the same-task block it continues)
     /// when the current visit overlaps the window.
-    public func timelineSessions(from: Date, to: Date) -> [Session] {
+    package func timelineSessions(from: Date, to: Date) -> [Session] {
         // The live checkpoint row is internal crash-recovery state, not a
         // user-facing slice — never draw it on the timeline.
         var list = ((try? journal.sessions(from: from, to: to)) ?? [])
@@ -3032,7 +3032,7 @@ public final class AppController: ObservableObject {
         return list
     }
 
-    public static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
+    package static let liveSessionID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11E")!
 
     /// The stored comments of the journalled rows the displayed live block
     /// folds (see `timelineSessions`) — read-only context for the timeline
@@ -3040,7 +3040,7 @@ public final class AppController: ObservableObject {
     /// parts belong to journalled slices). Bounded to a 2-day lookback: the
     /// fold chains only across ≤2 s gaps, so anything older can't be part of
     /// the live block anyway.
-    public func liveFoldedComment() -> String? {
+    package func liveFoldedComment() -> String? {
         guard case .tracking(.task(let ref), _) = trackerState else { return nil }
         let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
         let rows = ((try? journal.sessions(from: liveStart.addingTimeInterval(-2 * 86_400),
@@ -3056,7 +3056,7 @@ public final class AppController: ObservableObject {
     /// `since` is where the provisional run began, `graceEnds` when it commits.
     /// nil unless such a switch is in flight. Pure display state — reading it
     /// never writes to the journal or changes segmentation.
-    public var liveGraceRange: (since: Date, graceEnds: Date)? {
+    package var liveGraceRange: (since: Date, graceEnds: Date)? {
         guard let since = tracker.pendingSwitchSince,
               let ends = tracker.graceEndsAt else { return nil }
         return (since, ends)
@@ -3099,25 +3099,25 @@ public final class AppController: ObservableObject {
     /// A slice the timeline should frame + open when it next appears — set when
     /// you click a slice in the pie window's mini-timeline. The timeline consumes
     /// and clears it.
-    @Published public var pendingTimelineFocus: Session?
+    @Published package var pendingTimelineFocus: Session?
 
     /// The view shown in the single Time window, and in the optional second
     /// window (control/right-click a preview). Flipping the primary in place is
     /// the normal "switch"; the second window is the escape hatch for both at
     /// once.
-    @Published public var timeWindowView: TimeView = .timeline
-    @Published public var timeWindow2View: TimeView = .spent
+    @Published package var timeWindowView: TimeView = .timeline
+    @Published package var timeWindow2View: TimeView = .spent
 
     /// Record which time view is showing (persists, so "last viewed" survives a
     /// relaunch).
-    public func noteTimeViewOpened(_ which: TimeView) {
+    package func noteTimeViewOpened(_ which: TimeView) {
         if settings.lastViewedTimeView != which { settings.lastViewedTimeView = which }
     }
 
     /// Scan OP for duplicate time entries over a recent window and plan the
     /// richest-survivor reconcile against the journal. Empty when not connected
     /// or nothing duplicated.
-    public func findDuplicateActions(daysBack: Int = 90) async -> [ReconcileAction] {
+    package func findDuplicateActions(daysBack: Int = 90) async -> [ReconcileAction] {
         guard let backend else { return [] }
         let to = Date()
         let from = to.addingTimeInterval(-Double(daysBack) * 86_400)
@@ -3133,7 +3133,7 @@ public final class AppController: ObservableObject {
     /// deletions are REMOTE, ⌘Z re-creates the entries from a pre-apply
     /// snapshot rather than restoring pointers to dead ids (which would 404
     /// on the next edit — worse than no undo; see ReconcileUndoPlan).
-    public func applyReconcile(_ action: ReconcileAction) async {
+    package func applyReconcile(_ action: ReconcileAction) async {
         guard let backend else { return }
         // Snapshot FIRST: the sessions must still hold their old pointers.
         let plan = DuplicateReconcile.undoPlan(
@@ -3211,7 +3211,7 @@ public final class AppController: ObservableObject {
     /// without touching anything yet. The live-tracking sentinels are never
     /// candidates (they're always recent, but excluded on principle like
     /// every other journal read that plans against `allSessions()`).
-    public func consolidationPreview() -> JournalPrune.Plan {
+    package func consolidationPreview() -> JournalPrune.Plan {
         let sessions = ((try? journal.allSessions()) ?? [])
             .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
         let days = Int(settings.journalConsolidateAfterYears * 365)
@@ -3222,7 +3222,7 @@ public final class AppController: ObservableObject {
     /// the raw originals they replace. Order matters not at all here (ids
     /// never collide — the rollup carries a freshly-derived id) but creating
     /// first means an interrupted apply never loses time outright.
-    public func applyConsolidation(_ plan: JournalPrune.Plan) {
+    package func applyConsolidation(_ plan: JournalPrune.Plan) {
         // Snapshot the raw originals BEFORE deleting: consolidation is
         // journal-local (no backend writes), so undo can restore the exact
         // rows — rollups out, originals back, remote linkage untouched.
@@ -3244,7 +3244,7 @@ public final class AppController: ObservableObject {
     /// (c) Hard-cap preview — STRONGLY DISCOURAGED: plan deleting the oldest
     /// raw slices (never rollups) until the synced journal is back under
     /// `capMB`. Preview only; nothing is deleted until `applyHardCapPrune`.
-    public func hardCapPreview(capMB: Double) -> JournalPrune.Plan {
+    package func hardCapPreview(capMB: Double) -> JournalPrune.Plan {
         let sessions = ((try? journal.allSessions()) ?? [])
             .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
         return JournalPrune.hardCapPlan(sessions: sessions, capBytes: Int(capMB * 1_048_576))
@@ -3254,7 +3254,7 @@ public final class AppController: ObservableObject {
     /// plan never proposes rollups). The UI double-confirms before this runs —
     /// and ⌘Z within the session still brings the rows back (permanence
     /// starts when the session ends, not the moment the button is clicked).
-    public func applyHardCapPrune(_ plan: JournalPrune.Plan) {
+    package func applyHardCapPrune(_ plan: JournalPrune.Plan) {
         let originals = plan.deleteIDs.compactMap { try? journal.session(id: $0) }
         for id in plan.deleteIDs { try? journal.deleteSession(id) }
         if !originals.isEmpty {
@@ -3269,13 +3269,13 @@ public final class AppController: ObservableObject {
 
     /// Today's project breakdown + total (the timeline window's mini-pie
     /// cross-preview).
-    public func todaySpentNodes() -> [TimeAggregator.Node] {
+    package func todaySpentNodes() -> [TimeAggregator.Node] {
         spentNodes(from: Calendar.current.startOfDay(for: Date()), to: Date())
     }
 
     /// The latest work block's slices + extent (the pie window's mini-timeline
     /// cross-preview). nil when there's no recent activity.
-    public func currentBlock() -> (sessions: [Session], start: Date, end: Date)? {
+    package func currentBlock() -> (sessions: [Session], start: Date, end: Date)? {
         let recent = timelineSessions(from: Date().addingTimeInterval(-2 * 86_400), to: Date())
         guard let block = TimelineMath.latestBlock(in: recent) else { return nil }
         let slices = recent.filter { $0.end > block.start && $0.start < block.end }
@@ -3283,7 +3283,7 @@ public final class AppController: ObservableObject {
     }
 
     /// Which view the single Time window opens on, per the 3-way setting.
-    public func initialTimeView() -> TimeView {
+    package func initialTimeView() -> TimeView {
         switch settings.timeViewOpenMode {
         case .timeline: return .timeline
         case .spent: return .spent
@@ -3291,14 +3291,14 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func timelineSpans(for session: Session) -> [FocusSpan] {
+    package func timelineSpans(for session: Session) -> [FocusSpan] {
         (try? journal.spans(from: session.start, to: session.end)) ?? []
     }
 
     /// Why the attributor would pick a task for this window — drives the
     /// timeline's "why was this tracked as X?" panel. Scored at the window's own
     /// time so the time-of-day prior matches what actually happened.
-    public func explainSpan(_ span: FocusSpan) -> AttributionExplanation {
+    package func explainSpan(_ span: FocusSpan) -> AttributionExplanation {
         explain(span.signal, now: span.signal.timestamp)
     }
 
@@ -3307,14 +3307,14 @@ public final class AppController: ObservableObject {
     /// Why a signal attributes the way it does, for a raw focus signal (not
     /// tied to a journalled `FocusSpan`) — the popover host's Evidence Card
     /// source. `explainSpan` above is the timeline's equivalent.
-    public func explain(_ signal: ActivitySignal, now: Date = Date()) -> AttributionExplanation {
+    package func explain(_ signal: ActivitySignal, now: Date = Date()) -> AttributionExplanation {
         attributor.explain(signal, tasks: taskCache, now: now)
     }
 
     /// The current focus signal, or nil when nothing is focused — the
     /// popover host's Evidence Card source (the timeline host uses a
     /// journalled `FocusSpan`'s own signal instead).
-    public func currentFocusSignal() -> ActivitySignal? {
+    package func currentFocusSignal() -> ActivitySignal? {
         tracker.currentFocusSignal
     }
 
@@ -3322,19 +3322,19 @@ public final class AppController: ObservableObject {
     /// ladder / sees-line source, unconditionally (unlike `pinEmailIdentity()`,
     /// which gates on an email grain for the pin editor's Components-strip
     /// swap).
-    public func identity(of signal: ActivitySignal) -> ContextIdentity {
+    package func identity(of signal: ActivitySignal) -> ContextIdentity {
         attributor.identity(of: signal)
     }
 
     /// What [✕ forget] would remove for this signal, or nil (pin / OP-URL /
     /// nothing learned — see `Attributor.forgettable`).
-    public func forgettable(for signal: ActivitySignal, now: Date = Date()) -> Attributor.Unlearn? {
+    package func forgettable(for signal: ActivitySignal, now: Date = Date()) -> Attributor.Unlearn? {
         attributor.forgettable(for: signal, now: now)
     }
 
     /// The live "would then fall back to…" preview — never mutates (see
     /// `Attributor.explainWithout`).
-    public func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
+    package func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
                                now: Date = Date()) -> AttributionExplanation {
         attributor.explainWithout(u, signal, tasks: taskCache, now: now)
     }
@@ -3342,7 +3342,7 @@ public final class AppController: ObservableObject {
     /// What the fallback preview's own [✕ forget] would remove — the
     /// "forget that fallback too" affordance on the same preview line
     /// (never mutates; see `Attributor.forgettableWithout`).
-    public func forgettableWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
+    package func forgettableWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
                                    now: Date = Date()) -> Attributor.Unlearn? {
         attributor.forgettableWithout(u, signal, now: now)
     }
@@ -3351,7 +3351,7 @@ public final class AppController: ObservableObject {
     /// unpinned) — the card's "replaces: X → OldTask" warning before a
     /// Remember/Always commit (2026-07-03 spec §5.5). Mirrors
     /// `learnEmailRule`'s own replacement filter.
-    public func conflictingRule(level: EmailMatchLevel, value: String) -> EmailRule? {
+    package func conflictingRule(level: EmailMatchLevel, value: String) -> EmailRule? {
         attributor.emailRules.first {
             $0.level == level && !$0.pinned && $0.value.caseInsensitiveCompare(value) == .orderedSame
         }
@@ -3359,7 +3359,7 @@ public final class AppController: ObservableObject {
 
     /// `conflictingRule`'s site twin — mirrors `learnSiteRule`'s own
     /// replacement filter (same recipe+field+value, unpinned).
-    public func conflictingSiteRule(recipeID: String?, field: String, value: String) -> SiteRule? {
+    package func conflictingSiteRule(recipeID: String?, field: String, value: String) -> SiteRule? {
         attributor.siteRules.first {
             $0.recipeID == recipeID && $0.field == field && !$0.pinned
                 && $0.value.caseInsensitiveCompare(value) == .orderedSame
@@ -3373,7 +3373,7 @@ public final class AppController: ObservableObject {
     /// re-asserting it through `assign` (the only public way to create one)
     /// and then restoring the OTHER stores over its side effects, so the
     /// round trip is exact.
-    public func forget(_ u: Attributor.Unlearn, signal: ActivitySignal) {
+    package func forget(_ u: Attributor.Unlearn, signal: ActivitySignal) {
         let savedRules = attributor.emailRules
         let savedSiteRules = attributor.siteRules
         let savedPrimes = attributor.primedSurfaces
@@ -3425,7 +3425,7 @@ public final class AppController: ObservableObject {
     /// — see `PopoverView`/`TimelineView`). This is what replaces the
     /// retired silent `learnEmailRule` call in `confirm`/`assign`
     /// (2026-07-03 spec §5.2/§5.4).
-    public func commitGrain(_ identity: ContextIdentity, grainCount: Int, signal: ActivitySignal,
+    package func commitGrain(_ identity: ContextIdentity, grainCount: Int, signal: ActivitySignal,
                             to ref: TaskRef, pinned: Bool, now: Date = Date()) {
         guard grainCount >= 1, grainCount <= identity.segments.count else { return }
         let segment = identity.segments[grainCount - 1]
@@ -3493,7 +3493,7 @@ public final class AppController: ObservableObject {
     /// insensitively against `ContextIdentity.correspondentChoices(signal)`
     /// (the pure fan-out lives there, check-covered without an Attributor).
     /// A no-op if `chosen` picks nothing.
-    public func commitCorrespondentGrain(_ signal: ActivitySignal, chosen: Set<String>,
+    package func commitCorrespondentGrain(_ signal: ActivitySignal, chosen: Set<String>,
                                          to ref: TaskRef, pinned: Bool, now: Date = Date()) {
         let values = ContextIdentity.correspondentRuleValues(signal, chosen: chosen)
         guard !values.isEmpty else { return }
@@ -3528,21 +3528,21 @@ public final class AppController: ObservableObject {
     /// committed against, so undo forgets them through the same
     /// `forget(_:signal:)` path (with its usual undo-stack registration)
     /// rather than a bespoke removal.
-    public struct LearnNotice: Equatable, Sendable {
-        public let rules: [EmailRule]
-        public let taskName: String
-        public let signal: ActivitySignal
+    package struct LearnNotice: Equatable, Sendable {
+        package let rules: [EmailRule]
+        package let taskName: String
+        package let signal: ActivitySignal
     }
     /// A one-line popover-anchored trace of a learned rule's FIRST-ever win
     /// (spec §6 later-polish item, brought forward) — informational only, no
     /// undo (a rule that's working as intended is a Rules Ledger/Evidence
     /// Card matter, not a passing toast's).
-    public struct FireNotice: Equatable, Sendable {
-        public let rule: EmailRule
-        public let taskName: String
+    package struct FireNotice: Equatable, Sendable {
+        package let rule: EmailRule
+        package let taskName: String
     }
-    @Published public private(set) var learnNotice: LearnNotice?
-    @Published public private(set) var fireNotice: FireNotice?
+    @Published package private(set) var learnNotice: LearnNotice?
+    @Published package private(set) var fireNotice: FireNotice?
     /// Popover-anchored only — never a system notification (spec §6 MVP
     /// item 6 explicitly). Auto-dismisses after this long, or sooner on the
     /// next task pick (see `userPicked`/`changeCurrentTask`) — never blocks
@@ -3560,14 +3560,14 @@ public final class AppController: ObservableObject {
     }
 
     /// The First-LEARN notice's [undo]: forgets exactly the rule(s) it named.
-    public func undoLearnNotice() {
+    package func undoLearnNotice() {
         guard let notice = learnNotice else { return }
         learnNotice = nil
         for rule in notice.rules { forget(.emailRule(rule), signal: notice.signal) }
     }
 
-    public func dismissLearnNotice() { learnNotice = nil }
-    public func dismissFireNotice() { fireNotice = nil }
+    package func dismissLearnNotice() { learnNotice = nil }
+    package func dismissFireNotice() { fireNotice = nil }
 
     /// Wires `Attributor.onFirstFire` to publish the First-FIRE notice. Called
     /// once from `init`, after `attributor`/`tracker` are both set up.
@@ -3597,17 +3597,17 @@ public final class AppController: ObservableObject {
 
     /// `LearnNotice`'s site twin — a parallel struct rather than a
     /// generalisation, matching the parallel-rule-type call (spec §5).
-    public struct SiteLearnNotice: Equatable, Sendable {
-        public let rules: [SiteRule]
-        public let taskName: String
-        public let signal: ActivitySignal
+    package struct SiteLearnNotice: Equatable, Sendable {
+        package let rules: [SiteRule]
+        package let taskName: String
+        package let signal: ActivitySignal
     }
-    public struct SiteFireNotice: Equatable, Sendable {
-        public let rule: SiteRule
-        public let taskName: String
+    package struct SiteFireNotice: Equatable, Sendable {
+        package let rule: SiteRule
+        package let taskName: String
     }
-    @Published public private(set) var siteLearnNotice: SiteLearnNotice?
-    @Published public private(set) var siteFireNotice: SiteFireNotice?
+    @Published package private(set) var siteLearnNotice: SiteLearnNotice?
+    @Published package private(set) var siteFireNotice: SiteFireNotice?
 
     private func showSiteLearnNotice(rules: [SiteRule], signal: ActivitySignal) {
         guard let first = rules.first else { return }
@@ -3623,31 +3623,31 @@ public final class AppController: ObservableObject {
     /// The site First-LEARN notice's [undo]: forgets exactly the rule(s) it
     /// named — through `forget(_:signal:)`, so it registers its own ⌘Z step
     /// like the email twin.
-    public func undoSiteLearnNotice() {
+    package func undoSiteLearnNotice() {
         guard let notice = siteLearnNotice else { return }
         siteLearnNotice = nil
         for rule in notice.rules { forget(.siteRule(rule), signal: notice.signal) }
     }
 
-    public func dismissSiteLearnNotice() { siteLearnNotice = nil }
-    public func dismissSiteFireNotice() { siteFireNotice = nil }
+    package func dismissSiteLearnNotice() { siteLearnNotice = nil }
+    package func dismissSiteFireNotice() { siteFireNotice = nil }
 
     // MARK: - Rules Ledger (Settings ▸ Context rules…)
 
     /// Learned + pinned email rules grouped by task, for the ledger window.
-    public func rulesLedger(search: String = "") -> [RulesLedgerGroup] {
+    package func rulesLedger(search: String = "") -> [RulesLedgerGroup] {
         RulesLedger.grouped(attributor.emailRules, nameOf: { name(of: .task($0)) }, search: search)
     }
 
     /// Ledger row delete (✕) — the same undo mechanism as the card's forget.
-    public func deleteRule(_ rule: EmailRule) {
+    package func deleteRule(_ rule: EmailRule) {
         deleteRules([rule])
     }
 
     /// Bulk ledger forget (multi-select ✕ / a group's "Forget all") — every
     /// rule removed in the SAME undo step, so one ⌘Z restores the whole act
     /// instead of one row at a time (2026-07-03 spec §6, "bulk forget").
-    public func deleteRules(_ rules: [EmailRule]) {
+    package func deleteRules(_ rules: [EmailRule]) {
         guard !rules.isEmpty else { return }
         let saved = attributor.emailRules
         attributor.emailRules.removeAll { candidate in rules.contains { $0.sameRule(as: candidate) } }
@@ -3666,7 +3666,7 @@ public final class AppController: ObservableObject {
 
     /// The ledger's "Copy rules" export — every learned + pinned email rule
     /// as human-readable plain text (2026-07-03 spec §6, "export").
-    public func rulesExportText() -> String {
+    package func rulesExportText() -> String {
         RulesLedger.exportText(attributor.emailRules, nameOf: { name(of: .task($0)) })
     }
 
@@ -3674,19 +3674,19 @@ public final class AppController: ObservableObject {
 
     /// Learned + pinned site rules grouped by task — the ledger's Sites
     /// segment, `rulesLedger`'s exact contract.
-    public func siteRulesLedger(search: String = "") -> [SiteRulesLedgerGroup] {
+    package func siteRulesLedger(search: String = "") -> [SiteRulesLedgerGroup] {
         SiteRulesLedger.grouped(attributor.siteRules, nameOf: { name(of: .task($0)) },
                                 search: search)
     }
 
     /// Site-row delete (✕) — `deleteRule`'s twin.
-    public func deleteSiteRule(_ rule: SiteRule) {
+    package func deleteSiteRule(_ rule: SiteRule) {
         deleteSiteRules([rule])
     }
 
     /// Bulk site-rule forget: every rule removed in the SAME undo step,
     /// exactly `deleteRules`' shape.
-    public func deleteSiteRules(_ rules: [SiteRule]) {
+    package func deleteSiteRules(_ rules: [SiteRule]) {
         guard !rules.isEmpty else { return }
         let saved = attributor.siteRules
         attributor.siteRules.removeAll { candidate in rules.contains { $0.sameRule(as: candidate) } }
@@ -3704,7 +3704,7 @@ public final class AppController: ObservableObject {
     }
 
     /// The Sites segment's "Copy rules" export.
-    public func siteRulesExportText() -> String {
+    package func siteRulesExportText() -> String {
         SiteRulesLedger.exportText(attributor.siteRules, nameOf: { name(of: .task($0)) })
     }
 
@@ -3712,7 +3712,7 @@ public final class AppController: ObservableObject {
     /// recipe layer derives from the CURRENT focus surface (the pure
     /// formatter lives in Core — `SiteRecipes.probeText` — so it's checked).
     /// Shown on demand only; never routed to DebugLog (spec §9).
-    public func siteRecipeProbeText() -> String {
+    package func siteRecipeProbeText() -> String {
         guard let signal = tracker.currentFocusSignal else {
             return "No focused surface yet — focus the page you want to inspect, then reopen Settings."
         }
@@ -3723,7 +3723,7 @@ public final class AppController: ObservableObject {
     /// Teach the attributor that this window is `ref` (a strong correction, like
     /// a confirmation): future time on it attributes here. The visible "edit the
     /// weighting" action behind the why-panel.
-    public func teachSurface(_ span: FocusSpan, to ref: TaskRef) {
+    package func teachSurface(_ span: FocusSpan, to ref: TaskRef) {
         let restore = attributorSnapshotRestore()
         attributor.confirm(span.signal, task: ref, tasks: taskCache)
         persistAssociations()
@@ -3732,7 +3732,7 @@ public final class AppController: ObservableObject {
         objectWillChange.send()
     }
 
-    public func boostSurface(_ span: FocusSpan, to ref: TaskRef, weight: Double = 4) {
+    package func boostSurface(_ span: FocusSpan, to ref: TaskRef, weight: Double = 4) {
         let restore = attributorSnapshotRestore()
         attributor.learnSurface(span.signal, to: ref, weight: weight)
         persistAssociations(); tracker.reevaluate()
@@ -3766,7 +3766,7 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func pinSurface(_ span: FocusSpan, to ref: TaskRef) {
+    package func pinSurface(_ span: FocusSpan, to ref: TaskRef) {
         guard let id = PinScope.identity(of: span.signal) else {
             boostSurface(span, to: ref, weight: 6); return
         }
@@ -3782,7 +3782,7 @@ public final class AppController: ObservableObject {
     /// hash fallback survives only as the one-time migration snapshot
     /// (`legacyHashColourHex`), so pre-engine tasks keep exactly the colour
     /// they always had.
-    public func colour(for ref: TaskRef) -> NSColor {
+    package func colour(for ref: TaskRef) -> NSColor {
         if ref == WorkTask.unknown.ref { return .systemGray }
         if let hex = settings.taskColours[ref.storageKey], let c = NSColor(hex: hex) {
             return c
@@ -3884,7 +3884,7 @@ public final class AppController: ObservableObject {
     /// borrowed the first child task's colour, so a project's apparent
     /// colour changed whenever its biggest task or the sort order did.
     /// nil when the ref is unknown to the cache (caller falls back).
-    public func projectColour(containing ref: TaskRef?) -> NSColor? {
+    package func projectColour(containing ref: TaskRef?) -> NSColor? {
         guard let ref, ref != WorkTask.unknown.ref,
               let task = taskCache.first(where: { $0.ref == ref }),
               let key = projectKey(for: task) else { return nil }
@@ -3934,7 +3934,7 @@ public final class AppController: ObservableObject {
     /// user's own picks (overrides) are untouched; records for tasks no
     /// longer resolvable to a project are preserved as they stand. One ⌘Z
     /// restores the previous palette exactly.
-    public func rederiveAutomaticColours() {
+    package func rederiveAutomaticColours() {
         let before = colourAssignments
         var groups: [String: [String]] = [:]
         for task in taskCache {
@@ -3971,7 +3971,7 @@ public final class AppController: ObservableObject {
     /// "Shade tasks around this": re-derive ONE project's automatic task
     /// colours around its current (usually just-picked) project colour —
     /// the project picker's companion to the global re-derive.
-    public func shadeTasks(aroundProjectContaining ref: TaskRef) {
+    package func shadeTasks(aroundProjectContaining ref: TaskRef) {
         guard let task = taskCache.first(where: { $0.ref == ref }),
               let key = projectKey(for: task) else { return }
         let before = colourAssignments
@@ -3993,7 +3993,7 @@ public final class AppController: ObservableObject {
     }
 
     /// The complete current colour state, for Save palette….
-    public func currentPalette() -> Palette {
+    package func currentPalette() -> Palette {
         Palette(taskOverrides: settings.taskColours,
                 projectOverrides: settings.projectColours,
                 assignments: colourAssignments)
@@ -4004,7 +4004,7 @@ public final class AppController: ObservableObject {
     /// automatic anchor swatch — in first-seen order, and nothing else. No
     /// task or project names leave the machine, so the file is shareable
     /// and loads meaningfully over anyone's tasks.
-    public func currentGenericPalette() -> Palette {
+    package func currentGenericPalette() -> Palette {
         let colours = colourAssignments.projects
             .sorted { ($0.value.firstSeen, $0.key) < ($1.value.firstSeen, $1.key) }
             .map { settings.projectColours[$0.key] ?? $0.value.hex }
@@ -4017,7 +4017,7 @@ public final class AppController: ObservableObject {
     /// picks: it re-derives the automatic colours with its colours seeding
     /// the project anchors (first-seen order), leaving the user's own picks
     /// untouched — same contract as Re-derive.
-    public func applyPalette(_ palette: Palette) {
+    package func applyPalette(_ palette: Palette) {
         guard let assignments = palette.assignments else {
             let before = colourAssignments
             var groups: [String: [String]] = [:]
@@ -4058,7 +4058,7 @@ public final class AppController: ObservableObject {
         objectWillChange.send()
     }
 
-    public func setColour(_ colour: NSColor, for ref: TaskRef) {
+    package func setColour(_ colour: NSColor, for ref: TaskRef) {
         let previous = settings.taskColours[ref.storageKey]
         registerUndo("colour change") { [weak self] in
             self?.settings.taskColours[ref.storageKey] = previous
@@ -4068,7 +4068,7 @@ public final class AppController: ObservableObject {
 
     /// Manually-picked colours ▸ Revert all: one step clears every override
     /// (task and project alike); the automatic palette shows through.
-    public func revertAllColourOverrides() {
+    package func revertAllColourOverrides() {
         let tasks = settings.taskColours
         let projects = settings.projectColours
         guard !tasks.isEmpty || !projects.isEmpty else { return }
@@ -4083,7 +4083,7 @@ public final class AppController: ObservableObject {
     /// Settings ▸ Colours ▸ Manually picked: overrides whose task/project
     /// no longer resolves still need a way out — remove by raw key,
     /// undoable like the resolvable paths.
-    public func removeColourOverride(taskKey: String) {
+    package func removeColourOverride(taskKey: String) {
         guard let previous = settings.taskColours[taskKey] else { return }
         registerUndo("remove colour pick") { [weak self] in
             self?.settings.taskColours[taskKey] = previous
@@ -4091,7 +4091,7 @@ public final class AppController: ObservableObject {
         settings.taskColours[taskKey] = nil
     }
 
-    public func removeProjectColourOverride(projectKey key: String) {
+    package func removeProjectColourOverride(projectKey key: String) {
         guard let previous = settings.projectColours[key] else { return }
         registerUndo("remove project colour pick") { [weak self] in
             self?.settings.projectColours[key] = previous
@@ -4102,7 +4102,7 @@ public final class AppController: ObservableObject {
     /// True when the task's colour is the user's own pick (a settings
     /// override) rather than the engine's record — the swatch editor's
     /// "your pick / automatic" state and its reset enablement.
-    public func hasColourOverride(for ref: TaskRef) -> Bool {
+    package func hasColourOverride(for ref: TaskRef) -> Bool {
         settings.taskColours[ref.storageKey] != nil
     }
 
@@ -4111,7 +4111,7 @@ public final class AppController: ObservableObject {
     /// record survived underneath and reset restores exactly the
     /// pre-override colour (a never-recorded task simply allocates fresh
     /// on next sight). Undoable like the edit itself.
-    public func resetColour(for ref: TaskRef) {
+    package func resetColour(for ref: TaskRef) {
         guard let previous = settings.taskColours[ref.storageKey] else { return }
         registerUndo("reset colour") { [weak self] in
             self?.settings.taskColours[ref.storageKey] = previous
@@ -4128,7 +4128,7 @@ public final class AppController: ObservableObject {
         return projectKey(for: task)
     }
 
-    public func hasProjectColourOverride(containing ref: TaskRef?) -> Bool {
+    package func hasProjectColourOverride(containing ref: TaskRef?) -> Bool {
         guard let key = projectColourKey(containing: ref) else { return false }
         return settings.projectColours[key] != nil
     }
@@ -4141,7 +4141,7 @@ public final class AppController: ObservableObject {
     /// Future tasks in the project shade around the override's hue (see
     /// `ColourEngine.overrideAnchorHue`); already-seen tasks keep their
     /// colours — stability cuts both ways.
-    public func setProjectColour(_ colour: NSColor, containing ref: TaskRef) {
+    package func setProjectColour(_ colour: NSColor, containing ref: TaskRef) {
         guard let key = projectColourKey(containing: ref) else { return }
         let previous = settings.projectColours[key]
         registerUndo("project colour change") { [weak self] in
@@ -4152,7 +4152,7 @@ public final class AppController: ObservableObject {
 
     /// Remove a project's colour override — the ring/legend falls back to
     /// the engine's anchor record, untouched underneath. Undoable.
-    public func resetProjectColour(containing ref: TaskRef) {
+    package func resetProjectColour(containing ref: TaskRef) {
         guard let key = projectColourKey(containing: ref),
               let previous = settings.projectColours[key] else { return }
         registerUndo("reset project colour") { [weak self] in
@@ -4173,7 +4173,7 @@ public final class AppController: ObservableObject {
     /// Forgiving search over the full ranked task list. Also matches a task by
     /// the words the learner has associated with it (e.g. "voting" finds the task
     /// you always work in a "voting" window, whatever its OP subject says).
-    public func searchTasks(_ query: String) -> [WorkTask] {
+    package func searchTasks(_ query: String) -> [WorkTask] {
         let base = fullPickList()
         let stamp = pickListCache?.at ?? Date()
         if let c = searchCache, c.query == query, c.basedOn == stamp { return c.results }
@@ -4188,7 +4188,7 @@ public final class AppController: ObservableObject {
     /// Sorted, de-duplicated window (focus-span) edges in [from, to] — the
     /// times an edit can snap to so a tracked window lands wholly in one task
     /// instead of being split across the slice boundary.
-    public func windowBoundaries(from: Date, to: Date) -> [Date] {
+    package func windowBoundaries(from: Date, to: Date) -> [Date] {
         var edges = Set<Date>()
         for s in (try? journal.spans(from: from, to: to)) ?? [] {
             edges.insert(s.start)
@@ -4200,7 +4200,7 @@ public final class AppController: ObservableObject {
     /// Time Spent hierarchy for the pie: project -> task -> app, including
     /// the live session when the range covers now. Sessions crossing the
     /// range boundary are clipped so totals never double-count across days.
-    public func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
+    package func spentNodes(from: Date, to: Date) -> [TimeAggregator.Node] {
         // RESOLVED view (D1): the pie shows the seconds posting bills.
         var sessions = ((try? journal.resolvedSessions(from: from, to: to)) ?? [])
             .filter { $0.id != Self.liveCheckpointID }   // internal recovery row
@@ -4239,7 +4239,7 @@ public final class AppController: ObservableObject {
     /// Different-task slices the live start would cross if dragged to
     /// `newStart` — what an absorb would trim/delete. The timeline shows these
     /// as a warning before the second Save confirms.
-    public func liveStartConflicts(newStart: Date) -> [Session] {
+    package func liveStartConflicts(newStart: Date) -> [Session] {
         guard case .tracking(.task(let ref), _) = trackerState else { return [] }
         let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
         guard newStart < liveStart else { return [] }
@@ -4254,7 +4254,7 @@ public final class AppController: ObservableObject {
     /// `absorbOtherTasks` is set (the timeline confirms via a warning first) —
     /// other-task slices it crosses are trimmed/deleted through the very same
     /// TimelineMath.trims path a normal edge drag uses. One undo step.
-    public func adjustLiveStart(to date: Date, absorbOtherTasks: Bool = false) async {
+    package func adjustLiveStart(to date: Date, absorbOtherTasks: Bool = false) async {
         guard case .tracking(.task(let ref), _) = trackerState else { return }
         let liveStart = tracker.liveSliceStart ?? targetSince ?? Date()
         // Same window as the warning (liveStartConflicts) so warn-set == absorb-
@@ -4319,7 +4319,7 @@ public final class AppController: ObservableObject {
     /// The most recently tracked task — the obvious resume candidate. Looks back
     /// 36 h, not just "today", so just after midnight the candidate is still the
     /// task you were on at 23:50 rather than nothing.
-    public func lastTrackedTask() -> WorkTask? {
+    package func lastTrackedTask() -> WorkTask? {
         let lookback = Date().addingTimeInterval(-36 * 3600)
         guard let last = ((try? journal.sessions(from: lookback, to: Date())) ?? [])
             .filter({ $0.id != Self.liveCheckpointID }).last else {
@@ -4331,7 +4331,7 @@ public final class AppController: ObservableObject {
     /// The task to "revert" to: the last closed slice's task, but only when it
     /// differs from what we're tracking now (otherwise there is nothing to
     /// undo). Drives the popover's one-click "← <prev>" when a switch was wrong.
-    public func revertTargetTask() -> WorkTask? {
+    package func revertTargetTask() -> WorkTask? {
         guard case .tracking(let current, _) = trackerState else { return nil }
         guard let prev = previousTask, .task(prev) != current,
               let task = taskCache.first(where: { $0.ref == prev }) else { return nil }
@@ -4341,7 +4341,7 @@ public final class AppController: ObservableObject {
     /// "That switch was wrong": fold the current (mis-attributed) running slice
     /// back onto the previous task, keeping the clock — no reset. Same machinery
     /// as the popover's "Reassign".
-    public func revertToLastTask() {
+    package func revertToLastTask() {
         guard let target = revertTargetTask() else { return }
         changeCurrentTask(to: target.ref)
     }
@@ -4349,7 +4349,7 @@ public final class AppController: ObservableObject {
     /// A brand-new manual slice (drawn or gap-filled on the timeline).
     /// `origin`: .edited for timeline-drawn slices; claimIdleGap passes
     /// .manual ("I claim this time", not "I shaped these bounds").
-    public func createTimelineSession(_ session: Session,
+    package func createTimelineSession(_ session: Session,
                                       origin: SliceOrigin = .edited) async {
         var session = session
         session.provenance = .userAssigned   // drawn/claimed by hand
@@ -4365,7 +4365,7 @@ public final class AppController: ObservableObject {
     }
 
     /// Persist a timeline edit; PATCH the OP entry when one exists.
-    public func applyTimelineEdit(_ session: Session, undoable: Bool = true) async {
+    package func applyTimelineEdit(_ session: Session, undoable: Bool = true) async {
         if undoable,
            let previous = try? journal.session(id: session.id) {
             // A task-change edit also TEACHES (teachAssociation below);
@@ -4475,7 +4475,7 @@ public final class AppController: ObservableObject {
     /// keep its window detail, and teach the attributor its dominant surface is
     /// non-work so similar time stops auto-tracking. Undo restores the slice.
     /// Used to undo e.g. an away stretch you didn't actually work.
-    public func markSessionDoNotTrack(_ session: Session) async {
+    package func markSessionDoNotTrack(_ session: Session) async {
         // ONE ⌘Z step restoring BOTH halves: the slice comes back AND the
         // don't-track teaching is unlearned — previously undo restored the
         // slice but the surface kept auto-suppressing future tracking.
@@ -4490,7 +4490,7 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
+    package func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
         if undoable {
             var restore = session
             restore.opTimeEntryID = nil
@@ -4512,7 +4512,7 @@ public final class AppController: ObservableObject {
         updateJournalSummary()
     }
 
-    public func reassignTimelineSessions(_ sessions: [Session], to task: TaskRef,
+    package func reassignTimelineSessions(_ sessions: [Session], to task: TaskRef,
                                           undoable: Bool = true) async {
         if undoable {
             let originals = sessions.filter { $0.id != Self.liveSessionID }
@@ -4557,13 +4557,13 @@ public final class AppController: ObservableObject {
 
     /// One-line feedback for the Spent view (also forces a refresh since it
     /// is @Published — the pie reads the journal, which the reassign changed).
-    @Published public private(set) var actionNote: String?
+    @Published package private(set) var actionNote: String?
 
     /// Move time spent in app `appLabel` to `target` across a period — by
     /// SPLITTING each session at that app's window spans (the Games time is
     /// usually a minor slice of a larger task's sessions, so whole-session
     /// matching found nothing). Teaches the attributor so it stops recurring.
-    public func reassignSpentApp(_ appLabel: String, from: Date, to: Date,
+    package func reassignSpentApp(_ appLabel: String, from: Date, to: Date,
                                  to target: TaskRef) async {
         let candidates = ((try? journal.sessions(from: from, to: to)) ?? [])
             .filter { $0.task != target }
@@ -4612,7 +4612,7 @@ public final class AppController: ObservableObject {
     /// Merge same-task sessions that now butt up against each other (after an
     /// edit/drag) into one, without losing data. Direct journal+OP cleanup,
     /// guarded against re-entry.
-    public func coalesceAdjacent(around date: Date) async {
+    package func coalesceAdjacent(around date: Date) async {
         guard !coalescing else { return }
         coalescing = true
         defer { coalescing = false }
@@ -4718,7 +4718,7 @@ public final class AppController: ObservableObject {
     /// session overlapping the selected ranges and split each. `session` names
     /// the block's task; live callers pass the just-committed tail (via
     /// `commitLiveSlice`) so its own windows are already a real row here.
-    public func splitAndReassign(_ session: Session,
+    package func splitAndReassign(_ session: Session,
                                  ranges: [(start: Date, end: Date)],
                                  to target: TaskRef) async {
         guard let lo = ranges.map({ $0.start }).min(),
@@ -4749,7 +4749,7 @@ public final class AppController: ObservableObject {
     /// free through those two paths — including the Unknown no-teach guard
     /// in `teachAssociation`, so allocating to Unknown never masquerades as
     /// learned evidence.
-    public func allocateSpan(from start: Date, to end: Date, target: TaskRef) async {
+    package func allocateSpan(from start: Date, to end: Date, target: TaskRef) async {
         guard end > start else { return }
         let sessions = ((try? journal.sessions(from: start.addingTimeInterval(-2),
                                                to: end.addingTimeInterval(2))) ?? [])
@@ -4773,7 +4773,7 @@ public final class AppController: ObservableObject {
     }
 
     /// Reassign a whole task's period sessions to another task.
-    public func reassignSpentTask(_ ref: TaskRef, from: Date, to: Date,
+    package func reassignSpentTask(_ ref: TaskRef, from: Date, to: Date,
                                   to target: TaskRef) async {
         let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
             .filter { $0.task == ref }
@@ -4785,21 +4785,21 @@ public final class AppController: ObservableObject {
 
     // MARK: - AI assist (clipboard out, paste back)
 
-    public func copyAIPrompt() {
+    package func copyAIPrompt() {
         let prompt = AIAssist.classificationPrompt(tasks: taskCache, segments: pendingReview)
         copyToClipboard(prompt)
     }
 
     /// Put a string on the general pasteboard (the AI-assist flows copy a prompt
     /// for the user to paste into the AI of their choice).
-    public func copyToClipboard(_ text: String) {
+    package func copyToClipboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// The raw app / title / url of the current focus surface — the fields the
     /// AI pin prompt is built from. nil when there's nothing focused.
-    public func currentSurfaceFields() -> (app: String, title: String?, url: String?)? {
+    package func currentSurfaceFields() -> (app: String, title: String?, url: String?)? {
         guard let s = tracker.currentFocusSignal else { return nil }
         return (s.app, s.windowTitle, s.tabURL)
     }
@@ -4810,7 +4810,7 @@ public final class AppController: ObservableObject {
     /// deadline-bounded `osascript` channel with live capture (2026-07-03),
     /// so it blocks up to a couple of seconds — run off the main actor via
     /// `Task.detached`; only the clipboard write needs to be back on main.
-    public func probeEmailSender() async -> String {
+    package func probeEmailSender() async -> String {
         // The probe's verdict must be the one LIVE capture would reach, so
         // the settings' own-address sets travel with it (without them a
         // self-only thread reports "healthy", naming the user's own address).
@@ -4850,7 +4850,7 @@ public final class AppController: ObservableObject {
         return out
     }
 
-    public func ingestAIResponse(_ raw: String) -> String {
+    package func ingestAIResponse(_ raw: String) -> String {
         do {
             let assignments = try AIAssist.parseResponse(
                 raw, validSegmentIDs: Set(pendingReview.map(\.id)),
@@ -4874,7 +4874,7 @@ public final class AppController: ObservableObject {
 
     // MARK: - OP
 
-    public func saveAPIKey(_ key: String) {
+    package func saveAPIKey(_ key: String) {
         do {
             try APIKeyStore.saveAPIKey(key)
         } catch {
@@ -4886,20 +4886,20 @@ public final class AppController: ObservableObject {
 
     /// Reconnect using the already-stored API key — e.g. after re-entering only
     /// the instance URL (the key lives in its own file and need not be retyped).
-    public func reconnect() {
+    package func reconnect() {
         rebuildClient()
         Task { await refreshTasks() }
     }
 
     /// True when an API key is already on disk, so the UI can offer "Connect"
     /// without forcing a re-entry.
-    public func hasStoredAPIKey() -> Bool {
+    package func hasStoredAPIKey() -> Bool {
         (try? APIKeyStore.loadAPIKey())?.isEmpty == false
     }
 
     /// The backend's web page for a remote task ("Open in OpenProject" etc.);
     /// nil when standalone or the backend has no task pages.
-    public func taskWebURL(id: String) -> URL? {
+    package func taskWebURL(id: String) -> URL? {
         backend?.taskURL(id: id)
     }
 
@@ -4907,32 +4907,32 @@ public final class AppController: ObservableObject {
     /// (OP: the cost report filtered to the work package) so "check the
     /// entries" doesn't dump the user on the task page to hunt. Falls back to
     /// the task page for backends without one.
-    public func taskTimeEntriesWebURL(id: String) -> URL? {
+    package func taskTimeEntriesWebURL(id: String) -> URL? {
         backend?.taskTimeEntriesURL(id: id) ?? backend?.taskURL(id: id)
     }
 
     /// The primary backend's display name, for menu labels ("Open in
     /// OpenProject"). nil in standalone mode.
-    public var primaryBackendName: String? { backend?.displayName }
+    package var primaryBackendName: String? { backend?.displayName }
 
     /// Display names of every registered connector — Settings ▸ Connections
     /// uses this to tell a live Pro connector (andeyePro registered it) from
     /// one that should sit greyed behind the licence gate.
-    public var registeredConnectorNames: [String] {
+    package var registeredConnectorNames: [String] {
         registry.entries.map { $0.backend.displayName }
     }
 
     /// The timestamped comment list stored locally against a task — the
     /// standalone half of comment-to-task (notes for .local tasks, backends
     /// without a comment endpoint, and failed posts land here). Newest last.
-    public func storedTaskComments(for ref: TaskRef) -> [(date: Date, text: String)] {
+    package func storedTaskComments(for ref: TaskRef) -> [(date: Date, text: String)] {
         (try? journal.taskComments(for: ref)) ?? []
     }
 
     /// The journal for a period rendered as CSV or Markdown — the standalone
     /// way OUT of andeye (invoicing, records) with or without a backend.
-    public enum TimesheetFormat { case csv, markdown }
-    public func timesheetExport(period: TimePeriod, format: TimesheetFormat) -> String {
+    package enum TimesheetFormat { case csv, markdown }
+    package func timesheetExport(period: TimePeriod, format: TimesheetFormat) -> String {
         let now = Date()
         let range = period.range(anchor: now, now: now)
         // The RESOLVED view (D1): the export shows the same seconds posting
@@ -4958,9 +4958,9 @@ public final class AppController: ObservableObject {
 
     /// The connected backend's name for UI copy ("OpenProject", "Xero"); nil
     /// when standalone.
-    public var backendName: String? { backend?.displayName }
+    package var backendName: String? { backend?.displayName }
 
-    public func refreshTasks() async {
+    package func refreshTasks() async {
         guard let backend else {
             if lastError == nil, !settings.opBaseURL.isEmpty {
                 lastError = "Not connected – check OP URL and API key in Settings"
@@ -5042,15 +5042,15 @@ public final class AppController: ObservableObject {
     /// from (D4 detection); `lockedInvoices` = sent invoices covering posted
     /// time (the invoice-lock layer) with a per-invoice unlock. Only
     /// backends with something to show appear.
-    public struct PostingHealth: Identifiable {
-        public let id: String        // backend id (ledger identity)
-        public let name: String      // display name for the row
-        public let stuck: Int
-        public let diverged: Int
-        public let lockedInvoices: [(ref: String, count: Int)]
+    package struct PostingHealth: Identifiable {
+        package let id: String        // backend id (ledger identity)
+        package let name: String      // display name for the row
+        package let stuck: Int
+        package let diverged: Int
+        package let lockedInvoices: [(ref: String, count: Int)]
     }
 
-    public func postingHealthReport() -> [PostingHealth] {
+    package func postingHealthReport() -> [PostingHealth] {
         registry.entries.compactMap { entry in
             let stuck = ((try? journal.postingRecords(state: .stuck,
                                                       backendID: entry.id)) ?? []).count
@@ -5082,7 +5082,7 @@ public final class AppController: ObservableObject {
     /// on every entry billed under `ref` so deliberate corrections can flow
     /// again; the same invoice is never auto re-locked. The Xero-side
     /// credit-note/void remains the accountant's act.
-    public func unlockInvoice(ref: String, backendID: String) {
+    package func unlockInvoice(ref: String, backendID: String) {
         let snapshot = SyncEngine(journal: journal, backends: registry.entries)
             .unlockInvoice(ref: ref, backendID: backendID)
         // ⌘Z re-locks: the deliberate repair gesture is still a data edit,
@@ -5100,7 +5100,7 @@ public final class AppController: ObservableObject {
 
     /// The repair gesture for quarantined rows: clearing a `.stuck` row puts
     /// its session back in the queue with a fresh attempt budget.
-    public func retryStuck(backendID: String) {
+    package func retryStuck(backendID: String) {
         let rows = SyncEngine(journal: journal, backends: registry.entries)
             .retryStuck(backendID: backendID)
         if !rows.isEmpty {
@@ -5117,7 +5117,7 @@ public final class AppController: ObservableObject {
         }
     }
 
-    public func syncIfEnabled() async {
+    package func syncIfEnabled() async {
         if Date().timeIntervalSince(lastLicenseRevalidation) > 3_600 {
             lastLicenseRevalidation = Date()
             revalidateLicense()
@@ -5199,7 +5199,7 @@ public final class AppController: ObservableObject {
 
     /// The user's billable rules — its own user-ownable file (billing.json),
     /// keyed by stable backend-scoped project ids. Default non-billable.
-    @Published public private(set) var billing: BillableRules
+    @Published package private(set) var billing: BillableRules
 
     private func saveBilling() {
         try? billingStore.save(billing)
@@ -5209,7 +5209,7 @@ public final class AppController: ObservableObject {
     /// key builders): id-based when the backend project id was captured,
     /// title-based fallback until the next task refresh migrates it, name-
     /// based for local projects. nil when the task has no project at all.
-    public func projectKey(for task: WorkTask) -> String? {
+    package func projectKey(for task: WorkTask) -> String? {
         if case .local = task.ref {
             return BillableRules.localProjectKey(task.project ?? "Personal")
         }
@@ -5232,17 +5232,17 @@ public final class AppController: ObservableObject {
     // MARK: - Finance mappings (D6 Settings editor)
 
     /// Whether the Billing-mappings Settings section shows at all.
-    public var hasFinanceBackend: Bool {
+    package var hasFinanceBackend: Bool {
         registry.entries.contains { $0.backendClass == .finance }
     }
 
     /// The finance backend's own tasks, fetched for the mapping pickers —
     /// (backendID, displayName, tasks). Refreshed on section appearance;
     /// a fetch failure leaves the previous options standing.
-    @Published public private(set) var financeTaskOptions:
+    @Published package private(set) var financeTaskOptions:
         [(backendID: String, name: String, tasks: [WorkTask])] = []
 
-    public func refreshFinanceTaskOptions() async {
+    package func refreshFinanceTaskOptions() async {
         var out: [(backendID: String, name: String, tasks: [WorkTask])] = []
         for entry in registry.entries where entry.backendClass == .finance {
             guard let tasks = try? await entry.backend.fetchTasks() else { continue }
@@ -5255,7 +5255,7 @@ public final class AppController: ObservableObject {
     /// The BILLABLE remote projects — the rows of the mapping editor (only
     /// billable time ever reaches a finance backend, so unmapped
     /// non-billable projects are noise).
-    public func billableSourceProjects() -> [(name: String, key: String)] {
+    package func billableSourceProjects() -> [(name: String, key: String)] {
         var seen = Set<String>()
         var out: [(name: String, key: String)] = []
         for task in taskCache {
@@ -5268,14 +5268,14 @@ public final class AppController: ObservableObject {
         return out.sorted { $0.name < $1.name }
     }
 
-    public func financeMapping(forProjectKey key: String) -> FinanceMapping? {
+    package func financeMapping(forProjectKey key: String) -> FinanceMapping? {
         financeMappings.mappings[key]
     }
 
     /// The Settings gesture: map (or nil = unmap) a source project to a
     /// finance-backend task. Persistence + the criterion-10 reopen ride the
     /// store's change handler.
-    public func setFinanceMapping(projectKey: String, backendTaskID: String?) {
+    package func setFinanceMapping(projectKey: String, backendTaskID: String?) {
         let prior = financeMappings.mappings[projectKey]
         let new = backendTaskID.map(FinanceMapping.init)
         guard prior != new else { return }
@@ -5287,22 +5287,22 @@ public final class AppController: ObservableObject {
 
     /// The cached tasks belonging to a project as DISPLAYED (the pie/legend
     /// label) — the cascade's membership and the flip's stranded-time scope.
-    public func tasksInProject(named name: String) -> [WorkTask] {
+    package func tasksInProject(named name: String) -> [WorkTask] {
         taskCache.filter { $0.project == name }
     }
 
-    public func isProjectBillable(named name: String) -> Bool {
+    package func isProjectBillable(named name: String) -> Bool {
         guard let first = tasksInProject(named: name).first else { return false }
         return billing.projectBillable(projectKey(for: first))
     }
 
-    public func taskBillableState(_ ref: TaskRef) -> BillableState {
+    package func taskBillableState(_ ref: TaskRef) -> BillableState {
         billing.taskState(ref)
     }
 
     /// Effective billability of one task (override else project else
     /// non-billable) — drives the UI's checkmarks.
-    public func isTaskBillable(_ task: WorkTask) -> Bool {
+    package func isTaskBillable(_ task: WorkTask) -> Bool {
         billing.effectiveBillable(task: task.ref, projectKey: projectKey(for: task))
     }
 
@@ -5312,7 +5312,7 @@ public final class AppController: ObservableObject {
     /// confirmed hours the flip strands uninvoiced — the UI alert's data.
     /// Undoable. Returns nil when the project has no cached tasks to key on.
     @discardableResult
-    public func setProjectBillable(named name: String, billable: Bool) -> BillableFlipReport? {
+    package func setProjectBillable(named name: String, billable: Bool) -> BillableFlipReport? {
         let members = tasksInProject(named: name)
         guard let first = members.first, let key = projectKey(for: first) else { return nil }
         guard billing.projectBillable(key) != billable else { return nil }
@@ -5338,7 +5338,7 @@ public final class AppController: ObservableObject {
     /// Set one task's tri-state override (`.inherit` clears it). Undoable;
     /// the report warns about stranded time exactly like a project flip.
     @discardableResult
-    public func setTaskBillable(_ task: WorkTask, state: BillableState) -> BillableFlipReport? {
+    package func setTaskBillable(_ task: WorkTask, state: BillableState) -> BillableFlipReport? {
         guard billing.taskState(task.ref) != state else { return nil }
         let becomesBillable = state == .billable
             || (state == .inherit && billing.projectBillable(projectKey(for: task)))
@@ -5362,7 +5362,7 @@ public final class AppController: ObservableObject {
     /// Effective billability of one journalled entry: its own override when
     /// marked, else its task's resolution — drives the Timeline's checkmarks
     /// and the slice editor's footer.
-    public func isSessionBillable(_ session: Session) -> Bool {
+    package func isSessionBillable(_ session: Session) -> Bool {
         let key = taskCache.first { $0.ref == session.task }
             .flatMap { projectKey(for: $0) }
         return billing.effectiveBillable(entryOverride: session.billableOverride,
@@ -5396,7 +5396,7 @@ public final class AppController: ObservableObject {
     /// entry IS the consent a flag flip's `since` stands in for). Undoable —
     /// the sync kick is deferred (see scheduleBillableSync) so an immediate
     /// ⌘Z has a real window to retract the mark before it posts.
-    public func setSessionBillable(_ session: Session, override: Bool?) async {
+    package func setSessionBillable(_ session: Session, override: Bool?) async {
         guard var row = try? journal.session(id: session.id),
               row.billableOverride != override else { return }
         let previous = row.billableOverride
@@ -5419,7 +5419,7 @@ public final class AppController: ObservableObject {
     /// prospective-only and would leave it stranded); the task flag handles
     /// future time. Returns the flip report when the flag actually changed.
     @discardableResult
-    public func markSessionAndTaskBillable(_ session: Session) async -> BillableFlipReport? {
+    package func markSessionAndTaskBillable(_ session: Session) async -> BillableFlipReport? {
         guard let task = taskCache.first(where: { $0.ref == session.task }) else { return nil }
         var report: BillableFlipReport?
         await undoGroup("mark \(task.subject) billable") {
@@ -5432,7 +5432,7 @@ public final class AppController: ObservableObject {
     /// Same widen gesture at project scope: entry mark + project flag,
     /// one ⌘Z step.
     @discardableResult
-    public func markSessionAndProjectBillable(_ session: Session) async -> BillableFlipReport? {
+    package func markSessionAndProjectBillable(_ session: Session) async -> BillableFlipReport? {
         guard let task = taskCache.first(where: { $0.ref == session.task }),
               let project = task.project else { return nil }
         var report: BillableFlipReport?
@@ -5516,8 +5516,8 @@ func installCrashTraps() {
 /// Diagnostic event log at a world-readable path so remote debugging over the
 /// scoped SSH user works (the agent cannot read Martin's home). Window titles
 /// appear in it; delete the file to clear, toggle by removing write access.
-public enum DebugLog {
-    public static let path = "/Users/Shared/andeye-debug.log"
+package enum DebugLog {
+    package static let path = "/Users/Shared/andeye-debug.log"
     private static let formatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
@@ -5537,7 +5537,7 @@ public enum DebugLog {
     /// megabytes a day — an unbounded /Users/Shared file is a slow leak).
     private static let maxBytes: off_t = 8 * 1024 * 1024
 
-    public static func write(_ message: String) {
+    package static func write(_ message: String) {
         rotateIfLarge()
         let line = "\(formatter.string(from: Date())) \(message)\n"
         let fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)

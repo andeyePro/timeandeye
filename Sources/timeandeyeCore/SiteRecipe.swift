@@ -25,27 +25,27 @@ import Foundation
 /// feeding rules and the learner). A recipe never parses task ids — the day
 /// a site's pages name backend tasks, that parsing belongs in that backend's
 /// recognizer. No "OP recipe" exists, ever.
-public struct SiteRecipe: Codable, Equatable, Sendable {
+package struct SiteRecipe: Codable, Equatable, Sendable {
     /// Stable id ("github") — keys rules, toggles and the ledger strip.
-    public let id: String
+    package let id: String
     /// Display name ("GitHub") — Evidence Card / ledger.
-    public let label: String
+    package let label: String
     /// Anchored host match: equal, or suffix at a dot boundary (the C20
     /// fastmail lesson — "github.com" must not match "notgithub.com").
-    public let hosts: [String]
+    package let hosts: [String]
     /// 0 = URL/title only (all of v1). 1 = adds DOM extractors (later).
-    public let tier: Int
+    package let tier: Int
     /// When extraction may run at all — the generalised `isMessageView`.
     /// Tier 0: a page-kind classifier (is the interesting entity open?).
     /// Tier 1 will ALSO make it the cached-DOM staleness gate.
-    public let viewGate: URLShape
+    package let viewGate: URLShape
     /// General → specific — the ordered field list IS the grain ladder.
-    public let fields: [Field]
+    package let fields: [Field]
     /// The field the post-pick grain footer defaults to (spec §6: "each
     /// recipe declares its default" — repo, document, organisation).
-    public let defaultField: String
+    package let defaultField: String
 
-    public init(id: String, label: String, hosts: [String], tier: Int,
+    package init(id: String, label: String, hosts: [String], tier: Int,
                 viewGate: URLShape, fields: [Field], defaultField: String) {
         self.id = id
         self.label = label
@@ -59,43 +59,43 @@ public struct SiteRecipe: Codable, Equatable, Sendable {
     /// Anchored suffix semantics: exact host, or a subdomain at a dot
     /// boundary. Never a plain `hasSuffix` — "github.com.evil.example" and
     /// "notgithub.com" must both fail.
-    public func matches(host: String) -> Bool {
+    package func matches(host: String) -> Bool {
         let h = host.lowercased()
         return hosts.contains { h == $0 || h.hasSuffix("." + $0) }
     }
 
     /// One extractable field. Everything here is data so a future pack can
     /// ship new fields without code.
-    public struct Field: Codable, Equatable, Sendable {
+    package struct Field: Codable, Equatable, Sendable {
         /// Rule/feature key and `SegmentKind.recipeField`'s association.
-        public let name: String
+        package let name: String
         /// Display name ("Repository").
-        public let label: String
-        public let source: Source
+        package let label: String
+        package let source: Source
         /// true = subject-like CONTENT, matched by case-insensitive
         /// substring (rule values are substrings) and never emitted as a
         /// learned feature; false = identity, matched by equality.
-        public let isContent: Bool
+        package let isContent: Bool
         /// Multi-value fields commit one rule per chosen value (the email
         /// multi-correspondent flow). No v1 recipe uses it; modelled so the
         /// Gmail correspondent field fits when it migrates (spec §3).
-        public let multi: Bool
+        package let multi: Bool
         /// When set, extraction ghosts unless the value (lowercased) is in
         /// this list — GitHub's `section` grain, Docs' `docType`.
-        public let allowed: [String]?
+        package let allowed: [String]?
         /// When set, extraction runs only when the URL PATH matches this
         /// regex — gates GitHub's item-title read to issue/PR pages so a
         /// repo-home title never mints a junk content value (the
         /// "Inbox (1)" staleness lesson applied to Tier 0's one stale-ish
         /// input, the window title — spec §9).
-        public let pathRegex: String?
+        package let pathRegex: String?
         /// When set, the identity chain DISPLAYS this other field's value
         /// while the rule keys on this field's own (Docs: the rule keys on
         /// the stable opaque doc id, the row shows the human title — the
         /// rule survives a rename).
-        public let displayVia: String?
+        package let displayVia: String?
 
-        public init(name: String, label: String, source: Source,
+        package init(name: String, label: String, source: Source,
                     isContent: Bool = false, multi: Bool = false,
                     allowed: [String]? = nil, pathRegex: String? = nil,
                     displayVia: String? = nil) {
@@ -112,7 +112,7 @@ public struct SiteRecipe: Codable, Equatable, Sendable {
 
     /// Where a field's value comes from. Tier 0 sources only read the URL
     /// and window title; `domSelector` is Tier 1 and extracts nothing in v1.
-    public enum Source: Codable, Equatable, Sendable {
+    package enum Source: Codable, Equatable, Sendable {
         /// URL path segment by index (0 = first after the host).
         case pathComponent(Int)
         /// The segment following the FIRST of these markers present
@@ -144,18 +144,18 @@ public struct SiteRecipe: Codable, Equatable, Sendable {
 /// A small declarative URL predicate (all conditions must hold) — the view
 /// gate stays data rather than a closure so a recipe remains serialisable
 /// and a future pack can ship new gates without code (spec §3).
-public struct URLShape: Codable, Equatable, Sendable {
-    public var minPathDepth: Int
+package struct URLShape: Codable, Equatable, Sendable {
+    package var minPathDepth: Int
     /// Reserved first path segments that are NOT the entity the recipe
     /// models (GitHub's /settings, /notifications, …). Lowercased.
-    public var firstSegmentDenylist: [String]
+    package var firstSegmentDenylist: [String]
     /// At least one of these markers must appear as a path component WITH a
     /// following component ("d" gates Docs to open documents).
-    public var pathMarkers: [String]
+    package var pathMarkers: [String]
     /// A path component with this prefix must exist (Xero's "!" shortcode).
-    public var pathPrefixMarker: String?
+    package var pathPrefixMarker: String?
 
-    public init(minPathDepth: Int = 0, firstSegmentDenylist: [String] = [],
+    package init(minPathDepth: Int = 0, firstSegmentDenylist: [String] = [],
                 pathMarkers: [String] = [], pathPrefixMarker: String? = nil) {
         self.minPathDepth = minPathDepth
         self.firstSegmentDenylist = firstSegmentDenylist
@@ -163,7 +163,7 @@ public struct URLShape: Codable, Equatable, Sendable {
         self.pathPrefixMarker = pathPrefixMarker
     }
 
-    public func admits(_ url: URL) -> Bool {
+    package func admits(_ url: URL) -> Bool {
         let path = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
         guard path.count >= minPathDepth else { return false }
         if let first = path.first, firstSegmentDenylist.contains(first.lowercased()) {
@@ -189,18 +189,18 @@ public struct URLShape: Codable, Equatable, Sendable {
 /// chains, learned features and the review footer all re-derive it from any
 /// signal (which is what lets old review rows gain recipe grains
 /// retroactively with no schema change).
-public struct SiteContext: Equatable, Sendable {
+package struct SiteContext: Equatable, Sendable {
     /// The matched recipe, or nil for the host-only degradation (the policy
     /// note's "one correction generalises the whole host" — learnable on
     /// EVERY non-mail URL page, no recipe needed).
-    public let recipe: SiteRecipe?
+    package let recipe: SiteRecipe?
     /// Lowercased URL host.
-    public let host: String
+    package let host: String
     /// Extracted field values by field name. Missing fields are simply
     /// absent (they render as ghost rows), never empty strings.
-    public let values: [String: String]
+    package let values: [String: String]
 
-    public init(recipe: SiteRecipe?, host: String, values: [String: String]) {
+    package init(recipe: SiteRecipe?, host: String, values: [String: String]) {
         self.recipe = recipe
         self.host = host
         self.values = values
@@ -209,18 +209,18 @@ public struct SiteContext: Equatable, Sendable {
     /// The grain ladder for matching, general → specific: the reserved
     /// `site` level below every recipe field, then the recipe's declared
     /// field order (spec §5).
-    public var ladder: [String] {
+    package var ladder: [String] {
         [SiteRule.siteField] + (recipe?.fields.map(\.name) ?? [])
     }
 }
 
-public enum SiteRecipes {
+package enum SiteRecipes {
     /// v1 ships built-ins only (spec §0 Q5) — the three sites where Martin's
     /// browser time actually goes and URL + title are insufficient today.
-    public static let builtIn: [SiteRecipe] = [github, gdocs, xero]
+    package static let builtIn: [SiteRecipe] = [github, gdocs, xero]
 
     /// The enabled recipe covering `host`, if any.
-    public static func recipe(forHost host: String,
+    package static func recipe(forHost host: String,
                               disabled: Set<String> = []) -> SiteRecipe? {
         builtIn.first { !disabled.contains($0.id) && $0.matches(host: host) }
     }
@@ -230,7 +230,7 @@ public enum SiteRecipes {
     /// domains are host-disjoint by construction, spec §3), when no enabled
     /// recipe's hosts match, or when the recipe's view gate refuses the
     /// page. Pure and synchronous — URL and title ARE the current signal.
-    public static func extract(_ signal: ActivitySignal,
+    package static func extract(_ signal: ActivitySignal,
                                disabled: Set<String> = []) -> SiteContext? {
         guard let (url, host) = nonMailURL(of: signal),
               let recipe = Self.recipe(forHost: host, disabled: disabled),
@@ -250,7 +250,7 @@ public enum SiteRecipes {
     /// matches (and its gate admits), else the host-only degradation — which
     /// is what makes the `site` grain learnable everywhere (spec §0 Q2).
     /// Still nil for mail hosts and URL-less signals.
-    public static func context(for signal: ActivitySignal,
+    package static func context(for signal: ActivitySignal,
                                disabled: Set<String> = []) -> SiteContext? {
         if let extracted = extract(signal, disabled: disabled) { return extracted }
         guard let (_, host) = nonMailURL(of: signal) else { return nil }
@@ -400,7 +400,7 @@ public enum SiteRecipes {
     /// initiated inspection of their own screen, like the Evidence Card) —
     /// but this text must never be routed to DebugLog (spec §9: log
     /// mechanics, never content).
-    public static func probeText(for signal: ActivitySignal,
+    package static func probeText(for signal: ActivitySignal,
                                  disabled: Set<String> = []) -> String {
         guard let raw = signal.tabURL, let url = URL(string: raw),
               let host = url.host?.lowercased() else {

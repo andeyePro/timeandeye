@@ -3,24 +3,24 @@ import Foundation
 /// One task's learned + pinned email rules, for the Rules Ledger (2026-07-03
 /// context-rules spec §5.3 — list + provenance + delete + bulk forget +
 /// export; search-by-last-5-matches is still later polish, §6).
-public struct RulesLedgerGroup: Equatable, Sendable {
-    public var target: TaskRef
-    public var rows: [EmailRule]
+package struct RulesLedgerGroup: Equatable, Sendable {
+    package var target: TaskRef
+    package var rows: [EmailRule]
 
-    public init(target: TaskRef, rows: [EmailRule]) {
+    package init(target: TaskRef, rows: [EmailRule]) {
         self.target = target
         self.rows = rows
     }
 }
 
-public enum RulesLedger {
+package enum RulesLedger {
     /// Group rules by target task, sorted pinned-first then by how often each
     /// has fired (most-active first) then newest-first — the rules most worth
     /// a glance sort to the top of their group. Groups sort by task name (via
     /// `nameOf`, case-insensitive) so the ledger reads like a contact list,
     /// not insertion order. `search` matches either the rule's value or its
     /// task's name.
-    public static func grouped(_ rules: [EmailRule], nameOf: (TaskRef) -> String,
+    package static func grouped(_ rules: [EmailRule], nameOf: (TaskRef) -> String,
                                search: String = "") -> [RulesLedgerGroup] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered = query.isEmpty ? rules : rules.filter {
@@ -42,7 +42,7 @@ public enum RulesLedger {
     /// grain, value, provenance and fire count on its own line. Pure and
     /// deterministic (mirrors `TimesheetExport`'s style) so it's checkable
     /// without a clipboard.
-    public static func exportText(_ rules: [EmailRule], nameOf: (TaskRef) -> String,
+    package static func exportText(_ rules: [EmailRule], nameOf: (TaskRef) -> String,
                                   calendar: Calendar = .current) -> String {
         let groups = grouped(rules, nameOf: nameOf)
         guard !groups.isEmpty else { return "No email rules learned or pinned yet.\n" }
@@ -85,22 +85,22 @@ public enum RulesLedger {
 /// (2026-07-09 site-recipes spec §6), duplicated in the small-function style
 /// the calendar spec chose rather than a premature shared generic; the
 /// three-domain protocol refactor is a dedicated later pass.
-public struct SiteRulesLedgerGroup: Equatable, Sendable {
-    public var target: TaskRef
-    public var rows: [SiteRule]
+package struct SiteRulesLedgerGroup: Equatable, Sendable {
+    package var target: TaskRef
+    package var rows: [SiteRule]
 
-    public init(target: TaskRef, rows: [SiteRule]) {
+    package init(target: TaskRef, rows: [SiteRule]) {
         self.target = target
         self.rows = rows
     }
 }
 
-public enum SiteRulesLedger {
+package enum SiteRulesLedger {
     /// Same grouping/sorting contract as `RulesLedger.grouped`: by task,
     /// pinned-first then most-fired then newest within a group; groups by
     /// task name. `search` matches the rule's value, its grain label
     /// ("GitHub repository") or its task's name.
-    public static func grouped(_ rules: [SiteRule], nameOf: (TaskRef) -> String,
+    package static func grouped(_ rules: [SiteRule], nameOf: (TaskRef) -> String,
                                search: String = "") -> [SiteRulesLedgerGroup] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered = query.isEmpty ? rules : rules.filter {
@@ -120,7 +120,7 @@ public enum SiteRulesLedger {
 
     /// Plain-text dump for the ledger's "Copy rules" on the Sites segment —
     /// `RulesLedger.exportText`'s exact shape, site-grain captions.
-    public static func exportText(_ rules: [SiteRule], nameOf: (TaskRef) -> String,
+    package static func exportText(_ rules: [SiteRule], nameOf: (TaskRef) -> String,
                                   calendar: Calendar = .current) -> String {
         let groups = grouped(rules, nameOf: nameOf)
         guard !groups.isEmpty else { return "No site rules learned or pinned yet.\n" }

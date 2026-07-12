@@ -19,7 +19,7 @@ import Foundation
 /// containing ':' (Proton's `recipients:sender`) are matched with substring
 /// operators (`[data-testid*=sender]`) instead. A checks-suite invariant
 /// enforces this for every recipe.
-public enum EmailSystem: String, CaseIterable, Sendable {
+package enum EmailSystem: String, CaseIterable, Sendable {
     case gmail
     case outlookWeb
     case proton
@@ -37,7 +37,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
 
     /// Identify the system from the active tab URL host (webmail) — native
     /// clients will route via bundle id in a later pass.
-    public static func detect(urlHost host: String?) -> EmailSystem {
+    package static func detect(urlHost host: String?) -> EmailSystem {
         guard let h = host?.lowercased() else { return .unknown }
         if hostMatches(h, "mail.google.com") { return .gmail }
         if hostMatches(h, "outlook.office.com") || hostMatches(h, "outlook.live.com")
@@ -50,7 +50,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
 
     /// Human-readable name ("Gmail" not "gmail") — the Evidence Card / identity
     /// chain's display form.
-    public var label: String {
+    package var label: String {
         switch self {
         case .gmail: return "Gmail"
         case .outlookWeb: return "Outlook"
@@ -67,7 +67,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
     /// (`email`/`data-hovercard-id`/`data-email`/`title`, then address-shaped
     /// text) — so a recipe only has to FIND the sender element, not name the
     /// attribute the address hides in.
-    public var senderSelector: String? {
+    package var senderSelector: String? {
         switch self {
         case .gmail:
             // Validated against the live DOM 2026-06-29; address in the
@@ -126,7 +126,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
     /// match nothing (BCC-only mail); validation only needs SOME party across
     /// sender + recipients, so a weak recipient selector doesn't sink a
     /// healthy sender read.
-    public var recipientSelector: String? {
+    package var recipientSelector: String? {
         switch self {
         case .gmail:
             return ".g2"   // validated live 2026-06-29
@@ -161,7 +161,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
         }
     }
 
-    public var hasRecipe: Bool { senderSelector != nil }
+    package var hasRecipe: Bool { senderSelector != nil }
 
     /// Whether the tab URL names an OPEN MESSAGE rather than a list/label/
     /// search surface. Correspondent capture must only run on message views:
@@ -175,7 +175,7 @@ public enum EmailSystem: String, CaseIterable, Sendable {
     /// a polluted one. `.unknown` returns true so a future recipe isn't
     /// silently gated before its classifier is written (it has no recipe, so
     /// the gate is never reached today).
-    public func isMessageView(urlString: String?) -> Bool {
+    package func isMessageView(urlString: String?) -> Bool {
         switch self {
         case .gmail:
             // Message URLs end the fragment with a long alphanumeric thread

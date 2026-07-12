@@ -14,15 +14,15 @@ public enum SliceOrigin: Int, Codable, Comparable, Sendable {
 /// One revision of a synced session: the record plus its merge metadata.
 /// `deleted` is a tombstone — deletes must travel between devices, so a
 /// deleted session keeps its row (and HLC) rather than vanishing.
-public struct SessionRevision: Equatable, Codable, Sendable, Identifiable {
-    public var session: Session
-    public var hlc: HLC
-    public var origin: SliceOrigin
-    public var deleted: Bool
+package struct SessionRevision: Equatable, Codable, Sendable, Identifiable {
+    package var session: Session
+    package var hlc: HLC
+    package var origin: SliceOrigin
+    package var deleted: Bool
 
-    public var id: UUID { session.id }
+    package var id: UUID { session.id }
 
-    public init(session: Session, hlc: HLC, origin: SliceOrigin = .auto,
+    package init(session: Session, hlc: HLC, origin: SliceOrigin = .auto,
                 deleted: Bool = false) {
         self.session = session
         self.hlc = hlc
@@ -34,7 +34,7 @@ public struct SessionRevision: Equatable, Codable, Sendable, Identifiable {
 /// Deterministic merge for the synced journal. Pure functions only: every
 /// device holding the same set of revisions computes the identical journal,
 /// regardless of the order the revisions arrived in.
-public enum SessionMerge {
+package enum SessionMerge {
 
     // MARK: - Record level (last-writer-wins by HLC)
 
@@ -45,7 +45,7 @@ public enum SessionMerge {
     /// local mutation re-stamps via tick(). Equal HLC therefore means equal
     /// content; the deleted-wins tiebreak is belt-and-braces so a violated
     /// invariant can still never diverge two replicas.
-    public static func merge(local: SessionRevision?, remote: SessionRevision?) -> SessionRevision? {
+    package static func merge(local: SessionRevision?, remote: SessionRevision?) -> SessionRevision? {
         switch (local, remote) {
         case (nil, nil): return nil
         case (let l?, nil): return l
@@ -58,7 +58,7 @@ public enum SessionMerge {
 
     /// Merge two whole replicas by record id (order-independent). Output
     /// order is total (start, then id) so replicas compare as arrays.
-    public static func merge(_ a: [SessionRevision], _ b: [SessionRevision]) -> [SessionRevision] {
+    package static func merge(_ a: [SessionRevision], _ b: [SessionRevision]) -> [SessionRevision] {
         var byID: [UUID: SessionRevision] = [:]
         for rev in a { byID[rev.id] = merge(local: byID[rev.id], remote: rev) }
         for rev in b { byID[rev.id] = merge(local: byID[rev.id], remote: rev) }
@@ -99,7 +99,7 @@ public enum SessionMerge {
     /// raw set. Persisting or pushing the derived trims would let two devices
     /// hold different content under one HLC — the one way LWW can diverge.
     /// The UI, aggregation and the backend pusher all read this view.
-    public static func resolveOverlaps(_ revisions: [SessionRevision]) -> [SessionRevision] {
+    package static func resolveOverlaps(_ revisions: [SessionRevision]) -> [SessionRevision] {
         resolve(revisions).view
     }
 
@@ -108,7 +108,7 @@ public enum SessionMerge {
     /// their parent, so the POSTING layer can bill one backend entry per
     /// stored session at its resolved size without ever keying ledger rows by
     /// derived fragment ids. A fully-covered session simply has no entry.
-    public static func resolvedContributions(
+    package static func resolvedContributions(
         _ revisions: [SessionRevision]) -> [UUID: (start: Date, seconds: TimeInterval)] {
         let (view, parentOf) = resolve(revisions)
         var out: [UUID: (start: Date, seconds: TimeInterval)] = [:]
@@ -182,7 +182,7 @@ public enum SessionMerge {
     /// UUID; the RFC 4122 version nibble is pinned to 8 (a "custom" UUID)
     /// so derived ids live in a different namespace from random v4 session
     /// ids and can never collide with one.
-    public static func fragmentID(parent: UUID, index: Int) -> UUID {
+    package static func fragmentID(parent: UUID, index: Int) -> UUID {
         var input = [UInt8]()
         withUnsafeBytes(of: parent.uuid) { input.append(contentsOf: $0) }
         input.append(contentsOf: Array("tail-\(index)".utf8))
@@ -211,12 +211,12 @@ public enum SessionMerge {
     /// `fragmentID` stamps in is a namespace a real session's random v4 id
     /// can never occupy. Lets a prune step tell rollups from raw slices
     /// without a stored flag.
-    public static func isDerivedID(_ id: UUID) -> Bool {
+    package static func isDerivedID(_ id: UUID) -> Bool {
         id.uuid.6 & 0xF0 == 0x80
     }
 
     /// The full pipeline: record-merge two replicas, then normalise overlaps.
-    public static func converge(_ a: [SessionRevision], _ b: [SessionRevision]) -> [SessionRevision] {
+    package static func converge(_ a: [SessionRevision], _ b: [SessionRevision]) -> [SessionRevision] {
         resolveOverlaps(merge(a, b))
     }
 }

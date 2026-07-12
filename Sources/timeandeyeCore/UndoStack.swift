@@ -4,8 +4,8 @@ import Foundation
 /// tasks, colours) — the pure stack + grouping semantics behind the app's
 /// global ⌘Z, extracted from AppController so it's checkable and sharable.
 /// Not thread-safe: owned and driven by the main-actor controller.
-public final class UndoStack {
-    public typealias Inverse = () async -> Void
+package final class UndoStack {
+    package typealias Inverse = () async -> Void
 
     private var stack: [(label: String, inverse: Inverse)] = []
     /// Non-nil while inside `group`: inverses accumulate here and the group
@@ -26,11 +26,11 @@ public final class UndoStack {
     /// of being swallowed under the open group's label.
     @TaskLocal private static var activeGroupToken: Int?
 
-    public init() {}
+    package init() {}
 
-    public var count: Int { stack.count }
+    package var count: Int { stack.count }
 
-    public func register(_ label: String, inverse: @escaping Inverse) {
+    package func register(_ label: String, inverse: @escaping Inverse) {
         if pendingGroupToken != nil, Self.activeGroupToken == pendingGroupToken {
             pendingGroup?.append(inverse)   // in-context: the group pushes one entry
         } else {
@@ -42,7 +42,7 @@ public final class UndoStack {
     /// drag that overwrites several records, or an overlap save that trims a
     /// neighbour and moves a slice, undoes in a single ⌘Z). Nestable — inner
     /// groups fold into the outermost. An empty group pushes nothing.
-    public func group(_ label: String, _ body: () async -> Void) async {
+    package func group(_ label: String, _ body: () async -> Void) async {
         let (token, outer) = beginGroup()
         await Self.$activeGroupToken.withValue(token) { await body() }
         endGroup(label, outer: outer)
@@ -57,7 +57,7 @@ public final class UndoStack {
     /// name, not a `group` overload: trailing-closure syntax drops argument
     /// labels, so an overload would silently re-route existing sync-bodied
     /// `await group { … }` callers here.
-    public func groupSync(_ label: String, _ body: () -> Void) {
+    package func groupSync(_ label: String, _ body: () -> Void) {
         let (token, outer) = beginGroup()
         Self.$activeGroupToken.withValue(token) { body() }
         endGroup(label, outer: outer)
@@ -97,7 +97,7 @@ public final class UndoStack {
 
     /// The most recent entry, removed. The caller runs the inverse (and owns
     /// the user-facing notification). nil when there is nothing to undo.
-    public func pop() -> (label: String, inverse: Inverse)? {
+    package func pop() -> (label: String, inverse: Inverse)? {
         stack.popLast()
     }
 }

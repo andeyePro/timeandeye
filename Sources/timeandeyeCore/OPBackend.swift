@@ -4,18 +4,18 @@ import Foundation
 /// nothing above the seam needs to know them: the startTime-422 fallback
 /// (instances can have start times disabled), page/PWA-title recognition, and
 /// the work-package URL scheme.
-public final class OPBackend: TaskBackend {
+package final class OPBackend: TaskBackend {
     /// The built-in OpenProject connection's STABLE registry/ledger id (see
     /// RegisteredBackend.id). One OP instance per app in v1, so a constant is
     /// exactly stable; per-connection minted ids arrive with the deferred
     /// duplicate-instance (TaskRef identity) work. The single-slot →
     /// posting-ledger migration maps every legacy `pushedToOP` row to this id,
     /// so it must never change.
-    public static let stableID = "openproject"
+    package static let stableID = "openproject"
 
     private let client: OPClient
     private let baseURL: URL
-    public var onDebug: (String) -> Void = { _ in }
+    package var onDebug: (String) -> Void = { _ in }
 
     /// OP's TimeEntry.startTime is an ISO 8601 date-time in UTC (verified
     /// against the API schema; "HH:mm" gets a 422). OP converts to the
@@ -24,38 +24,38 @@ public final class OPBackend: TaskBackend {
 
     /// Flips false on the first startTime 422 so one refusal stops further
     /// attempts for the process lifetime (mirrors the old SyncEngine flag).
-    public private(set) var startTimesSupported = true
+    package private(set) var startTimesSupported = true
 
-    public init(baseURL: URL, apiKey: String, transport: HTTPTransport) {
+    package init(baseURL: URL, apiKey: String, transport: HTTPTransport) {
         self.baseURL = baseURL
         self.client = OPClient(baseURL: baseURL, apiKey: apiKey, transport: transport)
     }
 
-    public var displayName: String { "OpenProject" }
-    public var supportsActivities: Bool { true }
-    public var supportsTaskComments: Bool { true }
+    package var displayName: String { "OpenProject" }
+    package var supportsActivities: Bool { true }
+    package var supportsTaskComments: Bool { true }
 
-    public func owns(_ ref: TaskRef) -> Bool {
+    package func owns(_ ref: TaskRef) -> Bool {
         if case .op = ref { return true }
         return false
     }
-    public var pageRecognizer: BackendPageRecognizer {
+    package var pageRecognizer: BackendPageRecognizer {
         OPPageRecognizer(instanceHost: baseURL.host ?? "")
     }
 
-    public func fetchTasks() async throws -> [WorkTask] {
+    package func fetchTasks() async throws -> [WorkTask] {
         try await client.fetchTasks()
     }
 
-    public func fetchMe() async throws -> String {
+    package func fetchMe() async throws -> String {
         try await client.fetchMe()
     }
 
-    public func fetchActivities() async throws -> [TimeActivity] {
+    package func fetchActivities() async throws -> [TimeActivity] {
         try await client.fetchActivities()
     }
 
-    public func taskURL(id: String) -> URL? {
+    package func taskURL(id: String) -> URL? {
         Int(id).map { baseURL.appendingPathComponent("work_packages/\($0)") }
     }
 
@@ -65,7 +65,7 @@ public final class OPBackend: TaskBackend {
     /// reporting module's CostQuery filter, unchanged since at least v12).
     /// OP has no per-time-entry page, so this is where "check the entries"
     /// lands.
-    public func taskTimeEntriesURL(id: String) -> URL? {
+    package func taskTimeEntriesURL(id: String) -> URL? {
         guard let n = Int(id),
               var comps = URLComponents(url: baseURL.appendingPathComponent("cost_reports"),
                                         resolvingAgainstBaseURL: false) else { return nil }
@@ -95,7 +95,7 @@ public final class OPBackend: TaskBackend {
         return n
     }
 
-    public func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
+    package func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
                                 activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
         let wpID = try opTaskID(taskID)
         do {
@@ -115,7 +115,7 @@ public final class OPBackend: TaskBackend {
         }
     }
 
-    public func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
+    package func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
                                 duration: TimeInterval, activityID: Int?,
                                 comment: String?) async throws {
         try await client.updateTimeEntry(
@@ -124,15 +124,15 @@ public final class OPBackend: TaskBackend {
             startTime: startTimesSupported ? Self.timeFormatter.string(from: start) : nil)
     }
 
-    public func updateEntryComment(id: RemoteEntryID, comment: String) async throws {
+    package func updateEntryComment(id: RemoteEntryID, comment: String) async throws {
         try await client.updateTimeEntryComment(id: opID(id), comment: comment)
     }
 
-    public func deleteTimeEntry(id: RemoteEntryID) async throws {
+    package func deleteTimeEntry(id: RemoteEntryID) async throws {
         try await client.deleteTimeEntry(id: opID(id))
     }
 
-    public func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {
+    package func listTimeEntries(from: Date, to: Date) async throws -> [RemoteTimeEntry] {
         try await client.listTimeEntries(from: from, to: to).map { e in
             RemoteTimeEntry(id: String(e.id), taskID: String(e.workPackageID),
                             start: e.start, durationSeconds: e.durationSeconds,
@@ -142,36 +142,36 @@ public final class OPBackend: TaskBackend {
         }
     }
 
-    public func addTaskComment(taskID: String, text: String) async throws {
+    package func addTaskComment(taskID: String, text: String) async throws {
         try await client.addWorkPackageComment(id: try opTaskID(taskID), text: text)
     }
 }
 
 /// OP task pages: `/work_packages/<id>` URLs on the instance host, "#<id>"
 /// in a PWA window title, and `/projects/` pages as project-scoped.
-public struct OPPageRecognizer: BackendPageRecognizer {
-    public let instanceHost: String
+package struct OPPageRecognizer: BackendPageRecognizer {
+    package let instanceHost: String
 
-    public init(instanceHost: String) {
+    package init(instanceHost: String) {
         self.instanceHost = instanceHost
     }
 
-    public func taskRef(inURL urlString: String) -> TaskRef? {
+    package func taskRef(inURL urlString: String) -> TaskRef? {
         OPURLParser.taskID(in: urlString, instanceHost: instanceHost).map(TaskRef.op)
     }
 
-    public func taskRef(inTitle title: String) -> TaskRef? {
+    package func taskRef(inTitle title: String) -> TaskRef? {
         OPURLParser.taskID(inTitle: title).map(TaskRef.op)
     }
 
-    public func isProjectPage(_ url: URL) -> Bool {
+    package func isProjectPage(_ url: URL) -> Bool {
         url.host == instanceHost && url.path.contains("/projects/")
     }
 
     /// The slug straight after /projects/ ("/projects/alpha-beta/work_packages"
     /// → "alpha-beta") — OP's project identifier, usually the kebab-cased
     /// title.
-    public func projectHint(in url: URL) -> String? {
+    package func projectHint(in url: URL) -> String? {
         guard url.host == instanceHost else { return nil }
         let parts = url.pathComponents
         guard let i = parts.firstIndex(of: "projects"), i + 1 < parts.count else { return nil }

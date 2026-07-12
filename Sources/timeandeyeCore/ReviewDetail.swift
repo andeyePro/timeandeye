@@ -9,7 +9,7 @@ import Foundation
 /// Which calendar day a moment falls on, relative to now — the drawer's
 /// rows carry dates ("Oldest" sorting makes no sense without them), and
 /// Today/Yesterday read faster than a numeric date where they apply.
-public enum RelativeDay: Equatable, Sendable {
+package enum RelativeDay: Equatable, Sendable {
     case today
     case yesterday
     /// Any other day — the UI shows the calendar date itself.
@@ -18,7 +18,7 @@ public enum RelativeDay: Equatable, Sendable {
     /// Classification is by CALENDAR day, not elapsed time: 23:50 last
     /// night is "Yesterday" even from 00:30, and 09:00 this morning is
     /// "Today" even fourteen hours later.
-    public static func of(_ date: Date, now: Date = Date(),
+    package static func of(_ date: Date, now: Date = Date(),
                           calendar: Calendar = .current) -> RelativeDay {
         if calendar.isDate(date, inSameDayAs: now) { return .today }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
@@ -37,26 +37,26 @@ public enum RelativeDay: Equatable, Sendable {
 /// distant tracked session because only sessions were considered).
 /// Sessions overlapping the slice itself are its own minutes under
 /// another name, so they are never offered as "before" or "after".
-public struct SliceNeighbours: Equatable, Sendable {
-    public struct Neighbour: Equatable, Sendable {
+package struct SliceNeighbours: Equatable, Sendable {
+    package struct Neighbour: Equatable, Sendable {
         /// The attributed session's task — nil when the neighbour is a
         /// pending review slice (nothing is decided about it yet).
-        public var task: TaskRef?
-        public var start: Date
-        public var end: Date
+        package var task: TaskRef?
+        package var start: Date
+        package var end: Date
         /// Seconds of untracked daylight between the slice's edge and this
         /// neighbour's nearest edge — 0 when they touch.
-        public var gap: TimeInterval
+        package var gap: TimeInterval
         /// The pending neighbour's surface ("Excel – Budget.xlsx") — what
         /// the drawer labels it by instead of a task name. nil for sessions.
-        public var pendingSurface: String?
+        package var pendingSurface: String?
 
         /// A neighbour that is itself still awaiting review. Display marks
         /// it distinctly, and `AdjacencyBoost` must never be fed one — a
         /// pending neighbour is evidence of nothing.
-        public var isPending: Bool { task == nil }
+        package var isPending: Bool { task == nil }
 
-        public init(task: TaskRef?, start: Date, end: Date, gap: TimeInterval,
+        package init(task: TaskRef?, start: Date, end: Date, gap: TimeInterval,
                     pendingSurface: String? = nil) {
             self.task = task
             self.start = start
@@ -67,18 +67,18 @@ public struct SliceNeighbours: Equatable, Sendable {
 
         /// "Immediately" before/after, within the tracker's own switch
         /// resolution — anything past the tolerance gets a named gap.
-        public var isContiguous: Bool { gap <= SliceNeighbours.contiguityTolerance }
+        package var isContiguous: Bool { gap <= SliceNeighbours.contiguityTolerance }
     }
 
-    public var before: Neighbour?
-    public var after: Neighbour?
+    package var before: Neighbour?
+    package var after: Neighbour?
 
     /// Under a minute between slice and neighbour still reads as
     /// contiguous — the tracker's own switch grace means genuinely
     /// back-to-back activity can journal a few seconds apart.
-    public static let contiguityTolerance: TimeInterval = 60
+    package static let contiguityTolerance: TimeInterval = 60
 
-    public init(before: Neighbour? = nil, after: Neighbour? = nil) {
+    package init(before: Neighbour? = nil, after: Neighbour? = nil) {
         self.before = before
         self.after = after
     }
@@ -93,7 +93,7 @@ public struct SliceNeighbours: Equatable, Sendable {
     /// use: an attributed neighbour is evidence a task continued across the
     /// slice; a pending neighbour (see the pending-aware overload below) is
     /// evidence of nothing and must never reach the boost.
-    public static func around(start: Date, end: Date, in sessions: [Session]) -> SliceNeighbours {
+    package static func around(start: Date, end: Date, in sessions: [Session]) -> SliceNeighbours {
         let beforeSession = sessions.filter { $0.end <= start }
             .max { ($0.end, $0.start) < ($1.end, $1.start) }
         let afterSession = sessions.filter { $0.start >= end }
@@ -117,7 +117,7 @@ public struct SliceNeighbours: Equatable, Sendable {
     /// pass `pending` without the slice's own row; segments overlapping the
     /// slice are excluded by the same edge filters sessions get, so even an
     /// un-filtered self never appears as its own neighbour.
-    public static func around(start: Date, end: Date, in sessions: [Session],
+    package static func around(start: Date, end: Date, in sessions: [Session],
                               pending: [ReviewSegment]) -> SliceNeighbours {
         let tracked = around(start: start, end: end, in: sessions)
         func surface(_ s: ReviewSegment) -> String {
@@ -150,7 +150,7 @@ public struct SliceNeighbours: Equatable, Sendable {
     /// own `around` filters are applied in memory. `pending` may include
     /// the slices themselves — the edge filters already exclude any
     /// overlapper, so a slice can never read as its own neighbour.
-    public static func batch(for segments: [ReviewSegment], sessions: [Session],
+    package static func batch(for segments: [ReviewSegment], sessions: [Session],
                              pending: [ReviewSegment])
         -> [UUID: (display: SliceNeighbours, adjacency: SliceNeighbours)] {
         var out: [UUID: (display: SliceNeighbours, adjacency: SliceNeighbours)] = [:]
@@ -171,15 +171,15 @@ public struct SliceNeighbours: Equatable, Sendable {
 /// this half is computed lazily and in batches (see AppController's
 /// `requestSliceDetail`) so opening structure — even Expand all over a big
 /// backlog — costs nothing per row at render time.
-public struct ReviewSliceDetail: Equatable, Sendable {
-    public var explanation: AttributionExplanation
+package struct ReviewSliceDetail: Equatable, Sendable {
+    package var explanation: AttributionExplanation
     /// Nearest neighbour each side for DISPLAY — sessions or other pending
     /// slices, whichever is nearer.
-    public var display: SliceNeighbours
+    package var display: SliceNeighbours
     /// Sessions-only neighbours — the only lookup `AdjacencyBoost` may see.
-    public var adjacency: SliceNeighbours
+    package var adjacency: SliceNeighbours
 
-    public init(explanation: AttributionExplanation, display: SliceNeighbours,
+    package init(explanation: AttributionExplanation, display: SliceNeighbours,
                 adjacency: SliceNeighbours) {
         self.explanation = explanation
         self.display = display
@@ -200,7 +200,7 @@ public struct ReviewSliceDetail: Equatable, Sendable {
 /// attributor's ranked path, so it DOES shape live certainty — what
 /// journals, queues and auto-pushes. Same constants for both; every
 /// applied boost is logged so corrections can fit them.
-public struct AdjacencyBoost: Equatable, Sendable {
+package struct AdjacencyBoost: Equatable, Sendable {
     // MARK: - Tuning constants
     // All in ONE place so a retune is a one-line edit. Every applied boost
     // is also logged (AppController.adjacencyScores → DebugLog) precisely so
@@ -210,35 +210,35 @@ public struct AdjacencyBoost: Equatable, Sendable {
 
     /// Same task tracked immediately on BOTH sides: close this fraction of
     /// the gap between the base certainty and the inferred ceiling.
-    public static let bothSidesGapClose = 0.60
+    package static let bothSidesGapClose = 0.60
     /// Same task tracked immediately on ONE side only: close this fraction.
     /// Kept at half of `bothSidesGapClose` so the two-sided boost decays
     /// CONTINUOUSLY into the one-sided value as one neighbour's gap grows
     /// (see `apply`); retuning it off that ratio introduces a small step at
     /// the handover, which is acceptable for a deliberate retune.
-    public static let oneSideGapClose = 0.30
+    package static let oneSideGapClose = 0.30
     /// Gaps up to this still count as "immediately" — full boost strength.
     /// Matches the tracker's own switch buffer: genuinely back-to-back
     /// activity can journal a few seconds apart.
-    public static let fullStrengthGap: TimeInterval = 30
+    package static let fullStrengthGap: TimeInterval = 30
     /// Strength decays linearly from full at `fullStrengthGap` to ZERO
     /// here — a neighbour a quarter of an hour away says nothing about
     /// what filled the slice.
-    public static let zeroStrengthGap: TimeInterval = 15 * 60
+    package static let zeroStrengthGap: TimeInterval = 15 * 60
 
     /// The certainty before adjacency was considered.
-    public var base: Double
+    package var base: Double
     /// The boosted certainty — never above the ceiling; equal to `base`
     /// when no adjacency applied.
-    public var certainty: Double
+    package var certainty: Double
     /// The human account of the adjacency contribution ("follows Project X
     /// (+18%)"), nil when no boost applied. Shown on hover and logged.
-    public var reasoning: String?
+    package var reasoning: String?
 
     /// The delta adjacency actually added (0 when none).
-    public var boost: Double { certainty - base }
+    package var boost: Double { certainty - base }
 
-    public init(base: Double, certainty: Double, reasoning: String? = nil) {
+    package init(base: Double, certainty: Double, reasoning: String? = nil) {
         self.base = base
         self.certainty = certainty
         self.reasoning = reasoning
@@ -248,7 +248,7 @@ public struct AdjacencyBoost: Equatable, Sendable {
     /// adjacent: 1 up to the switch buffer, linear to 0 at the far limit.
     /// A negative gap (defensive — `SliceNeighbours` never produces one)
     /// reads as touching.
-    public static func strength(gap: TimeInterval) -> Double {
+    package static func strength(gap: TimeInterval) -> Double {
         if gap <= fullStrengthGap { return 1 }
         if gap >= zeroStrengthGap { return 0 }
         return (zeroStrengthGap - gap) / (zeroStrengthGap - fullStrengthGap)
@@ -260,7 +260,7 @@ public struct AdjacencyBoost: Equatable, Sendable {
     /// not against tracking). The boost closes a fraction of the gap up to
     /// `ceiling` and never exceeds it — a pin's 1.0 passes through untouched
     /// because the remaining gap is already ≤ 0.
-    public static func apply(base: Double, candidate: Target, name: String,
+    package static func apply(base: Double, candidate: Target, name: String,
                              neighbours: SliceNeighbours,
                              ceiling: Double = Attributor.inferredCeiling) -> AdjacencyBoost {
         guard case .task(let ref) = candidate else {
@@ -324,7 +324,7 @@ public struct AdjacencyBoost: Equatable, Sendable {
     /// before-neighbour at `gap` seconds, so live and drawer boosts can
     /// never drift apart. Only the running task's own candidate is lifted;
     /// non-task targets (do-not-track) never boost.
-    public static func live(base: Double, candidate: Target, name: String,
+    package static func live(base: Double, candidate: Target, name: String,
                             running: Target, gap: TimeInterval,
                             ceiling: Double = Attributor.inferredCeiling) -> AdjacencyBoost {
         guard candidate == running, case .task(let ref) = running else {
@@ -342,7 +342,7 @@ public struct AdjacencyBoost: Equatable, Sendable {
     /// would let one strong slice oversell the whole selection. The
     /// aggregate reasoning says how many slices adjacency actually touched,
     /// quoting the strongest slice's own account.
-    public static func aggregate(_ perSlice: [AdjacencyBoost]) -> AdjacencyBoost {
+    package static func aggregate(_ perSlice: [AdjacencyBoost]) -> AdjacencyBoost {
         guard !perSlice.isEmpty else { return AdjacencyBoost(base: 0, certainty: 0) }
         if perSlice.count == 1 { return perSlice[0] }
         let n = Double(perSlice.count)
@@ -363,7 +363,7 @@ public struct AdjacencyBoost: Equatable, Sendable {
     /// comes from, what adjacency added, and the result. `sliceCount` > 1
     /// prefixes the mean so a stack's number is never mistaken for a
     /// single-slice read.
-    public static func hoverText(sourceWord: String, _ agg: AdjacencyBoost,
+    package static func hoverText(sourceWord: String, _ agg: AdjacencyBoost,
                                  sliceCount: Int) -> String {
         func pct(_ x: Double) -> String { "\(Int((x * 100).rounded()))%" }
         let prefix = sliceCount > 1 ? "mean of \(sliceCount) slices · " : ""
@@ -375,7 +375,7 @@ public struct AdjacencyBoost: Equatable, Sendable {
     /// certainty"): indices by descending certainty, original position
     /// breaking ties — a stable sort, so zero-signal tasks keep their
     /// familiar ranked pick-list order behind the scored ones.
-    public static func buttonOrder(certainties: [Double]) -> [Int] {
+    package static func buttonOrder(certainties: [Double]) -> [Int] {
         certainties.enumerated()
             .sorted { $0.element == $1.element ? $0.offset < $1.offset
                                                : $0.element > $1.element }

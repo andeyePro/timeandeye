@@ -1,7 +1,7 @@
 import Foundation
 
-public enum Andeye {
-    public static let version = "0.1.0"
+package enum Andeye {
+    package static let version = "0.1.0"
 }
 
 /// Identity of a task. `.op` = OpenProject work package; `.remote` = a task
@@ -174,7 +174,7 @@ public struct ActivitySignal: Equatable, Codable, Sendable {
 
 /// Everything the platform sensor layer can tell Core. Sensors emit these;
 /// Core tests emit them from scripts.
-public enum SensorEvent: Equatable, Sendable {
+package enum SensorEvent: Equatable, Sendable {
     case focus(ActivitySignal)
     /// A late-arriving correspondents/subject capture for the CURRENT open
     /// span (2026-07-03 diagnosis fix: capture must never block `poll()`, so
@@ -193,27 +193,27 @@ public enum SensorEvent: Equatable, Sendable {
 /// One app's window placement, captured for a task's "workspace" layout so it
 /// can be relaunched and re-arranged on demand. Platform-agnostic (Core) so it
 /// persists in settings; the macOS layer does the actual capture/restore.
-public struct WindowFrame: Codable, Equatable, Sendable {
-    public var bundleID: String
-    public var x: Double
-    public var y: Double
-    public var w: Double
-    public var h: Double
+package struct WindowFrame: Codable, Equatable, Sendable {
+    package var bundleID: String
+    package var x: Double
+    package var y: Double
+    package var w: Double
+    package var h: Double
     /// Best-effort window title at capture time, used to match a specific window
     /// back to its frame on restore when an app has several. Often empty (the
     /// title needs the screen-recording grant to read), so restore also falls
     /// back to capture order. Optional for back-compat with layouts saved before
     /// this field existed.
-    public var title: String
+    package var title: String
 
-    public init(bundleID: String, x: Double, y: Double, w: Double, h: Double,
+    package init(bundleID: String, x: Double, y: Double, w: Double, h: Double,
                 title: String = "") {
         self.bundleID = bundleID
         self.x = x; self.y = y; self.w = w; self.h = h
         self.title = title
     }
 
-    public init(from decoder: Decoder) throws {
+    package init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         bundleID = try c.decode(String.self, forKey: .bundleID)
         x = try c.decode(Double.self, forKey: .x)
@@ -226,16 +226,16 @@ public struct WindowFrame: Codable, Equatable, Sendable {
 
 /// The stable identity of a window/tab for priming and learning:
 /// URL host+path when there is a URL, else the window title.
-public struct Surface: Hashable, Codable, Sendable {
-    public var app: String
-    public var detail: String
+package struct Surface: Hashable, Codable, Sendable {
+    package var app: String
+    package var detail: String
 
-    public init(app: String, detail: String) {
+    package init(app: String, detail: String) {
         self.app = app
         self.detail = detail
     }
 
-    public init(signal: ActivitySignal) {
+    package init(signal: ActivitySignal) {
         self.app = signal.app
         if let raw = signal.tabURL, let url = URL(string: raw), let host = url.host {
             var path = url.path
@@ -464,7 +464,7 @@ public struct ReviewSegment: Equatable, Codable, Sendable, Identifiable {
     }
 }
 
-public extension Array where Element == ReviewSegment {
+package extension Array where Element == ReviewSegment {
     /// One synthetic signal per DISTINCT surface among the segments whose ids
     /// are in `ids`, in queue order — what a multi-select review assign
     /// teaches the attributor from. Every covered surface teaches (the old

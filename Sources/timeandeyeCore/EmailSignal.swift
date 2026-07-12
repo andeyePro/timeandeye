@@ -4,12 +4,12 @@ import Foundation
 /// pull candidate email addresses out of arbitrary text (e.g. the strings an AX
 /// walk of a webmail window yields). Pure, so it's unit-checkable; the platform
 /// AX traversal that feeds it lives in timeandeyeMac.
-public enum EmailSignal {
+package enum EmailSignal {
     /// A named address from a message header (sender or recipient).
-    public struct Party: Equatable, Sendable {
-        public let name: String
-        public let email: String
-        public init(name: String, email: String) {
+    package struct Party: Equatable, Sendable {
+        package let name: String
+        package let email: String
+        package init(name: String, email: String) {
             self.name = name
             self.email = email
         }
@@ -20,7 +20,7 @@ public enum EmailSignal {
     /// also drops anything in `ownAddresses` / `ownDomains`. First-seen order,
     /// de-duplicated by address. This is the strong "which task" signal — the
     /// other party (and especially their domain) usually identifies the work.
-    public static func counterparties(senders: [Party], recipients: [Party],
+    package static func counterparties(senders: [Party], recipients: [Party],
                                       ownAddresses: Set<String> = [],
                                       ownDomains: Set<String> = []) -> [Party] {
         let own = Set(ownAddresses.map { $0.lowercased() })
@@ -40,7 +40,7 @@ public enum EmailSignal {
 
     /// Best-effort subject from a webmail browser/tab title, which is typically
     /// "<subject> - <account> - <Provider> Mail" — take the part before " - ".
-    public static func subject(fromTitle title: String?) -> String? {
+    package static func subject(fromTitle title: String?) -> String? {
         guard let t = title?.trimmingCharacters(in: .whitespaces), !t.isEmpty else { return nil }
         if let r = t.range(of: " - ") { return String(t[..<r.lowerBound]) }
         return t
@@ -51,7 +51,7 @@ public enum EmailSignal {
     /// an "@" are addresses, the rest are domains; lowercased, trimmed,
     /// empties dropped. Forgiving on separators (commas, whitespace,
     /// newlines) — it's a hand-typed field.
-    public static func ownEntrySets(_ raw: String)
+    package static func ownEntrySets(_ raw: String)
         -> (addresses: Set<String>, domains: Set<String>) {
         var addresses = Set<String>()
         var domains = Set<String>()
@@ -63,7 +63,7 @@ public enum EmailSignal {
     }
 
     /// The domain part of an email address, lowercased (nil if malformed).
-    public static func domain(of email: String) -> String? {
+    package static func domain(of email: String) -> String? {
         guard let at = email.firstIndex(of: "@") else { return nil }
         let d = email[email.index(after: at)...]
         return d.isEmpty ? nil : String(d).lowercased()
@@ -92,14 +92,14 @@ public enum EmailSignal {
     /// shape test validate-on-use applies to each captured party (a redesigned
     /// selector often yields opaque tokens or display names where addresses
     /// used to be).
-    public static func isAddress(_ s: String) -> Bool {
+    package static func isAddress(_ s: String) -> Bool {
         let range = NSRange(location: 0, length: (s as NSString).length)
         return exactAddressRegex.firstMatch(in: s, range: range) != nil
     }
 
     /// Every distinct email address in `text`, in first-seen order
     /// (case-insensitively de-duplicated).
-    public static func addresses(in text: String) -> [String] {
+    package static func addresses(in text: String) -> [String] {
         let ns = text as NSString
         var seen = Set<String>()
         var out: [String] = []

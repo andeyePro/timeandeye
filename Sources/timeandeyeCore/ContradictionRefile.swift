@@ -22,61 +22,58 @@ import Foundation
 ///: update them automatically, leave them entirely alone,
 /// or queue every contradiction for his review. String-raw + lenient
 /// decode like every settings enum.
-public enum RefileMode: String, Codable, CaseIterable, Sendable {
+package enum RefileMode: String, Codable, CaseIterable, Sendable {
     case auto      // update past entries when certainty changes
     case off       // never touch (or mention) past entries
     case review    // everything becomes a suggestion to confirm
 }
 
-public enum ContradictionRefile {
+package enum ContradictionRefile {
 
-    public struct Finding: Equatable, Sendable {
-        public var sessionID: UUID
-        public var priorTask: TaskRef
-        public var priorCertainty: Double
-        public var priorProvenance: SessionProvenance?
-        public var newTask: TaskRef
-        public var score: Double
+    package struct Finding: Equatable, Sendable {
+        package var sessionID: UUID
+        package var priorTask: TaskRef
+        package var priorCertainty: Double
+        package var newTask: TaskRef
+        package var score: Double
 
-        public init(sessionID: UUID, priorTask: TaskRef, priorCertainty: Double,
-                    priorProvenance: SessionProvenance?, newTask: TaskRef,
-                    score: Double) {
+        package init(sessionID: UUID, priorTask: TaskRef, priorCertainty: Double,
+                    newTask: TaskRef, score: Double) {
             self.sessionID = sessionID
             self.priorTask = priorTask
             self.priorCertainty = priorCertainty
-            self.priorProvenance = priorProvenance
             self.newTask = newTask
             self.score = score
         }
 
         /// Stable dismissal key: a session dismissed for ONE suggested task
         /// may legitimately resurface if the rules later point somewhere else.
-        public var dismissalKey: String { "\(sessionID.uuidString)|\(newTask.storageKey)" }
+        package var dismissalKey: String { "\(sessionID.uuidString)|\(newTask.storageKey)" }
     }
 
-    public struct Plan: Equatable, Sendable {
+    package struct Plan: Equatable, Sendable {
         /// ≥ bar, provably engine-decided, unpushed: refile now.
-        public var refiles: [Finding]
+        package var refiles: [Finding]
         /// Already posted (invoice-lockable): flag only, whatever the score or
         /// provenance — money never moves off a bulk pass.
-        public var postedFlags: [Finding]
+        package var postedFlags: [Finding]
         /// Suggest-only: unpushed, and below the bar or provenance unknown.
-        public var suggestions: [Finding]
+        package var suggestions: [Finding]
 
-        public init(refiles: [Finding] = [], postedFlags: [Finding] = [],
+        package init(refiles: [Finding] = [], postedFlags: [Finding] = [],
                     suggestions: [Finding] = []) {
             self.refiles = refiles
             self.postedFlags = postedFlags
             self.suggestions = suggestions
         }
 
-        public var isEmpty: Bool {
+        package var isEmpty: Bool {
             refiles.isEmpty && postedFlags.isEmpty && suggestions.isEmpty
         }
     }
 
     /// Provenance raws that are the USER's word — never touched.
-    public static let userDecided: Set<String> = [
+    package static let userDecided: Set<String> = [
         "userAssigned", "aiApplied", "pin", "sessionSticky",
     ]
 
@@ -90,13 +87,13 @@ public enum ContradictionRefile {
     ///     reassignTimelineSessions run: the old entry belongs to the old
     ///     work package, so it is deleted and the time re-posts under the
     ///     new task. An unpushed slice has no backend footprint to clear.
-    public struct Applied: Equatable, Sendable {
-        public var newTask: TaskRef
-        public var certainty: Double
-        public var severBackendLinkage: Bool
-        public var entryToDelete: RemoteEntryID?
+    package struct Applied: Equatable, Sendable {
+        package var newTask: TaskRef
+        package var certainty: Double
+        package var severBackendLinkage: Bool
+        package var entryToDelete: RemoteEntryID?
 
-        public init(newTask: TaskRef, certainty: Double,
+        package init(newTask: TaskRef, certainty: Double,
                     severBackendLinkage: Bool, entryToDelete: RemoteEntryID?) {
             self.newTask = newTask
             self.certainty = certainty
@@ -105,7 +102,7 @@ public enum ContradictionRefile {
         }
     }
 
-    public static func apply(_ finding: Finding, to session: Session) -> Applied {
+    package static func apply(_ finding: Finding, to session: Session) -> Applied {
         Applied(newTask: finding.newTask,
                 certainty: finding.score,
                 severBackendLinkage: session.pushedToOP,
@@ -117,7 +114,7 @@ public enum ContradictionRefile {
     /// path — same numbers a human sees opening the card). `suggestFloor`
     /// keeps noise out of the suggestion row (the review threshold is the
     /// natural choice). `dismissed` holds `Finding.dismissalKey` strings.
-    public static func plan(sessions: [Session], bar: Double, suggestFloor: Double,
+    package static func plan(sessions: [Session], bar: Double, suggestFloor: Double,
                             dismissed: Set<String>,
                             score: (Session) -> (target: Target, score: Double)?) -> Plan {
         var plan = Plan()
@@ -130,7 +127,6 @@ public enum ContradictionRefile {
                   result.score >= suggestFloor else { continue }
             let finding = Finding(sessionID: session.id, priorTask: session.task,
                                   priorCertainty: session.certainty,
-                                  priorProvenance: session.provenance,
                                   newTask: newRef, score: result.score)
             if dismissed.contains(finding.dismissalKey) { continue }
             let provablyEngine = provenanceRaw != nil

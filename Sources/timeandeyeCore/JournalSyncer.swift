@@ -2,16 +2,16 @@ import Foundation
 
 /// Opaque incremental-pull cursor (CloudKit: the zone change token; the mock
 /// server: a sequence number). The syncer never inspects it.
-public struct SyncToken: Equatable, Codable, Sendable {
-    public var raw: Data
-    public init(raw: Data) { self.raw = raw }
+package struct SyncToken: Equatable, Codable, Sendable {
+    package var raw: Data
+    package init(raw: Data) { self.raw = raw }
 }
 
 /// The pipe to the shared truth (CloudKit private DB in production, an
 /// in-memory server in checks). Implementations move revisions verbatim —
 /// ALL merge intelligence stays in Core (SessionMerge/JournalSyncer), so the
 /// checks exercise the real logic.
-public protocol SyncTransport {
+package protocol SyncTransport {
     /// Upload local revisions. IMPORTANT contract note: the server is NOT
     /// assumed to order writes by HLC — CloudKit with `.allKeys` overwrites
     /// unconditionally, so a stale concurrent push CAN revert a newer server
@@ -28,7 +28,7 @@ public protocol SyncTransport {
 /// A replica's revision persistence: the raw synced truth (live + tombstones
 /// + dirty flags). SQLiteJournalStore adopts this when sync lands; the
 /// in-memory twin drives checks.
-public protocol RevisionStore: AnyObject {
+package protocol RevisionStore: AnyObject {
     func allRevisions() throws -> [SessionRevision]
     func revision(id: UUID) throws -> SessionRevision?
     func dirtyRevisionIDs() throws -> [UUID]
@@ -44,14 +44,14 @@ public protocol RevisionStore: AnyObject {
     var syncToken: SyncToken? { get set }
 }
 
-public final class InMemoryRevisionStore: RevisionStore {
+package final class InMemoryRevisionStore: RevisionStore {
     private var revisions: [UUID: SessionRevision] = [:]
     private var dirty: Set<UUID> = []
-    public var syncToken: SyncToken?
+    package var syncToken: SyncToken?
 
-    public init() {}
+    package init() {}
 
-    public func allRevisions() throws -> [SessionRevision] {
+    package func allRevisions() throws -> [SessionRevision] {
         revisions.values.sorted {
             $0.session.start != $1.session.start
                 ? $0.session.start < $1.session.start
@@ -59,23 +59,23 @@ public final class InMemoryRevisionStore: RevisionStore {
         }
     }
 
-    public func revision(id: UUID) throws -> SessionRevision? { revisions[id] }
+    package func revision(id: UUID) throws -> SessionRevision? { revisions[id] }
 
-    public func dirtyRevisionIDs() throws -> [UUID] {
+    package func dirtyRevisionIDs() throws -> [UUID] {
         dirty.sorted { $0.uuidString < $1.uuidString }
     }
 
-    public func saveLocal(_ revision: SessionRevision) throws {
+    package func saveLocal(_ revision: SessionRevision) throws {
         revisions[revision.id] = revision
         dirty.insert(revision.id)
     }
 
-    public func applyRemote(_ revision: SessionRevision) throws {
+    package func applyRemote(_ revision: SessionRevision) throws {
         revisions[revision.id] = revision
         dirty.remove(revision.id)   // the remote won; nothing of ours to push
     }
 
-    public func clearDirty(_ cleared: [SessionRevision]) throws {
+    package func clearDirty(_ cleared: [SessionRevision]) throws {
         for rev in cleared where revisions[rev.id]?.hlc == rev.hlc {
             dirty.remove(rev.id)
         }
@@ -85,13 +85,13 @@ public final class InMemoryRevisionStore: RevisionStore {
 /// One replica's sync driver: pull → merge → push, all through SessionMerge,
 /// so any two replicas that finish a cycle against the same server hold the
 /// identical raw set (and therefore derive the identical journal view).
-public final class JournalSyncer {
+package final class JournalSyncer {
     private let store: RevisionStore
     private let transport: SyncTransport
     private let clock: HLCClock
-    public var onDebug: (String) -> Void = { _ in }
+    package var onDebug: (String) -> Void = { _ in }
 
-    public init(store: RevisionStore, transport: SyncTransport, clock: HLCClock) {
+    package init(store: RevisionStore, transport: SyncTransport, clock: HLCClock) {
         self.store = store
         self.transport = transport
         self.clock = clock
@@ -100,11 +100,11 @@ public final class JournalSyncer {
     /// CloudKit caps a modify operation at ~400 records; pushing in bounded
     /// batches (with per-batch clearDirty) also means a mid-backlog failure
     /// leaves only the unpushed tail dirty. 200 leaves headroom.
-    public static let pushBatchSize = 200
+    package static let pushBatchSize = 200
 
     /// One full cycle. Pull first (so we never push something the server
     /// already obsoleted), then push what's still dirty after the merge.
-    public func sync() async throws {
+    package func sync() async throws {
         // 1. Pull remote changes and fold them in by record-level LWW.
         let (changes, token) = try await transport.pull(since: store.syncToken)
         var applied = 0

@@ -8,10 +8,10 @@ import Foundation
 /// silently return nothing (or junk), so the shape of the OUTPUT is the only
 /// detector we have. Pure, so redesign scenarios are checkable with no
 /// browser in the loop.
-public enum EmailRecipeValidation {
+package enum EmailRecipeValidation {
     /// Why a read was judged suspect — the health record keeps the latest one
     /// so diagnostics can say WHICH redesign symptom is presenting.
-    public enum Fault: String, Equatable, Sendable {
+    package enum Fault: String, Equatable, Sendable {
         /// Selectors matched nothing on a page we already classified as an
         /// OPEN MESSAGE (the capture gate ran first) — the classic redesign /
         /// renamed-class symptom (`.gD` disappearing).
@@ -27,7 +27,7 @@ public enum EmailRecipeValidation {
         case garbage
     }
 
-    public enum Verdict: Equatable, Sendable {
+    package enum Verdict: Equatable, Sendable {
         /// The read is trustworthy; enrich the signal with these counterparties.
         case healthy([EmailSignal.Party])
         /// Implausibly many counterparties for one message header. That can
@@ -53,7 +53,7 @@ public enum EmailRecipeValidation {
     /// One sender plus a CC list; even a large meeting thread rarely exceeds
     /// this. Beyond it the read is `flooded`: enrichment is capped here, but
     /// (unlike the suspect faults) health is untouched — see `Verdict.flooded`.
-    public static let maxPlausibleCounterparties = 12
+    package static let maxPlausibleCounterparties = 12
 
     /// Judge one recipe read. `senders`/`recipients` are the RAW parties the
     /// selectors yielded (pre self-filtering) — the raw set is what tells a
@@ -62,7 +62,7 @@ public enum EmailRecipeValidation {
     /// count of selector-MATCHED nodes that yielded no address-shaped value
     /// (the JS drops them from the party lists, so only this count can tell
     /// an attribute redesign apart from selectors matching nothing at all).
-    public static func validate(senders: [EmailSignal.Party],
+    package static func validate(senders: [EmailSignal.Party],
                                 recipients: [EmailSignal.Party],
                                 ownAddresses: Set<String> = [],
                                 ownDomains: Set<String> = [],
@@ -96,18 +96,18 @@ public enum EmailRecipeValidation {
 /// itself within one read after relaunch, and no per-system store exists to
 /// piggyback on (a new store file just for a streak counter isn't worth the
 /// surface).
-public struct EmailRecipeHealth: Equatable, Sendable {
+package struct EmailRecipeHealth: Equatable, Sendable {
     /// Three strikes: one suspect read can be a slow page load or a
     /// half-rendered message; three in a row with no healthy read between is
     /// a recipe that has actually gone bad.
-    public static let unhealthyThreshold = 3
+    package static let unhealthyThreshold = 3
 
-    public private(set) var consecutiveFailures = 0
-    public private(set) var lastFault: EmailRecipeValidation.Fault?
+    package private(set) var consecutiveFailures = 0
+    package private(set) var lastFault: EmailRecipeValidation.Fault?
 
-    public var isUnhealthy: Bool { consecutiveFailures >= Self.unhealthyThreshold }
+    package var isUnhealthy: Bool { consecutiveFailures >= Self.unhealthyThreshold }
 
-    public init() {}
+    package init() {}
 
     /// Fold one verdict in. `selfOnly` resets the streak just like `healthy`
     /// does — a recipe that cleanly read a self-thread demonstrably works.
@@ -117,7 +117,7 @@ public struct EmailRecipeHealth: Equatable, Sendable {
     /// middle: its parties parsed, so it must never strike toward a re-learn
     /// of selectors that plainly resolve — but its untrusted tail isn't
     /// proof of a sound recipe either, so it doesn't erase strikes.
-    public func recording(_ verdict: EmailRecipeValidation.Verdict) -> EmailRecipeHealth {
+    package func recording(_ verdict: EmailRecipeValidation.Verdict) -> EmailRecipeHealth {
         var next = self
         switch verdict {
         case .healthy, .selfOnly:

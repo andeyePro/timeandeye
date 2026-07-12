@@ -15,13 +15,13 @@ import Foundation
 ///
 /// All times are MONOTONIC (ProcessInfo.systemUptime domain), never Date():
 /// an NTP/clock jump must not stretch or kill the open grace.
-public struct FullscreenPose {
+package struct FullscreenPose {
     /// How long a freshly opened/reopened window holds the fullscreen pose
     /// unconditionally. Opening from the menu-bar popover REVEALS the menu
     /// bar, so the fullscreen-look heuristic reads false at exactly the
     /// open instant; by grace expiry the bar has re-hidden if the Space
     /// really is fullscreen.
-    public static let graceSeconds: TimeInterval = 4
+    package static let graceSeconds: TimeInterval = 4
     /// How long the screen must look non-fullscreen CONTINUOUSLY —
     /// measured in time, not samples — before a floating window settles to
     /// the desktop pose. Time-based so render/apply bursts cannot spend
@@ -29,22 +29,22 @@ public struct FullscreenPose {
     /// clock-glance over a real fullscreen app never evicts a window in
     /// use: the menu bar re-hides when the pointer leaves, resetting the
     /// run well before it completes.
-    public static let settleSeconds: TimeInterval = 5
+    package static let settleSeconds: TimeInterval = 5
 
-    public struct State: Equatable {
+    package struct State: Equatable {
         /// Uptime deadline of the open/reopen grace.
-        public var graceUntil: TimeInterval
+        package var graceUntil: TimeInterval
         /// Uptime at which the current continuous run of demotion-eligible
         /// non-fullscreen samples began; nil = no run in progress.
-        public var nonFullscreenSince: TimeInterval?
+        package var nonFullscreenSince: TimeInterval?
         /// Whether the window currently wears the fullscreen pose. This is
         /// the decision output as well as sticky input.
-        public var floating: Bool
+        package var floating: Bool
 
         /// A window always OPENS in the fullscreen pose (macOS decides the
         /// Space transition at show time, before any later sample could
         /// promote it) and only settles after the grace.
-        public init(openedAt now: TimeInterval) {
+        package init(openedAt now: TimeInterval) {
             graceUntil = now + FullscreenPose.graceSeconds
             nonFullscreenSince = nil
             floating = true
@@ -53,7 +53,7 @@ public struct FullscreenPose {
         /// A retained window re-shown (SwiftUI reopens the same NSWindow)
         /// restarts the grace, so a reopen never settles at normal level
         /// while the Space it landed on is still making up its mind.
-        public mutating func restartGrace(at now: TimeInterval) {
+        package mutating func restartGrace(at now: TimeInterval) {
             graceUntil = now + FullscreenPose.graceSeconds
             nonFullscreenSince = nil
         }
@@ -66,7 +66,7 @@ public struct FullscreenPose {
     /// is the System Settings auto-hide preference; `visible` is
     /// NSWindow.isVisible. Returns the new state; `.floating` on it is the
     /// pose to apply.
-    public static func decide(now: TimeInterval,
+    package static func decide(now: TimeInterval,
                               looksFullscreen: Bool,
                               popoverOpen: Bool,
                               menuBarAutoHides: Bool,

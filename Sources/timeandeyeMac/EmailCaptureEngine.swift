@@ -11,25 +11,25 @@ import timeandeyeCore
 /// moves on immediately; the result comes back later via `SensorEvent.
 /// focusEnrichment`, applied retroactively by `SessionTracker` if the surface
 /// is still current.
-public final class EmailCaptureEngine {
+package final class EmailCaptureEngine {
     /// The merged, self-filtered result a live capture hands back to the
     /// sensor loop — just what `SessionTracker.applyEnrichment` needs.
-    public struct Capture: Equatable, Sendable {
-        public let system: EmailSystem
-        public let correspondents: [String]
+    package struct Capture: Equatable, Sendable {
+        package let system: EmailSystem
+        package let correspondents: [String]
     }
 
     /// The fuller sender/recipient breakdown the diagnostics probe displays.
-    public struct FullCapture {
-        public let system: EmailSystem
-        public let senders: [EmailSignal.Party]
-        public let recipients: [EmailSignal.Party]
+    package struct FullCapture {
+        package let system: EmailSystem
+        package let senders: [EmailSignal.Party]
+        package let recipients: [EmailSignal.Party]
         /// Selector-MATCHED nodes whose value ladder produced nothing
         /// address-shaped (counted by the capture JS, which drops them from
         /// the party lines) — what lets validation call an attribute
         /// redesign `garbage` instead of misreporting it as `noParties`.
-        public let unparseable: Int
-        public let error: String?
+        package let unparseable: Int
+        package let error: String?
     }
 
     private let queue = DispatchQueue(label: "com.andeye.emailCapture", qos: .utility)
@@ -64,19 +64,19 @@ public final class EmailCaptureEngine {
     /// and recovery has no manual reset — a successful re-learn proves itself
     /// by producing healthy reads, which clear the streak. Set once before
     /// capture traffic starts (SensorHub's init); not mutated after.
-    public var onRecipeUnhealthy: ((EmailSystem, EmailRecipeHealth) -> Void)?
+    package var onRecipeUnhealthy: ((EmailSystem, EmailRecipeHealth) -> Void)?
 
-    public init(deadline: TimeInterval = 2.0) {
+    package init(deadline: TimeInterval = 2.0) {
         self.deadline = deadline
     }
 
     /// Snapshot for diagnostics (the email probe report). Empty until a
     /// recipe'd system has produced at least one validated read.
-    public func recipeHealth() -> [EmailSystem: EmailRecipeHealth] {
+    package func recipeHealth() -> [EmailSystem: EmailRecipeHealth] {
         gate.sync { health }
     }
 
-    public func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
+    package func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
         gate.sync {
             ownAddresses = addresses
             ownDomains = domains
@@ -90,7 +90,7 @@ public final class EmailCaptureEngine {
     /// queued — the rate limit the 2026-06-30 freeze needed. `completion`
     /// fires on this engine's background queue; callers must hop back to
     /// their own thread themselves (`SensorHub` hops to main).
-    public func capture(appName: String, completion: @escaping (Capture?) -> Void) {
+    package func capture(appName: String, completion: @escaping (Capture?) -> Void) {
         let claimed: Bool = gate.sync {
             if inFlight { return false }
             inFlight = true
@@ -150,7 +150,7 @@ public final class EmailCaptureEngine {
     /// engine (an explicit user click, not the hot path). Still off-main by
     /// construction of the caller (`Task.detached`), and still deadline-bounded
     /// so a stuck page can't hang the button forever.
-    public static func captureNow(appName: String, deadline: TimeInterval = 2.0) -> FullCapture? {
+    package static func captureNow(appName: String, deadline: TimeInterval = 2.0) -> FullCapture? {
         fullCapture(appName: appName, deadline: deadline)
     }
 
@@ -303,7 +303,7 @@ public final class EmailCaptureEngine {
     /// to capture (unsupported browser, no URL, a recipe-less email system, or
     /// a list/label/search surface — where the DOM still holds the LAST-open
     /// conversation and the selectors would report stale parties).
-    public static func captureTarget(bundleID: String?, tabURL: String?) -> String? {
+    package static func captureTarget(bundleID: String?, tabURL: String?) -> String? {
         guard let bundleID, let appName = chromeAppName(bundleID: bundleID),
               let urlStr = tabURL, let host = URL(string: urlStr)?.host else { return nil }
         let system = EmailSystem.detect(urlHost: host)

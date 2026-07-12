@@ -12,20 +12,20 @@ import Foundation
 ///   app:  ["Visual Studio Code", "timeandeye", "Attributor.swift"] (app + title parts)
 /// A pin stores the selected prefix; it matches any surface whose identity
 /// begins with that prefix.
-public struct PinScope: Hashable, Codable, Sendable {
-    public enum Kind: String, Codable, Sendable { case url, app }
-    public var kind: Kind
+package struct PinScope: Hashable, Codable, Sendable {
+    package enum Kind: String, Codable, Sendable { case url, app }
+    package var kind: Kind
     /// The selected prefix (length ≥ 1), broad→narrow.
-    public var prefix: [String]
+    package var prefix: [String]
 
-    public init(kind: Kind, prefix: [String]) {
+    package init(kind: Kind, prefix: [String]) {
         self.kind = kind
         self.prefix = prefix
     }
 
     /// The full broad→narrow identity of a signal, or nil if there's nothing
     /// to pin (no app at all). The first element is the root (host / app name).
-    public static func identity(of signal: ActivitySignal) -> (kind: Kind, segments: [String])? {
+    package static func identity(of signal: ActivitySignal) -> (kind: Kind, segments: [String])? {
         if let raw = signal.tabURL, let url = URL(string: raw), let host = url.host {
             let path = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
             return (.url, [host] + path)
@@ -42,7 +42,7 @@ public struct PinScope: Hashable, Codable, Sendable {
     ///    named Ghostty/terminal window or a doc title) — most users run several
     ///    windows of one app on different tasks, so the window is the useful
     ///    grain. Widen to app-only with ←. App-only when there is no title.
-    public static func defaultPrefixCount(kind: Kind, segments: [String]) -> Int {
+    package static func defaultPrefixCount(kind: Kind, segments: [String]) -> Int {
         switch kind {
         case .url: return min(2, segments.count)
         case .app: return min(2, segments.count)
@@ -58,7 +58,7 @@ public struct PinScope: Hashable, Codable, Sendable {
     ///    window-name pinned at position 1 slides to position 2 and a strict
     ///    positional prefix would silently stop matching. Presence-matching
     ///    keeps a window-name pin working as the leading title text changes.
-    public func matches(_ signal: ActivitySignal) -> Bool {
+    package func matches(_ signal: ActivitySignal) -> Bool {
         guard let id = Self.identity(of: signal), id.kind == kind,
               let root = id.segments.first, let pinnedRoot = prefix.first else { return false }
         // Case-insensitive segment comparison (reviewer B14): every PinOp is
@@ -81,7 +81,7 @@ public struct PinScope: Hashable, Codable, Sendable {
 
     /// Split a window title into identity parts on the separators apps use
     /// (en/em dash, pipe, slash, " - "), trimmed, empties dropped.
-    public static func titleSegments(_ title: String?) -> [String] {
+    package static func titleSegments(_ title: String?) -> [String] {
         guard let title, !title.isEmpty else { return [] }
         var parts = [title]
         for sep in [" — ", " – ", " | ", " - ", " / ", "/"] {
@@ -91,7 +91,7 @@ public struct PinScope: Hashable, Codable, Sendable {
     }
 
     /// Display separator between identity segments for each kind.
-    public static func separator(for kind: Kind) -> String {
+    package static func separator(for kind: Kind) -> String {
         kind == .url ? "/" : "  ▸  "
     }
 }

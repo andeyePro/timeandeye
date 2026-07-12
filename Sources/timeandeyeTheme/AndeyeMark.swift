@@ -9,37 +9,37 @@ import SwiftUI
 /// Stroke it — never fill: the mark is one continuous line. Use
 /// `AndeyeMark.strokeStyle(for:)` so the line weight scales with the
 /// rendered size exactly as the SVG intends.
-public struct AndeyeMark: Shape {
-    public var t: Double
-    public var wink: Double
+package struct AndeyeMark: Shape {
+    package var t: Double
+    package var wink: Double
     /// Which end the reveal grows from. `.tail` (the default) is the
     /// original draw-on; `.eye` shows the eye first and grows toward the &
     /// (the menu bar's certainty draw-in). Not animatable — a direction is
     /// a mode, not a pose.
-    public var revealFrom: AndeyeLogo.RevealFrom
+    package var revealFrom: AndeyeLogo.RevealFrom
 
-    public init(t: Double = 1, wink: Double = 0,
+    package init(t: Double = 1, wink: Double = 0,
                 from revealFrom: AndeyeLogo.RevealFrom = .tail) {
         self.t = t
         self.wink = wink
         self.revealFrom = revealFrom
     }
 
-    public var animatableData: AnimatablePair<Double, Double> {
+    package var animatableData: AnimatablePair<Double, Double> {
         get { AnimatablePair(t, wink) }
         set { t = newValue.first; wink = newValue.second }
     }
 
     /// The SVG stroke width for a mark rendered `width` points wide.
-    public static func strokeStyle(for width: CGFloat) -> StrokeStyle {
+    package static func strokeStyle(for width: CGFloat) -> StrokeStyle {
         StrokeStyle(lineWidth: width * AndeyeLogo.strokeWidth,
                     lineCap: .round, lineJoin: .round)
     }
 
     /// Height/width of the mark's box (the SVG's 235:365).
-    public static let aspect = AndeyeLogo.aspect
+    package static let aspect = AndeyeLogo.aspect
 
-    public func path(in rect: CGRect) -> Path {
+    package func path(in rect: CGRect) -> Path {
         let segs = AndeyeLogo.stroke(t: t, wink: wink, from: revealFrom)
         guard let first = segs.first else { return Path() }
         // Fit the unit-width, `aspect`-tall (y-up) box into rect, centred,
@@ -61,13 +61,13 @@ public struct AndeyeMark: Shape {
 
 /// Convenience view: the mark stroked in a colour, aspect-locked. For the
 /// hero/hello pose use `AndeyeTheme.Colours.brandAccent`.
-public struct AndeyeMarkView: View {
-    public var t: Double
-    public var wink: Double
-    public var revealFrom: AndeyeLogo.RevealFrom
-    public var colour: Color
+package struct AndeyeMarkView: View {
+    package var t: Double
+    package var wink: Double
+    package var revealFrom: AndeyeLogo.RevealFrom
+    package var colour: Color
 
-    public init(t: Double = 1, wink: Double = 0,
+    package init(t: Double = 1, wink: Double = 0,
                 from revealFrom: AndeyeLogo.RevealFrom = .tail,
                 colour: Color = AndeyeTheme.Colours.brandAccent) {
         self.t = t
@@ -76,7 +76,7 @@ public struct AndeyeMarkView: View {
         self.colour = colour
     }
 
-    public var body: some View {
+    package var body: some View {
         GeometryReader { proxy in
             AndeyeMark(t: t, wink: wink, from: revealFrom)
                 .stroke(colour, style: AndeyeMark.strokeStyle(

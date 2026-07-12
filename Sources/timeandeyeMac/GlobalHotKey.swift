@@ -14,7 +14,7 @@ import Carbon.HIToolbox
 /// inside the handler. The actual callback runs on the main actor — Carbon
 /// dispatches the handler on the main run loop already, but we hop explicitly
 /// so the `@MainActor`-isolated AppController state mutation is sound.
-public final class GlobalHotKey {
+package final class GlobalHotKey {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private let id: UInt32
@@ -26,7 +26,7 @@ public final class GlobalHotKey {
     ///   - signature: a 4-char OSType identifying the app's hotkeys.
     ///   - id: an app-unique id for this hotkey (matched in the handler).
     ///   - onFire: invoked on the main actor each time the chord is pressed.
-    public init?(keyCode: UInt32,
+    package init?(keyCode: UInt32,
                  modifiers: UInt32,
                  signature: OSType,
                  id: UInt32,

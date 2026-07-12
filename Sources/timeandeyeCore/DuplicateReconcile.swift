@@ -1,23 +1,23 @@
 import Foundation
 
 /// A time entry as it exists in OpenProject (read back for reconciliation).
-public struct OPTimeEntry: Equatable, Sendable, Identifiable {
-    public var id: Int
-    public var workPackageID: Int
-    public var start: Date
-    public var durationSeconds: TimeInterval
-    public var comment: String?
+package struct OPTimeEntry: Equatable, Sendable, Identifiable {
+    package var id: Int
+    package var workPackageID: Int
+    package var start: Date
+    package var durationSeconds: TimeInterval
+    package var comment: String?
     /// When OP recorded / last changed the entry — the key signal for telling an
     /// accidental duplicate from a deliberate second entry.
-    public var createdAt: Date?
-    public var updatedAt: Date?
-    public var activity: String?
+    package var createdAt: Date?
+    package var updatedAt: Date?
+    package var activity: String?
     /// Whether OP actually reported a per-entry start time. Some instances don't
     /// (the feature can be off), in which case `start` is just the day at
     /// midnight — the UI must not show a misleading "0:00", and grouping must not
     /// rely on the minute (it falls back to the journal count, below).
-    public var hasStart: Bool
-    public init(id: Int, workPackageID: Int, start: Date,
+    package var hasStart: Bool
+    package init(id: Int, workPackageID: Int, start: Date,
                 durationSeconds: TimeInterval, comment: String? = nil,
                 createdAt: Date? = nil, updatedAt: Date? = nil, activity: String? = nil,
                 hasStart: Bool = true) {
@@ -38,24 +38,24 @@ public struct OPTimeEntry: Equatable, Sendable, Identifiable {
 /// the survivor, and any journal slice that pointed at a deleted entry is
 /// re-pointed at the survivor. Applied ONE AT A TIME after the user confirms it.
 /// Backend-neutral since the RemoteTimeEntry generalisation: ids are Strings.
-public struct ReconcileAction: Equatable, Sendable, Identifiable {
-    public var taskID: String
-    public var start: Date
-    public var survivorID: RemoteEntryID
-    public var deleteIDs: [RemoteEntryID]
+package struct ReconcileAction: Equatable, Sendable, Identifiable {
+    package var taskID: String
+    package var start: Date
+    package var survivorID: RemoteEntryID
+    package var deleteIDs: [RemoteEntryID]
     /// Every entry in the duplicate group (survivor + to-delete), so the UI can
     /// expand and show exactly what differs before you confirm.
-    public var entries: [RemoteTimeEntry]
+    package var entries: [RemoteTimeEntry]
     /// The survivor's comment after folding in the deleted entries' comments, or
     /// nil when nothing needs to change on the survivor.
-    public var mergedComment: String?
+    package var mergedComment: String?
     /// Journal session ids that referenced a deleted entry and must be re-pointed
     /// to the survivor so future edits still PATCH the right backend entry.
-    public var repointSessionIDs: [UUID]
-    public var label: String
-    public var id: String { survivorID }
+    package var repointSessionIDs: [UUID]
+    package var label: String
+    package var id: String { survivorID }
 
-    public init(taskID: String, start: Date, survivorID: RemoteEntryID,
+    package init(taskID: String, start: Date, survivorID: RemoteEntryID,
                 deleteIDs: [RemoteEntryID], entries: [RemoteTimeEntry],
                 mergedComment: String?, repointSessionIDs: [UUID], label: String) {
         self.taskID = taskID
@@ -76,11 +76,11 @@ public struct ReconcileAction: Equatable, Sendable, Identifiable {
 /// survivor so nothing is irrecoverable, re-point the journal at the survivor,
 /// and — the safety rail — NEVER touch a group that has no matching journal
 /// slice (it could be a hand-entered OP entry).
-public enum DuplicateReconcile {
+package enum DuplicateReconcile {
     private static func minuteKey(_ d: Date) -> Int { Int((d.timeIntervalSince1970 / 60).rounded(.down)) }
     private static func durMin(_ s: TimeInterval) -> Int { Int((s / 60).rounded()) }
 
-    public static func plan(entries: [RemoteTimeEntry], sessions: [Session]) -> [ReconcileAction] {
+    package static func plan(entries: [RemoteTimeEntry], sessions: [Session]) -> [ReconcileAction] {
         // Key on task + start-minute + duration (never duration alone, never
         // start alone): two records at the same point in time for the same task
         // with the same length.
@@ -152,20 +152,20 @@ public enum DuplicateReconcile {
 /// verbatim from this snapshot and re-points each slice at its entry's
 /// FRESH backend-assigned id. Must be built BEFORE the apply mutates
 /// anything (the sessions still hold their old pointers).
-public struct ReconcileUndoPlan: Equatable, Sendable {
+package struct ReconcileUndoPlan: Equatable, Sendable {
     /// The deleted entries, whole (comment, start, length, activity) — undo
     /// re-creates each at the backend.
-    public var recreate: [RemoteTimeEntry]
-    public var survivorID: RemoteEntryID
+    package var recreate: [RemoteTimeEntry]
+    package var survivorID: RemoteEntryID
     /// Rewrite the survivor's comment back to this pre-merge text. nil when
     /// the apply never touched it; "" actively clears a survivor that had no
     /// comment before the fold.
-    public var restoreSurvivorComment: String?
+    package var restoreSurvivorComment: String?
     /// Session id → the deleted entry id it pointed at before the re-point,
     /// so each slice follows its OWN entry's re-created id back out.
-    public var priorEntryIDBySession: [UUID: RemoteEntryID]
+    package var priorEntryIDBySession: [UUID: RemoteEntryID]
 
-    public init(recreate: [RemoteTimeEntry], survivorID: RemoteEntryID,
+    package init(recreate: [RemoteTimeEntry], survivorID: RemoteEntryID,
                 restoreSurvivorComment: String?,
                 priorEntryIDBySession: [UUID: RemoteEntryID]) {
         self.recreate = recreate
@@ -175,7 +175,7 @@ public struct ReconcileUndoPlan: Equatable, Sendable {
     }
 }
 
-public extension DuplicateReconcile {
+package extension DuplicateReconcile {
     /// Snapshot `action`'s reversal. `sessions` are the CURRENT journal rows
     /// for `action.repointSessionIDs`, fetched before the apply re-points
     /// them — their `opTimeEntryID` still names the doomed entry.

@@ -363,9 +363,9 @@ public enum TimelineMath {
 /// per session independently. Pure / unit-checkable; the controller applies
 /// each action through the existing reassign/split+replace paths so pushed
 /// sessions, undo and teaching all go through the one already-checked route.
-public enum SpanAllocation {
+package enum SpanAllocation {
     /// One session's fate under the plan.
-    public enum Action: Equatable, Sendable {
+    package enum Action: Equatable, Sendable {
         /// Wholly inside the range: the ORIGINAL (untouched) session, still
         /// on its old task — the caller re-points it whole via the same
         /// `reassignTimelineSessions` path a manual reassign uses, which
@@ -385,7 +385,7 @@ public enum SpanAllocation {
     /// treatment here: that policy (quietly re-queue the OP push; never
     /// teach the attributor) lives in the controller's apply path, not in
     /// this planning step.
-    public static func plan(sessions: [Session], range: (start: Date, end: Date),
+    package static func plan(sessions: [Session], range: (start: Date, end: Date),
                            to target: TaskRef) -> [Action] {
         var out: [Action] = []
         for session in sessions {

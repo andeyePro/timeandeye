@@ -2,12 +2,12 @@ import Foundation
 
 /// One pending segment the retro pass auto-clears — its best-scored target
 /// met (or beat) the retro bar.
-public struct RetroClearance: Equatable, Sendable {
-    public var segmentID: UUID
-    public var target: Target
-    public var score: Double
+package struct RetroClearance: Equatable, Sendable {
+    package var segmentID: UUID
+    package var target: Target
+    package var score: Double
 
-    public init(segmentID: UUID, target: Target, score: Double) {
+    package init(segmentID: UUID, target: Target, score: Double) {
         self.segmentID = segmentID
         self.target = target
         self.score = score
@@ -18,14 +18,14 @@ public struct RetroClearance: Equatable, Sendable {
 /// cleared segment. Certainty only ever moves up (open question (d)/(e), the
 /// 2026-07-06 approvals-drawer spec: retro-clearing lifts the session too, so
 /// it becomes push-eligible through the normal sync path).
-public struct SessionLift: Equatable, Sendable {
-    public var sessionID: UUID
-    public var priorTask: TaskRef
-    public var priorCertainty: Double
-    public var newTask: TaskRef
-    public var newCertainty: Double
+package struct SessionLift: Equatable, Sendable {
+    package var sessionID: UUID
+    package var priorTask: TaskRef
+    package var priorCertainty: Double
+    package var newTask: TaskRef
+    package var newCertainty: Double
 
-    public init(sessionID: UUID, priorTask: TaskRef, priorCertainty: Double,
+    package init(sessionID: UUID, priorTask: TaskRef, priorCertainty: Double,
                 newTask: TaskRef, newCertainty: Double) {
         self.sessionID = sessionID
         self.priorTask = priorTask
@@ -35,11 +35,11 @@ public struct SessionLift: Equatable, Sendable {
     }
 }
 
-public struct RetroPlan: Equatable, Sendable {
-    public var clearances: [RetroClearance]
-    public var lifts: [SessionLift]
+package struct RetroPlan: Equatable, Sendable {
+    package var clearances: [RetroClearance]
+    package var lifts: [SessionLift]
 
-    public init(clearances: [RetroClearance] = [], lifts: [SessionLift] = []) {
+    package init(clearances: [RetroClearance] = [], lifts: [SessionLift] = []) {
         self.clearances = clearances
         self.lifts = lifts
     }
@@ -52,7 +52,7 @@ public struct RetroPlan: Equatable, Sendable {
 /// planning only: the caller (AppController) applies the plan through the
 /// journal; nothing here touches an Attributor or a store, so it needs no
 /// mocking to check.
-public enum RetroAcceptance {
+package enum RetroAcceptance {
     /// `score` is the caller's scoring closure — in production, the
     /// attributor's own `explain()`/rank path (reused, not reinvented), so a
     /// retro clearance can never disagree with what a human would see if they
@@ -67,7 +67,7 @@ public enum RetroAcceptance {
     /// without touching any session. Certainty is set to
     /// `max(current, score)` — never lowered. A session overlapping several
     /// cleared segments keeps the highest-scoring lift.
-    public static func plan(pending: [ReviewSegment], sessions: [Session], bar: Double,
+    package static func plan(pending: [ReviewSegment], sessions: [Session], bar: Double,
                             score: (ActivitySignal) -> (target: Target, score: Double)?) -> RetroPlan {
         var clearances: [RetroClearance] = []
         for segment in pending {
@@ -106,14 +106,14 @@ public enum RetroAcceptance {
 }
 
 /// One session the Unknown sweep re-points — its prior task, for undo.
-public struct UnknownRepoint: Equatable, Sendable {
-    public var sessionID: UUID
-    public var priorTask: TaskRef
+package struct UnknownRepoint: Equatable, Sendable {
+    package var sessionID: UUID
+    package var priorTask: TaskRef
     /// What decided the session before the sweep — restored on ⌘Z so the
     /// undo really is "as it stood" (in-memory only, like the repoint).
-    public var priorProvenance: SessionProvenance?
+    package var priorProvenance: SessionProvenance?
 
-    public init(sessionID: UUID, priorTask: TaskRef,
+    package init(sessionID: UUID, priorTask: TaskRef,
                 priorProvenance: SessionProvenance? = nil) {
         self.sessionID = sessionID
         self.priorTask = priorTask
@@ -129,12 +129,12 @@ public struct UnknownRepoint: Equatable, Sendable {
 /// know"), not a confidence gain, so it deliberately does NOT reuse
 /// `RetroAcceptance`'s lift-to-max-certainty shape. Pure: the caller
 /// (AppController) applies the repoint through the journal.
-public enum UnknownSweep {
+package enum UnknownSweep {
     /// A session qualifies when it overlaps ANY of the just-swept segments,
     /// hasn't posted yet, and is still below `bar` (mirrors the retro pass's
     /// own definition of "low-certainty" — `RetroAcceptance.plan`'s lift
     /// gate uses the same threshold).
-    public static func sessionsToRepoint(segments: [ReviewSegment], sessions: [Session],
+    package static func sessionsToRepoint(segments: [ReviewSegment], sessions: [Session],
                                          bar: Double) -> [UnknownRepoint] {
         sessions.filter { session in
             !session.pushedToOP && session.certainty < bar

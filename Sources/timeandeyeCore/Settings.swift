@@ -2,16 +2,16 @@ import Foundation
 
 /// A user-defined non-OpenProject task (leisure, life admin, ...): tracked,
 /// timelined and charted like any other task, never pushed to OP.
-public struct LocalTaskDef: Codable, Equatable, Sendable, Identifiable {
-    public var id: UUID
-    public var name: String
-    public var isLeisure: Bool
+package struct LocalTaskDef: Codable, Equatable, Sendable, Identifiable {
+    package var id: UUID
+    package var name: String
+    package var isLeisure: Bool
     /// Local "project" this task groups under in Time Spent (parity with OP's
     /// project → task hierarchy). Optional so older saved settings still decode;
     /// nil/empty is treated as "Personal".
-    public var project: String?
+    package var project: String?
 
-    public init(id: UUID = UUID(), name: String, isLeisure: Bool = false,
+    package init(id: UUID = UUID(), name: String, isLeisure: Bool = false,
                 project: String? = nil) {
         self.id = id
         self.name = name
@@ -20,7 +20,7 @@ public struct LocalTaskDef: Codable, Equatable, Sendable, Identifiable {
     }
 
     /// The project name to display/group under (never empty).
-    public var projectName: String {
+    package var projectName: String {
         let p = (project ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return p.isEmpty ? "Personal" : p
     }
@@ -38,11 +38,11 @@ public extension TaskRef {
 }
 
 /// The two time views (one combined entry point opens one of them).
-public enum TimeView: String, Codable, Sendable, CaseIterable { case timeline, spent }
+package enum TimeView: String, Codable, Sendable, CaseIterable { case timeline, spent }
 
 /// What the combined Time entry point opens: always the timeline, always the
 /// pie, or whichever was viewed last.
-public enum TimeViewOpenMode: String, Codable, Sendable, CaseIterable {
+package enum TimeViewOpenMode: String, Codable, Sendable, CaseIterable {
     case timeline, lastViewed, spent
 }
 
@@ -51,80 +51,80 @@ public enum TimeViewOpenMode: String, Codable, Sendable, CaseIterable {
 public struct AndeyeSettings: Codable, Equatable, Sendable {
     public var opBaseURL: String
     /// Sessions at/above this certainty auto-push to OP. > 1.0 means never.
-    public var certaintyAutoPushThreshold: Double
-    public var colourLow: String      // hex; certainty 0 end of the gradient
-    public var colourHigh: String     // hex; certainty 1 end
-    public var showPercent: Bool
-    public var defaultActivityID: Int?
-    public var activityOverrides: [TaskRef: Int]
-    public var autoComment: Bool
+    package var certaintyAutoPushThreshold: Double
+    package var colourLow: String      // hex; certainty 0 end of the gradient
+    package var colourHigh: String     // hex; certainty 1 end
+    package var showPercent: Bool
+    package var defaultActivityID: Int?
+    package var activityOverrides: [TaskRef: Int]
+    package var autoComment: Bool
     /// Attach the manual note to the tracked-time entry (the time-entry comment).
-    public var commentToTrackedTime: Bool
+    package var commentToTrackedTime: Bool
     /// Also post the manual note to the task's activity feed, where it is far
     /// easier to find than buried on a single time entry.
-    public var commentToTask: Bool
-    public var trackLeisureLocally: Bool
-    public var statusOrder: [String]
-    public var primeDwellSeconds: Double
-    public var minSegmentSeconds: Double
+    package var commentToTask: Bool
+    package var trackLeisureLocally: Bool
+    package var statusOrder: [String]
+    package var primeDwellSeconds: Double
+    package var minSegmentSeconds: Double
     /// A visit only enters the Review queue once its slice is at least this
     /// many seconds long. Below it the time is still tracked and journalled —
     /// it just never asks for a decision: a sub-grace visit never becomes a
     /// tracked switch, so its identity is never worth one, however often it
     /// repeats (see `[ReviewSegment].meetingReviewFloor`). 0 = show all.
-    public var reviewFloorSeconds: Double
+    package var reviewFloorSeconds: Double
     /// How the Review queue's stacks are ordered (newest/oldest by last
     /// activity, longest/shortest by total time) — persisted so a
     /// backlog-clearing sort survives reopening the drawer.
-    public var reviewSortOrder: ReviewSortOrder
-    public var switchGraceSeconds: Double
-    public var sleepGraceSeconds: Double
+    package var reviewSortOrder: ReviewSortOrder
+    package var switchGraceSeconds: Double
+    package var sleepGraceSeconds: Double
     /// How long after an idle stop the one-tap "count the gap as <task>" offer
     /// stays available (the gap defaults to a break if untouched).
-    public var idleBackfillWindowSeconds: Double
+    package var idleBackfillWindowSeconds: Double
     /// Show the prominent "worked on X while away?" popover button at all.
     /// Off by default — the offer is opt-in, not a surprise prompt.
-    public var offerIdleBackfill: Bool
+    package var offerIdleBackfill: Bool
     /// First N characters of the tracked task name shown in the menu bar; 0 = off.
-    public var menuTaskChars: Int
+    package var menuTaskChars: Int
     /// Menu-bar draw-in: the mark's stroke proportion mirrors
     /// the live attribution certainty, revealed eye-first — just the eye
     /// when unsure, the whole &I when certain. Off = the full mark always.
-    public var menuDrawInCertainty: Bool
+    package var menuDrawInCertainty: Bool
     /// Calm menu bar: the status item renders template-mono,
     /// tinted by macOS like its own items; colour signalling is suppressed
     /// while on.
-    public var menuMonochrome: Bool
-    public var systemNotifications: Bool
+    package var menuMonochrome: Bool
+    package var systemNotifications: Bool
     /// While presenting (mic live or a display mirrored), floating banners
     /// that would name a task or contact are suppressed — a toast naming a
     /// client on a shared screen is a privacy leak. Content-free banners
     /// still show.
-    public var quietWhilePresenting: Bool
+    package var quietWhilePresenting: Bool
     /// The popover's default mode when tracking: true = "Reassign" (relabel the
     /// running session), false = "Switch to" (start a fresh session). Clicking
     /// the running task title flips to the other mode for that open.
-    public var popoverDefaultsToChangeMode: Bool
+    package var popoverDefaultsToChangeMode: Bool
     /// Which time view the combined entry point opens (timeline / last / pie).
-    public var timeViewOpenMode: TimeViewOpenMode
+    package var timeViewOpenMode: TimeViewOpenMode
     /// The last time view opened — persisted so "last viewed" survives a restart.
-    public var lastViewedTimeView: TimeView
+    package var lastViewedTimeView: TimeView
     /// Lock the Mac when "I'm leaving my desk" is activated.
-    public var lockOnLeave: Bool
+    package var lockOnLeave: Bool
     /// Diagnostics mode (Settings ▸ Diagnostics): shows developer
     /// affordances the everyday UI hides — e.g. the evidence card's copy
     /// button. Off by default: the less clutter the pleasanter the app
     /// (Martin, 2026-07-11).
-    public var diagnosticsMode: Bool
+    package var diagnosticsMode: Bool
     /// Dismissed mis-filed-slice suggestions (ContradictionRefile
     /// dismissal keys) — "dismiss for good" survives relaunch.
-    public var refileDismissals: [String]
+    package var refileDismissals: [String]
     /// What happens when later evidence contradicts past entries
     /// (Martin's, 2026-07-11): update them, leave them, or queue
     /// everything for his review.
-    public var refileMode: RefileMode
+    package var refileMode: RefileMode
     /// Non-OP tasks (leisure etc.), fully tracked locally.
-    public var localTasks: [LocalTaskDef]
+    package var localTasks: [LocalTaskDef]
     /// User colour overrides per task (TaskRef.storageKey -> hex).
     public var taskColours: [String: String]
     /// User colour overrides per project (stable project key -> hex) — the
@@ -133,74 +133,74 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     /// untouched underneath, so "reset to automatic" always has the exact
     /// pre-override colour to fall back to and the repair pass can never
     /// move a user's pick.
-    public var projectColours: [String: String]
+    package var projectColours: [String: String]
     /// The email→task specificity ladder (general → specific); the most specific
     /// matching rule wins. User-reorderable.
-    public var emailMatchOrder: [EmailMatchLevel]
+    package var emailMatchOrder: [EmailMatchLevel]
     /// The pasted licence key (a signed token, not a secret — safe in the
     /// settings file). nil/invalid = Community tier, fully functional.
-    public var licenseKey: String?
+    package var licenseKey: String?
     /// Multi-device journal sync (CloudKit). Default OFF: until enabled the
     /// store behaves exactly pre-sync. Flipping on stamps the backlog and
     /// starts the replica cycle (needs the CloudKit-entitled build).
-    public var journalSyncEnabled: Bool
+    package var journalSyncEnabled: Bool
     /// Currency symbol shown wherever billable totals render. nil/empty =
     /// the locale's own symbol (CurrencyDefault.symbol()); ONE override
     /// field, no settings sprawl.
-    public var currencySymbolOverride: String?
+    package var currencySymbolOverride: String?
     /// The user's OWN email addresses and domains, comma/space separated
     /// ("martin@example.com, andeye.com") — capture never reports these as
     /// counterparties. Webmail's "me" heuristic only covers the logged-in
     /// account; alternate own addresses showed up as correspondents without
     /// this (seen live 2026-07-09). ONE raw text field, parsed by
     /// `EmailSignal.ownEntrySets`.
-    public var ownEmailEntries: String
+    package var ownEmailEntries: String
     /// Finance backends auto-post only sessions younger than this many days
     /// (F15): after a long-idle reconnect (lapsed licence, dead Xero grant,
     /// a long holiday) months of billable backlog must NOT flood the books
     /// unasked — older sessions stay visibly pending until deliberately
     /// released. 0 = no gate.
-    public var financeAutoPostWindowDays: Double
+    package var financeAutoPostWindowDays: Double
     /// iCloud quota stewardship (b): Settings ▸ Maintenance's age-consolidation
     /// prune collapses slices older than this many years into per-day
     /// per-task rollups, on request — never automatic.
-    public var journalConsolidateAfterYears: Double
+    package var journalConsolidateAfterYears: Double
     /// iCloud quota stewardship (c): the hard-cap prune's ceiling in MB —
     /// STRONGLY DISCOURAGED, deletes oldest raw slices until the synced
     /// journal is back under it. nil = no ceiling configured (the default).
-    public var journalHardCapMB: Double?
+    package var journalHardCapMB: Double?
     /// Calendar signal (2026-07-09 spec): read-only EventKit capture, off
     /// until the user explicitly turns it on (that flip is what triggers the
     /// one-time permission prompt — see `AppController.enableCalendarSignal`).
-    public var calendarSignalEnabled: Bool
+    package var calendarSignalEnabled: Bool
     /// Pre-meeting alert: the menu-bar mark pulses quietly through the
     /// lead-up to each calendar event (Martin's 2026-07-09 alert design).
     /// On by default — inert until `calendarSignalEnabled` is.
-    public var calendarPreMeetingAlertEnabled: Bool
+    package var calendarPreMeetingAlertEnabled: Bool
     /// How many minutes before an event's start the pre-meeting pulse
     /// begins (`CalendarAlerts.leadMinuteChoices`; default 5).
-    public var calendarPreMeetingLeadMinutes: Int
+    package var calendarPreMeetingLeadMinutes: Int
     /// Meeting-start alert: one strong, unmissable menu-bar flash the
     /// moment an event begins. On by default — inert until
     /// `calendarSignalEnabled` is.
-    public var calendarStartAlertEnabled: Bool
+    package var calendarStartAlertEnabled: Bool
     /// Calendar names to ignore entirely (birthday/subscription calendars
     /// are already excluded by type, unconditionally — this is the user's
     /// own opt-out on top of that).
-    public var calendarExcludedNames: [String]
+    package var calendarExcludedNames: [String]
     /// How many days back the Review queue's calendar hint (spec §7) looks
     /// for an overlapping past event.
     /// The calendar→task specificity ladder (general → specific), the
     /// calendar-side mirror of `emailMatchOrder`.
-    public var calendarMatchOrder: [CalendarMatchLevel]
+    package var calendarMatchOrder: [CalendarMatchLevel]
     /// Site-recipe ids the user has turned OFF in the rules ledger's recipe
     /// strip (2026-07-09 site-recipes spec §0 Q4: recipes ship enabled — a
     /// URL/title recipe reads nothing the sensors don't already capture, so
     /// the toggle is legibility, not new collection). A disabled recipe
     /// extracts nothing; its rules go dormant (kept, listed greyed).
-    public var siteRecipesDisabled: [String]
+    package var siteRecipesDisabled: [String]
 
-    public init(opBaseURL: String,
+    package init(opBaseURL: String,
                 certaintyAutoPushThreshold: Double = 0.8,
                 colourLow: String = "#FF3B30",
                 colourHigh: String = "#34C759",
@@ -382,7 +382,7 @@ public struct AndeyeSettings: Codable, Equatable, Sendable {
     }
 }
 
-public extension AndeyeSettings {
+package extension AndeyeSettings {
     /// The symbol billable totals render with: the one override field when
     /// set, else the locale default.
     var effectiveCurrencySymbol: String {
@@ -403,10 +403,10 @@ private extension KeyedDecodingContainer {
 }
 
 /// Tiny atomic JSON persistence for any Codable (settings, LearningStore, ...).
-public final class JSONFileStore<Value: Codable> {
+package final class JSONFileStore<Value: Codable> {
     private let url: URL
 
-    public init(url: URL) {
+    package init(url: URL) {
         self.url = url
     }
 
@@ -416,7 +416,7 @@ public final class JSONFileStore<Value: Codable> {
     /// `.corrupt` (so nothing is silently lost) and fall back to the last-good
     /// `.bak`. A genuinely-absent file returns nil (first run). This stops a
     /// single bad read from leading the caller to default-then-overwrite.
-    public func load() throws -> Value? {
+    package func load() throws -> Value? {
         do {
             if let value = try decodeFile(url) { return value }
         } catch {
@@ -435,7 +435,7 @@ public final class JSONFileStore<Value: Codable> {
         return try JSONDecoder().decode(Value.self, from: Data(contentsOf: u))
     }
 
-    public func save(_ value: Value) throws {
+    package func save(_ value: Value) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(value)

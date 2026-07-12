@@ -15,28 +15,28 @@ import Foundation
 /// controller owns one instance for the app run (viewed marks survive
 /// closing and reopening the window; a relaunch starts a fresh walk — the
 /// simple honest option: nothing is journalled about mere attention).
-public struct ReviewWalk: Equatable, Sendable {
+package struct ReviewWalk: Equatable, Sendable {
     /// Arrow vocabulary: on a chronological day strip, left is earlier.
-    public enum Direction: Sendable {
+    package enum Direction: Sendable {
         case left
         case right
     }
 
     /// The pending slice ids, earliest first — set by `update` on every
     /// queue reload, never mutated elsewhere.
-    public private(set) var order: [UUID] = []
+    package private(set) var order: [UUID] = []
     /// Every slice the user has visited and that is STILL pending — what
     /// one confirm click covers. Slices acted on meanwhile (assigned,
     /// refiled, cleared, retro-accepted) are handled, not merely viewed,
     /// so `update` drops them.
-    public private(set) var viewed: Set<UUID> = []
+    package private(set) var viewed: Set<UUID> = []
     /// Where the walk is — highlighted in the drawer; nil before the first
     /// step/click and after the queue empties around it.
-    public private(set) var current: UUID?
+    package private(set) var current: UUID?
 
-    public init() {}
+    package init() {}
 
-    public var viewedCount: Int { viewed.count }
+    package var viewedCount: Int { viewed.count }
 
     /// The queue changed (assign, refile, clear, retro pass, reload):
     /// handled slices leave `viewed`, and a cursor whose slice was handled
@@ -44,7 +44,7 @@ public struct ReviewWalk: Equatable, Sendable {
     /// walk on" keeps moving through the day — else leftward, else nil.
     /// Relocation is mechanical, NOT a view: the user hasn't looked at the
     /// slice the cursor lands on, so it is never marked viewed here.
-    public mutating func update(order newOrder: [UUID]) {
+    package mutating func update(order newOrder: [UUID]) {
         let survivors = Set(newOrder)
         viewed.formIntersection(survivors)
         if let cur = current, !survivors.contains(cur) {
@@ -63,7 +63,7 @@ public struct ReviewWalk: Equatable, Sendable {
     /// walking right-to-left is first-class, not a reverse gear. At either
     /// end the cursor stays put (the day has edges; no wrap). Landing IS a
     /// visit: the slice joins the viewed set.
-    public mutating func step(_ direction: Direction) {
+    package mutating func step(_ direction: Direction) {
         guard !order.isEmpty else { return }
         let landed: UUID
         if let cur = current, let i = order.firstIndex(of: cur) {
@@ -91,7 +91,7 @@ public struct ReviewWalk: Equatable, Sendable {
     /// unmarks it: `viewed` only ever shrinks via `update`, when a slice
     /// stops being pending. Ids not in the current order are ignored — a
     /// stale click can't mark a phantom viewed.
-    public mutating func visit(_ id: UUID) {
+    package mutating func visit(_ id: UUID) {
         guard order.contains(id) else { return }
         current = id
         viewed.insert(id)
@@ -103,17 +103,17 @@ public struct ReviewWalk: Equatable, Sendable {
 /// saw in each slice's detail — as the user's word. Pure planning only (the
 /// shape `RetroAcceptance` set): the caller applies the plan through the
 /// journal and its own assign path, grouped into one undo step.
-public enum ReviewConfirm {
+package enum ReviewConfirm {
     /// One target's share of the confirm: its slices (queue order) and the
     /// overlapping sessions to stamp as user-decided (prior state captured
     /// for the undo closure — `RetroDigest.PriorSessionState` is exactly
     /// that payload already).
-    public struct Assignment: Equatable, Sendable {
-        public var target: Target
-        public var segmentIDs: [UUID]
-        public var sessionStamps: [RetroDigest.PriorSessionState]
+    package struct Assignment: Equatable, Sendable {
+        package var target: Target
+        package var segmentIDs: [UUID]
+        package var sessionStamps: [RetroDigest.PriorSessionState]
 
-        public init(target: Target, segmentIDs: [UUID],
+        package init(target: Target, segmentIDs: [UUID],
                     sessionStamps: [RetroDigest.PriorSessionState] = []) {
             self.target = target
             self.segmentIDs = segmentIDs
@@ -121,20 +121,20 @@ public enum ReviewConfirm {
         }
     }
 
-    public struct Plan: Equatable, Sendable {
+    package struct Plan: Equatable, Sendable {
         /// Per-target batches, targets in first-seen queue order.
-        public var assignments: [Assignment]
+        package var assignments: [Assignment]
         /// Viewed slices the scorer has NO answer for (nothing matched yet):
         /// there is no word to give, so they stay queued untouched — confirm
         /// never invents a target.
-        public var unresolved: [UUID]
+        package var unresolved: [UUID]
 
-        public init(assignments: [Assignment] = [], unresolved: [UUID] = []) {
+        package init(assignments: [Assignment] = [], unresolved: [UUID] = []) {
             self.assignments = assignments
             self.unresolved = unresolved
         }
 
-        public var confirmedCount: Int {
+        package var confirmedCount: Int {
             assignments.reduce(0) { $0 + $1.segmentIDs.count }
         }
     }
@@ -144,7 +144,7 @@ public enum ReviewConfirm {
     /// contradiction pass (`ContradictionRefile.userDecided`) never refiles
     /// or nags it, and the retro lift's below-bar gate never touches it
     /// again; the detail names the gesture for the Evidence Card.
-    public static let stampProvenance = SessionProvenance(
+    package static let stampProvenance = SessionProvenance(
         sourceRaw: "userAssigned", detail: "confirmed in review")
 
     /// Plan a confirm of `viewed` against the CURRENT queue. Only ids still
@@ -160,7 +160,7 @@ public enum ReviewConfirm {
     /// session is claimed at most once (first confirmed slice in queue
     /// order wins); `.doNotTrack` reads clear the slice but stamp nothing
     /// (there is no task a session could carry).
-    public static func plan(viewed: Set<UUID>, pending: [ReviewSegment],
+    package static func plan(viewed: Set<UUID>, pending: [ReviewSegment],
                             sessions: [Session], bar: Double,
                             score: (ActivitySignal) -> (target: Target, score: Double)?) -> Plan {
         var targetOrder: [Target] = []

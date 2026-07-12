@@ -5,8 +5,8 @@ import timeandeyeCore
 /// SQLite-backed JournalStore using the system sqlite3 C API directly —
 /// no third-party dependency. Rows store the Codable models as JSON columns
 /// beside the queryable fields, so schema churn stays cheap pre-1.0.
-public final class SQLiteJournalStore: JournalStore {
-    public enum StoreError: Error {
+package final class SQLiteJournalStore: JournalStore {
+    package enum StoreError: Error {
         case open(String)
         case exec(String)
         case encode
@@ -17,10 +17,10 @@ public final class SQLiteJournalStore: JournalStore {
     private let decoder = JSONDecoder()
     /// Sync switch: non-nil = every session mutation is stamped (HLC + dirty)
     /// and deletes become tombstones. nil = pre-sync behaviour, byte-for-byte.
-    public var clock: HLCClock?
+    package var clock: HLCClock?
     /// Rows that must NEVER sync (the live crash-checkpoint row): mutations
     /// aren't stamped, deletes stay hard deletes, revisions() skips them.
-    public var syncExcludedIDs: Set<UUID> = []
+    package var syncExcludedIDs: Set<UUID> = []
     // Serialises ALL access to the one sqlite3 connection. Without this, an
     // async OP push (SyncEngine isn't @MainActor, so it resumes off-main after
     // its network await) and the main-actor journal reads hit the connection
@@ -31,7 +31,7 @@ public final class SQLiteJournalStore: JournalStore {
         return try body()
     }
 
-    public init(path: String) throws {
+    package init(path: String) throws {
         if sqlite3_open(path, &db) != SQLITE_OK {
             throw StoreError.open(String(cString: sqlite3_errmsg(db)))
         }
@@ -178,7 +178,7 @@ public final class SQLiteJournalStore: JournalStore {
 
     // MARK: - Sessions
 
-    public func save(_ session: Session) throws {
+    package func save(_ session: Session) throws {
         // One critical section: meta read + row write must not interleave.
         try locked {
             let existing = try revisionRow(id: session.id)
@@ -276,7 +276,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out.first
     }
 
-    public func allSessions() throws -> [Session] {
+    package func allSessions() throws -> [Session] {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE deleted = 0 ORDER BY start") { stmt in
             out.append(try self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)))
@@ -284,7 +284,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func session(id: UUID) throws -> Session? {
+    package func session(id: UUID) throws -> Session? {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE id = ? AND deleted = 0",
                   bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
@@ -293,7 +293,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out.first
     }
 
-    public func sessionCount() throws -> Int {
+    package func sessionCount() throws -> Int {
         var count = 0
         try query("SELECT COUNT(*) FROM sessions WHERE deleted = 0") { stmt in
             count = Int(sqlite3_column_int64(stmt, 0))
@@ -301,7 +301,7 @@ public final class SQLiteJournalStore: JournalStore {
         return count
     }
 
-    public func pushedCount() throws -> Int {
+    package func pushedCount() throws -> Int {
         var count = 0
         try query("SELECT COUNT(*) FROM sessions WHERE pushed = 1 AND deleted = 0") { stmt in
             count = Int(sqlite3_column_int64(stmt, 0))
@@ -312,7 +312,7 @@ public final class SQLiteJournalStore: JournalStore {
     /// (a) iCloud quota stewardship: SQL SUM(LENGTH(json)) instead of the
     /// default's full decode — same "aggregate, never the whole table" rule
     /// as sessionCount/pushedCount above.
-    public func journalFootprint() throws -> (syncedBytes: Int, localDetailBytes: Int) {
+    package func journalFootprint() throws -> (syncedBytes: Int, localDetailBytes: Int) {
         var synced = 0
         try query("SELECT COALESCE(SUM(LENGTH(json)), 0) FROM sessions WHERE deleted = 0") { stmt in
             synced = Int(sqlite3_column_int64(stmt, 0))
@@ -324,7 +324,7 @@ public final class SQLiteJournalStore: JournalStore {
         return (synced, detail)
     }
 
-    public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
+    package func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE pushed = 0 AND is_op = 1 AND deleted = 0 AND certainty >= ? ORDER BY start",
                   bind: { sqlite3_bind_double($0, 1, threshold) }) { stmt in
@@ -333,7 +333,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
+    package func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
         // One critical section for the whole read-modify-write: the lock is
         // recursive, so the inner query/save re-acquisitions are free. Without
         // this, a main-actor update() can interleave between our read and our
@@ -380,7 +380,7 @@ public final class SQLiteJournalStore: JournalStore {
     private static let postingColumns =
         "session_id, backend_id, state, entry_id, last_error, attempts, updated, posted_start, posted_duration, session_stamp, locked_invoice_ref"
 
-    public func postingRecords(session: UUID) throws -> [PostingRecord] {
+    package func postingRecords(session: UUID) throws -> [PostingRecord] {
         var out: [PostingRecord] = []
         try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE session_id = ? ORDER BY backend_id",
                   bind: { sqlite3_bind_text($0, 1, session.uuidString, -1, Self.transient) }) { stmt in
@@ -389,7 +389,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
+    package func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
         var out: [PostingRecord] = []
         try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE state = ? AND backend_id = ? ORDER BY session_id",
                   bind: {
@@ -401,7 +401,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
+    package func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
         var out: [PostingRecord] = []
         try query("SELECT \(Self.postingColumns) FROM posting_ledger WHERE session_id = ? AND backend_id = ?",
                   bind: {
@@ -413,7 +413,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out.first
     }
 
-    public func setPostingRecord(_ record: PostingRecord) throws {
+    package func setPostingRecord(_ record: PostingRecord) throws {
         try locked {
             var stmt: OpaquePointer?
             let sql = """
@@ -473,7 +473,7 @@ public final class SQLiteJournalStore: JournalStore {
     /// e.g. a raced sync pass writing `.inflight` — can slip between the state
     /// check and the set. Closes the requarantine double-post race.
     @discardableResult
-    public func setPostingRecord(_ record: PostingRecord,
+    package func setPostingRecord(_ record: PostingRecord,
                                  unlessState unless: Set<PostingState>) throws -> Bool {
         try locked {
             if let current = try postingRecord(session: record.sessionID, backendID: record.backendID),
@@ -483,7 +483,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
+    package func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
         var out: Set<String> = []
         try query("SELECT invoice_ref FROM unlocked_invoices WHERE backend_id = ?",
                   bind: { sqlite3_bind_text($0, 1, backendID, -1, Self.transient) }) { stmt in
@@ -492,7 +492,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+    package func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
         try locked {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(
@@ -509,7 +509,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+    package func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
         try locked {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(
@@ -526,7 +526,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func clearPostingRecord(session: UUID, backendID: String) throws {
+    package func clearPostingRecord(session: UUID, backendID: String) throws {
         try locked {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(
@@ -543,7 +543,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func sessions(needingPostTo backendID: String,
+    package func sessions(needingPostTo backendID: String,
                          atOrAbove threshold: Double) throws -> [Session] {
         // FAIL-CLOSED eligibility: the ONLY retryable stored state is
         // 'failed' — any other row (posted/skipped/stuck/inflight AND any
@@ -573,7 +573,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func migrateSingleSlotPostings(to backendID: String,
+    package func migrateSingleSlotPostings(to backendID: String,
                                           excluding: Set<UUID>) throws -> Int {
         try locked {
             // Tombstoned rows are included: a resurrected (synced-back) slice
@@ -604,7 +604,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
+    package func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
         // GROUP BY the JSON task key in SQL so durable recency never decodes
         // the whole table (it used to, once a minute, growing with history).
         var out: [TaskRef: Date] = [:]
@@ -620,7 +620,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func sessions(from: Date, to: Date) throws -> [Session] {
+    package func sessions(from: Date, to: Date) throws -> [Session] {
         var out: [Session] = []
         // Bounds BOTH sides in SQL (was: start < to, then a Swift end > from
         // filter that still decoded every row before `to`).
@@ -670,7 +670,7 @@ public final class SQLiteJournalStore: JournalStore {
     /// isn't loaded, so a boundary-crossing parent may split differently in
     /// a different window) — in-window SECONDS are exact; never key anything
     /// on fragment ids from a windowed query (the ledger folds to parents).
-    public func resolvedSessions(from: Date, to: Date) throws -> [Session] {
+    package func resolvedSessions(from: Date, to: Date) throws -> [Session] {
         guard clock != nil else { return try sessions(from: from, to: to) }
         let resolved = SessionMerge.resolveOverlaps(try revisions(from: from, to: to))
             .filter { !$0.deleted }
@@ -688,14 +688,14 @@ public final class SQLiteJournalStore: JournalStore {
 
     /// The record's current revision stamp; nil while unstamped (sync off /
     /// excluded rows) so the verify sweep stays inert exactly as before sync.
-    public func sessionStamp(_ id: UUID) throws -> String? {
+    package func sessionStamp(_ id: UUID) throws -> String? {
         guard let row = try revisionRow(id: id), !row.hlc.deviceID.isEmpty else { return nil }
         return row.hlc.description
     }
 
     /// Sync ON: this session's surviving (start, seconds) after overlap
     /// resolution — nil when fully covered. Sync OFF: the stored span.
-    public func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)? {
+    package func resolvedContribution(sessionID: UUID) throws -> (start: Date, seconds: TimeInterval)? {
         guard let s = try session(id: sessionID) else { return nil }
         guard clock != nil,
               let row = try revisionRow(id: sessionID), !row.hlc.deviceID.isEmpty else {
@@ -717,11 +717,11 @@ public final class SQLiteJournalStore: JournalStore {
         for session in stale { try save(session) }   // save() now writes `end`
     }
 
-    public func update(_ session: Session) throws {
+    package func update(_ session: Session) throws {
         try save(session)   // INSERT OR REPLACE keyed by id
     }
 
-    public func deleteSession(_ id: UUID) throws {
+    package func deleteSession(_ id: UUID) throws {
         try locked {
             // Sync on: the delete must travel, so the row becomes a tombstone
             // (stamped + dirty). Sync off / excluded rows: hard delete as ever.
@@ -744,7 +744,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
+    package func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
         try locked {
             guard let row = try revisionRow(id: id), row.origin < origin else { return }
             // Origin drives cross-device overlap authority, so a change must
@@ -759,7 +759,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func save(_ span: FocusSpan) throws {
+    package func save(_ span: FocusSpan) throws {
         try locked {
             guard let json = try? encoder.encode(span),
                   let jsonString = String(data: json, encoding: .utf8) else {
@@ -780,7 +780,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func spans(from: Date, to: Date) throws -> [FocusSpan] {
+    package func spans(from: Date, to: Date) throws -> [FocusSpan] {
         var out: [FocusSpan] = []
         try query("SELECT json FROM spans WHERE end > ? AND start < ? ORDER BY start",
                   bind: {
@@ -794,7 +794,7 @@ public final class SQLiteJournalStore: JournalStore {
 
     // MARK: - Review segments
 
-    public func save(_ segment: ReviewSegment) throws {
+    package func save(_ segment: ReviewSegment) throws {
         try locked {
             guard let json = try? encoder.encode(segment),
                   let jsonString = String(data: json, encoding: .utf8) else {
@@ -816,7 +816,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func pendingReview() throws -> [ReviewSegment] {
+    package func pendingReview() throws -> [ReviewSegment] {
         var out: [ReviewSegment] = []
         try query("SELECT json FROM review_segments WHERE assigned = 0 ORDER BY start") { stmt in
             out.append(try self.decoder.decode(ReviewSegment.self, from: self.jsonColumn(stmt, 0)))
@@ -824,7 +824,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func assign(_ segmentIDs: [UUID], to target: Target?) throws {
+    package func assign(_ segmentIDs: [UUID], to target: Target?) throws {
         // Single critical section across the batch (see markPushed).
         try locked {
             for id in segmentIDs {
@@ -847,7 +847,7 @@ public final class SQLiteJournalStore: JournalStore {
     /// the review queue itself (capped per retro pass), so this mirrors
     /// `pendingReview()`'s own decode-then-return shape rather than adding a
     /// second queryable column for one caller.
-    public func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] {
+    package func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] {
         var out: [ReviewSegment] = []
         try query("SELECT json FROM review_segments WHERE assigned = 1 ORDER BY start") { stmt in
             let segment = try self.decoder.decode(ReviewSegment.self, from: self.jsonColumn(stmt, 0))
@@ -859,13 +859,13 @@ public final class SQLiteJournalStore: JournalStore {
     // MARK: - Retro-acceptance digests
 
     /// 30-day retention, mirroring the spans table's own prune-on-init.
-    public func pruneRetroDigests(olderThanDays days: Int = retroDigestRetentionDays,
+    package func pruneRetroDigests(olderThanDays days: Int = retroDigestRetentionDays,
                                   now: Date = Date()) throws {
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400).timeIntervalSince1970
         try exec("DELETE FROM retro_digests WHERE date < \(cutoff)")
     }
 
-    public func saveRetroDigest(_ digest: RetroDigest) throws {
+    package func saveRetroDigest(_ digest: RetroDigest) throws {
         try locked {
             try pruneRetroDigests()
             guard let json = try? encoder.encode(digest),
@@ -887,7 +887,7 @@ public final class SQLiteJournalStore: JournalStore {
         }
     }
 
-    public func retroDigests(limit: Int) throws -> [RetroDigest] {
+    package func retroDigests(limit: Int) throws -> [RetroDigest] {
         try pruneRetroDigests()
         var out: [RetroDigest] = []
         try query("SELECT json FROM retro_digests ORDER BY date DESC LIMIT \(limit)") { stmt in
@@ -896,7 +896,7 @@ public final class SQLiteJournalStore: JournalStore {
         return out
     }
 
-    public func deleteRetroDigest(_ id: UUID) throws {
+    package func deleteRetroDigest(_ id: UUID) throws {
         try locked {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, "DELETE FROM retro_digests WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else {
@@ -914,7 +914,7 @@ public final class SQLiteJournalStore: JournalStore {
 // MARK: - RevisionStore (the replica side of sync)
 
 extension SQLiteJournalStore: RevisionStore {
-    public func allRevisions() throws -> [SessionRevision] {
+    package func allRevisions() throws -> [SessionRevision] {
         var out: [SessionRevision] = []
         try query("""
             SELECT json, hlc_millis, hlc_counter, hlc_device, origin, deleted
@@ -937,14 +937,14 @@ extension SQLiteJournalStore: RevisionStore {
             }
     }
 
-    public func revision(id: UUID) throws -> SessionRevision? {
+    package func revision(id: UUID) throws -> SessionRevision? {
         guard !syncExcludedIDs.contains(id),
               let row = try revisionRow(id: id), !row.hlc.deviceID.isEmpty else { return nil }
         return SessionRevision(session: row.session, hlc: row.hlc,
                                origin: row.origin, deleted: row.deleted)
     }
 
-    public func dirtyRevisionIDs() throws -> [UUID] {
+    package func dirtyRevisionIDs() throws -> [UUID] {
         var out: [UUID] = []
         try query("SELECT id FROM sessions WHERE dirty = 1 AND hlc_device != ''") { stmt in
             if let text = sqlite3_column_text(stmt, 0),
@@ -954,17 +954,17 @@ extension SQLiteJournalStore: RevisionStore {
             .sorted { $0.uuidString < $1.uuidString }
     }
 
-    public func saveLocal(_ revision: SessionRevision) throws {
+    package func saveLocal(_ revision: SessionRevision) throws {
         try write(revision.session, meta: RowMeta(hlc: revision.hlc, origin: revision.origin,
                                                   deleted: revision.deleted, dirty: true))
     }
 
-    public func applyRemote(_ revision: SessionRevision) throws {
+    package func applyRemote(_ revision: SessionRevision) throws {
         try write(revision.session, meta: RowMeta(hlc: revision.hlc, origin: revision.origin,
                                                   deleted: revision.deleted, dirty: false))
     }
 
-    public func clearDirty(_ cleared: [SessionRevision]) throws {
+    package func clearDirty(_ cleared: [SessionRevision]) throws {
         try locked {
             for rev in cleared {
                 var stmt: OpaquePointer?
@@ -987,7 +987,7 @@ extension SQLiteJournalStore: RevisionStore {
         }
     }
 
-    public var syncToken: SyncToken? {
+    package var syncToken: SyncToken? {
         get {
             var out: Data?
             try? query("SELECT value FROM sync_state WHERE key = 'token'") { stmt in
@@ -1015,7 +1015,7 @@ extension SQLiteJournalStore: RevisionStore {
 
     // MARK: - Task comments (standalone comment-to-task)
 
-    public func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
+    package func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
         try locked {
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(
@@ -1033,7 +1033,7 @@ extension SQLiteJournalStore: RevisionStore {
         }
     }
 
-    public func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
+    package func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
         var out: [(Date, String)] = []
         try query("SELECT created, text FROM task_comments WHERE task_key = ? ORDER BY created",
                   bind: { sqlite3_bind_text($0, 1, ref.storageKey, -1, Self.transient) }) { stmt in
@@ -1071,17 +1071,17 @@ extension SQLiteJournalStore: RevisionStore {
         }
     }
 
-    public func syncStateString(_ key: String) -> String? {
+    package func syncStateString(_ key: String) -> String? {
         syncStateData(key).flatMap { String(data: $0, encoding: .utf8) }
     }
 
-    public func setSyncStateString(_ key: String, _ value: String) {
+    package func setSyncStateString(_ key: String, _ value: String) {
         setSyncStateData(key, Data(value.utf8))
     }
 
     /// The HLC clock state as of the last stamped mutation — restored on
     /// launch so stamps stay monotonic even across a wall-clock regression.
-    public func loadClockState() -> HLC? {
+    package func loadClockState() -> HLC? {
         syncStateData("clock").flatMap { try? decoder.decode(HLC.self, from: $0) }
     }
 
@@ -1092,7 +1092,7 @@ extension SQLiteJournalStore: RevisionStore {
 
     /// Checks-only raw accessor: freezes the is_op column contract
     /// (1 = remote/pushable, 0 = local) independent of query behaviour.
-    public func rawIsOPColumn(id: UUID) throws -> Int {
+    package func rawIsOPColumn(id: UUID) throws -> Int {
         var out = -1
         try query("SELECT is_op FROM sessions WHERE id = ?",
                   bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
@@ -1106,7 +1106,7 @@ extension SQLiteJournalStore: RevisionStore {
     /// must survive locally or it never travels. LOCAL-only: the CK-side
     /// record remains (incremental pulls never re-send untouched records, so
     /// it won't resurrect); server-side GC is a later explicit pass.
-    public func purgeTombstones(olderThanDays days: Int = 90, now: Date = Date()) throws {
+    package func purgeTombstones(olderThanDays days: Int = 90, now: Date = Date()) throws {
         let cutoffMillis = Int64((now.timeIntervalSince1970 - Double(days) * 86_400) * 1000)
         try exec("""
         DELETE FROM sessions
@@ -1117,7 +1117,7 @@ extension SQLiteJournalStore: RevisionStore {
     /// One-shot sync-enablement migration: stamp every pre-sync row (in start
     /// order, so HLCs read sensibly) and mark it dirty for the first upload.
     /// Idempotent — already-stamped rows are untouched.
-    public func stampAllUnstamped(clock: HLCClock) throws {
+    package func stampAllUnstamped(clock: HLCClock) throws {
         try locked {
             var stale: [UUID] = []
             try query("SELECT id FROM sessions WHERE hlc_device = '' ORDER BY start") { stmt in

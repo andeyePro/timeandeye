@@ -3,7 +3,7 @@ import Foundation
 /// Pure decision for what to do with a live-checkpoint row a crash/quit left
 /// behind. Kept out of AppController so it is checkable: the controller's
 /// `promoteStaleCheckpoint` is just I/O around this.
-public enum CheckpointRecovery {
+package enum CheckpointRecovery {
     /// Whether a stale checkpoint should be promoted to a real, pushable slice.
     ///
     /// Returns nil (drop the checkpoint, recover nothing) when:
@@ -16,7 +16,7 @@ public enum CheckpointRecovery {
     /// remainder (C18: a partial overlap used to promote the WHOLE span,
     /// double-counting the overlapped part; full containment is now just the
     /// remainder hitting zero).
-    public static func recover(stale: Session?, floor: TimeInterval,
+    package static func recover(stale: Session?, floor: TimeInterval,
                                alreadyJournalled: [Session]) -> Session? {
         guard let stale else { return nil }
         guard stale.end.timeIntervalSince(stale.start) >= floor else { return nil }

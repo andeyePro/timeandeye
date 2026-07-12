@@ -19,14 +19,14 @@ import timeandeyeTheme
 /// with the same font the text is drawn in) cannot reflow: the item's width
 /// changes only when the reservation itself changes (bracket transitions),
 /// never on a digit tick.
-public enum AndeyeLogoImage {
+package enum AndeyeLogoImage {
     /// The font both measurement and drawing use — a mismatch here is
     /// exactly the bug this type exists to kill.
-    public static var menuFont: NSFont {
+    package static var menuFont: NSFont {
         .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
     }
 
-    public static func textWidth(_ text: String) -> CGFloat {
+    package static func textWidth(_ text: String) -> CGFloat {
         (text as NSString).size(withAttributes: [.font: menuFont]).width
     }
 
@@ -35,10 +35,10 @@ public enum AndeyeLogoImage {
     /// deliberately distinct from the certainty gradient `menuColour`
     /// already carries, so an alert reads as "a different KIND of signal"
     /// at a glance rather than a certainty dip.
-    public static let flashTint = NSColor(hex: "#FF9F0A") ?? .systemOrange
+    package static let flashTint = NSColor(hex: "#FF9F0A") ?? .systemOrange
 
     @MainActor
-    public static func image(t: Double, wink: Double,
+    package static func image(t: Double, wink: Double,
                              from: AndeyeLogo.RevealFrom = .tail,
                              colour: NSColor, flash: Double = 0,
                              monochrome: Bool = false,
@@ -60,7 +60,7 @@ public enum AndeyeLogoImage {
     /// instead — a tint change is invisible in a template, but a meeting
     /// alert must still be a meeting alert.
     @MainActor
-    public static func label(t: Double, wink: Double,
+    package static func label(t: Double, wink: Double,
                              from: AndeyeLogo.RevealFrom = .tail,
                              colour: NSColor, flash: Double = 0,
                              monochrome: Bool = false,

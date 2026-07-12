@@ -14,8 +14,8 @@ import Foundation
 /// This is the text front-end to the same `Predicate` the engine evaluates, so
 /// a typed expression and an AI-emitted one are the same thing — re-opening an
 /// Expression pin just renders its `Predicate` back to text.
-public enum PredicateParser {
-    public enum ParseError: Error, Equatable {
+package enum PredicateParser {
+    package enum ParseError: Error, Equatable {
         case empty
         case unexpected(String)
         case unbalancedParens
@@ -24,7 +24,7 @@ public enum PredicateParser {
 
     // MARK: Parse
 
-    public static func parse(_ input: String) -> Result<Predicate, ParseError> {
+    package static func parse(_ input: String) -> Result<Predicate, ParseError> {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .failure(.empty) }
         let toks = tokenize(trimmed)
@@ -48,7 +48,7 @@ public enum PredicateParser {
     /// "Any field contains" sugar: a single `any` leaf, which spans app, title,
     /// url, subject and every email correspondent (see `PinField.any`). Renders
     /// back to `any contains "…"`, so bare text now round-trips cleanly.
-    public static func anyFieldContains(_ value: String) -> Predicate {
+    package static func anyFieldContains(_ value: String) -> Predicate {
         .leaf(field: .any, op: .contains, value: value)
     }
 
@@ -56,7 +56,7 @@ public enum PredicateParser {
 
     /// Render a `Predicate` back to the typed syntax. Compound children are
     /// parenthesised so the result always re-parses to the same tree.
-    public static func string(from predicate: Predicate) -> String {
+    package static func string(from predicate: Predicate) -> String {
         switch predicate {
         case .leaf(let f, let op, let v):
             // Escape embedded quotes/backslashes (B12): a subject like

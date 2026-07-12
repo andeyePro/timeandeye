@@ -14,20 +14,20 @@ import timeandeyeCore
 /// (async, deadline-bounded, one-in-flight) — `buildReport()` below reuses its
 /// safe `osascript` channel so the diagnostics button no longer risks the
 /// 2026-06-30 main-thread freeze either.
-public enum EmailSignalProbe {
-    public struct Result {
-        public let app: String
-        public let nodesScanned: Int
-        public let truncated: Bool
+package enum EmailSignalProbe {
+    package struct Result {
+        package let app: String
+        package let nodesScanned: Int
+        package let truncated: Bool
         /// Distinct email addresses anywhere in the tree, first-seen order.
-        public let candidates: [String]
+        package let candidates: [String]
         /// `role | text` for each node whose text contains '@' (capped).
-        public let contexts: [String]
+        package let contexts: [String]
     }
 
     /// Browsers we know how to target. AX can read any of these by pid even when
     /// andeye itself is frontmost (so the diagnostic button works).
-    public static let browserBundleIDs = [
+    package static let browserBundleIDs = [
         "com.google.Chrome", "com.operasoftware.Opera",
         "com.brave.Browser", "com.apple.Safari",
     ]
@@ -35,7 +35,7 @@ public enum EmailSignalProbe {
     private static let maxNodes = 8000
     private static let maxDepth = 45
 
-    public static func probeFrontBrowser() -> Result? {
+    package static func probeFrontBrowser() -> Result? {
         guard AXIsProcessTrusted() else { return nil }
         guard let app = targetBrowser() else { return nil }
         let appEl = AXUIElementCreateApplication(app.processIdentifier)
@@ -90,7 +90,7 @@ public enum EmailSignalProbe {
     /// the same read does in production. Callers on the main thread must
     /// still hop to a background queue first (this blocks up to the engine's
     /// deadline).
-    public static func buildReport(ownAddresses: Set<String> = [],
+    package static func buildReport(ownAddresses: Set<String> = [],
                                    ownDomains: Set<String> = []) -> String {
         guard AXIsProcessTrusted() else {
             return "Accessibility permission not granted — System Settings ▸ Privacy ▸ Accessibility."

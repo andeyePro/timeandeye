@@ -8,7 +8,7 @@ import timeandeyeCore
 /// All real-world observation, emitting Core's SensorEvents through one callback.
 /// Polling design (2 s) keeps the AX surface minimal; event-driven AXObserver
 /// is a future refinement.
-public final class SensorHub {
+package final class SensorHub {
     /// Every emitter today runs on the main run loop (Timer poll, workspace/
     /// distributed notification blocks on .main queues), and the consumer
     /// (AppController.tracker) is main-actor state — so emission is FUNNELED
@@ -17,7 +17,7 @@ public final class SensorHub {
     /// calls from elsewhere. The guard exists BEFORE that refinement lands,
     /// so it can never silently corrupt tracker state from a background
     /// thread.
-    public var onEvent: (SensorEvent) -> Void = { _ in }
+    package var onEvent: (SensorEvent) -> Void = { _ in }
 
     func emit(_ event: SensorEvent) {
         if Thread.isMainThread {
@@ -27,7 +27,7 @@ public final class SensorHub {
             DispatchQueue.main.async { self.onEvent(event) }
         }
     }
-    public private(set) var accessibilityTrusted = false
+    package private(set) var accessibilityTrusted = false
 
     private var pollTimer: Timer?
     private var lastSurfaceKey: String?
@@ -37,11 +37,11 @@ public final class SensorHub {
 
     /// Settings pass-through: the user's own addresses/domains, which capture
     /// must never report as counterparties.
-    public func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
+    package func setOwnEmail(addresses: Set<String>, domains: Set<String>) {
         emailCapture.setOwnEmail(addresses: addresses, domains: domains)
     }
 
-    public init() {
+    package init() {
         // Health telemetry surfaces in the debug log (plus the email probe
         // report); this log line IS the degrade story until the self-heal
         // loop lands on this same seam. Fires on the capture queue —
@@ -56,17 +56,17 @@ public final class SensorHub {
 
     /// Diagnostics pass-through: per-system validate-on-use health, printed
     /// by the email probe report. Empty until a recipe'd system has captured.
-    public func emailRecipeHealth() -> [EmailSystem: EmailRecipeHealth] {
+    package func emailRecipeHealth() -> [EmailSystem: EmailRecipeHealth] {
         emailCapture.recipeHealth()
     }
 
     /// Prompts for Accessibility on first run (window titles need it).
-    public func requestPermissions() {
+    package func requestPermissions() {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         accessibilityTrusted = AXIsProcessTrustedWithOptions(options)
     }
 
-    public func start() {
+    package func start() {
         accessibilityTrusted = AXIsProcessTrusted()
 
         let workspace = NSWorkspace.shared.notificationCenter
@@ -111,11 +111,11 @@ public final class SensorHub {
     /// Drop the surface dedup key so the NEXT poll re-emits the current
     /// window even though it hasn't changed — manual start/confirm needs the
     /// span to reopen without waiting for a real focus change.
-    public func reemitCurrentSurface() {
+    package func reemitCurrentSurface() {
         lastSurfaceKey = nil
     }
 
-    public func stop() {
+    package func stop() {
         pollTimer?.invalidate()
         pollTimer = nil
         micMonitor?.stop()
@@ -300,8 +300,8 @@ final class MicMonitor {
 
 /// Reads the display-sleep minutes from pmset; the spec derives the idle
 /// threshold from the user's own sleep settings.
-public enum PowerSettings {
-    public static func displaySleepSeconds() -> TimeInterval? {
+package enum PowerSettings {
+    package static func displaySleepSeconds() -> TimeInterval? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
         process.arguments = ["-g"]

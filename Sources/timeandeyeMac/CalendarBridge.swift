@@ -17,11 +17,11 @@ import timeandeyeCore
 /// edits/new invites), on wake (the Mac may have missed changes asleep), and
 /// a defensive 5-minute fallback timer (notification delivery isn't 100%
 /// guaranteed after a long background stretch).
-public final class CalendarBridge {
+package final class CalendarBridge {
     /// The rolling window's events, re-emitted on every refresh. Every
     /// emitter in this codebase funnels onto the main thread (C10 guard) —
     /// `emit` below enforces the same rule here.
-    public var onEvent: ([CalendarEvent]) -> Void = { _ in }
+    package var onEvent: ([CalendarEvent]) -> Void = { _ in }
 
     private let store = EKEventStore()
     private var fallbackTimer: Timer?
@@ -29,7 +29,7 @@ public final class CalendarBridge {
     private var changeObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
 
-    public init() {}
+    package init() {}
 
     private func emit(_ events: [CalendarEvent]) {
         if Thread.isMainThread {
@@ -44,7 +44,7 @@ public final class CalendarBridge {
     /// `LSMinimumSystemVersion` is already 14.0 (make-app.sh), so there is no
     /// pre-14 install to fall back for (mirrors the calendar-signal spec §1's
     /// TCC precedent note).
-    public func requestAccess(completion: @escaping (Bool) -> Void) {
+    package func requestAccess(completion: @escaping (Bool) -> Void) {
         store.requestFullAccessToEvents { granted, _ in
             DispatchQueue.main.async { completion(granted) }
         }
@@ -54,7 +54,7 @@ public final class CalendarBridge {
     /// the settings opt-list (Settings ▸ Calendar); call
     /// `setExcludedCalendarNames` again later to change it without a
     /// restart.
-    public func start(excludedCalendarNames: [String] = []) {
+    package func start(excludedCalendarNames: [String] = []) {
         excludedNames = Set(excludedCalendarNames)
         changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged, object: store, queue: .main) { [weak self] _ in
@@ -71,7 +71,7 @@ public final class CalendarBridge {
         refresh()
     }
 
-    public func stop() {
+    package func stop() {
         fallbackTimer?.invalidate()
         fallbackTimer = nil
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
@@ -80,7 +80,7 @@ public final class CalendarBridge {
         wakeObserver = nil
     }
 
-    public func setExcludedCalendarNames(_ names: [String]) {
+    package func setExcludedCalendarNames(_ names: [String]) {
         excludedNames = Set(names)
         refresh()
     }
@@ -99,7 +99,7 @@ public final class CalendarBridge {
 
     /// The live prior's own read: events covering `date`, all-day excluded
     /// (spec §3 — an all-day banner isn't "what you're doing this minute").
-    public func currentEvents(at date: Date = Date()) -> [CalendarEvent] {
+    package func currentEvents(at date: Date = Date()) -> [CalendarEvent] {
         let from = date.addingTimeInterval(-86_400)
         let to = date.addingTimeInterval(86_400)
         return fetch(from: from, to: to).filter { $0.start <= date && date < $0.end }
@@ -113,7 +113,7 @@ public final class CalendarBridge {
     /// (derived from the oldest unresolved review row); all-day and free-marked events are
     /// INCLUDED here even though they're excluded from the live prior (§7 —
     /// "Annual leave" overlapping a queued day is still a legitimate hint).
-    public func events(overlapping span: (start: Date, end: Date), from: Date, to: Date) -> [CalendarEvent] {
+    package func events(overlapping span: (start: Date, end: Date), from: Date, to: Date) -> [CalendarEvent] {
         fetch(from: from, to: to, allDayIncluded: true)
             .filter { $0.start < span.end && $0.end > span.start }
     }

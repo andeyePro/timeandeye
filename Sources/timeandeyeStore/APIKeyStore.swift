@@ -13,7 +13,7 @@ import Foundation
 /// folder, beside the journal and settings — which are already plaintext in the
 /// same directory, so this matches the existing on-disk posture. No keychain,
 /// no prompt. Renamed from `KeychainStore` so the name stops implying a keychain.
-public enum APIKeyStore {
+package enum APIKeyStore {
     /// Resolves through AppSupport so the key always follows the one data
     /// home; a hardcoded folder name here would silently look in the wrong
     /// place (the "No API key yet" class of bug).
@@ -22,11 +22,11 @@ public enum APIKeyStore {
     }
 
     /// Exposed for the migration regression check (temp-dir based).
-    public static func fileURL(in dir: URL) -> URL {
+    package static func fileURL(in dir: URL) -> URL {
         dir.appendingPathComponent("op-api-key")
     }
 
-    public static func saveAPIKey(_ key: String) throws {
+    package static func saveAPIKey(_ key: String) throws {
         let url = fileURL()
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
@@ -37,7 +37,7 @@ public enum APIKeyStore {
     }
 
     /// nil = absent (no key set yet).
-    public static func loadAPIKey() throws -> String? {
+    package static func loadAPIKey() throws -> String? {
         guard let data = try? Data(contentsOf: fileURL()) else { return nil }
         return String(data: data, encoding: .utf8)
     }

@@ -6,11 +6,11 @@ import Foundation
 /// its visible label or a synonym. Pure data + string matching — the UI layer
 /// renders it, the check suite proves it (every item points at a real
 /// category, search is case/diacritic-insensitive, titles outrank keywords).
-public enum SettingsIA {
+package enum SettingsIA {
 
     // MARK: Categories (sidebar order = declaration order)
 
-    public enum Category: String, CaseIterable, Codable, Identifiable, Sendable {
+    package enum Category: String, CaseIterable, Codable, Identifiable, Sendable {
         // Declaration order = sidebar order. Tracking leads (the app's core;
         // Martin, 2026-07-11: the backend connection is not the front page)
         // and the connection panel wears a plain-English name.
@@ -26,9 +26,9 @@ public enum SettingsIA {
         case diagnostics
         case about
 
-        public var id: String { rawValue }
+        package var id: String { rawValue }
 
-        public var title: String {
+        package var title: String {
             switch self {
             case .backend:       return "Connections"
             case .tracking:      return "Tracking"
@@ -45,7 +45,7 @@ public enum SettingsIA {
         }
 
         /// SF Symbol for the sidebar row.
-        public var systemImage: String {
+        package var systemImage: String {
             switch self {
             case .backend:       return "link"
             case .tracking:      return "record.circle"
@@ -64,16 +64,16 @@ public enum SettingsIA {
 
     // MARK: Searchable items
 
-    public struct Item: Identifiable, Equatable, Sendable {
-        public let id: String
+    package struct Item: Identifiable, Equatable, Sendable {
+        package let id: String
         /// The control's visible label, verbatim — what the user's eye will
         /// look for after landing on the category.
-        public let title: String
+        package let title: String
         /// Lowercase synonyms (include US spellings — colour/color).
-        public let keywords: [String]
-        public let category: Category
+        package let keywords: [String]
+        package let category: Category
 
-        public init(_ id: String, _ title: String, _ keywords: [String],
+        package init(_ id: String, _ title: String, _ keywords: [String],
                     _ category: Category) {
             self.id = id
             self.title = title
@@ -85,7 +85,7 @@ public enum SettingsIA {
     /// One entry per user-visible control. Conditional sections (posting
     /// health, billing mappings) stay indexed — search lands the user on the
     /// right category even when the section is currently empty.
-    public static let items: [Item] = [
+    package static let items: [Item] = [
         // Backend
         Item("backend.licence", "Licence",
              ["license", "key", "xero", "paid", "pro", "community", "renew",
@@ -216,7 +216,7 @@ public enum SettingsIA {
     /// separated token must match the item (in its title or a keyword);
     /// items whose TITLE matches rank above keyword-only matches, title
     /// prefixes above title substrings, ties keep registry order.
-    public static func search(_ query: String) -> [Item] {
+    package static func search(_ query: String) -> [Item] {
         let tokens = fold(query).split(separator: " ").map(String.init)
         guard !tokens.isEmpty else { return [] }
         // Score: 0 = title prefix, 1 = title substring, 2 = keyword only.

@@ -206,9 +206,9 @@ public extension JournalStore {
 
 /// 30-day retention for retro-acceptance digests — a receipt trail, not an
 /// archive (mirrors the spans table's own 30-day window in the SQLite store).
-public let retroDigestRetentionDays = 30
+package let retroDigestRetentionDays = 30
 
-public final class InMemoryJournalStore: JournalStore {
+package final class InMemoryJournalStore: JournalStore {
     private var sessions: [Session] = []
     private var segments: [ReviewSegment] = []
     private var allSpans: [FocusSpan] = []
@@ -223,33 +223,33 @@ public final class InMemoryJournalStore: JournalStore {
         "\(session.uuidString)|\(backendID)"
     }
 
-    public init() {}
+    package init() {}
 
-    public func save(_ session: Session) throws {
+    package func save(_ session: Session) throws {
         sessions.append(session)
     }
 
-    public func allSessions() throws -> [Session] {
+    package func allSessions() throws -> [Session] {
         sessions
     }
 
-    public func session(id: UUID) throws -> Session? {
+    package func session(id: UUID) throws -> Session? {
         sessions.first { $0.id == id }
     }
 
-    public func sessionCount() throws -> Int {
+    package func sessionCount() throws -> Int {
         sessions.count
     }
 
-    public func pushedCount() throws -> Int {
+    package func pushedCount() throws -> Int {
         sessions.filter(\.pushedToOP).count
     }
 
-    public func sessions(from: Date, to: Date) throws -> [Session] {
+    package func sessions(from: Date, to: Date) throws -> [Session] {
         sessions.filter { $0.end > from && $0.start < to }.sorted { $0.start < $1.start }
     }
 
-    public func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
+    package func latestEndByTask(excluding: Set<UUID>) throws -> [TaskRef: Date] {
         var out: [TaskRef: Date] = [:]
         for s in sessions where !excluding.contains(s.id) {
             out[s.task] = max(out[s.task] ?? .distantPast, s.end)
@@ -257,14 +257,14 @@ public final class InMemoryJournalStore: JournalStore {
         return out
     }
 
-    public func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
+    package func sessions(needingPushAtOrAbove threshold: Double) throws -> [Session] {
         sessions.filter { session in
             guard session.task.isRemote else { return false }
             return !session.pushedToOP && session.certainty >= threshold
         }
     }
 
-    public func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
+    package func markPushed(_ id: UUID, opTimeEntryID: RemoteEntryID?) throws {
         guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[i].pushedToOP = true
         sessions[i].opTimeEntryID = opTimeEntryID
@@ -272,41 +272,41 @@ public final class InMemoryJournalStore: JournalStore {
 
     // MARK: Posting ledger
 
-    public func postingRecords(session: UUID) throws -> [PostingRecord] {
+    package func postingRecords(session: UUID) throws -> [PostingRecord] {
         ledger.values.filter { $0.sessionID == session }
             .sorted { $0.backendID < $1.backendID }
     }
 
-    public func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
+    package func postingRecord(session: UUID, backendID: String) throws -> PostingRecord? {
         ledger[ledgerKey(session, backendID)]
     }
 
-    public func setPostingRecord(_ record: PostingRecord) throws {
+    package func setPostingRecord(_ record: PostingRecord) throws {
         ledger[ledgerKey(record.sessionID, record.backendID)] = record
     }
 
-    public func clearPostingRecord(session: UUID, backendID: String) throws {
+    package func clearPostingRecord(session: UUID, backendID: String) throws {
         ledger[ledgerKey(session, backendID)] = nil
     }
 
-    public func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
+    package func postingRecords(state: PostingState, backendID: String) throws -> [PostingRecord] {
         ledger.values.filter { $0.state == state && $0.backendID == backendID }
             .sorted { $0.sessionID.uuidString < $1.sessionID.uuidString }
     }
 
-    public func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
+    package func unlockedInvoiceRefs(backendID: String) throws -> Set<String> {
         unlockedInvoices[backendID] ?? []
     }
 
-    public func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+    package func addUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
         unlockedInvoices[backendID, default: []].insert(ref)
     }
 
-    public func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
+    package func removeUnlockedInvoiceRef(_ ref: String, backendID: String) throws {
         unlockedInvoices[backendID]?.remove(ref)
     }
 
-    public func sessions(needingPostTo backendID: String,
+    package func sessions(needingPostTo backendID: String,
                          atOrAbove threshold: Double) throws -> [Session] {
         sessions.filter { session in
             guard session.task.isRemote, session.certainty >= threshold else { return false }
@@ -320,7 +320,7 @@ public final class InMemoryJournalStore: JournalStore {
         .sorted { $0.start < $1.start }
     }
 
-    public func migrateSingleSlotPostings(to backendID: String,
+    package func migrateSingleSlotPostings(to backendID: String,
                                           excluding: Set<UUID>) throws -> Int {
         var migrated = 0
         for session in sessions
@@ -334,51 +334,51 @@ public final class InMemoryJournalStore: JournalStore {
         return migrated
     }
 
-    public func update(_ session: Session) throws {
+    package func update(_ session: Session) throws {
         guard let i = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[i] = session
     }
 
-    public func deleteSession(_ id: UUID) throws {
+    package func deleteSession(_ id: UUID) throws {
         sessions.removeAll { $0.id == id }
     }
 
-    public func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
+    package func escalateOrigin(_ id: UUID, to origin: SliceOrigin) throws {
         // Not a sync replica: origin has no effect here.
     }
 
-    public func save(_ span: FocusSpan) throws {
+    package func save(_ span: FocusSpan) throws {
         allSpans.append(span)
     }
 
-    public func spans(from: Date, to: Date) throws -> [FocusSpan] {
+    package func spans(from: Date, to: Date) throws -> [FocusSpan] {
         allSpans.filter { $0.end > from && $0.start < to }.sorted { $0.start < $1.start }
     }
 
-    public func save(_ segment: ReviewSegment) throws {
+    package func save(_ segment: ReviewSegment) throws {
         segments.append(segment)
     }
 
-    public func pendingReview() throws -> [ReviewSegment] {
+    package func pendingReview() throws -> [ReviewSegment] {
         segments.filter { $0.assigned == nil }.sorted { $0.start < $1.start }
     }
 
-    public func assign(_ segmentIDs: [UUID], to target: Target?) throws {
+    package func assign(_ segmentIDs: [UUID], to target: Target?) throws {
         let ids = Set(segmentIDs)
         for i in segments.indices where ids.contains(segments[i].id) {
             segments[i].assigned = target
         }
     }
 
-    public func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] {
+    package func reviewSegments(assignedTo target: Target) throws -> [ReviewSegment] {
         segments.filter { $0.assigned == target }.sorted { $0.start < $1.start }
     }
 
-    public func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
+    package func saveTaskComment(_ ref: TaskRef, text: String, at date: Date) throws {
         comments[ref.storageKey, default: []].append((date, text))
     }
 
-    public func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
+    package func taskComments(for ref: TaskRef) throws -> [(date: Date, text: String)] {
         (comments[ref.storageKey] ?? []).sorted { $0.date < $1.date }
     }
 
@@ -389,18 +389,18 @@ public final class InMemoryJournalStore: JournalStore {
         retroDigestRows.removeAll { $0.date < cutoff }
     }
 
-    public func saveRetroDigest(_ digest: RetroDigest) throws {
+    package func saveRetroDigest(_ digest: RetroDigest) throws {
         pruneRetroDigests()
         retroDigestRows.removeAll { $0.id == digest.id }
         retroDigestRows.append(digest)
     }
 
-    public func retroDigests(limit: Int) throws -> [RetroDigest] {
+    package func retroDigests(limit: Int) throws -> [RetroDigest] {
         pruneRetroDigests()
         return Array(retroDigestRows.sorted { $0.date > $1.date }.prefix(limit))
     }
 
-    public func deleteRetroDigest(_ id: UUID) throws {
+    package func deleteRetroDigest(_ id: UUID) throws {
         retroDigestRows.removeAll { $0.id == id }
     }
 }

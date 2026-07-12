@@ -5,24 +5,24 @@ import Foundation
 /// already groups on in Models.swift), presented as ONE decision instead of
 /// N (approvals-drawer spec, Martin's stack-by-default choice: "1,040 items"
 /// only ever meant a much smaller number of distinct surfaces).
-public struct ReviewStack: Equatable, Sendable, Identifiable {
+package struct ReviewStack: Equatable, Sendable, Identifiable {
     /// The stacked segments, in queue order (oldest first, matching
     /// `pendingReview()`'s own order).
-    public var segments: [ReviewSegment]
-    public var app: String
-    public var windowTitle: String?
-    public var tabURL: String?
+    package var segments: [ReviewSegment]
+    package var app: String
+    package var windowTitle: String?
+    package var tabURL: String?
     /// Summed segment durations — the group's total pending time.
-    public var total: TimeInterval
+    package var total: TimeInterval
     /// Earliest segment start in the group.
-    public var first: Date
+    package var first: Date
     /// Latest segment end in the group — what stacks sort newest-first by.
-    public var last: Date
+    package var last: Date
 
     /// The surface key — stable identity for SwiftUI's ForEach/List.
-    public var id: String { "\(app)|\(windowTitle ?? "")|\(tabURL ?? "")" }
+    package var id: String { "\(app)|\(windowTitle ?? "")|\(tabURL ?? "")" }
 
-    public init(segments: [ReviewSegment], app: String, windowTitle: String?, tabURL: String?,
+    package init(segments: [ReviewSegment], app: String, windowTitle: String?, tabURL: String?,
                 total: TimeInterval, first: Date, last: Date) {
         self.segments = segments
         self.app = app
@@ -34,7 +34,7 @@ public struct ReviewStack: Equatable, Sendable, Identifiable {
     }
 }
 
-public extension Array where Element == ReviewSegment {
+package extension Array where Element == ReviewSegment {
     /// Group pending segments into stacks by identical surface, newest stack
     /// first (by each stack's most recent segment) — the drawer's default
     /// shape. Segments within a stack keep their original (queue) order.
@@ -80,7 +80,7 @@ public extension Array where Element == ReviewSegment {
 /// slice inside an expanded group. Selection gestures speak in rows; the
 /// selection itself stays a flat set of slice ids — a group row simply
 /// stands for every slice in its stack.
-public enum ReviewRow: Hashable, Sendable {
+package enum ReviewRow: Hashable, Sendable {
     case stack(String)
     case slice(UUID)
 }
@@ -101,20 +101,20 @@ public enum ReviewRow: Hashable, Sendable {
 /// bar's certainty aggregates over the SAME per-slice list either way.
 /// Pure value semantics so the CLT-only loop can check it; the drawer
 /// just renders membership.
-public struct ReviewSelection: Equatable, Sendable {
+package struct ReviewSelection: Equatable, Sendable {
     /// The selected slice ids — all the view highlights, all the bar scopes.
-    public private(set) var selected: Set<UUID> = []
+    package private(set) var selected: Set<UUID> = []
     /// The span anchor: the row of the most recent plain or ⌘ click.
-    public private(set) var anchor: ReviewRow?
+    package private(set) var anchor: ReviewRow?
     /// The selection as it stood when the anchor was set — what every
     /// ⇧-span from that anchor builds ON, so a second shift-click re-spans
     /// (dropping the first span's extras) instead of accumulating.
     private var anchorBase: Set<UUID> = []
 
-    public init() {}
+    package init() {}
 
     /// The slice ids a row stands for: itself, or its stack's whole group.
-    public static func ids(of row: ReviewRow, in stacks: [ReviewStack]) -> Set<UUID> {
+    package static func ids(of row: ReviewRow, in stacks: [ReviewStack]) -> Set<UUID> {
         switch row {
         case .slice(let id): return [id]
         case .stack(let key):
@@ -124,7 +124,7 @@ public struct ReviewSelection: Equatable, Sendable {
     }
 
     /// Plain click: the clicked row becomes the selection (and the anchor).
-    public mutating func click(_ row: ReviewRow, in stacks: [ReviewStack]) {
+    package mutating func click(_ row: ReviewRow, in stacks: [ReviewStack]) {
         selected = Self.ids(of: row, in: stacks)
         anchor = row
         anchorBase = selected
@@ -133,7 +133,7 @@ public struct ReviewSelection: Equatable, Sendable {
     /// ⌘-click: toggle the row in or out. A group that is only PARTLY
     /// selected completes (a group click means "all of this"); only a
     /// fully-selected group toggles out. The row becomes the anchor.
-    public mutating func commandClick(_ row: ReviewRow, in stacks: [ReviewStack]) {
+    package mutating func commandClick(_ row: ReviewRow, in stacks: [ReviewStack]) {
         let ids = Self.ids(of: row, in: stacks)
         if !ids.isEmpty, ids.isSubset(of: selected) {
             selected.subtract(ids)
@@ -151,7 +151,7 @@ public struct ReviewSelection: Equatable, Sendable {
     /// anchor yet (first click of a session), or an anchor row no longer
     /// on display (assigned away, or its stack collapsed), degrades to a
     /// plain click on the target — never a guess.
-    public mutating func shiftClick(_ row: ReviewRow, rows: [ReviewRow],
+    package mutating func shiftClick(_ row: ReviewRow, rows: [ReviewRow],
                                     in stacks: [ReviewStack]) {
         guard let ti = rows.firstIndex(of: row) else { return }
         guard let anchor, let ai = rows.firstIndex(of: anchor) else {
@@ -166,14 +166,14 @@ public struct ReviewSelection: Equatable, Sendable {
 
     /// Drop ids of slices assigned away meanwhile, so counts and certainty
     /// aggregates recalculate over what actually remains.
-    public mutating func prune(to stacks: [ReviewStack]) {
+    package mutating func prune(to stacks: [ReviewStack]) {
         let live = stacks.everySliceID
         selected.formIntersection(live)
         anchorBase.formIntersection(live)
     }
 
     /// Nothing selected — what an assign leaves behind.
-    public mutating func clear() {
+    package mutating func clear() {
         selected = []
         anchor = nil
         anchorBase = []
@@ -181,7 +181,7 @@ public struct ReviewSelection: Equatable, Sendable {
 
     /// A stack is selected when EVERY slice in it is — the header and left
     /// margin highlight rides on this, never on separate group state.
-    public static func isStackSelected(_ stack: ReviewStack, in selection: Set<UUID>) -> Bool {
+    package static func isStackSelected(_ stack: ReviewStack, in selection: Set<UUID>) -> Bool {
         !stack.segments.isEmpty && stack.segments.allSatisfy { selection.contains($0.id) }
     }
 
@@ -189,12 +189,12 @@ public struct ReviewSelection: Equatable, Sendable {
     /// assign bar scopes to and what its certainty means: group-selected
     /// slices land in the SAME list as individually-clicked ones. Reading
     /// through the CURRENT stacks self-prunes ids assigned away meanwhile.
-    public static func segments(of selection: Set<UUID>, in stacks: [ReviewStack]) -> [ReviewSegment] {
+    package static func segments(of selection: Set<UUID>, in stacks: [ReviewStack]) -> [ReviewSegment] {
         stacks.flatMap(\.segments).filter { selection.contains($0.id) }
     }
 }
 
-public extension Array where Element == ReviewStack {
+package extension Array where Element == ReviewStack {
     /// Expand-all target state (Martin, 2026-07-10: "Could we have an
     /// open-all option?"): every stack id, so ONE header control can open
     /// the whole drawer rather than the user clicking each chevron.
