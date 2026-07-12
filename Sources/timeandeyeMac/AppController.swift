@@ -2649,6 +2649,7 @@ public final class AppController: ObservableObject {
     /// its single-undo semantics carry over unchanged.
     private func applyRefiles(_ findings: [ContradictionRefile.Finding], reason: String) {
         var priorSessions: [RetroDigest.PriorSessionState] = []
+        var appliedTargets: [Target] = []
         var entriesToDelete: [RemoteEntryID] = []
         var severedAny = false
         var lockedSkipped = 0
@@ -2672,6 +2673,7 @@ public final class AppController: ObservableObject {
                 certainty: finding.priorCertainty,
                 priorProvenance: session.provenance,
                 priorPushedToOP: session.pushedToOP))
+            appliedTargets.append(.task(finding.newTask))
             let applied = ContradictionRefile.apply(finding, to: session)
             // A POSTED slice's backend entry belongs to the OLD work package;
             // re-pointing the task alone would leave the money filed under the
@@ -2699,7 +2701,7 @@ public final class AppController: ObservableObject {
         guard !priorSessions.isEmpty else { return }
         let digest = RetroDigest(
             clearedSegmentIDs: [],
-            target: .task(findings[0].newTask),
+            target: dominantRetroTarget(in: appliedTargets),
             count: priorSessions.count,
             reason: reason,
             priorSessions: priorSessions)
@@ -2787,13 +2789,23 @@ public final class AppController: ObservableObject {
     /// pass (ties keep the first one seen) — display only, undo doesn't need
     /// it (it restores each segment/session from the stored payload).
     private func dominantRetroTarget(in clearances: [RetroClearance]) -> Target {
+        dominantRetroTarget(in: clearances.map(\.target))
+    }
+
+    /// Same "most-common, ties keep first seen" rule, keyed directly on
+    /// `Target` — the refile batch's findings carry a `TaskRef` rather than
+    /// a `RetroClearance`, so `applyRefiles` maps to `Target` and calls this
+    /// overload instead of duplicating the counting logic (finding 7,
+    /// 2026-07-12: a mixed-target refile batch's digest used to name only
+    /// the first finding's target, hiding sessions refiled elsewhere).
+    private func dominantRetroTarget(in targets: [Target]) -> Target {
         var counts: [Target: Int] = [:]
         var order: [Target] = []
-        for clearance in clearances {
-            if counts[clearance.target] == nil { order.append(clearance.target) }
-            counts[clearance.target, default: 0] += 1
+        for target in targets {
+            if counts[target] == nil { order.append(target) }
+            counts[target, default: 0] += 1
         }
-        return order.max { (counts[$0] ?? 0) < (counts[$1] ?? 0) } ?? clearances[0].target
+        return order.max { (counts[$0] ?? 0) < (counts[$1] ?? 0) } ?? targets[0]
     }
 
     /// Undo one retro-acceptance pass: restores every cleared segment to

@@ -91,6 +91,38 @@
   canon+guard logic against trailing-slash, symlinked-parent, genuinely-
   different, and missing-`$DEST` path shapes.
 
+- [x] **Refile-batch digest now names its dominant target;
+  `reviewThreshold`'s write-only remnant is gone.** Two independent
+  2026-07-12 review findings, one commit. (1) `applyRefiles`'s digest
+  stamped `target: .task(findings[0].newTask)` – the first finding's
+  target – even though `ContradictionRefile.plan` derives each finding's
+  `newTask` independently, so a mixed-target bulk refile rendered "Cleared
+  N to \<firstTarget\>" in ReviewView's Recently-cleared row, hiding
+  sessions actually refiled elsewhere. The sibling `applyRetroPlan`'s
+  `dominantRetroTarget(in:)` already solved this for retro clearances –
+  its "most-common, ties keep first seen" core is now factored onto a
+  shared `[Target]` overload, with the existing `[RetroClearance]` entry
+  point delegating to it and `applyRefiles` mapping each *applied*
+  finding's `newTask` to `.task(...)` before delegating too, so the digest
+  reflects only the sessions actually moved – not ones skipped for an
+  invoice lock. Undo payloads stay per-session and untouched. (2)
+  `AndeyeSettings.reviewThreshold` was write-only dead state since the
+  2026-07-11 ONE-threshold change hardcoded `AppController`'s only reader
+  (`uncertainBelow`) to a fixed `0.6` and removed the slider/IA entry, but
+  the field, its doc comment (which still falsely called it a live
+  UI-visible threshold), init parameter/default, memberwise assign and
+  lenient-decode line all lingered. All five are now removed; a repo-wide
+  grep (and a check of the mounted `andeyePro` reference tree) turns up
+  zero remaining readers. Decode safety: `AndeyeSettings.init(from:)`
+  decodes via `decoder.container(keyedBy: CodingKeys.self)`, and
+  `CodingKeys` is auto-synthesized from the struct's stored properties (no
+  explicit enum in this file) – with the property gone, `CodingKeys` has
+  no `reviewThreshold` case, so the decoder never looks the key up; a
+  leftover `"reviewThreshold"` in an old persisted settings file is simply
+  an unrecognised key to a keyed container and is ignored like any other.
+  No check ever read the field, so the suite count is unchanged. Bridge
+  suite: 865 passed, 0 failed, before and after.
+
 ## 2026-07-11
 
 - [x] **Undo: inverses run in order; groups don't swallow strangers.** (F3-3) `undo()` fired each inverse as a detached Task, so rapid ⌘Z⌘Z interleaved their awaits and inverse N+1's writes could race N's (last-writer-wins on the same rows). Inverses now chain — inverse N completes before N+1 starts — off the caller so the UI never blocks. (F3-4) `UndoStack.group` bodies that await yield the main actor, and any UNRELATED registration that interleaved during the suspension folded into the open group (one ⌘Z then reverted a stranger's edit under the wrong label). A task-local group token now scopes the fold to the group's own call context; a stray registration lands as its own ⌘Z step. New interleave check drives a group parked mid-await while an out-of-context registration arrives. (F3-7) `applyReconcile`'s per-id delete swallowed backend failures with `try?`, then undo unconditionally recreated every entry — manufacturing a duplicate for any delete that hadn't actually landed. It now tracks which deletes succeeded, undo recreates only those, and a failed delete surfaces via `lastError`. Suite 864/0; release `timeandeyeApp` build clean.
