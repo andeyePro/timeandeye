@@ -4,6 +4,8 @@
 # SwiftPM build products
 .build/
 *.app/
+/timeandeye
+/andeyeTT
 
 # Per-machine Xcode state
 xcuserdata/
@@ -13,9 +15,17 @@ xcuserdata/
 site/node_modules/
 site/dist/
 site/.astro/
+sites/
 
 # Local tool state
 .claude/settings.local.json
+.vs/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Working notes, not part of the shipped tree
 
 # The paid tier lives in the private andeyePro repo, never here
 /pro/

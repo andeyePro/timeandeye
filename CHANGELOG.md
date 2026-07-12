@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-12
+
+- [x] **Restore the local-state ignore rules.** `.gitignore` again excludes
+  
+  
+  binaries, so a routine broad `git add` cannot stage per-machine or working
+  material. 
+
 ## 2026-07-11
 
 - [x] **Undo: inverses run in order; groups don't swallow strangers.** (F3-3) `undo()` fired each inverse as a detached Task, so rapid ⌘Z⌘Z interleaved their awaits and inverse N+1's writes could race N's (last-writer-wins on the same rows). Inverses now chain — inverse N completes before N+1 starts — off the caller so the UI never blocks. (F3-4) `UndoStack.group` bodies that await yield the main actor, and any UNRELATED registration that interleaved during the suspension folded into the open group (one ⌘Z then reverted a stranger's edit under the wrong label). A task-local group token now scopes the fold to the group's own call context; a stray registration lands as its own ⌘Z step. New interleave check drives a group parked mid-await while an out-of-context registration arrives. (F3-7) `applyReconcile`'s per-id delete swallowed backend failures with `try?`, then undo unconditionally recreated every entry — manufacturing a duplicate for any delete that hadn't actually landed. It now tracks which deletes succeeded, undo recreates only those, and a failed delete surfaces via `lastError`. Suite 864/0; release `timeandeyeApp` build clean.
@@ -80,7 +88,10 @@
   undo payload gained `priorPushedToOP` (optional, lenient-decode). Three
   ContradictionRefile checks pin the certainty rule, the sever decision, and
   the posted-slice apply+undo round-trip. Suite 860/0.
-- [x] **Housekeeping ahead of the public flip.**
+- [x] **Housekeeping ahead of the public flip.** Internal working notes left
+  the tracked tree, the multibackend billable spec now carries only its
+  external cost citations, and earlier backlog notes about the tidy fold
+  into this line.
 - [x] **Tracking: gate the pending-switch revert, de-duplicate the reassign
   teach, show window duration, and tell the boost delta honestly.** Four
   fixes from Martin's 2026-07-11 logs. (1) The main bug: a pending switch
