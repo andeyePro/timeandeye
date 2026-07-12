@@ -5243,7 +5243,11 @@ public final class AppController: ObservableObject {
         }
         billing.setProject(key, billable: billable)
         saveBilling()
-        Task { await syncIfEnabled() }   // prospective: new time follows the new flag
+        // Debounced, not immediate: the widen gestures call this right after an
+        // entry mark, and that mark posts to finance the moment a sync sees it
+        // (no `since` gate) with no claw-back. The shared debounce gives every
+        // billable gesture the same ⌘Z window setSessionBillable relies on.
+        scheduleBillableSync()
         return report
     }
 
@@ -5264,7 +5268,10 @@ public final class AppController: ObservableObject {
         }
         billing.setTask(task.ref, state: state)
         saveBilling()
-        Task { await syncIfEnabled() }
+        // Debounced for the same reason as setProjectBillable: the widen gesture
+        // pairs this with an immediate entry mark, so the kick must clear the
+        // undo window before it can post.
+        scheduleBillableSync()
         return report
     }
 

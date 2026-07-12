@@ -2,6 +2,27 @@
 
 ## 2026-07-12
 
+- [x] **The billable widen gestures now get a real ⌘Z window.** Commit 860a137
+  gave a bare entry mark an undo window by debouncing its finance sync 4 s, but
+  the widen gestures – "mark this entry AND its task/project billable" – still
+  posted instantly. They call `setSessionBillable(override:true)` (debounced)
+  and then `setTaskBillable`/`setProjectBillable`, and those two flag setters
+  fired an UNdebounced `Task { await syncIfEnabled() }`. That immediate sync saw
+  the just-set entry override – which `Billing.financeEligible` honours with no
+  `since` gate – and posted the clicked slice to finance within milliseconds; a
+  ⌘Z a second later restored the flags but the entry was already on the client's
+  books. Both flag setters now route their sync kick through the existing
+  `scheduleBillableSync()` debounce, so every billable-mark gesture clears the
+  same undo window before anything reaches the wire. Scope: this closes the
+  zero-length undo window; it does not add claw-back – a mark left to stand, or
+  undone after the debounce fires, still posts and stays posted (finance history
+  is never retracted, by policy). The since-gate that stops a bare task/project
+  flip posting pre-existing history was already correct and is unchanged. No new
+  Core behaviour to pin (the fix is AppController timer plumbing, not reachable
+  from timeandeyeChecks); the since-gate and the deferred-kick model are already
+  pinned by the existing "flips are prospective-only" and "billable mark then
+  immediate undo" checks.
+
 - [x] **Bulk refile can no longer delete invoice-locked time.** The
   contradiction pass routed a posted slice to an actionable lane whenever its
   provenance was unstamped (rows journalled before provenance) or its score sat
