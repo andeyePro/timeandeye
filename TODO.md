@@ -311,8 +311,37 @@ and recorded rather than fixed blind:
 ## Open
 
 - [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus the
-  follow-up audit's fixes, across 10 local commits; details per-entry in
-  CHANGELOG under 2026-07-12. The publish steps themselves stay manual.
+  follow-up tooling audit's fixes; details per-entry in CHANGELOG under
+  2026-07-12. The publish steps themselves stay manual.
+- [x] Public API surface sealed to a three-tier contract (2026-07-12) –
+  ~1,370 `public`→`package` demotions; spec at
+  docs/superpowers/specs/2026-07-12-public-api-surface.md. See CHANGELOG.
+- [x] Attribution certainty calculus written down and conformed (2026-07-12) –
+  spec docs/superpowers/specs/2026-07-12-attribution-calculus.md, 8 property
+  checks. Behaviour change: human-corrected slices post immediately (Martin
+  ratified 2026-07-12). See CHANGELOG.
+- [x] Posting/money state machine formalised (2026-07-12) – spec
+  docs/superpowers/specs/2026-07-12-posting-state-machine.md, bounded
+  model-check harness, three user-path holes closed. See CHANGELOG.
+- [ ] AFTER the flip: verify the iOS build against the API seal. The seal
+  protects `ios/` by analysis only (the CLT bridge cannot compile iOS), so
+  the next `cd ios && xcodegen` + Xcode build is the real gate. Every symbol
+  kept public for iOS is listed in the spec; a resolve failure there is a
+  seal bug to flag, not to fix by re-widening blindly.
+- [ ] Cross-repo (andeyePro session, tracked in the cross-repo note): Pro's
+  Package.swift still depends on `../andeyeTT` product `andeyeTTCore`
+  (pre-rename), so Pro cannot build against the renamed tree until its
+  manifest updates; then re-verify Pro against community commit 2337b2a
+  (confirmatory – every seam symbol Pro consumes stayed public).
+- [ ] Non-blocking cleanups surfaced by the 2026-07-12 review (do after the
+  flip, not before – each extra pre-release commit widens the review burden):
+  TimelineView `selectTwins` O(N^2) per render; SettingsView connector panel
+  hardcodes tiers (registry-driven rendering, Xero mis-filed as Pro);
+  ColourEngineChecks pins real fixture names (synthesize the collision);
+  EvidenceCardView `cardFactsAttributed` parallel fact renderer (one
+  fact-model); extract a shared debounce helper (3 hand-rolled copies);
+  `connectorHealth` recompute per connector (memo). Detail in the
+  /code-review report at a private path
 - [ ] Light-mode contrast: `AndeyeColors.highlight` needs a light-scheme
   variant (light blue reads weak on white/blue; dark mode confirmed good).
 - [ ] Re-shoot the deleted review-drawer screenshot with mocked data.
