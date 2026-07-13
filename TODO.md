@@ -313,6 +313,16 @@ and recorded rather than fixed blind:
 - [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus the
   follow-up tooling audit's fixes; details per-entry in CHANGELOG under
   2026-07-12. The publish steps themselves stay manual.
+- [x] Attribution learning coherence pass (2026-07-13) – model written down
+  (docs/superpowers/specs/2026-07-13-attribution-learning.md), first property
+  coverage (L1-L7), one correction operator. No behaviour change. See CHANGELOG.
+- [ ] Learning behaviour decisions (owner's call, surfaced by the 2026-07-13
+  pass; full block with recommendations in a private path
+  (1) add recency decay to associations – recommend a slow time-based
+  half-life (the moat's biggest gap: dropped clients resurface forever);
+  (2) [✕ forget] should also clear the target's `totals`; (3) floor counts at
+  write; (4) down-weight the hourOfDay teach side to match its 0.15 score
+  weight. L7 pins the current no-decay so (1) is a deliberate tested change.
 - [x] Public API surface sealed to a three-tier contract (2026-07-12) –
   ~1,370 `public`→`package` demotions; spec at
   docs/superpowers/specs/2026-07-12-public-api-surface.md. See CHANGELOG.
