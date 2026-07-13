@@ -3814,6 +3814,10 @@ public final class AppController: ObservableObject {
 
     package func boostSurface(_ span: FocusSpan, to ref: TaskRef, weight: Double = 4) {
         let restore = attributorSnapshotRestore()
+        // A boost is a pure +4 reinforce with NO discount of a displaced ranked
+        // belief, unlike a +2 confirm/assign (which routes the correction
+        // operator's discount arm). Whether it should discount is an owner call
+        // — attribution-learning spec §Open decisions 3 ("boost symmetry").
         attributor.learnSurface(span.signal, to: ref, weight: weight)
         persistAssociations(); tracker.reevaluate()
         registerUndo("remove boost toward \(name(of: .task(ref)))") { restore() }

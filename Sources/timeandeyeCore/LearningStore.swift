@@ -110,12 +110,26 @@ package struct LearningStore: Codable, Equatable, Sendable {
         totals[target, default: 0] += weight
     }
 
-    /// A correction teaches harder than a confirmation: subtract from the wrong
-    /// target, add double to the right one.
-    package mutating func correct(_ signal: ActivitySignal, from old: Target, to new: Target,
+    /// THE correction operator — the SINGLE definition of how one user
+    /// correction moves the count model (attribution-learning spec §The
+    /// correction operator), composed from the `learn` primitive. Reinforce
+    /// the corrected target `new` by `weight` (+2 for a confirm/assign, +4 for
+    /// a boost gesture); discount the displaced belief by 1 ONLY when the
+    /// caller passes it in `displacingRanked`. That the discount is a
+    /// caller-supplied target, not an automatic side effect of naming an
+    /// "old", is deliberate: a human's earlier word, a pin or a prime is not
+    /// evidence to subtract against, so the DECISION to treat a displaced
+    /// belief as engine-ranked stays with the caller — the Attributor passes a
+    /// displaced target here exactly when its source was `.ranked`.
+    /// Confirm/assign route through this so "a correction" can never mean two
+    /// different things in production and in the checks.
+    package mutating func correct(_ signal: ActivitySignal, to new: Target, weight: Double,
+                                 displacingRanked displaced: Target? = nil,
                                  disabledRecipes: Set<String> = []) {
-        learn(signal, target: old, weight: -1, disabledRecipes: disabledRecipes)
-        learn(signal, target: new, weight: 2, disabledRecipes: disabledRecipes)
+        learn(signal, target: new, weight: weight, disabledRecipes: disabledRecipes)
+        if let displaced {
+            learn(signal, target: displaced, weight: -1, disabledRecipes: disabledRecipes)
+        }
     }
 
     /// Targeted un-learn (the Evidence Card's [✕ forget] for a ranked source):

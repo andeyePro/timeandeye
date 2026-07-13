@@ -80,7 +80,7 @@ func learningStoreChecks(_ c: Checks) {
         var store = LearningStore()
         // Full learn cycle against the Xero task from an ordinary sensor signal.
         store.learn(ghostty, target: .task(xeroTask.ref), weight: 2)
-        store.correct(steam, from: .task(xeroTask.ref), to: .task(.op(1)))
+        store.correct(steam, to: .task(.op(1)), weight: 2, displacingRanked: .task(xeroTask.ref))
         let json = String(data: try JSONEncoder().encode(store), encoding: .utf8)!
         try expect(!json.contains(xeroSubject), "API-sourced subject leaked into the model")
         try expect(!json.contains("Xero Client Co"), "API-sourced project leaked into the model")
@@ -105,7 +105,7 @@ func learningStoreChecks(_ c: Checks) {
     c.check("correction moves the score") {
         var store = LearningStore()
         store.learn(ghostty, target: taskA)
-        store.correct(ghostty, from: taskA, to: taskB)
+        store.correct(ghostty, to: taskB, weight: 2, displacingRanked: taskA)
         let scores = store.scores(for: ghostty, among: [taskA, taskB])
         try expect(scores[taskB]! > scores[taskA]!)
     }
@@ -147,7 +147,7 @@ func learningStoreChecks(_ c: Checks) {
     c.check("learnedValues drops a value corrected away (net weight <= 0)") {
         var store = LearningStore()
         store.learn(steam, target: taskA)              // titleToken=library on A
-        store.correct(steam, from: taskA, to: taskB)   // -1 from A, +2 to B
+        store.correct(steam, to: taskB, weight: 2, displacingRanked: taskA)   // -1 from A, +2 to B
         try expect(!store.learnedValues(for: taskA).contains("library"), "corrected-away value gone")
         try expect(store.learnedValues(for: taskB).contains("library"), "now associated with B")
     }

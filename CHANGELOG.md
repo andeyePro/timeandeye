@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-13
+
+- [x] **One correction operator – unified the divergent "a correction" logic
+  behind a single definition; no behaviour change.** Refactor only. Before,
+  "a correction" had three shapes: the live `Attributor.confirm`/`assign` path
+  hand-rolled `+2` to the corrected target plus a conditional `-1` to a
+  displaced belief (only when its source was `.ranked`); `LearningStore.correct(from:to:)`
+  did a DIFFERENT, unconditional `-1/+2` and was dead in production
+  (checks-only); and the `+4` boost reinforced with no discount at all. A
+  future caller reaching for the obvious `LearningStore.correct()` would have
+  got behaviour unlike the live path. Now there is ONE operator –
+  `LearningStore.correct(_:to:weight:displacingRanked:)` – that reinforces the
+  corrected target by a caller-supplied weight and discounts a displaced belief
+  by 1 ONLY when the caller passes it (the "discount if ranked" decision is an
+  explicit argument, not a hidden rule); it composes the existing `learn`
+  primitive. `confirm`/`assign` route their whole correction through it (prime
+  side split into a small `primeSurface` helper), so production behaviour is
+  byte-identical – proven by the live-path checks (AttributionChecks, the
+  integration suite, and the L2/L3 pins that drive `confirm`) staying green
+  UNEDITED. The dead divergent `correct(from:to:)` is gone; its direct callers
+  (the L1 pin and three CoreLogicChecks) are repointed to the operator with the
+  same asserted numbers. The `+4` boost keeps its no-discount behaviour (an
+  owner call – spec §Open decisions 3), now documented at `boostSurface` and
+  `learnSurface` instead of silent. Invariants L1–L7 hold; no decay, read-floor,
+  hour weight asymmetry, or `forget` behaviour was touched. Added an
+  operator-identity check pinning that `correct` reproduces the old hand-rolled
+  `+w`/conditional `-1` deltas exactly.
+
 ## 2026-07-12
 
 - [x] **Closed the posting state machine's three user-path holes – timeline

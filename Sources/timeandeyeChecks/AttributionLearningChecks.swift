@@ -65,9 +65,10 @@ func attributionLearningChecks(_ c: Checks) {
 
     // MARK: L1 — correction direction. After a correction to T displacing
     // ranked D, T's score does not fall and D's does not rise, for that signal.
-    // The count-model correction operator is `correct(from:to:)` (= learn(D,-1)
-    // + learn(T,+2)); production drives the same ±(2,-1) split through
-    // Attributor.confirm/assign (B9). Generated over realistic-magnitude
+    // The count-model correction operator is `correct(to:weight:displacingRanked:)`
+    // (= learn(T,+w) then learn(D,-1) when a ranked belief is displaced);
+    // production drives the same ±(2,-1) split through Attributor.confirm/assign
+    // (B9) via that one operator. Generated over realistic-magnitude
     // histories (a handful of confirmations) — the regime a user actually
     // produces; the B5 "weak match on a huge total" corner is documented,
     // intended behaviour and out of this invariant's scope.
@@ -91,7 +92,7 @@ func attributionLearningChecks(_ c: Checks) {
             let leader = before.max { $0.value < $1.value }?.key
             guard leader == wrong else { continue }
 
-            store.correct(sig, from: wrong, to: right)
+            store.correct(sig, to: right, weight: 2, displacingRanked: wrong)
             let after = store.scores(for: sig, among: pool)
 
             try expect((after[right] ?? 0) >= (before[right] ?? 0) - 1e-9,
@@ -358,6 +359,41 @@ func attributionLearningChecks(_ c: Checks) {
                                       emailSubject: sig.emailSubject)
             try expect(store.scores(for: past, among: pool) == s1,
                        "seed \(seed): absolute wall-time must not affect the score (no decay)")
+        }
+    }
+
+    // MARK: Operator identity — the ONE correction operator reproduces the
+    // deltas the live path used to hand-roll, EXACTLY. `correct` composes
+    // `learn`; this pins that composition so a future edit to the operator that
+    // changed the numbers (a stray extra teach, a dropped subtract, a wrong
+    // weight) fails here instead of silently diverging production from the
+    // count model. Both arms: with a ranked displacement it is +w to T then -1
+    // to D; without one (the +4 boost gesture's semantics) it is a bare +w.
+    c.check("operator identity: correct reproduces the hand-rolled +w / conditional -1 exactly") {
+        for seed in UInt64(1)...UInt64(30) {
+            var r = SeededRNG(seed)
+            let sig = genSignal(&r, hourOffset: r.below(6), base: now)
+            let T = pool[r.below(pool.count)]
+            var D = pool[r.below(pool.count)]
+            while D == T { D = pool[r.below(pool.count)] }
+            let w = Double(2 + r.below(3))                    // 2..4
+
+            // Ranked displacement: identical to the old learn(T,+w)+learn(D,-1).
+            var viaOp = LearningStore()
+            viaOp.correct(sig, to: T, weight: w, displacingRanked: D)
+            var byHand = LearningStore()
+            byHand.learn(sig, target: T, weight: w)
+            byHand.learn(sig, target: D, weight: -1)
+            try expect(viaOp == byHand,
+                       "seed \(seed): operator with a ranked displacement must equal +w to T, -1 to D")
+
+            // No displacement (boost): identical to a bare reinforce, no subtract.
+            var viaOpBoost = LearningStore()
+            viaOpBoost.correct(sig, to: T, weight: w)
+            var byHandBoost = LearningStore()
+            byHandBoost.learn(sig, target: T, weight: w)
+            try expect(viaOpBoost == byHandBoost,
+                       "seed \(seed): operator without a displacement must equal a bare +w reinforce")
         }
     }
 }

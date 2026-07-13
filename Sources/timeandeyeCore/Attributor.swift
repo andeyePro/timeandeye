@@ -673,23 +673,44 @@ package final class Attributor {
                         tasks: [WorkTask] = [], now: Date = Date()) {
         let displaced = recordDisplaced(signal, by: .task(task), tasks: tasks, now: now)
         recordSticky(signal, target: .task(task), now: now)
-        learnSurface(signal, to: task, weight: 2)
-        // A correction SUBTRACTS from the displaced learned belief (reviewer
-        // B9: `correct` was dead code — the mistaken association kept its
-        // counts and kept winning on sibling surfaces, so the user had to
-        // correct each one individually). Only ranked (learned) beliefs
-        // subtract; a displaced pin/prime/sticky isn't a count problem.
-        if let displaced, displaced.source == .ranked {
-            learning.learn(signal, target: displaced.target, weight: -1,
-                           disabledRecipes: disabledSiteRecipes)
-        }
+        primeSurface(signal, to: task)
+        // The whole correction — reinforce +2, and SUBTRACT from the displaced
+        // learned belief when (and only when) it was engine-ranked — is ONE
+        // operator call (reviewer B9: the mistaken association used to keep its
+        // counts and keep winning on sibling surfaces, so the user had to
+        // correct each one individually). A displaced pin/prime/sticky isn't a
+        // count problem, so its target is not passed to the operator.
+        learning.correct(signal, to: .task(task), weight: 2,
+                         displacingRanked: rankedDisplaced(displaced),
+                         disabledRecipes: disabledSiteRecipes)
     }
 
-    /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
-    package func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double) {
+    /// The displaced belief to subtract against, or nil: a correction only
+    /// discounts a belief the ENGINE ranked (`.ranked`); a human's earlier
+    /// word, a pin or a prime is not evidence to subtract against. The
+    /// Attributor's single decision point for the operator's discount arm, so
+    /// confirm and assign can never disagree on it.
+    private func rankedDisplaced(
+        _ displaced: (target: Target, source: AttributionExplanation.Source)?) -> Target? {
+        (displaced?.source == .ranked) ? displaced?.target : nil
+    }
+
+    /// Remember this surface → task as a soft prime, clearing any stale pending
+    /// prime for the same surface. The prime side of a correction; the count
+    /// side goes through `LearningStore.correct` / `learn`.
+    private func primeSurface(_ signal: ActivitySignal, to task: TaskRef) {
         let surface = Surface(signal: signal)
         primedSurfaces[surface] = task
         if pendingPrime?.surface == surface { pendingPrime = nil }
+    }
+
+    /// Weighted soft prime (caps 0.95). The why-panel Boost drives it heavier.
+    /// A pure reinforce with NO discount arm — the +4 boost gesture deliberately
+    /// does not subtract from a displaced ranked belief the way a +2 confirm
+    /// does (attribution-learning spec §Open decisions 3, "boost symmetry": an
+    /// owner call, left as-is here).
+    package func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double) {
+        primeSurface(signal, to: task)
         learning.learn(signal, target: .task(task), weight: weight,
                        disabledRecipes: disabledSiteRecipes)
     }
@@ -712,12 +733,11 @@ package final class Attributor {
             primedSurfaces[surface] = nil
         }
         if pendingPrime?.surface == surface { pendingPrime = nil }
-        learning.learn(signal, target: target, weight: 2,
-                       disabledRecipes: disabledSiteRecipes)
-        if let displaced, displaced.source == .ranked {
-            learning.learn(signal, target: displaced.target, weight: -1,
-                           disabledRecipes: disabledSiteRecipes)   // B9
-        }
+        // One operator call: reinforce +2, subtract from the displaced belief
+        // only when it was engine-ranked (B9). Same correction as `confirm`.
+        learning.correct(signal, to: target, weight: 2,
+                         displacingRanked: rankedDisplaced(displaced),
+                         disabledRecipes: disabledSiteRecipes)
     }
 
     /// Add or update a pin (by id). New pins go last → most recent for ties.
