@@ -300,7 +300,10 @@ public final class SyncEngine {
             // `.stuck` snapshot. A create already on the wire stays truthful —
             // the reconcile sweep then owns it — and the undo is a no-op for
             // that row rather than re-opening the F12 amnesia window.
-            try? journal.setPostingRecord(row, unlessState: [.posted, .inflight])
+            // Best-effort by design: a false result means a raced pass already
+            // owns the row (.posted/.inflight) and requarantine correctly leaves
+            // it be, so the CAS outcome is intentionally discarded.
+            _ = try? journal.setPostingRecord(row, unlessState: [.posted, .inflight])
         }
     }
 
