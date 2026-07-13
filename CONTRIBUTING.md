@@ -33,7 +33,8 @@ green — CI runs them on every push.
   (Xero API terms; frozen by a check). Features come from the sensor signal
   only.
 - `TaskBackend` is the seam new backends implement — `OPBackend` is the
-  reference conformer.
+  reference conformer. Adding one? Start with [docs/backends.md](docs/backends.md),
+  the full method-by-method backend guide.
 
 ## Licence and contributor agreement
 

@@ -136,6 +136,15 @@ non-work time land there instead of stopping the clock.
 - Calls answered on the iPhone are invisible (look like idle time).
 - Onboarding is this README; in-app guided onboarding arrives with user 2.
 
+## Extending: write your own backend
+
+Backends plug in behind the `TaskBackend` seam — one protocol that translates
+between the local journal and a remote task/timesheet service (OpenProject is
+the reference conformer). To add another tracker (Toggl, Jira, GitHub Issues,
+something in-house), see **[docs/backends.md](docs/backends.md)**: the
+method-by-method guide, the error and transport contracts, registration, and a
+complete worked example.
+
 ## Licence
 
 AGPL-3.0 (see LICENSE). Contributions are accepted under the andeye

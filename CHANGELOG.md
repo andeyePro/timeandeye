@@ -2,6 +2,21 @@
 
 ## 2026-07-13
 
+- [x] **docs: contributor backend guide (`docs/backends.md`).** Added the
+  authoritative "Write your own backend" walk-through for public contributors:
+  what a backend is (a translator that keeps the local journal as the source
+  of truth), the `TaskBackend` protocol method by method (task-list reads,
+  time-entry writes, the page-recognition hook), the error contract
+  (`PermanentPostError` vs `AmendmentError` and how the engine routes on
+  each), the injected `HTTPTransport` testability seam, registration
+  (`BackendClass.pm`/`.finance` and the entitlement-gated overload), the
+  local-first/compliance invariants, and a complete copyable worked example
+  (illustrative in-doc listing, not a compiled target — zero build-surface
+  risk). Promotes and expands the public-API spec's short §Extending section,
+  which keeps its summary and links here. README gains an "Extending" pointer
+  subsection and CONTRIBUTING points backend authors at the guide. Docs only;
+  no production code touched.
+
 - [x] **One correction operator – unified the divergent "a correction" logic
   behind a single definition; no behaviour change.** Refactor only. Before,
   "a correction" had three shapes: the live `Attributor.confirm`/`assign` path
