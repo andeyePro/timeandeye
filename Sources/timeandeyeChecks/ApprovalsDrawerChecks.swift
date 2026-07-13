@@ -722,6 +722,97 @@ func reviewSliceDetailChecks(_ c: Checks) {
         try expectEq(try unwrap(second.display.before).end, s1.end)
         try expectNil(second.display.after, "never its own neighbour")
     }
+
+    // Same-EDGE tie-break: when two candidates share the deciding edge, the
+    // one covering MORE of the adjacent time wins — the neighbour actually
+    // touching the slice, not an arbitrary one. (The `around` ordering:
+    // before = later start among equal ends; after = earlier end among equal
+    // starts.) The nearest-each-side checks above only vary the deciding edge.
+
+    c.check("before tie: sessions ending together — the later-STARTING one (covering more) wins") {
+        // Both end at 940 (a 60s gap to the 1000 slice start); one ran 500–940,
+        // the other 800–940. The one hugging the slice is 800–940.
+        let long = session(.op(1), 500, 940)
+        let hugging = session(.op(2), 800, 940)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600), in: [long, hugging])
+        let before = try unwrap(n.before)
+        try expectEq(before.task, .op(2), "the later-starting session is the one actually adjacent")
+        try expectEq(before.start, t0.addingTimeInterval(800))
+        try expectEq(before.gap, 60, "the shared deciding edge still sets the gap")
+    }
+
+    c.check("after tie: sessions starting together — the earlier-ENDING one (covering more) wins") {
+        // Both start at 1660 (a 60s gap to the 1600 slice end); one runs to
+        // 1700, the other to 1900. The one hugging the slice is 1660–1700.
+        let hugging = session(.op(3), 1660, 1700)
+        let long = session(.op(4), 1660, 1900)
+        let n = SliceNeighbours.around(start: t0.addingTimeInterval(1000),
+                                       end: t0.addingTimeInterval(1600), in: [long, hugging])
+        let after = try unwrap(n.after)
+        try expectEq(after.task, .op(3), "the earlier-ending session is the one actually adjacent")
+        try expectEq(after.end, t0.addingTimeInterval(1700))
+        try expectEq(after.gap, 60)
+    }
+
+    // PROPERTY: over a spread of slices, sessions and pending rows, the batch
+    // partition must reproduce the per-slice lookups EXACTLY — for every slice,
+    // both flavours. (The example check above pins two slices; this varies the
+    // count and the interleaving so a partitioning bug can't hide in a corner.)
+
+    c.check("batch == per-slice for EVERY slice across a varied spread (both flavours)") {
+        let sessions = [session(.op(1), 0, 300), session(.op(2), 350, 900),
+                        session(.op(3), 2050, 2400), session(.op(4), 4000, 4600)]
+        let slices = (0..<6).map { i in
+            pendingSeg("Excel", Double(i) * 1000 + 950, Double(i) * 1000 + 1500,
+                       title: "row \(i)")
+        }
+        let out = SliceNeighbours.batch(for: slices, sessions: sessions, pending: slices)
+        try expectEq(out.count, slices.count, "one result per slice, none dropped")
+        for slice in slices {
+            let got = try unwrap(out[slice.id])
+            try expectEq(got.adjacency,
+                         SliceNeighbours.around(start: slice.start, end: slice.end, in: sessions),
+                         "sessions-only flavour identical — AdjacencyBoost sees the same evidence")
+            try expectEq(got.display,
+                         SliceNeighbours.around(start: slice.start, end: slice.end,
+                                                in: sessions,
+                                                pending: slices.filter { $0.id != slice.id }),
+                         "display flavour identical, the slice's own row excluded")
+        }
+    }
+
+    // ReviewSliceDetail ASSEMBLY: the two neighbour flavours it carries are NOT
+    // interchangeable — `adjacency` is the sessions-only lookup precisely so a
+    // pending neighbour (evidence of nothing) can never reach AdjacencyBoost,
+    // while `display` may surface a nearer pending slice for the drawer. Pin
+    // that separation on an assembled detail.
+
+    c.check("ReviewSliceDetail keeps adjacency sessions-only while display may carry a pending neighbour") {
+        // A far tracked session before; a flush PENDING slice before. Display
+        // should prefer the pending one; adjacency must ignore it entirely.
+        let farSession = session(.op(1), 0, 400)
+        let flushPending = pendingSeg("Excel", 500, 1000, title: "Budget.xlsx")
+        let start = t0.addingTimeInterval(1000), end = t0.addingTimeInterval(1600)
+        let display = SliceNeighbours.around(start: start, end: end,
+                                             in: [farSession], pending: [flushPending])
+        let adjacency = SliceNeighbours.around(start: start, end: end, in: [farSession])
+        let detail = ReviewSliceDetail(
+            explanation: AttributionExplanation(source: .ranked, chosen: .task(.op(1)),
+                                                chosenScore: 0.7, lines: [], features: ["app=excel"]),
+            display: display, adjacency: adjacency)
+
+        try expect(try unwrap(detail.display.before).isPending,
+                   "the drawer surfaces the nearer pending neighbour")
+        let adjBefore = try unwrap(detail.adjacency.before)
+        try expect(!adjBefore.isPending, "adjacency's neighbour is an attributed session, never pending")
+        try expectEq(adjBefore.task, .op(1), "AdjacencyBoost only ever sees the tracked session")
+        // A boost fed the adjacency flavour keys on that session; the pending
+        // slice (task nil) could never have matched a candidate anyway.
+        let boost = AdjacencyBoost.apply(base: 0.5, candidate: .task(.op(1)), name: "Project 1",
+                                         neighbours: detail.adjacency)
+        try expect(boost.boost >= 0, "the sessions-only neighbour is a valid boost input")
+    }
 }
 
 // MARK: - Native selection semantics (Martin, 2026-07-10, second pass,

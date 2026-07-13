@@ -174,6 +174,7 @@ let asyncSuites: [(String, (Checks) async -> Void)] = [
     ("MultiBackendSync", multiBackendSyncChecks),
     ("ResolvedPosting", resolvedPostingChecks),
     ("PostingMachine", postingMachineChecks),
+    ("MultiDevicePosting", multiDevicePostingChecks),
     ("EndToEnd", endToEndChecks),
 ]
 

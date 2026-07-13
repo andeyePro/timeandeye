@@ -2,6 +2,29 @@
 
 ## 2026-07-13
 
+- [x] **test: multi-device posting safety + ReviewDetail coverage.** Test-only
+  (901→908 checks, 0 failed); no production behaviour changed. New
+  `MultiDevicePostingChecks` models TWO Macs sharing one journal via CloudKit —
+  two independent `SQLiteJournalStore`s + HLC clocks (so two device-local
+  posting ledgers, the real double-post surface), one shared `FakeBackend` both
+  engines post/list/delete against, sessions propagated as `SessionRevision`s
+  through `applyRemote` (the exact store entry point `CloudKitSyncTransport`
+  feeds), and the D2(a) `postingOwners`/`localDeviceID` gate as the sole
+  cross-device double-post guard. Pins three money invariants under
+  device-interleaved passes: M1 cross-device (two synced devices post ONE
+  remote entry — the non-owner defers, no rival create), cross-device delete
+  (a slice deleted on the non-owner retracts at the backend via the owner,
+  never re-posted — M4 across the pair), and stamp-driven cross-device
+  resurrection (deleted-then-resurrected slice re-bills exactly once as a NEW
+  entry, never a second live entry over the dead one). No production seam
+  needed — the two-device regime was already reachable through the existing
+  public/package API. Also fills genuine ReviewDetail gaps: the same-EDGE
+  tie-break in `SliceNeighbours.around` (later-start-before / earlier-end-after
+  = the neighbour covering more adjacent time), a batch==per-slice property
+  check across a varied spread, and a `ReviewSliceDetail` assembly check pinning
+  that `adjacency` stays sessions-only (a pending neighbour never reaches
+  `AdjacencyBoost`) while `display` may surface a nearer pending slice.
+
 - [x] **docs: contributor backend guide (`docs/backends.md`).** Added the
   authoritative "Write your own backend" walk-through for public contributors:
   what a backend is (a translator that keeps the local journal as the source
