@@ -317,12 +317,16 @@ and recorded rather than fixed blind:
   (docs/superpowers/specs/2026-07-13-attribution-learning.md), first property
   coverage (L1-L7), one correction operator. No behaviour change. See CHANGELOG.
 - [ ] Learning behaviour decisions (owner's call, surfaced by the 2026-07-13
-  pass; full block with recommendations in a private path
-  (1) add recency decay to associations – recommend a slow time-based
-  half-life (the moat's biggest gap: dropped clients resurface forever);
-  (2) [✕ forget] should also clear the target's `totals`; (3) floor counts at
-  write; (4) down-weight the hourOfDay teach side to match its 0.15 score
-  weight. L7 pins the current no-decay so (1) is a deliberate tested change.
+  pass; full block + the 2026-07-13 decay re-analysis in
+  a private path Priority order after re-analysis:
+  (1) **make [✕ forget] complete** – also clear the target's `totals`, so
+  "stop suggesting this" fully works (the one targeted fix for the narrow
+  stale-association residual); (2) floor counts at write; (3) down-weight the
+  hourOfDay teach side to match its 0.15 score weight. RECENCY DECAY:
+  re-analysed and NOT recommended – scoring is store-size-independent, closed
+  backend tasks leave the candidate pool so stale associations self-clean, and
+  "dropped" has no clean signal; leave associations and pins as-is. L7 pins
+  the current no-decay.
 - [x] Public API surface sealed to a three-tier contract (2026-07-12) –
   ~1,370 `public`→`package` demotions; spec at
   docs/superpowers/specs/2026-07-12-public-api-surface.md. See CHANGELOG.
