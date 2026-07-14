@@ -88,7 +88,8 @@ public final class PhoneController: ObservableObject {
         guard end.timeIntervalSince(live.since) >= 30 else { return }   // taps, not slices
         let s = Session(task: live.task, start: live.since, end: end,
                         certainty: 1.0, comment: nil)
-        try? journal.save(s)
+        do { try journal.save(s) }
+        catch { lastError = "Couldn't save tracked time — \(error). This slice may not be recorded." }
         try? journal.escalateOrigin(s.id, to: .manual)
         touchRecency(live.task)
         Task { await pushIfEligible() }

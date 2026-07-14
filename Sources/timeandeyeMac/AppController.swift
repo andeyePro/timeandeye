@@ -251,7 +251,8 @@ public final class AppController: ObservableObject {
     @Published package var settings: AndeyeSettings {
         didSet {
             invalidatePickList()   // statusOrder / localTasks feed the ranker
-            try? settingsStore.save(settings)
+            do { try settingsStore.save(settings) }
+            catch { lastError = "Couldn't save settings — \(error). Your change may revert on next launch." }
             Notifier.enabled = settings.systemNotifications
             attributor.emailMatchOrder = settings.emailMatchOrder
             attributor.disabledSiteRecipes = Set(settings.siteRecipesDisabled)
@@ -958,7 +959,8 @@ public final class AppController: ObservableObject {
                 note: note, autoCommentText: s.comment,
                 autoCommentEnabled: self.settings.autoComment,
                 toTrackedTime: self.settings.commentToTrackedTime)
-            try? self.journal.save(s)
+            do { try self.journal.save(s) }
+            catch { self.lastError = "Couldn't save tracked time — \(error). Your time up to now may not be recorded." }
             // The TASK-feed half no longer rides the flush: commitComment
             // posts it immediately to the DISPLAYED task. Consuming it here
             // let a grace-delayed flush from the PREVIOUS task steal the
@@ -5440,7 +5442,8 @@ public final class AppController: ObservableObject {
     @Published package private(set) var billing: BillableRules
 
     private func saveBilling() {
-        try? billingStore.save(billing)
+        do { try billingStore.save(billing) }
+        catch { lastError = "Couldn't save billable flags — \(error). Your change may revert on next launch." }
     }
 
     /// Stable project key for a task's containing project (see BillableRules

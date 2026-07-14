@@ -35,6 +35,11 @@ package final class SQLiteJournalStore: JournalStore {
         if sqlite3_open(path, &db) != SQLITE_OK {
             throw StoreError.open(String(cString: sqlite3_errmsg(db)))
         }
+        // Wait up to 5s on a momentarily-locked DB before a write fails — the
+        // one code-fixable cause of the transient save failures that would
+        // otherwise drop a slice/setting; the rest (disk-full, permissions) are
+        // now surfaced as errors rather than swallowed.
+        sqlite3_busy_timeout(db, 5000)
         try exec("""
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
