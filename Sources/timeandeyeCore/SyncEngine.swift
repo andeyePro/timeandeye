@@ -191,7 +191,14 @@ public final class SyncEngine {
         let candidates = ((try? journal.postingRecords(state: .posted,
                                                        backendID: entry.id)) ?? [])
             .filter { $0.lockedInvoiceRef == nil && $0.entryID != nil }
-            .filter { ($0.postedStart ?? .distantPast) > now.addingTimeInterval(-Self.divergenceScanHorizon) }
+            // A migrated / pre-snapshot row has nil postedStart (see
+            // migrateSingleSlotPostings, which nulls it and is never backfilled).
+            // Treat unknown vintage as "must scan" (.distantFuture), NOT
+            // "definitely too old" (.distantPast) — else a legacy pushed session
+            // is excluded from invoice-lock candidacy FOREVER, so once its period
+            // is invoiced the lock is never recorded and a later edit/delete
+            // could modify an already-billed entry (defeating the lock law).
+            .filter { ($0.postedStart ?? .distantFuture) > now.addingTimeInterval(-Self.divergenceScanHorizon) }
             .sorted { ($0.postedStart ?? .distantPast) > ($1.postedStart ?? .distantPast) }
             .prefix(Self.invoicePollBatch)
         guard !candidates.isEmpty else { return }
