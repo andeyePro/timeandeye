@@ -190,8 +190,15 @@ package struct LearningStore: Codable, Equatable, Sendable {
         let maxV = raw.values.max()!
         var expd: [Target: Double] = [:]
         var sum = 0.0
-        for (t, v) in raw {
-            let e = exp(v - maxV)
+        // Fold over `candidates` (ordered), NOT `raw` (a Dictionary, whose
+        // iteration order Swift randomises per process). Float addition is
+        // non-associative, so summing in hash order left the normaliser — and
+        // thus every returned score — differing by a ULP run-to-run, a real
+        // nondeterminism the L7 determinism check catches intermittently. The
+        // `expd[t] == nil` guard dedupes (candidates may repeat a target),
+        // matching the unique-key set the dictionary fold produced.
+        for t in candidates where expd[t] == nil {
+            let e = exp(raw[t]! - maxV)
             expd[t] = e
             sum += e
         }

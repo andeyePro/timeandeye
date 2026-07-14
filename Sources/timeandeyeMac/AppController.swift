@@ -3131,7 +3131,10 @@ public final class AppController: ObservableObject {
         row.lastError = nil
         row.sessionStamp = ((try? journal.sessionStamp(session.id)) ?? nil)
         row.updatedAt = Date()
-        try? journal.setPostingRecord(row)
+        // CAS, like clearPrimaryPosting/severPrimaryLinkage (spec §Concurrency):
+        // this controller-side write can race a sync pass across the PATCH
+        // await, so it must NOT overwrite an engine-owned `.inflight` intent.
+        try? journal.setPostingRecord(row, unlessState: [.inflight])
     }
 
     /// Sever `session`'s primary-pm linkage honouring the two laws
