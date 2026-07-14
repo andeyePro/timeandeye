@@ -50,12 +50,13 @@ package enum EmailSignalProbe {
         func snapshot() -> (count: Int, texts: [String], contexts: [String])? {
             var win: CFTypeRef?
             guard AXUIElementCopyAttributeValue(appEl, kAXFocusedWindowAttribute as CFString, &win) == .success,
-                  let window = win else { return nil }
+                  let window = win,
+                  CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
             var texts: [String] = []
             var contexts: [String] = []
             var count = 0
             // swiftlint:disable:next force_cast
-            walk(window as! AXUIElement, depth: 0, count: &count, texts: &texts, contexts: &contexts)
+            walk(window as! AXUIElement, depth: 0, count: &count, texts: &texts, contexts: &contexts)   // type-checked above
             return (count, texts, contexts)
         }
 

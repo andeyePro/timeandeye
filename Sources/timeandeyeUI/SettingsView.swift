@@ -379,7 +379,7 @@ struct SettingsView: View {
                     Text("%").font(.caption).foregroundStyle(.secondary)
                 }
                 Text(threshold > 1.0 ? "Never auto-push — everything queues for your review"
-                     : "Sessions ≥ \(Int((threshold * 100).rounded()))% certain post to \(backendName) by themselves; everything below queues for your review")
+                     : "Sessions ≥ \(safeInt(threshold * 100))% certain post to \(backendName) by themselves; everything below queues for your review")
                     .font(.caption).foregroundStyle(.secondary)
                 // The floor's meaningful range starts AT the Switch Buffer:
                 // anything briefer never journals, so a sub-buffer floor is
@@ -388,7 +388,7 @@ struct SettingsView: View {
                 let buffer = controller.settings.switchGraceSeconds
                 let reviewFloor = max(controller.settings.reviewFloorSeconds, buffer)
                 HStack {
-                    Stepper("Review queue floor: \(Int(reviewFloor.rounded()))s",
+                    Stepper("Review queue floor: \(safeInt(reviewFloor))s",
                             value: Binding(
                                 get: { max(controller.settings.reviewFloorSeconds, buffer) },
                                 set: { controller.settings.reviewFloorSeconds = max($0, buffer) }),
@@ -401,8 +401,8 @@ struct SettingsView: View {
                 }
                 HStack(spacing: 4) {
                     Text(reviewFloor <= buffer
-                         ? "Every uncertain slice asks for review (visits briefer than the \(Int(buffer))s"
-                         : "Only visits of \(Int(reviewFloor.rounded()))s or longer ask for review – briefer visits are still timed and follow the Auto-push rule above, they just never ask. Related:")
+                         ? "Every uncertain slice asks for review (visits briefer than the \(safeInt(buffer))s"
+                         : "Only visits of \(safeInt(reviewFloor))s or longer ask for review – briefer visits are still timed and follow the Auto-push rule above, they just never ask. Related:")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Switch Buffer") { selectedCategory = .behaviour }
                         .buttonStyle(.link).font(.caption)
@@ -695,7 +695,7 @@ struct SettingsView: View {
     @ViewBuilder private var behaviourSections: some View {
             Section("Behaviour") {
                 HStack {
-                    Stepper("Switch buffer: \(Int(controller.settings.switchGraceSeconds))s",
+                    Stepper("Switch buffer: \(safeInt(controller.settings.switchGraceSeconds))s",
                             value: $controller.settings.switchGraceSeconds, in: 0...120, step: 5)
                     numericBox(intBinding($controller.settings.switchGraceSeconds, in: 0...120))
                     Text("s").font(.caption).foregroundStyle(.secondary)
@@ -703,7 +703,7 @@ struct SettingsView: View {
                 Text("A new window must hold focus this long before the task switches; briefer visits merge into the current task. (Restart to apply.)")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Stepper("Sleep grace: \(Int(controller.settings.sleepGraceSeconds))s",
+                    Stepper("Sleep grace: \(safeInt(controller.settings.sleepGraceSeconds))s",
                             value: $controller.settings.sleepGraceSeconds, in: 0...300, step: 15)
                     numericBox(intBinding($controller.settings.sleepGraceSeconds, in: 0...300))
                     Text("s").font(.caption).foregroundStyle(.secondary)
@@ -713,7 +713,7 @@ struct SettingsView: View {
                 Toggle("Offer to log time you were away",
                        isOn: $controller.settings.offerIdleBackfill)
                 HStack {
-                    Stepper("Offer to backfill an idle gap for: \(Int(controller.settings.idleBackfillWindowSeconds / 3600))h",
+                    Stepper("Offer to backfill an idle gap for: \(safeInt(controller.settings.idleBackfillWindowSeconds / 3600))h",
                             value: $controller.settings.idleBackfillWindowSeconds, in: 3600...86_400, step: 3600)
                     numericBox(intBinding($controller.settings.idleBackfillWindowSeconds,
                                           scale: 1.0 / 3600, in: 3600...86_400), width: 44)
@@ -1060,9 +1060,18 @@ struct SettingsView: View {
             .frame(width: width)
     }
 
+    /// Trap-safe Int for rendering a setting decoded from disk without a range
+    /// check: a corrupt or cross-version settings.json can hold a magnitude
+    /// `Int(Double)` would trap on (opening Settings would then crash). Clamp
+    /// to a display-safe range (Int32, far beyond any real setting) first.
+    private func safeInt(_ d: Double) -> Int {
+        guard d.isFinite else { return 0 }
+        return Int(min(max(d.rounded(), Double(Int32.min)), Double(Int32.max)))
+    }
+
     private func intBinding(_ value: Binding<Double>, scale: Double = 1,
                             in range: ClosedRange<Double>) -> Binding<Int> {
-        Binding(get: { Int((value.wrappedValue * scale).rounded()) },
+        Binding(get: { safeInt(value.wrappedValue * scale) },
                 set: { value.wrappedValue = min(max(Double($0) / scale,
                                                     range.lowerBound),
                                                 range.upperBound) })
