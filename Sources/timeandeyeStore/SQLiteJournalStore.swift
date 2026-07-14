@@ -787,7 +787,7 @@ package final class SQLiteJournalStore: JournalStore {
                       sqlite3_bind_double($0, 1, from.timeIntervalSince1970)
                       sqlite3_bind_double($0, 2, to.timeIntervalSince1970)
                   }) { stmt in
-            out.append(try self.decoder.decode(FocusSpan.self, from: self.jsonColumn(stmt, 0)))
+            if let s = try? self.decoder.decode(FocusSpan.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
         }
         return out
     }
@@ -819,7 +819,7 @@ package final class SQLiteJournalStore: JournalStore {
     package func pendingReview() throws -> [ReviewSegment] {
         var out: [ReviewSegment] = []
         try query("SELECT json FROM review_segments WHERE assigned = 0 ORDER BY start") { stmt in
-            out.append(try self.decoder.decode(ReviewSegment.self, from: self.jsonColumn(stmt, 0)))
+            if let s = try? self.decoder.decode(ReviewSegment.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
         }
         return out
     }
@@ -831,8 +831,8 @@ package final class SQLiteJournalStore: JournalStore {
                 var segments: [ReviewSegment] = []
                 try query("SELECT json FROM review_segments WHERE id = ?",
                           bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-                    segments.append(try self.decoder.decode(ReviewSegment.self,
-                                                            from: self.jsonColumn(stmt, 0)))
+                    if let s = try? self.decoder.decode(ReviewSegment.self,
+                                                        from: self.jsonColumn(stmt, 0)) { segments.append(s) }
                 }
                 guard var segment = segments.first else { continue }
                 segment.assigned = target
@@ -891,7 +891,7 @@ package final class SQLiteJournalStore: JournalStore {
         try pruneRetroDigests()
         var out: [RetroDigest] = []
         try query("SELECT json FROM retro_digests ORDER BY date DESC LIMIT \(limit)") { stmt in
-            out.append(try self.decoder.decode(RetroDigest.self, from: self.jsonColumn(stmt, 0)))
+            if let s = try? self.decoder.decode(RetroDigest.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
         }
         return out
     }
