@@ -3089,8 +3089,15 @@ public final class AppController: ObservableObject {
         registry.primaryPM?.id ?? OPBackend.stableID
     }
 
-    /// The primary pm row is gone: the session re-enters the pm queue.
+    /// The primary pm row is gone: the session re-enters the pm queue — UNLESS
+    /// the engine has taken the cell in-flight. Per the state-machine spec's
+    /// concurrency rule, a mutation-side row-clear must not overwrite `inflight`
+    /// (the engine owns the in-progress intent); leave it and let reconcile
+    /// settle. The read + conditional delete run with no `await` between, so on
+    /// the MainActor they are atomic against a racing sync pass — no TOCTOU.
     private func clearPrimaryPosting(_ id: UUID) {
+        let cell = (try? journal.postingRecord(session: id, backendID: primaryPMLedgerID)) ?? nil
+        guard cell?.state != .inflight else { return }
         try? journal.clearPostingRecord(session: id, backendID: primaryPMLedgerID)
     }
 
@@ -3211,18 +3218,23 @@ public final class AppController: ObservableObject {
             sessions: action.repointSessionIDs.compactMap {
                 ((try? journal.session(id: $0)) ?? nil)
             })
-        if let merged = action.mergedComment {
-            try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
-        }
         // Lock law: reconcile never deletes a billed (invoice-locked) entry,
-        // nor moves a billed session onto a different survivor. Gather the
-        // locked entry ids and locked sessions so both loops skip them; a
-        // human reconciles billed duplicates by unlocking the invoice first.
+        // amends its comment, nor moves a billed session onto a different
+        // survivor. Gather the locked entry ids and locked sessions FIRST — so
+        // the survivor comment-merge below skips them too — then a human
+        // reconciles billed duplicates by unlocking the invoice first.
         let lockedRecords = ((try? journal.postingRecords(
                 state: .posted, backendID: primaryPMLedgerID)) ?? [])
             .filter { $0.lockedInvoiceRef != nil }
         let lockedEntryIDs = Set(lockedRecords.compactMap(\.entryID))
         let lockedSessions = Set(lockedRecords.map(\.sessionID))
+        // Amend the survivor's comment only when the survivor is NOT itself a
+        // billed entry — overwriting an invoice-locked entry's comment is a
+        // mutation of billed time.
+        if let merged = action.mergedComment,
+           !lockedEntryIDs.contains(action.survivorID) {
+            try? await backend.updateEntryComment(id: action.survivorID, comment: merged)
+        }
         // Track which deletes ACTUALLY landed: a swallowed failure left the
         // duplicate live on the backend, yet undo then recreated it anyway —
         // manufacturing a duplicate. Undo now recreates only the entries this
@@ -3263,7 +3275,14 @@ public final class AppController: ObservableObject {
                     freshIDs[e.id] = fresh
                 }
             }
-            if let restore = plan.restoreSurvivorComment {
+            // Lock law at undo time: if the survivor became billed since the
+            // reconcile, don't restore its comment over invoice-locked time.
+            let undoLockedIDs = Set(((try? self.journal.postingRecords(
+                    state: .posted, backendID: self.primaryPMLedgerID)) ?? [])
+                .filter { $0.lockedInvoiceRef != nil }
+                .compactMap(\.entryID))
+            if let restore = plan.restoreSurvivorComment,
+               !undoLockedIDs.contains(plan.survivorID) {
                 try? await backend.updateEntryComment(id: plan.survivorID,
                                                       comment: restore)
             }
@@ -4769,12 +4788,21 @@ public final class AppController: ObservableObject {
                 if let backend = self.backend, backend.owns(prior.task),
                    let taskID = prior.task.backendTaskID,
                    let entryID = prior.opTimeEntryID {
-                    try? await backend.updateTimeEntry(
-                        id: entryID, taskID: taskID, start: prior.start,
-                        duration: prior.end.timeIntervalSince(prior.start),
-                        activityID: self.settings.activityOverrides[prior.task]
-                            ?? self.settings.defaultActivityID,
-                        comment: prior.comment)
+                    // Lock law (mirrors the forward path below): if the survivor's
+                    // cell became invoice-locked after the merge, ⌘Z must not PATCH
+                    // its now-billed entry back to the prior extent — park diverged.
+                    let cell = (try? self.journal.postingRecord(
+                        session: prior.id, backendID: self.primaryPMLedgerID)) ?? nil
+                    if cell?.lockedInvoiceRef != nil {
+                        self.parkDiverged(cell)
+                    } else {
+                        try? await backend.updateTimeEntry(
+                            id: entryID, taskID: taskID, start: prior.start,
+                            duration: prior.end.timeIntervalSince(prior.start),
+                            activityID: self.settings.activityOverrides[prior.task]
+                                ?? self.settings.defaultActivityID,
+                            comment: prior.comment)
+                    }
                 }
             }
             self.updateJournalSummary()
