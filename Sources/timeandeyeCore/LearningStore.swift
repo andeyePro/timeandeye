@@ -217,7 +217,12 @@ package struct LearningStore: Codable, Equatable, Sendable {
                 sums[target, default: 0] += count
             }
         }
-        return sums.max { a, b in a.value < b.value }?.key
+        // Total-order tie-break (was `max` on value alone → a tie between two
+        // targets was broken by random Dictionary iteration order, flipping
+        // which learned association the Evidence Card offers to suppress).
+        return sums.max { a, b in
+            (a.value, String(describing: a.key)) < (b.value, String(describing: b.key))
+        }?.key
     }
 
     /// Fraction of a target's confirmed weight that fell in this hour

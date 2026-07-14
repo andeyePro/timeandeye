@@ -94,7 +94,7 @@ package enum JournalPrune {
                 comment: comment))
             deleteIDs += sorted.map(\.id)
         }
-        create.sort { $0.start < $1.start }
+        create.sort { $0.start != $1.start ? $0.start < $1.start : $0.id.uuidString < $1.id.uuidString }
         deleteIDs.sort { $0.uuidString < $1.uuidString }
         return Plan(create: create, deleteIDs: deleteIDs)
     }
@@ -113,7 +113,8 @@ package enum JournalPrune {
         guard remaining > capBytes else { return Plan(create: [], deleteIDs: []) }
         let oldestFirst = sized
             .filter { !SessionMerge.isDerivedID($0.0.id) }
-            .sorted { $0.0.start < $1.0.start }
+            .sorted { $0.0.start != $1.0.start ? $0.0.start < $1.0.start
+                                              : $0.0.id.uuidString < $1.0.id.uuidString }
         var deleteIDs: [UUID] = []
         for (session, bytes) in oldestFirst {
             guard remaining > capBytes else { break }

@@ -140,7 +140,13 @@ package enum DuplicateReconcile {
                 label: "Task \(taskID): keep entry \(survivor.id), delete \(deleteIDs.count) duplicate"
                     + (deleteIDs.count == 1 ? "" : "s")))
         }
-        return actions.sorted { ($0.entries.first?.createdAt ?? $0.start) < ($1.entries.first?.createdAt ?? $1.start) }
+        // Total-order tie-break (survivorID) so two groups sharing an anchor
+        // timestamp don't order Dictionary-random across runs.
+        return actions.sorted {
+            let a = $0.entries.first?.createdAt ?? $0.start
+            let b = $1.entries.first?.createdAt ?? $1.start
+            return a != b ? a < b : String(describing: $0.survivorID) < String(describing: $1.survivorID)
+        }
     }
 }
 

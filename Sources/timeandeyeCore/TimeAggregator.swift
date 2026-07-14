@@ -32,7 +32,11 @@ public enum TimeAggregator {
         }
 
         var projects: [String: [Node]] = [:]
-        for (ref, seconds) in perTask {
+        // Deterministic iteration (perTask is a Dictionary — Swift randomises
+        // its order per process): build the node arrays stably so the
+        // non-associative float sum below and the tie-order don't flip launch
+        // to launch (the same class as the LearningStore softmax fix).
+        for (ref, seconds) in perTask.sorted(by: { String(describing: $0.key) < String(describing: $1.key) }) {
             let task = tasks.first { $0.ref == ref }
             let project = task.flatMap(\.project)
                 ?? (task?.isLocalOnly == true || isLocal(ref) ? localProjectName : "Other")
@@ -45,9 +49,10 @@ public enum TimeAggregator {
         return projects.map { name, taskNodes in
             Node(label: name,
                  seconds: taskNodes.reduce(0) { $0 + $1.seconds },
-                 children: taskNodes.sorted { $0.seconds > $1.seconds })
+                 children: taskNodes.sorted {
+                     $0.seconds != $1.seconds ? $0.seconds > $1.seconds : $0.label < $1.label })
         }
-        .sorted { $0.seconds > $1.seconds }
+        .sorted { $0.seconds != $1.seconds ? $0.seconds > $1.seconds : $0.label < $1.label }
     }
 
     private static func isLocal(_ ref: TaskRef) -> Bool {
@@ -73,6 +78,6 @@ public enum TimeAggregator {
             }
         }
         return perApp.map { Node(label: $0.key, seconds: $0.value) }
-            .sorted { $0.seconds > $1.seconds }
+            .sorted { $0.seconds != $1.seconds ? $0.seconds > $1.seconds : $0.label < $1.label }
     }
 }

@@ -34,7 +34,14 @@ package enum RulesLedger {
                 if $0.fireCount != $1.fireCount { return $0.fireCount > $1.fireCount }
                 return $0.createdAt > $1.createdAt
             })
-        }.sorted { nameOf($0.target).localizedCaseInsensitiveCompare(nameOf($1.target)) == .orderedAscending }
+        }.sorted {
+            // Total-order tie-break: two different TaskRefs can share a display
+            // name (same-named tasks in different projects, or local vs remote),
+            // and name-only compare left their group order Dictionary-random.
+            let c = nameOf($0.target).localizedCaseInsensitiveCompare(nameOf($1.target))
+            return c != .orderedSame ? c == .orderedAscending
+                                     : String(describing: $0.target) < String(describing: $1.target)
+        }
     }
 
     /// Plain-text dump of every rule for the ledger's "Copy rules" button —
@@ -115,7 +122,14 @@ package enum SiteRulesLedger {
                 if $0.fireCount != $1.fireCount { return $0.fireCount > $1.fireCount }
                 return $0.createdAt > $1.createdAt
             })
-        }.sorted { nameOf($0.target).localizedCaseInsensitiveCompare(nameOf($1.target)) == .orderedAscending }
+        }.sorted {
+            // Total-order tie-break: two different TaskRefs can share a display
+            // name (same-named tasks in different projects, or local vs remote),
+            // and name-only compare left their group order Dictionary-random.
+            let c = nameOf($0.target).localizedCaseInsensitiveCompare(nameOf($1.target))
+            return c != .orderedSame ? c == .orderedAscending
+                                     : String(describing: $0.target) < String(describing: $1.target)
+        }
     }
 
     /// Plain-text dump for the ledger's "Copy rules" on the Sites segment —

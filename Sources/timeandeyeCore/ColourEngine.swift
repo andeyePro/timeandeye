@@ -166,13 +166,18 @@ package struct ColourAssignments: Codable, Equatable, Sendable {
     @discardableResult
     package mutating func migrateProjectKeys(_ mapping: [String: String]) -> Int {
         var moved = 0
-        for (titleKey, idKey) in mapping {
+        // Sorted for determinism (mirrors BillableRules): two title-keys that
+        // collide onto one id-key otherwise kept a hash-random anchor and
+        // dropped the other. A colour has no money-safe direction, so the
+        // sorted-first colliding title wins deterministically; a pre-existing
+        // id key is never clobbered.
+        for (titleKey, idKey) in mapping.sorted(by: { $0.key < $1.key }) {
             guard let record = projects[titleKey] else { continue }
+            projects[titleKey] = nil
             if projects[idKey] == nil {
                 projects[idKey] = record
                 moved += 1
             }
-            projects[titleKey] = nil
         }
         return moved
     }

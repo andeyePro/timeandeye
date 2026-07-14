@@ -162,10 +162,28 @@ package struct BillableRules: Codable, Equatable, Sendable {
     @discardableResult
     package mutating func migrateProjectKeys(_ mapping: [String: String]) -> Int {
         var moved = 0
-        for (titleKey, idKey) in mapping {
+        var migrated: Set<String> = []   // id-keys populated BY this pass
+        // Deterministic order (was Dictionary-random): two title-keys can
+        // COLLIDE onto one id-key (a project renamed while still title-keyed),
+        // and the old code let whichever hash order visited first win the slot —
+        // the other flag was deleted, so which survived was random AND its loss
+        // irreversible (persisted immediately). Sort for determinism, and merge
+        // a same-pass collision MONEY-SAFE (billable wins, earlier `since`)
+        // rather than dropping a flag. A PRE-existing id key is still never
+        // clobbered (the documented rule).
+        for (titleKey, idKey) in mapping.sorted(by: { $0.key < $1.key }) {
             guard let flag = projects[titleKey] else { continue }
-            if projects[idKey] == nil { projects[idKey] = flag; moved += 1 }
             projects[titleKey] = nil
+            if migrated.contains(idKey), let existing = projects[idKey] {
+                let billable = existing.billable || flag.billable
+                let since = billable ? min(existing.since, flag.since)
+                                     : max(existing.since, flag.since)
+                projects[idKey] = ProjectFlag(billable: billable, since: since)
+            } else if projects[idKey] == nil {
+                projects[idKey] = flag
+                migrated.insert(idKey)
+                moved += 1
+            }
         }
         return moved
     }
