@@ -59,7 +59,7 @@ package final class CloudKitSyncTransport: SyncTransport {
               let device = record["hlcDevice"] as? String else { return nil }
         return SessionRevision(
             session: session,
-            hlc: HLC(physicalMillis: millis, counter: Int32(counter), deviceID: device),
+            hlc: HLC(physicalMillis: millis, counter: Int32(truncatingIfNeeded: counter), deviceID: device),
             origin: (record["origin"] as? Int).flatMap(SliceOrigin.init(rawValue:)) ?? .auto,
             deleted: (record["deleted"] as? Int) == 1)
     }

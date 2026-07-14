@@ -198,9 +198,11 @@ package final class SensorHub {
         var window: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString,
                                             &window) == .success,
-              let windowElement = window else { return nil }
+              let windowRef = window,
+              CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
+        let windowElement = windowRef as! AXUIElement   // provably safe: type-checked above
         var title: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(windowElement as! AXUIElement,
+        guard AXUIElementCopyAttributeValue(windowElement,
                                             kAXTitleAttribute as CFString,
                                             &title) == .success else { return nil }
         return title as? String

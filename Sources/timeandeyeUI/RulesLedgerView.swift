@@ -212,7 +212,7 @@ struct RulesLedgerView: View {
 
     private func confirmMessage(_ rules: [EmailRule]) -> String {
         guard rules.count > 1 else {
-            let rule = rules[0]
+            guard let rule = rules.first else { return "" }
             return "“\(rule.value.isEmpty ? "any mail" : rule.value)” → \(controller.name(of: .task(rule.target))). Undoable right after (⌘Z)."
         }
         return "All \(rules.count) rules for \(controller.name(of: .task(rules[0].target))). Undoable right after (⌘Z), as one step."
@@ -220,7 +220,7 @@ struct RulesLedgerView: View {
 
     private func deletedBannerText(_ deleted: [EmailRule]) -> String {
         guard deleted.count > 1 else {
-            let rule = deleted[0]
+            guard let rule = deleted.first else { return "" }
             return "Deleted “\(rule.value.isEmpty ? "any mail" : rule.value)”."
         }
         return "Deleted \(deleted.count) rules."
@@ -419,7 +419,7 @@ struct RulesLedgerView: View {
 
     private func confirmSiteMessage(_ rules: [SiteRule]) -> String {
         guard rules.count > 1 else {
-            let rule = rules[0]
+            guard let rule = rules.first else { return "" }
             return "“\(rule.value)” → \(controller.name(of: .task(rule.target))). Undoable right after (⌘Z)."
         }
         return "All \(rules.count) rules for \(controller.name(of: .task(rules[0].target))). Undoable right after (⌘Z), as one step."
@@ -427,7 +427,8 @@ struct RulesLedgerView: View {
 
     private func deletedSiteBannerText(_ deleted: [SiteRule]) -> String {
         guard deleted.count > 1 else {
-            return "Deleted “\(deleted[0].value)”."
+            guard let d = deleted.first else { return "" }
+            return "Deleted “\(d.value)”."
         }
         return "Deleted \(deleted.count) rules."
     }
