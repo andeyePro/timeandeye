@@ -1353,7 +1353,7 @@
   CFBundleIdentifier `com.andeye.mac` and the signing identity/keychain
   (TCC grants), CFBundleExecutable `andeye` (quit-wait during upgrades),
   Swift type names (`Andeye*` — the brand lives on, only TT dies), and
-  
+  history docs (internal review archives, dated specs, CHANGELOG entries).
   Product-site domain refs aligned to time.andeye.com (astro `site:`,
   canonical, manual link); andeye.com/terms + /privacy left —
   Xero-registered, "must not change". Mac to run: `rm -rf .build && swift

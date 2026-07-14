@@ -877,7 +877,7 @@ and recorded rather than fixed blind:
 
 ## /vs task_002 – multi-backend + billable (2026-07-06)
 
-- [x] Build the multi-backend seam + billable flag per .vs/spec.md
+- [x] Build the multi-backend seam + billable flag per the multi-backend spec
   (BUILT 2026-07-06, cycle 1; fuzzy mode – Reviewer verdict + Martin's
   `swift run timeandeyeChecks` on the Mac pending). BackendRegistry +
   pm/finance classes, per-(session, backend) posting ledger with one-time
@@ -970,7 +970,7 @@ and recorded rather than fixed blind:
   decode drops as "N sessions from a newer version aren't visible") remains
   open — user-facing, deliberately deferred.
 - [x] RUN `swift run andeyeTTChecks` on the Mac — DONE 2026-07-08 00:2x BST
-  via the the local build bridge bridge: TOTAL 441 passed, 0 failed (twice).
+  via the Mac test bridge: TOTAL 441 passed, 0 failed (twice).
   Needed `rm -rf .build` on the Mac tree (stale module cache) and one
   pre-existing flaky check deflaked (ContextRules surface bytes).
 - [ ] Martin: LOCK the licence spec §1 (open Qs 1–5 now carry Fable
