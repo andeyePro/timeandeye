@@ -36,7 +36,8 @@ package enum JournalPrune {
         // with a DST transition in the window, raw arithmetic could shift the
         // cutoff day by one, changing which day's sessions become eligible.
         let cutoff = calendar.startOfDay(
-            for: calendar.date(byAdding: .day, value: -days, to: now) ?? now)
+            for: calendar.date(byAdding: .day, value: -days, to: now)
+                ?? now.addingTimeInterval(-Double(days) * 86_400))
         var groups: [String: [Session]] = [:]
         for s in sessions where s.end < cutoff {
             guard s.pushedToOP || !s.task.isRemote else { continue }
