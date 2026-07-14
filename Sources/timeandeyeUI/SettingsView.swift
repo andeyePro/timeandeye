@@ -173,7 +173,8 @@ struct SettingsView: View {
             Section("Pro connectors") {
                 // Xero ships with andeyePro; the Pro build registers it and
                 // this row goes live. In the community build it sits greyed
-                // behind the licence gate, one click from the upgrade page.
+                // behind the licence gate. The upgrade link is intentionally
+                // omitted until the /pro page exists (see TODO).
                 if controller.registeredConnectorNames.contains("Xero") {
                     connectorHeading("Xero", detail: "connected")
                     connectorHealth(named: "Xero")
@@ -185,10 +186,6 @@ struct SettingsView: View {
                             BackendEntitlementRequirement(requiredTier: .plus,
                                                           connectorID: "xero")))
                             .font(.caption).foregroundStyle(.tertiary)
-                        Button("upgrade") {
-                            openURL(URL(string: "https://time.andeye.com/pro")!)
-                        }
-                        .buttonStyle(.link).font(.caption)
                     }
                 }
             }

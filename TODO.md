@@ -310,6 +310,11 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Restore the Xero "upgrade" link in Settings ▸ Pro connectors once the
+  `/pro` page exists. Removed 2026-07-14 (pointed at a non-existent
+  time.andeye.com/pro; dead link ahead of the public flip). The greyed Xero
+  row and its licence caption stay; only the link button was dropped
+  (SettingsView, "Pro connectors" section). Re-add pointing at the real page.
 - [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus the
   follow-up tooling audit's fixes; details per-entry in CHANGELOG under
   2026-07-12. The publish steps themselves stay manual.
