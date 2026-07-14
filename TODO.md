@@ -427,7 +427,7 @@ and recorded rather than fixed blind:
   group under the single ref "Xero".
 
 - [x] Relocate the AndeyeLogo geometry out of timeandeyeCore into
-  timeandeyeTheme — DONE 2026-07-10.
+  timeandeyeTheme — DONE 2026-07-10 in a quiet development window.
   timeandeyeTheme is now a LEAF (its only Core use was this geometry), so
   a sibling app wanting just the brand takes just the theme target;
   timeandeyeMac gained the theme dep (AndeyeLogoImage renders the mark).
