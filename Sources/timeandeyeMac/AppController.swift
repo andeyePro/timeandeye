@@ -3109,6 +3109,31 @@ public final class AppController: ObservableObject {
             state: .posted, entryID: entryID))
     }
 
+    /// Refresh the primary-pm ledger snapshot after an in-place backend AMEND
+    /// (a same-task timeline-edit PATCH, or a coalesce merge), mirroring
+    /// `SyncEngine.finishAmend`: the entry now holds `session`'s extent, so
+    /// `postedStart`/`postedDuration`/`sessionStamp` must follow it. Without
+    /// this the next `verifyTouchedPosted` builds its OP lookup window from the
+    /// STALE pre-edit extent; for a cross-day edit (drag across midnight, a
+    /// backdate correction) OP returns no candidate for the moved entry, the
+    /// still-live entry is false-"vanished" and demoted, and the session then
+    /// re-creates a DUPLICATE billable entry. `setPrimaryPosted` records only
+    /// the id and leaves those fields nil — right for a reconcile re-point
+    /// (the entry holds a DIFFERENT session's extent), wrong for an amend.
+    private func recordPrimaryAmend(_ session: Session, entryID: RemoteEntryID?) {
+        var row = ((try? journal.postingRecord(session: session.id,
+                                               backendID: primaryPMLedgerID)) ?? nil)
+            ?? PostingRecord(sessionID: session.id, backendID: primaryPMLedgerID, state: .posted)
+        row.state = .posted
+        row.entryID = entryID
+        row.postedStart = session.start
+        row.postedDuration = session.end.timeIntervalSince(session.start)
+        row.lastError = nil
+        row.sessionStamp = ((try? journal.sessionStamp(session.id)) ?? nil)
+        row.updatedAt = Date()
+        try? journal.setPostingRecord(row)
+    }
+
     /// Sever `session`'s primary-pm linkage honouring the two laws
     /// (`PostingSever`). Replaces the raw `clearPrimaryPosting` +
     /// `try? deleteTimeEntry` idiom every mutation path used to inline —
@@ -4554,6 +4579,7 @@ public final class AppController: ObservableObject {
                         activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
                         comment: session.comment)
                     DebugLog.write("timeline edit pushed to backend entry \(entryID)")
+                    recordPrimaryAmend(session, entryID: entryID)
                 } catch {
                     lastError = "\(backend.displayName) update failed: \(error)"
                 }
@@ -4846,7 +4872,7 @@ public final class AppController: ObservableObject {
                         activityID: settings.activityOverrides[survivor.task] ?? settings.defaultActivityID,
                         comment: survivor.comment)
                     survivor.pushedToOP = true   // updated in place; don't re-create
-                    setPrimaryPosted(survivor.id, entryID: entryID)
+                    recordPrimaryAmend(survivor, entryID: entryID)
                     DebugLog.write("coalesce patched backend entry \(entryID)")
                 } catch {
                     // Keep it handled rather than risk a duplicate; the stale
