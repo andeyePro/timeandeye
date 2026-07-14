@@ -550,7 +550,7 @@ and recorded rather than fixed blind:
   NEEDS on-device verification that key-window shortcuts fire (built clean only).
   STANDING RULE going forward: every new command ships with a keyboard path, not
   just a button.
-- [x] Pin editor AI mode (#11, DONE 2026-06-28). Fourth hamburger entry "AI":
+- [x] Pin editor AI mode (DONE 2026-06-28). Fourth hamburger entry "AI":
   `AIAssist.pinRulePrompt` builds a prompt from the captured app/title/url + an
   editable guidance box (pre-seeded with the stable-pattern nudge,
   `AIAssist.defaultPinAdvice`), shown scrollable and auto-copied; the paste-back
@@ -901,8 +901,8 @@ and recorded rather than fixed blind:
 
 ## Window detail selection helpers (Martin, 2026-07-07)
 
-- [x] [+all] button — DONE 2026-07-08 overnight (Martin's 01:53 the maintainer channel
-  request): "+ all" appears top-right of the detail strip whenever the
+- [x] [+all] button — DONE 2026-07-08 overnight: "+ all" appears top-right
+  of the detail strip whenever the
   current selection has unselected twins (identity = app + title + tab URL,
   never the times); one click extends the selection to all of them; help
   text counts what it will add. Full build + suite green on the bridge.

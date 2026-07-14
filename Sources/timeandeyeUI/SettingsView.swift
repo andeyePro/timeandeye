@@ -1052,7 +1052,7 @@ struct SettingsView: View {
             }
     }
 
-    /// every numeric control pairs with a typeable number.
+    /// Every numeric control pairs with a typeable number.
     private func numericBox(_ binding: Binding<Int>, width: CGFloat = 52) -> some View {
         TextField("", value: binding, format: .number)
             .textFieldStyle(.roundedBorder)

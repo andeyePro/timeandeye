@@ -416,7 +416,7 @@
   fixes from Martin's 2026-07-11 logs. (1) The main bug: a pending switch
   reverted the instant the base task reappeared, with NO confidence gate —
   so a live-adjacency-boosted ~0.42 sighting of the base cancelled a
-  0.95-confident switch (his 14:22:30–32 sequence). The revert now requires
+  0.95-confident switch. The revert now requires
   `best.score >= config.uncertainBelow` (the same 0.6 floor a forward switch
   needs); a genuinely confident (≥0.6) return still reverts. New
   `SessionTracker` check reproduces both arms using OP work-package pages
@@ -637,7 +637,7 @@
   explanations swept from all UI copy.
 
 - [x] **Colours settings category — re-derive from scratch + colour sets.**
-  preserved pre-engine task colours share no family (each was an
+  Preserved pre-engine task colours share no family (each was an
   independent hue), so Settings ▸ Colours now offers **Re-derive all
   automatic colours** — `ColourEngine.rederiveAll` drops and re-allocates
   every groupable record in first-seen order (anchors spread the wheel,
@@ -2823,7 +2823,7 @@
 ## 2026-07-02
 
 - [x] **Session-sticky categorisation — your word holds for the day (300
-  checks green).** Martin's 23:27 report: composing an email, every
+  checks green).** Composing an email, every
   leave-and-return re-ran the inference ladder and an older email rule
   re-took the slice for the wrong project. Now any explicit assignment
   (popover pick, review assign, timeline edit, do-not-track) records a
@@ -3155,7 +3155,7 @@
 
 ## 2026-06-28
 
-- [x] **Pin editor AI mode (#11 final phase)** — a fourth hamburger entry for
+- [x] **Pin editor AI mode (final phase)** — a fourth hamburger entry for
   windows whose own app/title/url don't say which task they are. New Core builders
   (unit-checked): `AIAssist.pinRulePrompt` assembles a prompt from the captured
   fields + an editable guidance box (pre-seeded `defaultPinAdvice` nudging toward
@@ -3404,14 +3404,14 @@
   inverted" — verified false, `max(by:)` with `<` correctly picks highest
   specificity, and the specificity test passes; the real cause was matching, not
   selection.)
-- [x] **Pin badge shows the most distinctive clause (#11)** — an Expression
+- [x] **Pin badge shows the most distinctive clause** — an Expression
   pin's badge showed the FIRST clause; it now shows the leaf with the longest
   value (the bit that actually identifies the pin). `Predicate.shortLabel`.
-- [x] **Expression negation: `is not` / `does not contain` (#11)** — the parser
+- [x] **Expression negation: `is not` / `does not contain`** — the parser
   now accepts natural negations (`app is not "Ghostty"`, `url does not contain
   "github"`, `title doesn't match "…"`), so the user's example parses.
   `PredicateParser` (+ checks).
-- [x] **Pin parse errors are viewable in full (#11)** — a long parse error was
+- [x] **Pin parse errors are viewable in full** — a long parse error was
   truncated to one line; tap it to expand (and it's in the hover tooltip too).
   `PopoverView`.
 - [x] **Popover filter is focused on open** — the "type to search all N tasks"
@@ -3421,7 +3421,7 @@
 
 ## 2026-06-25
 
-- [x] **Pin editor hamburger: Components + Expression (#11)** — the boolean
+- [x] **Pin editor hamburger: Components + Expression** — the boolean
   engine existed but only the visual Components editor was wired up. The pin
   editor now has a hamburger (between Pin and Cancel) switching Components ↔ a
   typed Expression editor. New `PredicateParser` (Core, 7 checks) parses the

@@ -745,7 +745,7 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions.first?.end, t(180))
     }
 
-    c.check("a boost-only sighting of the base task must NOT cancel a confident pending switch; a confident one still reverts (Martin's 14:22:30 log)") {
+    c.check("a boost-only sighting of the base task must NOT cancel a confident pending switch; a confident one still reverts") {
         // A (op1) tracked; a confident B (op2) pends the switch A->B at 0.95.
         // Then an ambiguous surface where A wins ONLY via the running-clock
         // boost (~0.28, well under the 0.6 floor): the pend MUST survive — an
@@ -1094,7 +1094,7 @@ func sessionTrackerChecks(_ c: Checks) {
                    "op(1)'s comment leaked the excursion's window title")
     }
 
-    c.check("rapid MANUAL pick + comment + pick back: the pinned middle survives the relabels (Martin's 02:01 test)") {
+    c.check("rapid MANUAL pick + comment + pick back: the pinned middle survives the relabels") {
         // Picking a task from the list is a RELABEL (this whole visit was X),
         // and picking back relabels again — which re-tagged the commented
         // middle stretch and erased it before flush. Pinned spans are immune.
@@ -1120,7 +1120,7 @@ func sessionTrackerChecks(_ c: Checks) {
                    "the surrounding op(1) time still flushes")
     }
 
-    c.check("a comment on the DOMINANT task never duplicates its own run (Martin's 03:58 log walk)") {
+    c.check("a comment on the DOMINANT task never duplicates its own run") {
         // A pin whose chain overlaps a same-target dominant run must exempt
         // that run from the gate, NOT add a twin — the twin journalled two
         // overlapping slices of one task and stole the comment onto one.

@@ -219,13 +219,13 @@ public final class AppController: ObservableObject {
     /// The speech-bubble note. NOT @Published: binding a TextField to a
     /// published var rebuilds the whole popover on every keystroke and steals
     /// focus ("can't type"). The popover edits a local copy and pushes here.
-    /// Committed comments awaiting their slice, PER TASK (Martin's three
-    /// rapid test comments once all rode one global note onto one slice).
+    /// Committed comments awaiting their slice, PER TASK: without this, several
+    /// rapid comments once all rode one global note onto one slice.
     /// Each task's note is consumed by ITS slice at flush.
-    /// TIMESTAMPED per task (Martin's 14:39 test: a comment typed after
-    /// returning from an excursion accumulated onto the PRE-excursion part of
-    /// the base slice — the carve splits one task's time into several slices,
-    /// so each slice must consume only the comments typed within ITS span).
+    /// TIMESTAMPED per task: a comment typed after returning from an excursion
+    /// accumulated onto the PRE-excursion part of the base slice — the carve
+    /// splits one task's time into several slices, so each slice must consume
+    /// only the comments typed within ITS span.
     package var manualNotes: [TaskRef: [(text: String, at: Date)]] = [:]
     /// Display-target shim over `manualNotes` — the live-slice comment the
     /// timeline editor and legacy paths read/write. Keyed by the task the
@@ -962,7 +962,7 @@ public final class AppController: ObservableObject {
             // The TASK-feed half no longer rides the flush: commitComment
             // posts it immediately to the DISPLAYED task. Consuming it here
             // let a grace-delayed flush from the PREVIOUS task steal the
-            // note (Martin's comment landed on #238, 2026-07-09).
+            // note.
             // Tracked time counts as recency: the task you just worked on
             // belongs at the top of every pick list.
             if let i = self.taskCache.firstIndex(where: { $0.ref == s.task }) {
@@ -2009,8 +2009,7 @@ public final class AppController: ObservableObject {
     package func dismissIdleGap() { pendingGap = nil }
 
     /// One committed comment from the popover bar (enter pressed). Two
-    /// destinations, deliberately split (Martin, 2026-07-09 — his
-    /// comment posted to #238):
+    /// destinations, deliberately split:
     /// - The TASK's activity feed gets it NOW, addressed to the task the
     ///   popover is DISPLAYING — what the user sees is what gets commented.
     ///   Riding the flush was the bug: the note went to whichever slice
@@ -2612,7 +2611,7 @@ public final class AppController: ObservableObject {
     /// posted ones flag; the rest suggest. Runs on the retro pass's own
     /// debounce, so every teach/correction re-evaluates promptly.
     private func runContradictionPass() {
-        // the whole behaviour is a user choice.
+        // The whole behaviour is a user choice.
         guard settings.refileMode != .off else {
             refileSuggestions = []
             contradictedPostedCount = 0

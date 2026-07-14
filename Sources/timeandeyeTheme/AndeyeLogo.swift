@@ -63,7 +63,7 @@ package enum AndeyeLogo {
     /// numerically: curve 0 at u=0.03565 meets curve 1 at v≈0.996, within
     /// 0.01px). The tail retracts ALONG ITS OWN CURVE — a de Casteljau trim
     /// of curve 0's leading arc, never an endpoint drag, so the & keeps its
-    /// exact shape through the wink (his 19:53 note: dragging the endpoint
+    /// exact shape through the wink (dragging the endpoint
     /// swelled the &'s top loop) — while the bottom lid's end travels to
     /// the same corner. Apart from the draw-on (which starts at the tail to
     /// show it's an ampersand), a winking eye is a single loop — both lids

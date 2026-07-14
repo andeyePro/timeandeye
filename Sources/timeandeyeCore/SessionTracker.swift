@@ -563,7 +563,7 @@ package final class SessionTracker {
                 // faint boost-only sighting of the base task — e.g. the running
                 // clock lifting it to ~0.42 on an ambiguous surface — would
                 // cancel a 0.95-confident pending switch it has no business
-                // overruling (Martin's 14:22:30 log).
+                // overruling.
                 if best.target == p.from, best.score >= config.uncertainBelow {
                     revertPendingSwitch(at: now)          // confident return within grace
                 } else if best.target == p.target {
@@ -649,8 +649,8 @@ package final class SessionTracker {
     /// visit is work by attestation, however short): a pinned excursion is
     /// journalled RIGHT NOW as its own slice — waiting for the eventual
     /// flush left the timeline showing nothing where the user just
-    /// commented (his 02:40 test: the pin fired, the slice appeared only
-    /// at the next flush, which hadn't come when he looked). The emitted
+    /// commented: the pin fired, but the slice appeared only
+    /// at the next flush, which hadn't yet come. The emitted
     /// interval is remembered and carved out of the eventual dominant run.
     private func revertPendingSwitch(at date: Date = Date()) {
         guard let p = pendingSwitch else { return }
@@ -953,10 +953,9 @@ package final class SessionTracker {
         for f in forced {
             // If a same-target run already overlaps the pinned chain — the
             // pin was on the DOMINANT task — adding a forced twin would
-            // journal two overlapping slices of the same task (found via
-            // Martin's 03:58 log walk, 2026-07-09: the base-task comment's
-            // chain duplicated the base run and stole the note onto one
-            // twin). Just exempt the covering run(s) from the length gate.
+            // journal two overlapping slices of the same task (the base-task
+            // comment's chain duplicated the base run and stole the note onto
+            // one twin). Just exempt the covering run(s) from the length gate.
             var coveredByOwnRun = false
             for i in runs.indices where runs[i].target == f.target
                 && runs[i].start < f.end && runs[i].end > f.start {
