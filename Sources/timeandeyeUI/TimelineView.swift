@@ -329,8 +329,10 @@ struct TimelineView: View {
         let recent = controller.timelineSessions(from: liveEdge.addingTimeInterval(-2 * 86_400),
                                                   to: liveEdge)
         guard let block = TimelineMath.latestBlock(in: recent) else {
-            viewStart = Calendar.current.startOfDay(for: Date())
-            viewSpan = 86_400
+            let cal = Calendar.current
+            viewStart = cal.startOfDay(for: Date())
+            viewSpan = (cal.date(byAdding: .day, value: 1, to: viewStart)  // DST-safe day length
+                ?? viewStart.addingTimeInterval(86_400)).timeIntervalSince(viewStart)
             clampViewport()
             return
         }
@@ -343,7 +345,10 @@ struct TimelineView: View {
     /// Pan by whole days (the ‹ › buttons) — the continuous-timeline analogue
     /// of the old day-stepper, but it just slides the same-width window.
     private func pan(days: Int) {
-        viewStart = viewStart.addingTimeInterval(Double(days) * 86_400)
+        // Calendar day-add (handles the 23/25h DST day), NOT raw seconds, so the
+        // "same time, next day" the ‹ › buttons promise holds across a DST edge.
+        viewStart = Calendar.current.date(byAdding: .day, value: days, to: viewStart)
+            ?? viewStart.addingTimeInterval(Double(days) * 86_400)
         editing = nil
         selection = []
         sliceFocus = nil
@@ -354,8 +359,12 @@ struct TimelineView: View {
     }
 
     private func showToday() {
-        viewStart = Calendar.current.startOfDay(for: Date())
-        viewSpan = 86_400
+        let cal = Calendar.current
+        viewStart = cal.startOfDay(for: Date())
+        // Calendar day length (23/25h on a DST-change Sunday), NOT raw 86_400,
+        // else "Today" shows an hour of tomorrow or clips today's last hour.
+        viewSpan = (cal.date(byAdding: .day, value: 1, to: viewStart)
+            ?? viewStart.addingTimeInterval(86_400)).timeIntervalSince(viewStart)
         clampViewport()
     }
 

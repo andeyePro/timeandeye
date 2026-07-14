@@ -32,8 +32,11 @@ package enum JournalPrune {
     package static func plan(sessions: [Session], olderThanDays days: Int,
                             now: Date = Date(),
                             calendar: Calendar = .current) -> Plan {
+        // Calendar day-subtraction (DST-safe), NOT raw seconds: near midnight
+        // with a DST transition in the window, raw arithmetic could shift the
+        // cutoff day by one, changing which day's sessions become eligible.
         let cutoff = calendar.startOfDay(
-            for: now.addingTimeInterval(-Double(days) * 86_400))
+            for: calendar.date(byAdding: .day, value: -days, to: now) ?? now)
         var groups: [String: [Session]] = [:]
         for s in sessions where s.end < cutoff {
             guard s.pushedToOP || !s.task.isRemote else { continue }
