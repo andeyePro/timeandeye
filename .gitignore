@@ -26,6 +26,9 @@ __pycache__/
 *.pyc
 
 # Working notes, not part of the shipped tree
+# personal dev screenshots (real avatar / machine-inventory captures) — never
+
+Screenshots/
 
 # The paid tier lives in the private andeyePro repo, never here
 /pro/

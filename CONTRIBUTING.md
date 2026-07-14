@@ -43,9 +43,9 @@ deliberately: it keeps this codebase and everything built on it open, for
 good.
 
 But the AGPL and Apple's App Store are incompatible – Apple's terms and the
-AGPL's source-distribution requirements can't both be satisfied, which is
-why projects like VLC had to be pulled from the store, and why an AGPL app
-can't simply be published there. So for andeye to exist both as a genuinely
+AGPL's source-distribution requirements can't both be satisfied. It's the
+same copyleft-vs-App-Store clash that forced GPL apps like VLC off the store,
+and it means an AGPL app can't simply be published there. So for andeye to exist both as a genuinely
 copyleft community app here AND as an iPhone / App Store app (and the paid
 andeyePro build), one party needs to hold rights broad enough to ship under
 both sets of terms. That party is andeye Ltd, and the CLA is how it gets
