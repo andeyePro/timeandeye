@@ -246,10 +246,9 @@
   provenance matrix.
 
 - [x] **Restore the local-state ignore rules.** `.gitignore` again excludes
-  
-  
-  binaries, so a routine broad `git add` cannot stage per-machine or working
-  material. 
+  tool state, Python bytecode, working notes, scratch trees, and the root
+  build binaries, so a routine broad `git add` cannot stage per-machine or
+  working material.
 
 - [x] **install-timeandeye.command no longer self-clobbers on a loose .app
   source.** The self-clobber guard compared `$NEW` and `$DEST` as raw
