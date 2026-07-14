@@ -37,7 +37,7 @@ Team ID from https://developer.apple.com/account → Membership details.
 
 ---
 
-## 1. One-time portal work (Martin, in the browser – scripts cannot do these)
+## 1. One-time portal work (browser steps – scripts cannot do these)
 
 All at https://developer.apple.com/account unless noted. Order matters.
 
@@ -51,7 +51,7 @@ All at https://developer.apple.com/account unless noted. Order matters.
    ```bash
    openssl req -new -newkey rsa:2048 -nodes \
      -keyout devid.key -out devid.csr \
-     -subj "/emailAddress=martin@example.com/CN=Martin Currie/C=GB"
+     -subj "/emailAddress=you@example.com/CN=Your Name/C=GB"
    ```
 
    Upload `devid.csr`, download `developerID_application.cer`, then import
@@ -106,7 +106,7 @@ All at https://developer.apple.com/account unless noted. Order matters.
 
    ```bash
    xcrun notarytool store-credentials andeye-notary \
-     --apple-id martin@example.com --team-id TEAMID \
+     --apple-id you@example.com --team-id TEAMID \
      --password <app-specific-password>
    ```
 
@@ -185,7 +185,7 @@ Order of operations, replacing the self-signed block of make-app.sh (keep the
 build/Info.plist/stamp parts unchanged):
 
 ```bash
-IDENTITY="Developer ID Application: Martin Currie (TEAMID)"
+IDENTITY="Developer ID Application: Your Name (TEAMID)"
 PROFILE="$HOME/secrets/andeye_Developer_ID.provisionprofile"
 
 # 1. Embed the profile - BEFORE signing, exact filename matters.

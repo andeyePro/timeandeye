@@ -132,7 +132,6 @@ non-work time land there instead of stopping the clock.
 
 ## Known v0.1 limits
 
-- Safari tab URLs not yet read (Chrome/Opera/Brave only).
 - Calls answered on the iPhone are invisible (look like idle time).
 - Onboarding is this README; in-app guided onboarding arrives with user 2.
 

@@ -192,7 +192,7 @@ fields, so one correction can cover exactly the right slice of a site.
 Built-in recipes understand:
 
 - **GitHub** - owner, repository, section (issues, pulls, actions...) and
-  the open issue/PR title. "Everything in the example repo → task X" is one
+  the open issue/PR title. "Everything in the acme-web repo → task X" is one
   Remember at the repository grain.
 - **Google Docs / Drive** - document type, the document itself, and its
   title. A document rule keys on the document's stable identity, so it
