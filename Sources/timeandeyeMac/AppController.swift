@@ -4518,15 +4518,27 @@ public final class AppController: ObservableObject {
         try? journal.escalateOrigin(session.id, to: .edited)
         if let backend, backend.owns(session.task),
            let taskID = session.task.backendTaskID, let entryID = session.opTimeEntryID {
-            do {
-                try await backend.updateTimeEntry(
-                    id: entryID, taskID: taskID, start: session.start,
-                    duration: session.end.timeIntervalSince(session.start),
-                    activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
-                    comment: session.comment)
-                DebugLog.write("timeline edit pushed to backend entry \(entryID)")
-            } catch {
-                lastError = "\(backend.displayName) update failed: \(error)"
+            // Lock law (spec §The lock law): never AMEND an invoice-locked
+            // entry. A same-task edit (extent/comment) reaches here without the
+            // task-change branch's sever, so it must consult the lock itself:
+            // the local edit stands (journalled above), but the billed remote
+            // entry is left untouched and the cell parks .diverged for a human,
+            // exactly as coalesceAdjacent does for a locked survivor.
+            let cell = (try? journal.postingRecord(session: session.id,
+                                                   backendID: primaryPMLedgerID)) ?? nil
+            if cell?.lockedInvoiceRef != nil {
+                parkDiverged(cell)
+            } else {
+                do {
+                    try await backend.updateTimeEntry(
+                        id: entryID, taskID: taskID, start: session.start,
+                        duration: session.end.timeIntervalSince(session.start),
+                        activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
+                        comment: session.comment)
+                    DebugLog.write("timeline edit pushed to backend entry \(entryID)")
+                } catch {
+                    lastError = "\(backend.displayName) update failed: \(error)"
+                }
             }
         } else if previous?.task != session.task {
             await syncIfEnabled()   // reassigned: push under the new task
