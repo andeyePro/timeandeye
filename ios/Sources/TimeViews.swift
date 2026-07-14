@@ -388,7 +388,12 @@ struct TimelinePhoneView: View {
 
     private var dayBounds: ClosedRange<Date> {
         let start = Calendar.current.startOfDay(for: now)
-        return start...start.addingTimeInterval(86_400)
+        // Calendar arithmetic, NOT +86_400: a DST-change day is 23 or 25 hours
+        // long, so the raw constant would clamp the timeline viewport an hour
+        // past (or short of) true local midnight (matches TimePeriod / SpentView).
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: start)
+            ?? start.addingTimeInterval(86_400)
+        return start...end
     }
 
     private func reload() {

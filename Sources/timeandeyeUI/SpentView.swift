@@ -122,7 +122,12 @@ struct SpentView: View {
     /// The journal query window for the current selection: start-of-day of the
     /// first selected day, to start-of-day after the last (exclusive).
     private var effectiveRange: (from: Date, to: Date) {
-        (selStart, selEnd.addingTimeInterval(86_400))
+        // Calendar arithmetic, NOT +86_400: a DST-change day is 23 or 25 hours
+        // long, so the raw constant would pull an hour of the ADJACENT day into
+        // this range — corrupting the pie total AND bulk-reassign scope (both
+        // read this). The exact hazard TimePeriod.range() already guards.
+        (selStart, Calendar.current.date(byAdding: .day, value: 1, to: selEnd)
+            ?? selEnd.addingTimeInterval(86_400))
     }
 
     /// A preset button: set the selection to that period (relative to today) and
@@ -157,7 +162,8 @@ struct SpentView: View {
         selStart = cal.startOfDay(for: range.lowerBound)
         selEnd = cal.startOfDay(for: range.upperBound)
         activePreset = TimePeriod.matching(start: selStart,
-                                           endExclusive: selEnd.addingTimeInterval(86_400),
+                                           endExclusive: cal.date(byAdding: .day, value: 1, to: selEnd)
+                                               ?? selEnd.addingTimeInterval(86_400),
                                            now: Date())
     }
 

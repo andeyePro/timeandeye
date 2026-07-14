@@ -96,8 +96,10 @@ public final class PhoneController: ObservableObject {
 
     private func checkpoint() {
         guard let live = tracking else { return }
+        // Clock stepped back: never persist end < start (C9), matching the
+        // Mac's crash-checkpoint guard (AppController writes end: max(Date(), since)).
         try? journal.update(Session(id: Self.liveCheckpointID, task: live.task,
-                                    start: live.since, end: now(), certainty: 1.0,
+                                    start: live.since, end: max(now(), live.since), certainty: 1.0,
                                     pushedToOP: true))
     }
 
