@@ -3285,8 +3285,15 @@ public final class AppController: ObservableObject {
         for sid in action.repointSessionIDs where !lockedSessions.contains(sid) {
             if var s = try? journal.session(id: sid) {
                 s.opTimeEntryID = action.survivorID
-                try? journal.update(s)
-                setPrimaryPosted(sid, entryID: action.survivorID)   // ledger follows
+                // Ledger follows the repoint ONLY if the session write persisted;
+                // else the two stores diverge (session names the deleted
+                // duplicate while the ledger says posted under the survivor).
+                do {
+                    try journal.update(s)
+                    setPrimaryPosted(sid, entryID: action.survivorID)
+                } catch {
+                    lastError = "Reconcile repoint failed: \(error)"
+                }
             }
         }
         let n = action.deleteIDs.count
@@ -3327,8 +3334,13 @@ public final class AppController: ObservableObject {
                       var s = ((try? self.journal.session(id: sid)) ?? nil)
                 else { continue }
                 s.opTimeEntryID = fresh
-                try? self.journal.update(s)
-                self.setPrimaryPosted(sid, entryID: fresh)
+                // Ledger follows only on a persisted write (see forward path).
+                do {
+                    try self.journal.update(s)
+                    self.setPrimaryPosted(sid, entryID: fresh)
+                } catch {
+                    self.lastError = "Reconcile-undo repoint failed: \(error)"
+                }
             }
             self.updateJournalSummary()
         }
@@ -3358,7 +3370,22 @@ public final class AppController: ObservableObject {
         // journal-local (no backend writes), so undo can restore the exact
         // rows — rollups out, originals back, remote linkage untouched.
         let originals = plan.deleteIDs.compactMap { try? journal.session(id: $0) }
-        for session in plan.create { try? journal.save(session) }
+        // Create the rollups first, and ONLY delete the raw originals if EVERY
+        // rollup persisted. `try?` could otherwise silently drop a create and
+        // the delete loop would then lose that time span outright — breaking the
+        // "never loses time" guarantee above. On a create failure, roll back the
+        // rollups we did make so the (never-deleted) originals stay the sole,
+        // correct copy — no loss, no double-count.
+        var created: [UUID] = []
+        for session in plan.create {
+            do { try journal.save(session); created.append(session.id) }
+            catch {
+                lastError = "Consolidation failed: \(error)"
+                for id in created { try? journal.deleteSession(id) }
+                updateJournalSummary()
+                return
+            }
+        }
         for id in plan.deleteIDs { try? journal.deleteSession(id) }
         if !plan.isEmpty {
             let createdIDs = plan.create.map(\.id)
@@ -4660,7 +4687,16 @@ public final class AppController: ObservableObject {
                 await self.syncIfEnabled()
             }
         }
-        try? journal.deleteSession(session.id)
+        do {
+            try journal.deleteSession(session.id)
+        } catch {
+            // Local delete failed: do NOT sever the backend entry below, else the
+            // session survives locally (still pushedToOP, opTimeEntryID set)
+            // pointing at a deleted backend entry — the "vanished-entry" shape
+            // that triggers a false-vanish demote and a duplicate re-post.
+            lastError = "Couldn't delete session: \(error)"
+            return
+        }
         // Session-delete totality (M4): billed time must never quietly outlive
         // its session. The pm entry goes through the sever helper (lock law +
         // compensation). Every FINANCE cell is retracted too — not just pm as
