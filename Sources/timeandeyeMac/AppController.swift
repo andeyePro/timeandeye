@@ -3104,9 +3104,14 @@ public final class AppController: ObservableObject {
     /// The primary pm backend holds `entryID` for this session (a PATCH-in-
     /// place or reconcile re-point): record it so sync never re-creates it.
     private func setPrimaryPosted(_ id: UUID, entryID: RemoteEntryID?) {
-        try? journal.setPostingRecord(PostingRecord(
+        // CAS (spec §Concurrency), like clearPrimaryPosting / recordPrimaryAmend:
+        // this reconcile-re-point / coalesce-failure write can race a sync pass
+        // across an await, so it must NOT overwrite an engine-owned `.inflight`
+        // intent — else it clobbers the pass's in-flight create and a duplicate
+        // backend entry lands (violating the one-live-entry law).
+        _ = try? journal.setPostingRecord(PostingRecord(
             sessionID: id, backendID: primaryPMLedgerID,
-            state: .posted, entryID: entryID))
+            state: .posted, entryID: entryID), unlessState: [.inflight])
     }
 
     /// Refresh the primary-pm ledger snapshot after an in-place backend AMEND
