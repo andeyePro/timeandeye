@@ -115,8 +115,14 @@ public enum TimelineMath {
                 // task: it moved unselected time at a range edge AND swallowed a
                 // genuinely-selected sub-minute window. An honest short sliver
                 // beats misattributing a second of tracked time.
+                // Ownership rule (attribution-calculus spec): a reassigned piece
+                // moves to `target` by the user's hand, so it carries humanWord
+                // (1.0), not the old task's certainty; a non-reassigned piece
+                // keeps the session's own certainty.
                 pieces.append(Session(task: task, start: s, end: e,
-                                      certainty: session.certainty, comment: session.comment))
+                                      certainty: inReassign ? Attributor.humanWord
+                                                            : session.certainty,
+                                      comment: session.comment))
             }
         }
         return pieces.isEmpty ? [session] : pieces

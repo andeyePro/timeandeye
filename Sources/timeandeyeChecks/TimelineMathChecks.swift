@@ -113,6 +113,20 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(pieces[2].start, t(300)); try expectEq(pieces[2].end, t(600))
     }
 
+    c.check("split-reassign stamps the moved piece humanWord, keeps the rest") {
+        // Ownership rule: a hand-reassign is the user's word, so the moved
+        // piece carries humanWord (1.0) - NOT the old task's certainty, which
+        // would leave a corrected slice below the push bar and read incoherently
+        // against its userAssigned provenance. Untouched pieces keep theirs.
+        let s = Session(id: UUID(), task: .op(1), start: t(0), end: t(600),
+                        certainty: 0.3)
+        let pieces = TimelineMath.split(s, reassign: [(t(120), t(300))], to: .op(2))
+        try expectEq(pieces.map(\.task), [.op(1), .op(2), .op(1)])
+        try expectEq(pieces[1].certainty, Attributor.humanWord)
+        try expectEq(pieces[0].certainty, 0.3)
+        try expectEq(pieces[2].certainty, 0.3)
+    }
+
     c.check("split with a leading range yields two pieces") {
         let s = session(from: 0, to: 600, task: 1)
         let pieces = TimelineMath.split(s, reassign: [(t(0), t(240))], to: .op(2))
