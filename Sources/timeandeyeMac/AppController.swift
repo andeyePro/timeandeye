@@ -4676,6 +4676,19 @@ public final class AppController: ObservableObject {
     }
 
     package func deleteTimelineSession(_ session: Session, undoable: Bool = true) async {
+        // Delete FIRST; register the undo only AFTER it lands. A failed delete
+        // early-returns, and the undo (which restores the session as un-pushed)
+        // must not exist for a delete that never happened — else ⌘Z resurrects a
+        // session whose backend entry is still live, as `needingPush`, and
+        // re-posts a DUPLICATE. Also skip the backend sever below on failure,
+        // else the session survives locally pointing at a deleted entry (the
+        // "vanished-entry" shape that also re-posts a duplicate).
+        do {
+            try journal.deleteSession(session.id)
+        } catch {
+            lastError = "Couldn't delete session: \(error)"
+            return
+        }
         if undoable {
             var restore = session
             restore.opTimeEntryID = nil
@@ -4686,16 +4699,6 @@ public final class AppController: ObservableObject {
                 self.updateJournalSummary()
                 await self.syncIfEnabled()
             }
-        }
-        do {
-            try journal.deleteSession(session.id)
-        } catch {
-            // Local delete failed: do NOT sever the backend entry below, else the
-            // session survives locally (still pushedToOP, opTimeEntryID set)
-            // pointing at a deleted backend entry — the "vanished-entry" shape
-            // that triggers a false-vanish demote and a duplicate re-post.
-            lastError = "Couldn't delete session: \(error)"
-            return
         }
         // Session-delete totality (M4): billed time must never quietly outlive
         // its session. The pm entry goes through the sever helper (lock law +
