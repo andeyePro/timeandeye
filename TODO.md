@@ -310,6 +310,17 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Claude desktop app attribution is too coarse: desktop-app time is
+  recorded only as the app attributing to itself (the app name repeated in the
+  evidence card and window history), with no per-project or per-conversation
+  breakdown. Add sensing that distinguishes individual projects and individual
+  chats inside the desktop app. Not a flip blocker.
+- [ ] Calendar candidate selection picks the wrong events: a week-long all-day
+  event from a secondary calendar is offered as an attribution candidate while
+  a genuine short timed meeting from the primary calendar on the same day is
+  missed entirely. Fix selection/ranking — prefer timed events and the primary
+  calendar; deprioritise or exclude long multi-day all-day spans from secondary
+  calendars. Not a flip blocker.
 - [ ] Restore the Xero "upgrade" link in Settings ▸ Pro connectors once the
   `/pro` page exists. Removed 2026-07-14 (pointed at a non-existent
   time.andeye.com/pro; dead link ahead of the public flip). The greyed Xero
