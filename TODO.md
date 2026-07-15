@@ -310,6 +310,14 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Idle detection ends sessions during passive media watching: watching a
+  YouTube video with no cursor/keyboard activity trips the idle timeout and
+  stops the session, even though the video is playing and the user is present.
+  When the foreground tab/app is actively playing video, treat playback as
+  presence and don't idle-out. Then work out whether this generalises beyond
+  video sites (audio playback, long reads, remote-desktop, presentations) —
+  i.e. is there a broader "app is doing something the user is consuming"
+  signal, not just a per-site allowlist. Design question, not just a patch.
 - [ ] AFTER the flip: restructure the live-tracking flush to save-before-clear.
   Today the flush clears the running-slice timer before the SQLite save is
   confirmed, so a hard save failure (now surfaced via `lastError` + a 5s busy
