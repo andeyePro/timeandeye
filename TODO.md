@@ -310,6 +310,13 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] AFTER the flip: restructure the live-tracking flush to save-before-clear.
+  Today the flush clears the running-slice timer before the SQLite save is
+  confirmed, so a hard save failure (now surfaced via `lastError` + a 5s busy
+  timeout, commit 8e5725e) still can't recover that slice. Hold the slice in
+  hand until the save lands (or re-stage it on failure) so nothing is lost even
+  on a genuine disk/permission fault. Mac AppController.wireTracker onSession
+  and PhoneController.stop(). Not a flip blocker (Martin's call 2026-07-15).
 - [ ] Claude desktop app attribution is too coarse: desktop-app time is
   recorded only as the app attributing to itself (the app name repeated in the
   evidence card and window history), with no per-project or per-conversation

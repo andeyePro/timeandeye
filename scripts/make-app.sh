@@ -111,6 +111,13 @@ KC="$HOME/andeyett-dev.keychain-db"
 KCPASS="andeyett-build"
 ensure_identity() {
     security list-keychains -d user | grep -q "$KC" || {
+        # First run only: this creates a dedicated login-keychain to hold a
+        # self-signed code-signing certificate and adds it to your keychain
+        # search list. It stores no personal data and touches nothing else on
+        # your Mac; the self-signed cert is what keeps macOS permission grants
+        # (Accessibility, Automation) stable across rebuilds. To undo:
+        #   security delete-keychain "$KC"
+        echo "Creating a local signing keychain ($KC) to code-sign the app – first run only."
         security create-keychain -p "$KCPASS" "$KC" 2>/dev/null || true
         security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
     }
