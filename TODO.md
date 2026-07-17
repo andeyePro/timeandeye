@@ -341,8 +341,8 @@ and recorded rather than fixed blind:
   time.andeye.com/pro; dead link ahead of the public flip). The greyed Xero
   row and its licence caption stay; only the link button was dropped
   (SettingsView, "Pro connectors" section). Re-add pointing at the real page.
-- [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus the
-  follow-up tooling audit's fixes; details per-entry in CHANGELOG under
+- [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus
+  follow-up fixes; details per-entry in CHANGELOG under
   2026-07-12. The publish steps themselves stay manual.
 - [x] Attribution learning coherence pass (2026-07-13) – model written down
   (docs/superpowers/specs/2026-07-13-attribution-learning.md), first property
