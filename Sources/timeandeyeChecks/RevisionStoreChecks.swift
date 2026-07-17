@@ -236,18 +236,21 @@ func sqliteSyncStampingChecks(_ c: Checks) {
             hlc: phoneClock.tick(), origin: .manual))
 
         let semaphore = DispatchSemaphore(value: 0)
-        var thrown: Error?
+        // Reference box: the Task closure is @Sendable and may not mutate a
+        // captured var.
+        final class ErrorBox { var error: Error? }
+        let thrown = ErrorBox()
         Task {
             do {
                 try await macSync.sync()
                 try await phoneSync.sync()
                 try await macSync.sync()
                 try await phoneSync.sync()
-            } catch { thrown = error }
+            } catch { thrown.error = error }
             semaphore.signal()
         }
         semaphore.wait()
-        if let thrown { throw thrown }
+        if let error = thrown.error { throw error }
         try expectEq(try sqlite.allRevisions(), try phoneStore.allRevisions(),
                      "SQLite and in-memory replicas hold the identical raw set")
         try expectEq(try sqlite.allSessions().count, 2, "the phone's slice landed in the journal")

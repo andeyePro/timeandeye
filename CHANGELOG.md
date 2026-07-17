@@ -16,6 +16,11 @@
   the type-checker ceiling), plus an unused-`try?` warning silenced. No
   behaviour change; the strong copy in the timer bodies retains the
   app-lifetime controller only for the duration of each tick's Task.
+  Follow-on round (the failed run never reached the Checks target): two
+  captured-var mutations inside `Task` closures in `RevisionStoreChecks` /
+  `UndoStackChecks` replaced with local reference boxes, and one spurious
+  `await` on a fully-sync `PostingMachineChecks` check dropped (it resolved
+  to the sync `check` overload and warned). Assertions unchanged.
 
 ## 2026-07-13
 

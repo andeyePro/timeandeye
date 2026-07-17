@@ -135,7 +135,10 @@ func undoStackChecks(_ c: Checks) async {
         // under the group's label. The group's task-local token now scopes the
         // fold to its own context, so the stranger stands alone.
         let u = UndoStack()
-        var log: [String] = []
+        // Reference box: the group's Task is @Sendable and may not mutate a
+        // captured var.
+        final class Log { var lines: [String] = [] }
+        let log = Log()
         let bodyStarted = Gate()
         let mayFinish = Gate()
 
@@ -143,13 +146,13 @@ func undoStackChecks(_ c: Checks) async {
         // leak to the check's task where the stray register() below runs.
         let grouped = Task {
             await u.group("group") {
-                u.register("inside") { log.append("inside") }
+                u.register("inside") { log.lines.append("inside") }
                 await bodyStarted.release()   // "I'm registered and about to park"
                 await mayFinish.wait()        // suspend until the stray has landed
             }
         }
         await bodyStarted.wait()
-        u.register("stray") { log.append("stray") }   // no group token → its own step
+        u.register("stray") { log.lines.append("stray") }   // no group token → its own step
         await mayFinish.release()
         _ = await grouped.value
 
@@ -159,11 +162,11 @@ func undoStackChecks(_ c: Checks) async {
         let top = try unwrap(u.pop())
         try expectEq(top.label, "group", "the completed group sits on top")
         await top.inverse()
-        try expectEq(log, ["inside"], "the group holds ONLY its own inverse, not the stray")
+        try expectEq(log.lines, ["inside"], "the group holds ONLY its own inverse, not the stray")
         let below = try unwrap(u.pop())
         try expectEq(below.label, "stray")
         await below.inverse()
-        try expectEq(log, ["inside", "stray"], "the stray is its own independent ⌘Z step")
+        try expectEq(log.lines, ["inside", "stray"], "the stray is its own independent ⌘Z step")
     }
 
     await c.check("edit + follow-on coalesce in ONE group undoes to the exact prior rows") {

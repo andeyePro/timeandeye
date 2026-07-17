@@ -401,7 +401,7 @@ func postingMachineChecks(_ c: Checks) async {
     // retract-intent sweep also refuses billed time.
     // ===================================================================
 
-    await c.check("M2: PostingSever.plan freezes a locked cell and retracts only an unlocked live entry") {
+    c.check("M2: PostingSever.plan freezes a locked cell and retracts only an unlocked live entry") {
         let unlocked = PostingRecord(sessionID: UUID(), backendID: primaryPM,
                                      state: .posted, entryID: "e9")
         var locked = unlocked; locked.lockedInvoiceRef = "INV-1"
