@@ -2,6 +2,23 @@
 
 ## Post-flip (2026-07-17)
 
+- [ ] Reassign scope (Martin's call, 2026-07-17): a Reassign click relabels
+  ONLY the current tab/window's span — the assumption is the user was happy
+  with tracking until they switched; no ⌥ whole-session sweep for now (could
+  extend later if the reassign clearly informs prior spans, parked as
+  annoyance-risk). The visible tracked-time decrease is the user's alert.
+  Martin tests for a few days once built.
+- [ ] Popover mode default (Martin's call, 2026-07-17): keep the snap-back to
+  the default after each action — vary-per-click, no master toggle. Clicking
+  the "Reassign/Switch to" label should ALSO vary from the default for that
+  click (currently clicking the current task is the only discoverable
+  vary-path). Candidate: right-click on it to change the default action.
+  (Related decision closed: the 60 s switch hold stays, not a setting.)
+- [ ] Delete Projects/timeandeye-preflip (Martin, ~week of 2026-07-20) — the
+  last unrewritten pre-flip copy; everything private in it is preserved in
+  andeyePro. File in OpenProject once a session has OP access again (none on
+  2026-07-17); Martin re-runs the OP assign command before the next vibe.
+
 - [x] Fix CI on the fresh public repo — DONE 2026-07-17: first Actions run
   failed to COMPILE timeandeyeMac (runner Xcode drifted ahead while CI was
   frozen; not the suspected Checks fixture data — the djb2 collision fixture
@@ -378,11 +395,10 @@ and recorded rather than fixed blind:
 - [x] Posting/money state machine formalised (2026-07-12) – spec
   docs/superpowers/specs/2026-07-12-posting-state-machine.md, bounded
   model-check harness, three user-path holes closed. See CHANGELOG.
-- [ ] AFTER the flip: verify the iOS build against the API seal. The seal
-  protects `ios/` by analysis only (the CLT bridge cannot compile iOS), so
-  the next `cd ios && xcodegen` + Xcode build is the real gate. Every symbol
-  kept public for iOS is listed in the spec; a resolve failure there is a
-  seal bug to flag, not to fix by re-widening blindly.
+- [x] AFTER the flip: verify the iOS build against the API seal — DONE
+  2026-07-17: Martin's `cd ios && xcodegen` + two clean Xcode builds passed
+  first try; an independent same-day static trace of every symbol
+  `ios/Sources` touches confirmed the seal (all public, no UI/Mac imports).
 - [ ] Cross-repo (andeyePro session, tracked in the cross-repo note): Pro's
   Package.swift still depends on `../andeyeTT` product `andeyeTTCore`
   (pre-rename), so Pro cannot build against the renamed tree until its
