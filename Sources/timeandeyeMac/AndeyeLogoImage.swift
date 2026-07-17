@@ -120,9 +120,12 @@ package enum AndeyeLogoImage {
                     .foregroundColor: monochrome ? NSColor.black : NSColor.labelColor,
                 ]
                 let textSize = (text as NSString).size(withAttributes: attributes)
+                // Annotated: `.rounded()` hides the result type from the `/`
+                // overload pick, ambiguous under newer compilers' Double↔CGFloat
+                // implicit conversion.
+                let textY: CGFloat = ((height - textSize.height) / 2).rounded()
                 (text as NSString).draw(
-                    at: NSPoint(x: logoWidth + gap,
-                                y: ((height - textSize.height) / 2).rounded()),
+                    at: NSPoint(x: logoWidth + gap, y: textY),
                     withAttributes: attributes)
             }
             return true

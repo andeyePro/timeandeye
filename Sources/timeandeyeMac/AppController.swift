@@ -1251,9 +1251,13 @@ public final class AppController: ObservableObject {
                                                      leadSeconds: calendarLeadSeconds) else { return }
         let timer = Timer.scheduledTimer(withTimeInterval: max(next.timeIntervalSince(now), 1),
                                          repeats: false) { [weak self] _ in
+            // Timer blocks are @Sendable on newer SDKs: a weak `self` read
+            // inside the nested Task is a captured-var error there, so take
+            // the strong copy in the timer body (same for every timer below).
+            guard let self else { return }
             Task { @MainActor in
-                self?.recomputeCalendarMatch()
-                self?.scheduleCalendarBoundaryCheck()
+                self.recomputeCalendarMatch()
+                self.scheduleCalendarBoundaryCheck()
             }
         }
         // Tight: the meeting-start flash should land ON the minute, not
@@ -1486,7 +1490,8 @@ public final class AppController: ObservableObject {
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.refreshDisplayMirroring() }
+            guard let self else { return }
+            Task { @MainActor in self.refreshDisplayMirroring() }
         }
         refreshDisplayMirroring()
         // Calendar signal: `settings`'s own didSet drives start/stop on every
@@ -1500,8 +1505,8 @@ public final class AppController: ObservableObject {
         }
         Notifier.requestAuthorization()
         titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self else { return }
                 if let stop = self.scheduledStop, Date() >= stop {
                     self.scheduledStop = nil
                     if self.away { self.setAway(false) }
@@ -1512,10 +1517,11 @@ public final class AppController: ObservableObject {
             }
         }
         taskRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                self?.checkpointLive()        // crash-safety: persist the in-flight session
-                await self?.refreshTasks()
-                await self?.syncIfEnabled()   // retry path for failed/late pushes
+                self.checkpointLive()         // crash-safety: persist the in-flight session
+                await self.refreshTasks()
+                await self.syncIfEnabled()    // retry path for failed/late pushes
             }
         }
         // Nothing here is deadline-sensitive to the second: let the OS batch
@@ -1525,7 +1531,8 @@ public final class AppController: ObservableObject {
         // .tracking, so a stopped app does nothing here. The 5 s tolerance lets
         // the OS batch this with other timer fires — no extra wakeups.
         let cp = Timer.scheduledTimer(withTimeInterval: 12, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkpointLive() }
+            guard let self else { return }
+            Task { @MainActor in self.checkpointLive() }
         }
         cp.tolerance = 5
         checkpointTimer = cp
@@ -2542,7 +2549,8 @@ public final class AppController: ObservableObject {
         retroPassTimer?.invalidate()
         retroPassTimer = Timer.scheduledTimer(withTimeInterval: Self.retroPassDebounceSeconds,
                                               repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.runRetroPass() }
+            guard let self else { return }
+            Task { @MainActor in self.runRetroPass() }
         }
     }
 
@@ -3141,7 +3149,7 @@ public final class AppController: ObservableObject {
         // CAS, like clearPrimaryPosting/severPrimaryLinkage (spec §Concurrency):
         // this controller-side write can race a sync pass across the PATCH
         // await, so it must NOT overwrite an engine-owned `.inflight` intent.
-        try? journal.setPostingRecord(row, unlessState: [.inflight])
+        _ = try? journal.setPostingRecord(row, unlessState: [.inflight])
     }
 
     /// Sever `session`'s primary-pm linkage honouring the two laws
@@ -5080,12 +5088,20 @@ public final class AppController: ObservableObject {
         }
         out += "currentPin: \(currentPin.map { String(describing: $0.pin.rule) } ?? "none")\n"
         let recipeHealth = sensors.emailRecipeHealth()
-        out += "recipeHealth: " + (recipeHealth.isEmpty ? "no validated captures yet"
-            : recipeHealth.map { system, record in
-                "\(system.rawValue)=\(record.isUnhealthy ? "UNHEALTHY" : "ok") "
-                    + "(streak \(record.consecutiveFailures)"
-                    + "\(record.lastFault.map { ", last \($0.rawValue)" } ?? ""))"
-            }.sorted().joined(separator: "  ")) + "\n"
+        // Stepwise: the one-expression ternary+map+join form hits the
+        // type-checker's complexity ceiling on newer compilers.
+        let recipeLine: String
+        if recipeHealth.isEmpty {
+            recipeLine = "no validated captures yet"
+        } else {
+            let entries: [String] = recipeHealth.map { system, record in
+                let state = record.isUnhealthy ? "UNHEALTHY" : "ok"
+                let fault = record.lastFault.map { ", last \($0.rawValue)" } ?? ""
+                return "\(system.rawValue)=\(state) (streak \(record.consecutiveFailures)\(fault))"
+            }
+            recipeLine = entries.sorted().joined(separator: "  ")
+        }
+        out += "recipeHealth: " + recipeLine + "\n"
         copyToClipboard(out)
         return out
     }
@@ -5626,7 +5642,8 @@ public final class AppController: ObservableObject {
         billableSyncTimer?.invalidate()
         billableSyncTimer = Timer.scheduledTimer(withTimeInterval: Self.billableSyncDebounceSeconds,
                                                  repeats: false) { [weak self] _ in
-            Task { @MainActor in await self?.syncIfEnabled() }
+            guard let self else { return }
+            Task { @MainActor in await self.syncIfEnabled() }
         }
     }
 

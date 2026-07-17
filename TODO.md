@@ -1,5 +1,15 @@
 # TODO
 
+## Post-flip (2026-07-17)
+
+- [x] Fix CI on the fresh public repo — DONE 2026-07-17: first Actions run
+  failed to COMPILE timeandeyeMac (runner Xcode drifted ahead while CI was
+  frozen; not the suspected Checks fixture data — the djb2 collision fixture
+  premise re-verified intact, hues 173/174). Seven `guard let self` hoists out
+  of nested `Task { @MainActor }` blocks, one explicit-CGFloat bind in
+  AndeyeLogoImage, one type-check-ceiling break-up + one `try?` warning in
+  AppController. See CHANGELOG 2026-07-17.
+
 ## Review-fix cluster (2026-07-11)
 
 - [x] Undo ordering + group reentrancy + reconcile delete tracking

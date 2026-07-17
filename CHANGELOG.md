@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-17
+
+- [x] **fix(mac): compile clean on current Xcode toolchains (CI green).** First
+  Actions run on the fresh public repo failed: the macos-14 image's Xcode moved
+  ahead while CI was frozen, and the newer compiler rejects what the older CLT
+  accepted. Three fix shapes, all version-agnostic: (1) seven Timer/
+  NotificationCenter closures hoisted `guard let self` out of their nested
+  `Task { @MainActor }` blocks — those SDK blocks are now `@Sendable`, and a
+  weak `self` read inside the nested Task is a captured-var error there;
+  (2) `AndeyeLogoImage` text-baseline maths bound to an explicit `CGFloat`
+  (`.rounded()` hid the result type from the `/` overload pick, ambiguous
+  under Double↔CGFloat implicit conversion); (3) the recipe-health diagnostics
+  line in `AppController` built stepwise (one-expression ternary+map+join hit
+  the type-checker ceiling), plus an unused-`try?` warning silenced. No
+  behaviour change; the strong copy in the timer bodies retains the
+  app-lifetime controller only for the duration of each tick's Task.
+
 ## 2026-07-13
 
 - [x] **test: multi-device posting safety + ReviewDetail coverage.** Test-only
