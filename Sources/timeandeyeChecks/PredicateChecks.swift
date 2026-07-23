@@ -63,7 +63,10 @@ func predicateChecks(_ c: Checks) {
         let email = ActivitySignal(
             app: "Mail", windowTitle: "Re: renewal — Inbox",
             tabURL: nil, timestamp: now,
-            correspondents: ["Jane Doe <jane@harborlane.example>", "martin@example.com"],
+            // Counterparties only (correspondents are sender + recipients MINUS
+            // self), and neither may contain the "example.com" negative probe
+            // below — a substring hit there would invert the boundary claim.
+            correspondents: ["Jane Doe <jane@harborlane.example>", "sam@northgate.example"],
             emailSubject: "Re: policy renewal")
         try expect(Predicate.leaf(field: .sender, op: .contains, value: "harborlane.example").evaluate(email))
         try expect(!Predicate.leaf(field: .sender, op: .contains, value: "example.com").evaluate(email))

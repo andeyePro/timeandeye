@@ -201,10 +201,13 @@ call, not a mechanical fix:
   rows whose entry id moved on). Retry returns the cleared rows and ⌘Z
   re-quarantines (never over a `.posted` or `.inflight` row — no orphaned
   or double-posted entries).
-- [ ] Live pick (`userPicked`) and Stop are live-tracking controls, not data
-  edits — ⌘Z doesn't touch them by design (compensators: the popover's ←
-  revert, and the timeline edits every flushed slice). Confirm that stance
-  or fold picks into the stack.
+- [ ] Live pick (`userPicked`) and Stop join the ⌘Z stack — Martin's call
+  2026-07-23 ("I suspect cmd-Z should undo a live pick and even a stop").
+  Build with it: (a) ⌘⇧Z REDO over the whole app undo stack (none exists
+  today); (b) undo TRANSPARENCY — every ⌘Z/⌘⇧Z surfaces a one-line notice
+  naming what it just undid/redid (he hit a silent mystery-undo 2026-07-22:
+  sound fired, no clue what changed). Boundary kept: money already posted
+  to a backend is never clawed back silently (established design).
 - [x] `ingestAIResponse` applies N assignments as N undo steps (each fully
   undoable); grouping into one step means making the call async (UI ripple).
   DONE 2026-07-10 without the ripple: `UndoStack.groupSync` — a
@@ -344,14 +347,20 @@ and recorded rather than fixed blind:
   ~30 min if still running). Never push-and-forget — the 17–23 Jul
   red-main streak went unnoticed because nobody looked.
 
-- [ ] CI checks suite RED on main for three straight runs — 2891a94 +
-  7db416e (17 Jul) + 80452b8 (23 Jul), all failing at "Run the check
-  suite" (`swift run timeandeyeChecks`, macos-14), so ecea026's
-  "compile clean on current Xcode toolchains" did not cure it. Logs
-  unreadable from the 2026-07-23 container (old PAT had no repo
-  access; rotated, effective next relaunch) — first session after
-  relaunch: pull the job log for run 29978158390 via the API and
-  diagnose. No local repro possible (no Swift/macOS in container).
+- [x] CI checks suite RED on main — DIAGNOSED + FIXED 2026-07-23: the 17 Jul
+  runs died compiling (cured by ba37fae + ecea026); the 23 Jul run built and
+  RAN the suite on macos-14, and its red is
+  one deterministic check failure, `[Predicate] email fields` — its fixture's
+  second correspondent `martin@example.com` contains the check's own
+  `example.com` negative probe (self-contradictory since birth, 1f8e215).
+  Correspondent 2 is now `sam@northgate.example`. CI-verify on next push
+  (expect TOTAL 909 passed, 0 failed). Log route that works in-container:
+  run-level zip `gh api .../actions/runs/<id>/logs` (redirects via
+  results-receiver.actions.githubusercontent.com, reachable) — job-level
+  log endpoints redirect to firewalled Azure blob storage. See CHANGELOG.
+  Residual oddity, not chased: pre-flip local "0 failed" totals (07-08 →
+  07-13) can't have executed this check as recorded; treat historical
+  suite-count claims from container sessions as unverified.
 
 - [ ] Claude Desktop (and Electron apps generally): switching chats is
   invisible to tracking. Cause (code-read 2026-07-23): SensorHub polls
@@ -414,9 +423,10 @@ and recorded rather than fixed blind:
 - [x] Attribution learning coherence pass (2026-07-13) – model written down
   (docs/superpowers/specs/2026-07-13-attribution-learning.md), first property
   coverage (L1-L7), one correction operator. No behaviour change. See CHANGELOG.
-- [ ] Learning behaviour decisions (owner's call, surfaced by the 2026-07-13
+- [ ] Learning behaviour fixes — GO all three (Martin, 2026-07-23); build in
+  the next Swift session (surfaced by the 2026-07-13
   pass; full block + the 2026-07-13 decay re-analysis in
-  a private path Priority order after re-analysis:
+  a private path). Priority order after re-analysis:
   (1) **make [✕ forget] complete** – also clear the target's `totals`, so
   "stop suggesting this" fully works (the one targeted fix for the narrow
   stale-association residual); (2) floor counts at write; (3) down-weight the
@@ -850,15 +860,17 @@ and recorded rather than fixed blind:
 - [x] True global hotkey for "I'm leaving my desk" (DONE 2026-06-28) (currently ⌘⇧L works when
   andeye/its popover is key; a global RegisterEventHotKey would fire from
   any app).
-- [ ] Ambiguous web pages (no clear purpose in URL/title) — POLICY (proposed
-  2026-07-01, awaiting Martin's steer sticky-vs-review). Treat the URL HOST as a
-  first-class domain signal, the web sibling of the email correspondent-domain
-  ladder: one correction generalises the whole host (github.com → task). When
-  nothing matches (no pin/OP/learned host): be STICKY — keep the current task and
-  read low-certainty (red), rather than yanking onto the top ranked guess; a
-  sustained unknown page surfaces a one-tap "this site → task" (which learns the
-  host). Truly transient pages (new tab, a search) keep the prior task / a
-  don't-switch host list. Fold "web host" in as another ladder level later.
+- [ ] Ambiguous web pages — POLICY DECIDED 2026-07-23 (Martin: "Yes stay on
+  current task (but monitor window/tab change)"). When nothing matches (no
+  pin/OP/learned host): STICKY — keep the current task, read low-certainty
+  (red), keep monitoring surface changes; reassign-mode click re-points the
+  current window/tab and teaches the host (one correction generalises the
+  whole host, the web sibling of the email domain ladder). Truly transient
+  pages (new tab, a search) keep the prior task. OPEN sub-question (his
+  proposal, brainstorm queued in fromClaude): make the reassign SCOPE visible
+  — popover shows time-on-current-window beside the running total so "only
+  the last 1 minute reassigns" is legible before the click; ties into the
+  elapsed-desync item (menu bar vs timeline) below.
 - [ ] Martin to verify: timeline edits write back correctly to OpenProject and
   no data (windows etc.) is lost across edit/merge/split/reassign.
 
@@ -1065,10 +1077,13 @@ and recorded rather than fixed blind:
   via the Mac test bridge: TOTAL 441 passed, 0 failed (twice).
   Needed `rm -rf .build` on the Mac tree (stale module cache) and one
   pre-existing flaky check deflaked (ContextRules surface bytes).
-- [ ] Martin: LOCK the licence spec §1 (open Qs 1–5 now carry Fable
-  recommendations; F1 floor correction applied — standard connectors `.plus`).
-  Then commit the v2 build; do NOT sell any plus SKU before the entitlement
-  gate ships end-to-end (spec's own launch-blocker rule).
+- [ ] Licence tiers LOCKED by Martin 2026-07-23, superseding the spec's open
+  Qs: community (includes OpenProject) / plus (ONE standard connection —
+  currently Xero is the only one — + 24h email response) / pro (ALL standard
+  connections + 12h) / premium (all premium connections + 2h) / enterprise
+  (contact us). Fold into the licence spec §1 next session; open sub-question
+  to Martin (fromClaude): which connections count as premium. Unchanged rule:
+  do NOT sell any paid SKU before the entitlement gate ships end-to-end.
 - [x] AI-review triage — DONE 2026-07-11 (vsss iter-36 reconciliation).
   Designs: docs/superpowers/specs/2026-07-07-multidevice-posting-
   correctness.md (D0–D7 + 14 criteria). SHIPPED and code-verified: F8/D1

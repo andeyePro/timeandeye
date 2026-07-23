@@ -1,0 +1,10 @@
+# vibe content-guard allowlist.
+# path-warn entries: WARN-tier rules (emails, IPs, home paths, mdns) are
+# skipped for these files' staged/range diffs, because their example-domain
+# fixture addresses (example.com / *.example) are deliberate. BLOCK-tier
+# secret rules ALWAYS still fire on every file - a path-warn can never mask
+# a real secret, unlike a content ERE.
+path-warn:Sources/timeandeyeChecks/*
+path-warn:TODO.md
+path-warn:CHANGELOG.md
+path-warn:.vss/*

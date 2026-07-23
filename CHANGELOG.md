@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-23
+
+- [x] **fix(checks): CI red was one self-contradictory Predicate fixture, not
+  the toolchain.** The 17 Jul runs died compiling (cured by ba37fae + ecea026);
+  run 29978158390 (23 Jul) is the first to build and RUN the suite, and it died
+  at `FAIL [Predicate] email fields: sender/subject/any extraction and
+  matching: expected true` (908 passed, 1 failed). Root cause: the fixture's
+  second correspondent `martin@example.com` literally contains the
+  `example.com` negative probe (`expect(!sender contains "example.com")`), so
+  the check fails wherever it truly executes; it has been self-contradictory
+  since birth (1f8e215, 2026-07-01). Fix: correspondent 2 becomes
+  `sam@northgate.example` — a genuine counterparty, which also stops the
+  fixture contradicting the documented "sender + recipients minus self"
+  correspondent model. CI-verify on next push. Ops note: job-level Actions
+  logs redirect to firewalled Azure blob storage, but the RUN-level zip
+  (`gh api .../actions/runs/<id>/logs`) redirects via
+  `results-receiver.actions.githubusercontent.com`, which IS reachable
+  in-container — that's the log route for future CI diagnosis.
+
 ## 2026-07-17
 
 - [x] **fix(mac): compile clean on current Xcode toolchains (CI green).** First
