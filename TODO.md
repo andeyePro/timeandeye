@@ -337,6 +337,38 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] STANDING PRACTICE (every session, not a one-off): any time you
+  trigger a GitHub CI run (any push to main fires checks.yml), set a
+  ~15-minute background timer and then check the run's conclusion via
+  the Actions API; report a failure to Martin unprompted (re-check at
+  ~30 min if still running). Never push-and-forget — the 17–23 Jul
+  red-main streak went unnoticed because nobody looked.
+
+- [ ] CI checks suite RED on main for three straight runs — 2891a94 +
+  7db416e (17 Jul) + 80452b8 (23 Jul), all failing at "Run the check
+  suite" (`swift run timeandeyeChecks`, macos-14), so ecea026's
+  "compile clean on current Xcode toolchains" did not cure it. Logs
+  unreadable from the 2026-07-23 container (old PAT had no repo
+  access; rotated, effective next relaunch) — first session after
+  relaunch: pull the job log for run 29978158390 via the API and
+  diagnose. No local repro possible (no Swift/macOS in container).
+
+- [ ] Claude Desktop (and Electron apps generally): switching chats is
+  invisible to tracking. Cause (code-read 2026-07-23): SensorHub polls
+  frontmost app + focused-window AXTitle + tab URL every 2 s
+  (Sources/timeandeyeMac/Sensors.swift poll()/focusedWindowTitle);
+  Electron keeps renderer accessibility OFF until an AT opts in, and the
+  window chrome title doesn't change per chat — so the surface key never
+  changes. Fix sketch: set AXManualAccessibility on the app element (the
+  EmailSignalProbe.probeFrontBrowser() technique) for a known-Electron
+  bundle list and read the active document/chat title from the web
+  content tree as the windowTitle. Verify first on the Mac with:
+  `osascript -e 'tell application "System Events" to tell process
+  "Claude" to get name of front window'` on two different chats
+  (expected: identical/blank → confirms). Mind the hot-path rules: AX
+  walk must stay off the 2 s poll's critical path (no sync IPC on the
+  sensor thread) and be node/depth-bounded like the email probe.
+
 - [ ] Once andeye.com serves the canonical /terms + /privacy: delete
   `site/docs/terms.md` + `site/docs/privacy.md` here and turn `site/src/pages/
   terms.astro` + `privacy.astro` (and LegalPage.astro) into redirects to
