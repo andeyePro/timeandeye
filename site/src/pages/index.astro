@@ -735,7 +735,7 @@ const copy = (await getEntry('copy', 'home')).data;
     </div>
     <p class="eyebrow reveal" style="--d:0s">{copy.hero.eyebrow}</p>
     <h1 class="reveal" style="--d:0.08s">{copy.hero.h1[0]}<br>{copy.hero.h1[1]}</h1>
-    <p class="sub lede reveal" style="--d:0.16s">{copy.hero.lede}</p>
+    <p class="sub lede reveal" style="--d:0.16s" set:html={[copy.hero.lede].flat().join('<br>')}></p>
     <div class="ctas reveal" style="--d:0.26s">
       <a class="btn btn-primary" id="ctaStar" href="https://github.com/andeyePro/timeandeye">{copy.hero.cta_star_label}</a>
       <a class="btn btn-ghost" id="ctaWaitlist" href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">{copy.hero.cta_waitlist_label}</a>
@@ -998,10 +998,9 @@ const copy = (await getEntry('copy', 'home')).data;
     <span>{copy.footer.company_line}</span>
     <nav>
       <a href="/manual">Manual</a>
-      <a href="https://andeye.com/privacy">Privacy</a>
-      <a href="https://andeye.com/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
       <a href="https://github.com/andeyePro/timeandeye">GitHub</a>
-      <a href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">time@andeye.com</a>
     </nav>
   </div>
 </footer>

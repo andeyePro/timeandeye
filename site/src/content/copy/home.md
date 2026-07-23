@@ -1,6 +1,6 @@
 ---
 # ------------------------------------------------------------------
-# andeye landing page copy (src/pages/index.astro)
+# Time&I landing page copy (src/pages/index.astro)
 #
 # Edit the strings below freely - no code required. index.astro reads
 # this file once, server-side, via `getEntry('copy', 'home')`, and
@@ -26,18 +26,20 @@
 # ------------------------------------------------------------------
 
 hero:
-  eyebrow: "andeye · automatic time tracking for macOS"
+  eyebrow: "Time&I · automatic time tracking for macOS"
   h1:
-    - "andeye watches."
+    - "Time&I watches."
     - "You just work."
-  lede: "A menu-bar tracker that attributes your time to tasks by itself – on your Mac, never phoning home."
+  lede: 
+    - "A menu-bar tracker that attributes your time to tasks by itself"
+    - "- on your Mac, never phoning home."
   cta_star_label: "Star on GitHub"
   cta_waitlist_label: "Join the waitlist"
   # CTA-row subtext: sub_default shows at rest, sub_tech/sub_app on hover
   # of the two buttons above (read by the inline demo script via COPY).
-  sub_default: "Free and open source today. A ready-to-download app is on the way."
-  sub_tech: "It's free and open source. Clone the repo and build it on your Mac today – every last line of it."
-  sub_app: "Not a coder? No problem. Join the list and we'll email you the moment andeye is a normal app you just download and open – nothing to build, nothing to set up."
+  sub_default: "Free and open source today. A ready-to-run app is on the way."
+  sub_tech: "It's free and open source. Clone the repo and build it on your Mac today"
+  sub_app: "Not a coder? No problem. Join the list and we'll email you the moment Time&I is a normal app you just download and open - nothing to build, nothing to set up."
   fineprint: "macOS 14+ · free and open source · build from source today"
 
 demo:
@@ -45,10 +47,10 @@ demo:
   # it once at load with the visitor's real day/time - that "It's <day>,
   # <time>" FORMAT is code, not copy, so only edit the example values here.
   heading_fallback: "It’s Tuesday, 9:41"
-  intro_html: 'Click around like it’s your desk – answer Sarah, settle the accountant’s question, sneak a kitten. The eye follows, winks when you switch, and its tint is its confidence: <span class="cert-gradient">red when unsure, green when sure</span>.'
-  drive_idle: "Click an email or a tab – watch andeye follow you"
-  drive_active: "andeye is following you – keep clicking around"
-  caption: "Those two boxes are andeye’s own timeline and time donut, filling in live as you click. At the end of a real day, the billable slice is your invoice, and you never wrote anything down."
+  intro_html: 'Click around like it’s your desktop. The eye follows, winks when you switch, and its tint is its confidence: <span class="cert-gradient">red when unsure, green when certain</span>.'
+  drive_idle: "Click an email or a tab - watch Time&I follow you"
+  drive_active: "Time&I is following you - keep clicking around"
+  caption: "Those two boxes are Time&I’s own timeline and time donut, filling in live as you click. At the end of a real week, the billable slices are your invoices."
 
 flow:
   eyebrow: "How it works"
@@ -57,17 +59,17 @@ flow:
   nodes:
     observe:
       label: "observe"
-      body: "andeye watches your active window, tab and app as you work – and who a piece of mail is from. No screenshots, no keystrokes. It all stays on your Mac."
+      body: "Time&I watches your active window or browser tab as you work - and who a piece of mail is from. No screenshots, no keystrokes. It all stays on your Mac."
       manual_href: "/manual/auto-tracking-and-attribution/"
       manual_label: "more in the manual →"
     attribute:
       label: "attribute"
-      body: "Each minute lands on a task with a certainty score. 94% sure that thread was the Coleman retainer; not at all sure the newsletter was work – and it says so. A kitten break is a break. It never rounds up."
+      body: "Each minute lands on a task with a certainty score. 94% sure that thread was the Coleman retainer; not at all sure the newsletter was work - and it says so. A kitten break is a break. It never rounds up."
       manual_href: "/manual/auto-tracking-and-attribution/"
       manual_label: "more in the manual →"
     post:
       label: "post"
-      body: "The hours you approve post to your own tools – OpenProject today, Xero (and others) via Pro later. You keep the final say on every entry, and it only goes where you already keep your work."
+      body: "The hours you approve post to your own tools - OpenProject today, Xero (and others) via Pro later. You keep the final say on every entry, and it only goes where you already keep your work."
       manual_href: "/manual/data-sync-and-safety/"
       manual_label: "more in the manual →"
 
@@ -79,7 +81,7 @@ privacy:
     - head: "Your day stays on your Mac."
       body: "Observation, attribution and learning all run on-device. There is no server, no account, no telemetry."
     - head: "Only what you approve ever leaves."
-      body: "The only thing that ever leaves is a finished time entry you approve, sent to your own OpenProject – or your Xero (and others), later. Never to us."
+      body: "The only thing that ever leaves is a finished time entry you approve, sent to your own OpenProject - or your Xero (and others), later. Never to us."
     - head: "Learning stays local."
       body: "The model of how you work is built on your Mac and lives on your Mac. It gets smarter about you without anyone else getting smarter about you."
     - head: "Your rules, on your disk."
@@ -90,14 +92,14 @@ privacy:
 light:
   eyebrow: "Light by design"
   h2: "Tracking that doesn’t cost the earth"
-  lede: "Some trackers send your screen to a cloud AI every few minutes to guess what you’re doing. andeye doesn’t. Attribution is a handful of rules that run on your Mac in less time than a blink – no server anywhere, nothing kept warm in a datacenter, no AI inference ticking away in the background."
-  line2: "The only thing it spends is a whisper of your Mac’s attention – and it pays that back with the timesheet you never have to write."
+  lede: "Some trackers send your screen to a cloud AI every few minutes to guess what you’re doing. andeye doesn’t. Attribution is a handful of rules that run on your Mac in less time than a blink - no server anywhere, nothing kept warm in a datacenter, no AI inference ticking away in the background."
+  line2: "The only thing it spends is a whisper of your Mac’s attention - and it pays that back with the timesheet you never have to write."
 
 tiers:
   eyebrow: "Community & Pro"
   h2: "Open where it matters"
-  tracker_label: "Tracker – free forever"
-  tracker_body: "The macOS app is open source under AGPL-3.0. Clone the repo and build it today – observation, attribution, certainty scores and the OpenProject connector, all included."
+  tracker_label: "Tracker - free forever"
+  tracker_body: "The macOS app is open source under AGPL-3.0. Clone the repo and build it today - observation, attribution, certainty scores and the OpenProject connector, all included."
   tracker_cta_label: "Star on GitHub →"
   pro_label: "andeyePro"
   pro_body: "andeyePro adds the paid extras: Xero (and others), plus an iPhone companion. The tracker itself stays free, local and yours."

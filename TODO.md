@@ -337,6 +337,14 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] Once andeye.com serves the canonical /terms + /privacy: delete
+  `site/docs/terms.md` + `site/docs/privacy.md` here and turn `site/src/pages/
+  terms.astro` + `privacy.astro` (and LegalPage.astro) into redirects to
+  https://andeye.com/terms/ and /privacy/; also swap the waitlist mailto CTAs
+  to contact.andeye.com when that form is live. Until then the local copies
+  are what time.andeye.com serves — the andeye.com repo's markdown is the
+  single source of truth; never edit the prose here.
+
 - [ ] Idle detection ends sessions during passive media watching: watching a
   YouTube video with no cursor/keyboard activity trips the idle timeout and
   stops the session, even though the video is playing and the user is present.
