@@ -27,3 +27,18 @@ __pycache__/
 # The paid tier lives in the private andeyePro repo, never here
 /pro/
 andeyePro/
+
+# >>> vibe-managed runtime exclusions (auto-added; do not edit body) >>>
+# Files vibe writes to /workspace at runtime. Committing them
+# leaks per-machine state into the repo (PR-review-noise risk).
+# Opt out: set VIBE_AUTO_GITIGNORE=0 before container start, or
+# delete this entire block (won't be re-added once removed).
+.claude/settings.local.json
+.vibe/
+.vibe-signals/
+# <<< vibe-managed <<<
+
+# vss harness runtime state (auto-resume, heartbeat, rate-limit, last-plan.md)
+# is per-machine; only the session audits under .vss/sessions/ are committed.
+.vss/*
+!.vss/sessions/

@@ -372,8 +372,8 @@ and recorded rather than fixed blind:
   EmailSignalProbe.probeFrontBrowser() technique) for a known-Electron
   bundle list and read the active document/chat title from the web
   content tree as the windowTitle. Verify first on the Mac with:
-  `osascript -e 'tell application "System Events" to tell process
-  "Claude" to get name of front window'` on two different chats
+  `osascript -e 'tell application "System Events" to tell process "Claude" to get name of front window'`
+  on two different chats
   (expected: identical/blank → confirms). Mind the hot-path rules: AX
   walk must stay off the 2 s poll's critical path (no sync IPC on the
   sensor thread) and be node/depth-bounded like the email probe.

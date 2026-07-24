@@ -8,3 +8,9 @@ path-warn:Sources/timeandeyeChecks/*
 path-warn:TODO.md
 path-warn:CHANGELOG.md
 path-warn:.vss/*
+# The two guard-config files themselves: gitignore entries like the one for
+# vibe's settings.local.json runtime config false-positive the hostname WARN
+# on the ".local" substring (filenames, not hostnames). WARN-off for these
+# structural files only; BLOCK-tier secret rules still fire on them.
+path-warn:.gitignore
+path-warn:.vibe-content-allow
