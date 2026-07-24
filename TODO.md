@@ -353,8 +353,8 @@ and recorded rather than fixed blind:
   one deterministic check failure, `[Predicate] email fields` — its fixture's
   second correspondent `martin@example.com` contains the check's own
   `example.com` negative probe (self-contradictory since birth, 1f8e215).
-  Correspondent 2 is now `sam@northgate.example`. CI-verify on next push
-  (expect TOTAL 909 passed, 0 failed). Log route that works in-container:
+  Correspondent 2 is now `sam@northgate.example`. CONFIRMED green
+  2026-07-24: run 30114753472 on 7ce0448, TOTAL 909 passed, 0 failed. Log route that works in-container:
   run-level zip `gh api .../actions/runs/<id>/logs` (redirects via
   results-receiver.actions.githubusercontent.com, reachable) — job-level
   log endpoints redirect to firewalled Azure blob storage. See CHANGELOG.
