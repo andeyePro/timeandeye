@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-01
+
+- [x] **site: all contact routes through the live contact.andeye.com form** –
+  the contact form went live today, so per the andeye no-raw-email convention
+  the site's `mailto:` links are gone: both waitlist CTAs (hero +
+  Community/Pro tab) now open the prefilled register-interest link
+  (`source=time.andeye.com`, subject `Time&I waitlist`, message prefill, and
+  the three agreed `cb` tick options: ready-to-run app / beta / andeyePro),
+  the legal-page footer links "Contact", and the manual's andeyePro support
+  channel points at the form with an `andeyePro support` subject prefill.
+  `/privacy` + `/terms` still carry a mailto inside prose owned by the
+  andeye.com repo – that goes away with the already-planned redirect swap
+  (see TODO). Build verified: 13 pages, no mailto outside the legal prose.
+
 ## 2026-07-23
 
 - [x] **fix(checks): CI red was one self-contradictory Predicate fixture, not

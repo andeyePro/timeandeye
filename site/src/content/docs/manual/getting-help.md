@@ -37,10 +37,12 @@ You don't need to be a developer to use it. Here's the walkthrough:
 That's genuinely it. You're not bothering anyone; this is what the GitHub
 page is there for.
 
-## andeyePro: a fast reply by email
+## andeyePro: a fast, personal reply
 
 If you're an andeyePro subscriber, you don't need to go via GitHub at all -
-email **[time@andeye.com](mailto:time@andeye.com)** and you'll get a reply
+send your question through the
+**[contact form](https://contact.andeye.com/?source=time.andeye.com&subject=andeyePro%20support)**
+and you'll get a reply by email
 quickly. This is the supported channel that comes with a Pro subscription:
 a real person, answering your specific question about your setup.
 

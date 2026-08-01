@@ -738,7 +738,7 @@ const copy = (await getEntry('copy', 'home')).data;
     <p class="sub lede reveal" style="--d:0.16s" set:html={[copy.hero.lede].flat().join('<br>')}></p>
     <div class="ctas reveal" style="--d:0.26s">
       <a class="btn btn-primary" id="ctaStar" href="https://github.com/andeyePro/timeandeye">{copy.hero.cta_star_label}</a>
-      <a class="btn btn-ghost" id="ctaWaitlist" href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">{copy.hero.cta_waitlist_label}</a>
+      <a class="btn btn-ghost" id="ctaWaitlist" href="https://contact.andeye.com/?source=time.andeye.com&subject=Time%26I%20waitlist&message=Please%20email%20me%20when%20Time%26I%20goes%20live.&cb=Email%20me%20when%20the%20ready-to-run%20Mac%20app%20ships&cb=I%27d%20like%20to%20join%20the%20beta&cb=I%27m%20interested%20in%20andeyePro%20(Xero%20%2B%20iPhone%20companion)">{copy.hero.cta_waitlist_label}</a>
     </div>
     <p class="cta-sub reveal" id="ctaSub" style="--d:0.3s" aria-live="polite">{copy.hero.sub_default}</p>
     <p class="fineprint reveal" style="--d:0.34s">{copy.hero.fineprint}</p>
@@ -2015,7 +2015,7 @@ const CTAB_CONTENT = {
   tracker: '<p>' + COPY.trackerBody + '</p>'
     + '<a href="https://github.com/andeyePro/timeandeye">' + COPY.trackerCtaLabel + '</a>',
   pro: '<p>' + COPY.proBody + '</p>'
-    + '<a href="mailto:time@andeye.com?subject=andeye%20time%20tracker%20waitlist">' + COPY.proCtaLabel + '</a>',
+    + '<a href="https://contact.andeye.com/?source=time.andeye.com&subject=Time%26I%20waitlist&message=Please%20email%20me%20when%20Time%26I%20goes%20live.&cb=Email%20me%20when%20the%20ready-to-run%20Mac%20app%20ships&cb=I%27d%20like%20to%20join%20the%20beta&cb=I%27m%20interested%20in%20andeyePro%20(Xero%20%2B%20iPhone%20companion)">' + COPY.proCtaLabel + '</a>',
 };
 const ctabButtons = Array.prototype.slice.call(document.querySelectorAll('.ctab'));
 const ctabUnderline = document.getElementById('ctabUnderline');
