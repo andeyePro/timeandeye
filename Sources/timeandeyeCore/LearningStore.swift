@@ -280,6 +280,26 @@ package struct LearningStore: Codable, Equatable, Sendable {
         return total > 0 ? c / total : 0
     }
 
+    /// Package-scoped read for the ambiguous-web-page policy (2026-07-23,
+    /// Martin — "Yes stay on current task"): whether the learner has EVER
+    /// positively associated any target with this host, via the bare
+    /// `urlHost` feature or an `urlPath` feature rooted at it
+    /// ("host/first-segment"). `counts` stays private everywhere else —
+    /// this is the one additive query the Attributor needs to tell a
+    /// genuinely-unknown host from a learned one.
+    package func hasAssociation(urlHost host: String) -> Bool {
+        let pathPrefix = host + "/"
+        for (feature, targets) in counts {
+            switch feature.kind {
+            case .urlHost: guard feature.value == host else { continue }
+            case .urlPath: guard feature.value.hasPrefix(pathPrefix) else { continue }
+            default: continue
+            }
+            if targets.values.contains(where: { $0 > 0 }) { return true }
+        }
+        return false
+    }
+
     /// The learned feature *values* (of the given kinds) positively associated
     /// with `target` — the window-title tokens / hosts / apps you've confirmed
     /// while on this task. Powers learning-backed task search: a task you always

@@ -417,6 +417,74 @@ func attributorChecks(_ c: Checks) {
         try expect(s.correspondents == nil)
         try expect(s.emailSubject == nil)
     }
+
+    // WHY these checks exist: Martin's 2026-07-23 ambiguous-web-page policy
+    // ("Yes stay on current task (but monitor window/tab change)") needs
+    // `Attribution`/`AttributionExplanation` to expose a fresh-every-call
+    // "this page told us nothing" fact — no pin/sticky/URL/title/rule/
+    // prime fired AND the host is genuinely unknown to both the site-rule
+    // ladder and the learner. `SessionTracker` reads it to hold the running
+    // task instead of switching (see SessionTrackerChecks); these two
+    // checks prove the Attributor-level fact itself, in isolation.
+    c.check("ambiguous web page: unknown host with nothing else fired flags true; a learned host, a site rule, or a prime keeps it false") {
+        let a = Attributor(instanceHost: host)
+        let unfamiliar = ActivitySignal(app: "Chrome", windowTitle: "A blog post",
+                                        tabURL: "https://random-blog.example/post/42", timestamp: now)
+        let r = a.attribute(unfamiliar, tasks: tasks, now: now)
+        try expect(r.ambiguousSurface, "no rule/host evidence anywhere -> ambiguous")
+
+        // A learned urlHost/urlPath association (a past correction on the
+        // SAME host, a DIFFERENT page) exempts it — "a learned host still
+        // switches" (non-regression requirement).
+        let b = Attributor(instanceHost: host)
+        b.confirm(unfamiliar, task: .op(1))
+        try expect(b.learning.hasAssociation(urlHost: "random-blog.example"))
+        let learnedAgain = ActivitySignal(app: "Chrome", windowTitle: "Another post",
+                                          tabURL: "https://random-blog.example/post/99", timestamp: now)
+        let rb = b.attribute(learnedAgain, tasks: tasks, now: now)
+        try expect(!rb.ambiguousSurface, "a host the learner has heard from is no longer ambiguous")
+
+        // A `site`-level SiteRule for the host exempts it too — it wins at
+        // the .siteRule rung, long before the ranked fallback runs at all.
+        let s = Attributor(instanceHost: host)
+        s.siteRules = [SiteRule(recipeID: nil, field: SiteRule.siteField,
+                                value: "random-blog.example", target: .op(2))]
+        let rs = s.attribute(unfamiliar, tasks: tasks, now: now)
+        try expectEq(rs.provenance?.source, .siteRule)
+        try expect(!rs.ambiguousSurface, "a taught site rule at the host level is not ambiguous")
+
+        // A prime firing (a remembered surface — inferred-rung evidence)
+        // exempts it even though the host carries nothing else.
+        let p = Attributor(instanceHost: host)
+        p.confirm(unfamiliar, task: .op(1))    // primes the exact SURFACE
+        let rp = p.attribute(unfamiliar, tasks: tasks, now: now)
+        try expectEq(rp.provenance?.source, .primedSurface)
+        try expect(!rp.ambiguousSurface, "a prime firing is rule-grade evidence, never ambiguous")
+
+        // A non-web signal (no tab URL) is never ambiguous by this test.
+        let r2 = a.attribute(ghostty, tasks: tasks, now: now)
+        try expect(!r2.ambiguousSurface, "no tab URL -> not a web page -> never ambiguous")
+    }
+
+    c.check("explain() mirrors ambiguousSurface exactly — never disagrees with attribute()'s hold-or-not fact") {
+        let a = Attributor(instanceHost: host)
+        let unfamiliar = ActivitySignal(app: "Chrome", windowTitle: "A blog post",
+                                        tabURL: "https://random-blog.example/post/42", timestamp: now)
+        let attribution = a.attribute(unfamiliar, tasks: tasks, now: now)
+        let explanation = a.explain(unfamiliar, tasks: tasks, now: now)
+        try expectEq(attribution.ambiguousSurface, explanation.ambiguousSurface,
+                    "explain() must never disagree with attribute()'s ambiguous-surface fact")
+        try expect(explanation.ambiguousSurface, "the same unfamiliar host — this must actually be the ambiguous case")
+        try expectEq(explanation.source, .ranked, "no new source word — the existing .ranked/.none vocabulary carries the fact")
+
+        // A learned host mirrors false on both sides too.
+        a.confirm(unfamiliar, task: .op(1))
+        let learnedAgain = ActivitySignal(app: "Chrome", windowTitle: "Another post",
+                                          tabURL: "https://random-blog.example/post/99", timestamp: now)
+        try expectEq(a.attribute(learnedAgain, tasks: tasks, now: now).ambiguousSurface,
+                    a.explain(learnedAgain, tasks: tasks, now: now).ambiguousSurface)
+        try expect(!a.explain(learnedAgain, tasks: tasks, now: now).ambiguousSurface)
+    }
 }
 
 // MARK: - MinuteResolver (plan task 7)

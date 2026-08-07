@@ -78,6 +78,12 @@ tasks and tracks the best one. Sources, strongest first:
 5. **Learned associations** (what you've confirmed before) plus status/recency
    priors.
 
+On a web page andeye doesn't recognise at all - no rule, no site it's seen
+before - it stays on your current task rather than guessing, and the
+certainty reads low (red) until you either teach it (Reassign, which also
+teaches the site) or move on. Genuinely new-tab or search pages behave the
+same way: the task you were on keeps running.
+
 A brief flit to another window does not immediately re-file your time: a switch
 only becomes its own slice once you've held it past the Switch Buffer (and never
 below one displayed minute), so glancing at Slack mid-task does not fragment your

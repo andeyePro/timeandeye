@@ -542,6 +542,11 @@ package final class SessionTracker {
         let attribution = attributor.attribute(signal, tasks: tasks(), now: now,
                                                continuity: liveContinuity(at: now,
                                                                           lastActive: priorInput))
+        // Captured for the ambiguous-web-page hold below: the running
+        // task's own live-adjacency boost from THIS call, nil when none
+        // survived decay (or none applied) — `attribute()` resets this at
+        // the top of every call, so it always reflects the signal above.
+        let liveAdjacencyBoost = attributor.lastLiveBoost
         currentSignal = signal
         currentStart = now
         onDebug("focus \(signal.app)|\(signal.windowTitle ?? "-") -> best \(String(describing: attribution.best)) state \(state)")
@@ -631,14 +636,38 @@ package final class SessionTracker {
                 } else {
                     state = .tracking(p.target, certainty: best.score)   // uncertain, hold
                 }
+            } else if best.score >= config.uncertainBelow, best.target != displayTarget,
+                      attribution.ambiguousSurface, case .task = displayTarget {
+                // Ambiguous-web-page hold (Martin, 2026-07-23 policy: "Yes
+                // stay on current task (but monitor window/tab change)") —
+                // the page fell all the way to the ranked tier with no
+                // rule/host evidence, so its own candidate must not open a
+                // pending switch away from the running task; only
+                // rule-grade evidence or a learned host earns one (this
+                // branch never fires for those — they return long before
+                // the ranked-fallback tier attribute() computes
+                // ambiguousSurface from). Certainty reads the live-
+                // adjacency/continuity score instead of the ambiguous
+                // page's own — 0 once the boost has fully decayed — so the
+                // slice reads red and queues for review until reassign
+                // teaches the host.
+                state = .tracking(displayTarget, certainty: liveAdjacencyBoost?.certainty ?? 0)
             } else if best.score >= config.uncertainBelow, best.target != displayTarget {
                 handleConfidentSwitch(to: best, from: displayTarget, at: now,
                                       provenance: attribution.provenance)
             } else if best.score >= config.uncertainBelow {
-                state = .tracking(best.target, certainty: best.score)
                 // Same target re-decided by inference: the user's own word
                 // (start/confirm/relabel) stays the story — an agreeing
-                // ranker must not overwrite "you assigned it".
+                // ranker must not overwrite "you assigned it". On an
+                // ambiguous page the certainty is likewise forced to the
+                // live-adjacency/continuity score, never the pre-ambiguity
+                // value — the same red-certainty rule as the hold above,
+                // just with no switch to block (the ambiguous page's own
+                // ranked candidate already agreed with the running task).
+                var onAmbiguousTask = false
+                if attribution.ambiguousSurface, case .task = displayTarget { onAmbiguousTask = true }
+                let certainty = onAmbiguousTask ? (liveAdjacencyBoost?.certainty ?? 0) : best.score
+                state = .tracking(best.target, certainty: certainty)
                 if currentDecision?.sourceRaw != SessionProvenance.userAssigned.sourceRaw {
                     currentDecision = attribution.provenance
                 }

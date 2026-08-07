@@ -2,6 +2,62 @@
 
 ## 2026-08-07
 
+- [x] **Ambiguous-web-page hold, Core half (2026-07-23 policy landed)** –
+  Martin's decided policy ("Yes stay on current task (but monitor
+  window/tab change)") for a web page andeye can't place at all. `Sources/
+  timeandeyeCore/Attributor.swift`: `Attribution`/`AttributionExplanation`
+  gain `ambiguousSurface: Bool` (default `false`, older call sites
+  untouched) – true iff `attribute()` fell all the way to the ranked tier
+  (no pin, sessionSticky, opTaskURL, opTaskTitle, emailRule, siteRule,
+  pendingPrime or primedSurface fired) AND the signal is a web page whose
+  host carries neither a `site`-level `SiteRule` nor any learned
+  `urlHost`/`urlPath` association (new private `hostIsUnknown` helper).
+  Computed fresh every `attribute()`/`explain()` call, never latched – the
+  very next signal with rule-grade evidence or a learned host attributes
+  normally, and `explain()`'s own tail computes the identical flag so a
+  later why-panel re-derivation can never disagree with the live decision
+  (no new `Source` case – the existing `.ranked`/`.none` vocabulary
+  carries the fact). `Sources/timeandeyeCore/LearningStore.swift` gains
+  one additive package-scoped query, `hasAssociation(urlHost:)` –
+  `counts` stays private everywhere else. `Sources/timeandeyeCore/
+  SessionTracker.swift`'s `.tracking` case: while holding a real task, a
+  confident-but-ambiguous candidate for a DIFFERENT target no longer opens
+  a `pendingSwitch` – the running task holds instead, at the live-
+  adjacency/continuity certainty (`AdjacencyBoost`'s boosted score, 0 once
+  the boost has fully decayed past `zeroStrengthGap`), never the
+  pre-ambiguity value; the same override applies when the ambiguous page's
+  own ranked candidate happens to already agree with the running task, so
+  the slice reads red and queues for review either way. Non-regressions
+  (existing suite, unchanged counts): pin/sticky/OP-URL/OP-title/email-
+  rule/site-rule/prime candidates still switch instantly; a learned host
+  still switches; the `.stopped` resume ladder, `.doNotTrack` pending-stop
+  and `revertPendingSwitch` are byte-for-byte untouched (not in the
+  touched branch). TDD: `AttributionChecks.swift` (+2) and
+  `SessionTrackerChecks.swift` (+2) written first – reverting just the
+  three Core files (checks left in place) failed the BUILD outright
+  (`value of type 'Attribution' has no member 'ambiguousSurface'`, 5
+  call-sites across both check files); restored, green. Re-break: dropping
+  the `learning.hasAssociation` half of `hostIsUnknown` (site-rule check
+  only) failed exactly 3 checks – the two host-exemption assertions in
+  the new Attributor check, its explain-mirror sibling, and the
+  SessionTracker non-regression check ("a host the learner has heard from
+  must not read as ambiguous") – restored, diffed clean against the
+  pre-break file. `swift run --scratch-path .build-linux
+  timeandeyeChecks`: `TOTAL: 787 passed, 0 failed` (was 783, pinned
+  baseline 49482f4) – `Attributor: 31 passed, 0 failed` (was 29) and
+  `SessionTracker: 58 passed, 0 failed` (was 56) the only suites that
+  grew, every other suite's count unchanged, including
+  CertaintyCalculus/LiveAdjacency/Provenance/WhyPanelTruth. Docs in the
+  same commit: `TODO.md`'s "Ambiguous web pages" item marked done with
+  what stays Mac-side (the reassign-mode teach click, the popover's
+  reassign-scope visibility); `docs/superpowers/specs/
+  2026-07-09-site-recipes.md`'s §11 "later" line amended parked → landed
+  (Core half); `MANUAL.md` and `site/src/content/docs/manual/
+  auto-tracking-and-attribution.md` both gain one paragraph on the
+  unrecognised-page behaviour, fresh-reader voice, no failure-mode
+  history. macOS/iOS targets not compiled this session – this container
+  has no macOS.
+
 - [x] **Banked-slice repair on the Phone engine (reassign / adjust / delete)** –
   a slice `PhoneController.stop()` already pushed to OP was previously
   permanent on iOS. `Sources/timeandeyePhone/PhoneController.swift` gains

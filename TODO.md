@@ -918,17 +918,33 @@ and recorded rather than fixed blind:
 - [x] True global hotkey for "I'm leaving my desk" (DONE 2026-06-28) (currently ⌘⇧L works when
   andeye/its popover is key; a global RegisterEventHotKey would fire from
   any app).
-- [ ] Ambiguous web pages — POLICY DECIDED 2026-07-23 (Martin: "Yes stay on
+- [x] Ambiguous web pages — POLICY DECIDED 2026-07-23 (Martin: "Yes stay on
   current task (but monitor window/tab change)"). When nothing matches (no
   pin/OP/learned host): STICKY — keep the current task, read low-certainty
   (red), keep monitoring surface changes; reassign-mode click re-points the
   current window/tab and teaches the host (one correction generalises the
   whole host, the web sibling of the email domain ladder). Truly transient
-  pages (new tab, a search) keep the prior task. OPEN sub-question (his
-  proposal, brainstorm queued in fromClaude): make the reassign SCOPE visible
-  — popover shows time-on-current-window beside the running total so "only
-  the last 1 minute reassigns" is legible before the click; ties into the
-  elapsed-desync item (menu bar vs timeline) below.
+  pages (new tab, a search) keep the prior task.
+  CORE HALF LANDED 2026-08-07 (site-recipes spec §11 "later" item unparked):
+  `Attribution`/`AttributionExplanation` gained `ambiguousSurface` — true
+  iff a signal fell all the way to the ranked tier (no pin/sticky/OP-URL/
+  OP-title/email-rule/site-rule/prime fired) AND it's a web page whose host
+  has neither a `site`-level `SiteRule` nor any learned `urlHost`/`urlPath`
+  association (`LearningStore.hasAssociation(urlHost:)`, additive). Computed
+  fresh every call, never latched — the next signal with rule-grade evidence
+  or a learned host attributes normally. `SessionTracker`, while `.tracking`
+  a real task, reads the flag to refuse opening a pendingSwitch off an
+  ambiguous page's own ranked candidate; the held/displayed certainty is the
+  live-adjacency/continuity score instead (0 once the boost has decayed),
+  never the pre-ambiguity value, so the slice reads red and queues for
+  review. `explain()` mirrors the same flag so a why-panel re-derivation can
+  never disagree with the live hold.
+  STAYS MAC-SIDE (not this commit): the reassign-mode click that teaches the
+  host from a click (writes the `site`-level `SiteRule`); the popover's
+  visible red-certainty display itself; his OPEN sub-question — make the
+  reassign SCOPE visible (popover shows time-on-current-window beside the
+  running total so "only the last 1 minute reassigns" is legible before the
+  click) — ties into the elapsed-desync item (menu bar vs timeline) below.
 - [ ] Martin to verify: timeline edits write back correctly to OpenProject and
   no data (windows etc.) is lost across edit/merge/split/reassign.
 

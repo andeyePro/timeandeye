@@ -780,6 +780,81 @@ func sessionTrackerChecks(_ c: Checks) {
         }
     }
 
+    // WHY these checks exist: Martin's 2026-07-23 ambiguous-web-page policy
+    // — "Yes stay on current task (but monitor window/tab change)" — landed
+    // here. An unfamiliar page (fell to the ranked tier, host unknown to
+    // both site rules and the learner) must not open a pendingSwitch away
+    // from a real running task, however confidently the bare ranker likes
+    // some OTHER task on it; the display holds at the live-adjacency/
+    // continuity certainty (0 once the boost has fully decayed), never the
+    // pre-ambiguity value, so the slice reads red and queues for review.
+    c.check("an ambiguous web page never opens a switch off the running task; certainty reads the continuity score, not the page's own (2026-07-23 policy)") {
+        // idleThresholdSeconds raised well past the 1000s gap below — this
+        // check exercises the DECAYED-boost branch (past AdjacencyBoost.
+        // zeroStrengthGap, 900s), which would otherwise collide with the
+        // default 600s idle auto-stop before attribution even runs.
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 3600
+        let (tracker, attributor) = makeTracker(config: config)
+        // op2's titleToken is taught strongly enough to clear the switch
+        // bar on its OWN merit, from a signal that teaches nothing about
+        // any host — so the unfamiliar page below wins the raw ranking on
+        // title alone, with no host evidence anywhere.
+        attributor.confirm(sig("Mail", "Quarterly investment review", at: -1000), task: .op(2))
+        attributor.confirm(sig("Ghostty", "timeandeye build", at: -1000), task: .op(1))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye build", at: 0)))
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "setup: expected to be tracking op1, got \(tracker.state)")
+        }
+
+        // An unfamiliar host (never seen before — no site rule, no learned
+        // urlHost/urlPath) whose window title matches op2's learned token.
+        let unfamiliar = sig("Chrome", "Quarterly investment review",
+                             at: 1000, url: "https://random-blog.example/post/42")
+        let direct = attributor.attribute(unfamiliar, tasks: tasks, now: t(1000))
+        try expect(direct.ambiguousSurface, "the page itself must read as ambiguous — this is the case under test")
+        try expect((direct.best?.score ?? 0) >= TrackerConfig.switchBar,
+                   "the ranked candidate must clear the switch bar on its own merit for this to be a real test")
+        try expectEq(direct.best?.target, .task(.op(2)), "the learned title token, not op1, wins the raw ranking")
+
+        tracker.handle(.focus(unfamiliar))
+        guard case .tracking(let target, let certainty) = tracker.state else {
+            throw CheckFailure(description: "expected .tracking, got \(tracker.state)")
+        }
+        try expectEq(target, .task(.op(1)),
+                    "the running task holds — an ambiguous page must not open a pending switch")
+        // The 1000s gap since the last real input is well past
+        // AdjacencyBoost.zeroStrengthGap (15 min): no boost survives, so
+        // the held certainty reads exactly 0 — never op1's pre-ambiguity
+        // certainty and never op2's ranked score either.
+        try expectClose(certainty, 0)
+    }
+
+    c.check("a learned host or a taught site rule still switches instantly, even on the same shape of page (non-regression)") {
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 3600   // same 1000s gap as the check above; stay .tracking, not .stopped
+        let (tracker, attributor) = makeTracker(config: config)
+        attributor.confirm(sig("Mail", "Quarterly investment review", at: -1000), task: .op(2))
+        attributor.confirm(sig("Ghostty", "timeandeye build", at: -1000), task: .op(1))
+        // The learner has already heard from this exact host once (a past
+        // correction elsewhere on it) — no longer ambiguous.
+        attributor.confirm(sig("Chrome", "An older post", at: -900,
+                               url: "https://random-blog.example/post/1"), task: .op(2))
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye build", at: 0)))
+        let learnedHostPage = sig("Chrome", "Quarterly investment review",
+                                  at: 1000, url: "https://random-blog.example/post/42")
+        try expect(!attributor.attribute(learnedHostPage, tasks: tasks, now: t(1000)).ambiguousSurface,
+                   "a host the learner has heard from must not read as ambiguous")
+        tracker.handle(.focus(learnedHostPage))
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "a learned host must switch instantly like any other confident candidate, got \(tracker.state)")
+        }
+    }
+
     c.check("backdateSessionStart extends the live slice earlier with a synthetic span") {
         let (tracker, attributor) = makeTracker()
         attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))

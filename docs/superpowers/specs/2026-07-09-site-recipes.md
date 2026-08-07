@@ -525,4 +525,9 @@ generalised enrichment plumbing; the shared rule-domain protocol refactor
 across Email/Calendar/Site (now justified, three verses in); per-recipe
 ladder reordering in Settings (email's reorderable ladder, generalised);
 the ambiguous-page policy note's remaining half – sticky-on-unknown and
-red-certainty display – once Martin steers sticky-vs-review.
+red-certainty display – Martin steered it 2026-07-23 ("Yes stay on current
+task (but monitor window/tab change)"); the CORE half (the
+`ambiguousSurface` fact, the `SessionTracker` hold, the red held certainty,
+`explain()`'s mirror, `LearningStore.hasAssociation(urlHost:)`) landed
+2026-08-07. Still open, Mac-side: the reassign-mode click that teaches the
+host, and the popover's reassign-scope visibility sub-question.

@@ -49,12 +49,26 @@ package struct Attribution: Equatable, Sendable {
     /// existed) — journalled at flush so the Evidence Card can name the
     /// original decider verbatim. Defaults keep older call sites compiling.
     package var provenance: SessionProvenance?
+    /// True iff this signal fell all the way to the RANKED tier — no pin,
+    /// sticky, OP URL/title, email rule, site rule or prime fired — AND it
+    /// is a web page (a tab URL) whose host the site-rule ladder and the
+    /// learner have both never heard from (ambiguous-web-page policy,
+    /// Martin 2026-07-23: "Yes stay on current task (but monitor
+    /// window/tab change)"). Computed fresh every call, never latched: the
+    /// very next signal with rule-grade evidence or a learned host
+    /// attributes normally. `SessionTracker` reads this to hold the
+    /// running task instead of opening a pending switch to whatever the
+    /// bare ranker liked on an unfamiliar page. Defaults keep older call
+    /// sites compiling.
+    package var ambiguousSurface: Bool
     package var certainty: Double { best?.score ?? 0 }
     package init(best: Candidate?, ranked: [Candidate],
-                provenance: SessionProvenance? = nil) {
+                provenance: SessionProvenance? = nil,
+                ambiguousSurface: Bool = false) {
         self.best = best
         self.ranked = ranked
         self.provenance = provenance
+        self.ambiguousSurface = ambiguousSurface
     }
 }
 
@@ -130,17 +144,24 @@ public struct AttributionExplanation: Equatable, Sendable {
     /// Apple 71% (learned)" history line. nil when the engine already agreed
     /// with the pick, or believed nothing.
     package var priorToCorrection: Prior?
+    /// Mirrors `Attribution.ambiguousSurface` exactly for the same signal —
+    /// a re-derivation can never disagree with the live hold decision
+    /// (ambiguous-web-page policy, Martin 2026-07-23). Source stays
+    /// `.ranked`/`.none` as before (no new source word); this flag is what
+    /// a why-panel names the hold from, honestly, without inventing jargon.
+    package var ambiguousSurface: Bool
     package init(source: Source, chosen: Target?, chosenScore: Double,
                 lines: [Line], features: [String],
                 matchedEmailRule: EmailRule? = nil, matchedSiteRule: SiteRule? = nil,
                 matchedPin: Pin? = nil, priorToCorrection: Prior? = nil,
-                matchedSurface: Surface? = nil) {
+                matchedSurface: Surface? = nil, ambiguousSurface: Bool = false) {
         self.source = source; self.chosen = chosen; self.chosenScore = chosenScore
         self.lines = lines; self.features = features
         self.matchedEmailRule = matchedEmailRule; self.matchedSiteRule = matchedSiteRule
         self.matchedPin = matchedPin
         self.priorToCorrection = priorToCorrection
         self.matchedSurface = matchedSurface
+        self.ambiguousSurface = ambiguousSurface
     }
 
     /// An `explain()` is always a RE-DERIVATION from the current stores. For
@@ -409,7 +430,28 @@ package final class Attributor {
             }
             return SessionProvenance(source: .ranked)
         }
-        return Attribution(best: ranked.first, ranked: ranked, provenance: provenance)
+        // Ambiguous-web-page policy (Martin, 2026-07-23): only when NOTHING
+        // rule-grade fired — not even a prime — and the page itself is
+        // genuinely unfamiliar (see `hostIsUnknown`).
+        let ambiguous = primeSource == nil && hostIsUnknown(signal)
+        return Attribution(best: ranked.first, ranked: ranked, provenance: provenance,
+                           ambiguousSurface: ambiguous)
+    }
+
+    /// The "genuinely unknown" half of the ambiguous-web-page test: a web
+    /// page (has a parseable tab URL + host) whose host carries neither a
+    /// `site`-level `SiteRule` (pinned or learned) nor any learned
+    /// `urlHost`/`urlPath` association — the moment either exists, the page
+    /// is no longer ambiguous by this test (a learned host still switches).
+    /// Non-web signals (no tab URL) are never ambiguous.
+    private func hostIsUnknown(_ signal: ActivitySignal) -> Bool {
+        guard let raw = signal.tabURL, let url = URL(string: raw),
+              let host = url.host?.lowercased() else { return false }
+        let hasSiteRule = siteRules.contains {
+            $0.field == SiteRule.siteField
+                && $0.value.caseInsensitiveCompare(host) == .orderedSame
+        }
+        return !hasSiteRule && !learning.hasAssociation(urlHost: host)
     }
 
     /// Lift the running task's candidate by the live adjacency prior (see
@@ -919,7 +961,8 @@ package final class Attributor {
                          lines: lines, features: feats, matchedSurface: surface)
         }
         return .init(source: lines.isEmpty ? .none : .ranked, chosen: lines.first?.target,
-                     chosenScore: lines.first?.score ?? 0, lines: lines, features: feats)
+                     chosenScore: lines.first?.score ?? 0, lines: lines, features: feats,
+                     ambiguousSurface: hostIsUnknown(signal))
     }
 
     private func bestURLTarget(_ signal: ActivitySignal) -> Target? {
