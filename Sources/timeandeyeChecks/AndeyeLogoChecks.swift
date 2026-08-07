@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeTheme
 
@@ -336,3 +337,4 @@ func andeyeLogoChecks(_ c: Checks) {
         }
     }
 }
+#endif

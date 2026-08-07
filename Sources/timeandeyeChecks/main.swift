@@ -1,6 +1,9 @@
 import Foundation
 import timeandeyeCore
+import timeandeyeStore
+#if os(macOS)
 import timeandeyeMac
+#endif
 
 // Suites register here as they are implemented (plan task order).
 
@@ -65,7 +68,10 @@ func checkpointRecoveryChecks(_ c: Checks) {
             stale: stale, floor: 60, alreadyJournalled: [other]), stale)
     }
 }
-let suites: [(String, (Checks) -> Void)] = [
+// Platform-neutral entries only, so this base literal builds on Linux too;
+// the macOS-only suites (Mac/Theme/Phone sensors, CryptoKit licensing) are
+// appended below in a single #if os(macOS) block, in their original order.
+var suites: [(String, (Checks) -> Void)] = [
     ("Models", modelsChecks),
     ("OPURLParser", opURLParserChecks),
     ("LearningStore", learningStoreChecks),
@@ -77,21 +83,12 @@ let suites: [(String, (Checks) -> Void)] = [
     ("MinuteResolver", minuteResolverChecks),
     ("CheckpointRecovery", checkpointRecoveryChecks),
     ("SessionTracker", sessionTrackerChecks),
-    ("EmailCapture", emailCaptureChecks),
-    ("EmailSystemRecipes", emailSystemRecipeChecks),
-    ("EmailRecipeHealth", emailRecipeHealthChecks),
     ("TimelineMath", timelineMathChecks),
     ("SpanAllocation", spanAllocationChecks),
-    ("AndeyeLogo", andeyeLogoChecks),
-    ("AndeyeTheme", andeyeThemeChecks),
-    ("FullscreenPose", fullscreenPoseChecks),
     ("CommentRouting", commentRoutingChecks),
     ("FuzzyMatch", fuzzyMatchChecks),
     ("TimeAggregator", timeAggregatorChecks),
     ("JournalStore[InMemory]", inMemoryJournalChecks),
-    ("JournalStore[SQLite]", sqliteJournalChecks),
-    ("MenuTitle", menuTitleChecks),
-    ("SupportDir", supportDirChecks),
     ("AIAssist", aiAssistChecks),
     ("Settings", settingsChecks),
     ("DuplicateReconcile", duplicateReconcileChecks),
@@ -128,7 +125,6 @@ let suites: [(String, (Checks) -> Void)] = [
         }
     }),
     ("SQLiteSyncStamping", sqliteSyncStampingChecks),
-    ("License", licenseChecks),
     ("Billing", billingChecks),
     ("ColourEngine", colourEngineChecks),
     ("ReviewStack", reviewStackChecks),
@@ -163,20 +159,37 @@ let suites: [(String, (Checks) -> Void)] = [
     ("CertaintyCalculus", certaintyCalculusChecks),
     ("AttributionLearning", attributionLearningChecks),
 ]
-let asyncSuites: [(String, (Checks) async -> Void)] = [
+var asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),
-    ("PhoneController", phoneControllerChecks),
     ("SyncEngineOwnership", syncEngineOwnershipChecks),
     ("JournalSyncer", journalSyncerChecks),
     ("OPClient", opClientChecks),
     ("SyncEngine", syncEngineChecks),
     ("SyncIdempotency", syncIdempotencyChecks),
     ("MultiBackendSync", multiBackendSyncChecks),
+    ("EndToEnd", endToEndChecks),
+]
+
+#if os(macOS)
+suites += [
+    ("EmailCapture", emailCaptureChecks),
+    ("EmailSystemRecipes", emailSystemRecipeChecks),
+    ("EmailRecipeHealth", emailRecipeHealthChecks),
+    ("AndeyeLogo", andeyeLogoChecks),
+    ("AndeyeTheme", andeyeThemeChecks),
+    ("FullscreenPose", fullscreenPoseChecks),
+    ("JournalStore[SQLite]", sqliteJournalChecks),
+    ("MenuTitle", menuTitleChecks),
+    ("SupportDir", supportDirChecks),
+    ("License", licenseChecks),
+]
+asyncSuites += [
+    ("PhoneController", phoneControllerChecks),
     ("ResolvedPosting", resolvedPostingChecks),
     ("PostingMachine", postingMachineChecks),
     ("MultiDevicePosting", multiDevicePostingChecks),
-    ("EndToEnd", endToEndChecks),
 ]
+#endif
 
 var totalPassed = 0
 var totalFailed = 0

@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SQLite3
 import timeandeyeCore
@@ -621,3 +622,4 @@ private final class ThrowingMigrationStore: JournalStore {
     func retroDigests(limit: Int) throws -> [RetroDigest] { try inner.retroDigests(limit: limit) }
     func deleteRetroDigest(_ id: UUID) throws { try inner.deleteRetroDigest(id) }
 }
+#endif

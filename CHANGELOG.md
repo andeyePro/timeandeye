@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-08-07
+
+- [x] **In-container Linux checks subset** – `timeandeyeChecks` now builds
+  and runs the platform-neutral Core+Store subset on the Linux Swift 6.1
+  toolchain, without touching macOS suite membership. Added a `CSQLite`
+  system-library target (`Sources/CSQLite/module.modulemap`, wraps
+  `/usr/include/sqlite3.h`, links `sqlite3`) so `SQLiteJournalStore.swift`'s
+  `import SQLite3` resolves on Linux via a `#if canImport(SQLite3) … #else
+  import CSQLite #endif` shim; `RevisionStoreChecks.swift` now imports
+  `timeandeyeStore` directly instead of reaching `SQLiteJournalStore`
+  transitively through `timeandeyeMac`'s `@_exported import`, since Mac is
+  no longer available on Linux. `Package.swift`'s `timeandeyeChecks` target
+  makes `timeandeyeMac`/`timeandeyeTheme` macOS-only and `timeandeyePhone`
+  macOS+iOS-only dependencies, and gains an explicit `timeandeyeStore` dep.
+  `main.swift`'s suite registration splits into a platform-neutral base
+  literal plus one `#if os(macOS)` append block, so the SET of registered
+  suites is identical to before (98 names, verified by diff) – only which
+  ones run on Linux changed. Ten check files are now wrapped whole-file in
+  `#if os(macOS)` because they import an unavailable module or an
+  Apple-only framework: `ThemeChecks.swift` (SwiftUI), `AndeyeLogoChecks.swift`
+  (timeandeyeTheme), `MacChecks.swift` (timeandeyeMac + AppKit),
+  `EmailCaptureChecks.swift` (timeandeyeMac), `LicenseChecks.swift`
+  (CryptoKit), `FullscreenPoseChecks.swift` (timeandeyeMac),
+  `PhoneControllerChecks.swift` (timeandeyePhone → Combine), `PostingMachineChecks.swift`
+  (timeandeyeMac), `ResolvedPostingChecks.swift` (timeandeyeMac),
+  `MultiDevicePostingChecks.swift` (timeandeyeMac). `timeandeyePhone`
+  itself is excluded from the Linux subset because `PhoneController`
+  imports Combine unguarded (TODO follow-up filed). Linux run (this
+  session, `.build-linux` scratch path, never committed):
+  `TOTAL: 750 passed, 0 failed`. macOS suite membership is UNCHANGED by
+  static set-diff (old vs new suite-name sets identical) but macOS itself
+  is UNVERIFIED this session – this container has no macOS, so the
+  full-suite build/run still needs a Mac or CI.
+
 ## 2026-08-01
 
 - [x] **site: all contact routes through the live contact.andeye.com form** –

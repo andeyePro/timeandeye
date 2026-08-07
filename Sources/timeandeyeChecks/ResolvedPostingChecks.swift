@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SQLite3
 import timeandeyeCore
@@ -692,3 +693,4 @@ func resolvedPostingChecks(_ c: Checks) async {
         try expectEq(pm.created.count, 1, "no duplicate create")
     }
 }
+#endif

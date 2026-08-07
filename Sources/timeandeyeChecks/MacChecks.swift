@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeCore
 import timeandeyeMac
@@ -155,3 +156,4 @@ func menuTitleChecks(_ c: Checks) {
         try expectClose(Double(mid.redComponent), 0.5, accuracy: 0.01)
     }
 }
+#endif

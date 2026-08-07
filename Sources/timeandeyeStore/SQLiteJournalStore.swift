@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 import timeandeyeCore
 
 /// SQLite-backed JournalStore using the system sqlite3 C API directly —

@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeCore
 #if canImport(CryptoKit)
@@ -289,3 +290,4 @@ func licenseChecks(_ c: Checks) {
     }
     #endif
 }
+#endif

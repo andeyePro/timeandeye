@@ -54,6 +54,13 @@ matters). `timeandeyeIntegration` runs headless end-to-end against a real
 OpenProject instance. This container has no macOS, so checks must be run
 on a Mac – don't claim a check result you haven't actually seen.
 
+The Linux dev container CAN run a subset: the platform-neutral Core+Store
+checks build and run there with the Swift 6.1 Linux toolchain (`export
+PATH="$HOME/.claude/toolchains/swift-6.1-RELEASE-debian12-aarch64/usr/bin:$PATH"`,
+then `swift run --scratch-path .build-linux timeandeyeChecks`) – this only
+proves the neutral subset; the full suite (Mac/Theme/Phone-dependent) still
+needs a Mac.
+
 ## Hard rules – do not "clean up" these
 
 - The dev signing identity lives in the `andeyett-dev` keychain

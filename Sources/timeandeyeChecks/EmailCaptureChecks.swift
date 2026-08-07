@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeCore
 import timeandeyeMac
@@ -360,3 +361,4 @@ func emailRecipeHealthChecks(_ c: Checks) {
         try expectEq(h.consecutiveFailures, 1)
     }
 }
+#endif

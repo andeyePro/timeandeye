@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SwiftUI
 import timeandeyeCore
@@ -99,3 +100,4 @@ func andeyeThemeChecks(_ c: Checks) {
         try expectEq(AndeyeColors.highlight, AndeyeTheme.Colours.highlight)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeCore
 import timeandeyeMac
@@ -195,3 +196,4 @@ func multiDevicePostingChecks(_ c: Checks) async {
                      "one create per genuine posting; never a second live entry over the first")
     }
 }
+#endif

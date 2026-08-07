@@ -1,6 +1,10 @@
 import Foundation
 import timeandeyeCore
-import timeandeyeMac
+// SQLiteJournalStore itself lives in timeandeyeStore; on macOS it also
+// arrives transitively via timeandeyeMac's `@_exported import`, but this
+// suite stays in the Linux subset (timeandeyeMac is macOS-only there), so it
+// imports the neutral module directly.
+import timeandeyeStore
 
 /// Conformance suite every RevisionStore implementation must pass (mirrors
 /// journalStoreConformanceChecks): the sync layer's correctness rests on

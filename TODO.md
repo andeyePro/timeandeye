@@ -340,6 +340,14 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [ ] `timeandeyePhone` is excluded from the in-container Linux checks
+  subset (see CLAUDE.md "Build, check, run") because `PhoneController`
+  imports Combine unguarded (`ObservableObject`/`@Published`), and Combine
+  isn't available on the Linux Swift 6.1 toolchain here. Port the
+  observable surface to something portable, or `#if canImport(Combine)`
+  gate just the affected declarations, so `PhoneControllerChecks` can
+  rejoin the in-container run instead of being macOS-only.
+
 - [ ] STANDING PRACTICE (every session, not a one-off): any time you
   trigger a GitHub CI run (any push to main fires checks.yml), set a
   ~15-minute background timer and then check the run's conclusion via
@@ -390,6 +398,10 @@ and recorded rather than fixed blind:
   (expected: identical/blank → confirms). Mind the hot-path rules: AX
   walk must stay off the 2 s poll's critical path (no sync IPC on the
   sensor thread) and be node/depth-bounded like the email probe.
+  Note (2026-08-07): `SessionTrackerChecks` now runs in-container on Linux
+  as part of the platform-neutral checks subset – the away-mode gap
+  described above is unchanged, this only means the suite covering it is
+  no longer Mac-only to exercise.
 
 - [ ] Once andeye.com serves the canonical /terms + /privacy: delete
   `site/docs/terms.md` + `site/docs/privacy.md` here and turn `site/src/pages/

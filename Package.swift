@@ -18,9 +18,15 @@ let package = Package(
     ],
     targets: [
         .target(name: "timeandeyeCore"),
+        // System-library shim for the sqlite3 C API on Linux, where SQLite3
+        // isn't a bundled Foundation-adjacent module the way it is on Apple
+        // platforms (`import SQLite3` resolves there without this target).
+        .systemLibrary(name: "CSQLite", path: "Sources/CSQLite"),
         // Platform-NEUTRAL persistence + sync transport: SQLite replica,
         // CloudKit pipe, key file store. macOS AND iOS build on this.
-        .target(name: "timeandeyeStore", dependencies: ["timeandeyeCore"]),
+        .target(name: "timeandeyeStore",
+                dependencies: ["timeandeyeCore",
+                               .target(name: "CSQLite", condition: .when(platforms: [.linux]))]),
         // The iOS app's engine (manual tracking, pick list, export) —
         // UI-framework-free, so the CLT-only Mac loop compile-guards and
         // checks it; only the SwiftUI shell in ios/ needs Xcode.
@@ -43,9 +49,14 @@ let package = Package(
                           dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyeUI"]),
         // Check harness instead of a test target: the build Mac has Command
         // Line Tools only (no XCTest / Swift Testing). Run: swift run timeandeyeChecks
+        // Mac/Theme/Phone are conditional so the platform-neutral Core+Store
+        // subset also builds and runs in-container on Linux (main.swift
+        // #if-gates the suites that need the unconditional targets).
         .executableTarget(name: "timeandeyeChecks",
-                          dependencies: ["timeandeyeCore", "timeandeyeMac",
-                                         "timeandeyePhone", "timeandeyeTheme"]),
+                          dependencies: ["timeandeyeCore", "timeandeyeStore",
+                                         .target(name: "timeandeyeMac", condition: .when(platforms: [.macOS])),
+                                         .target(name: "timeandeyeTheme", condition: .when(platforms: [.macOS])),
+                                         .target(name: "timeandeyePhone", condition: .when(platforms: [.macOS, .iOS]))]),
         // Headless end-to-end against a REAL OpenProject as a test user:
         // swift run timeandeyeIntegration <base-url> <key-file>
         .executableTarget(name: "timeandeyeIntegration",

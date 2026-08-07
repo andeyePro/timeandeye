@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeCore
 import timeandeyePhone
@@ -207,3 +208,4 @@ func phoneControllerChecks(_ c: Checks) async {
         try expectEq(dataRows.count, 1, "one banked slice; the live checkpoint is excluded")
     }
 }
+#endif

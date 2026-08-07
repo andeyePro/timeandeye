@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import timeandeyeMac
 
@@ -158,3 +159,4 @@ func fullscreenPoseChecks(_ c: Checks) {
                    "settle stickiness must represent >=5s of continuous non-fullscreen look")
     }
 }
+#endif

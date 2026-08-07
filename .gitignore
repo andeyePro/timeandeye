@@ -3,6 +3,7 @@
 
 # SwiftPM build products
 .build/
+.build-linux/
 *.app/
 /timeandeye
 /andeyeTT
