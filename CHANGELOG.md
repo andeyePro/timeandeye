@@ -2,6 +2,33 @@
 
 ## 2026-08-07
 
+- [x] **`timeandeyePhone` joins the in-container Linux checks subset** –
+  `Sources/timeandeyePhone/PhoneController.swift` gates `import Combine`
+  behind `#if canImport(Combine)`; a new internal-shim file
+  `Sources/timeandeyePhone/CombineShim.swift` (wrapped entirely in
+  `#if !canImport(Combine)`) supplies a minimal `ObservableObject`
+  protocol and `@propertyWrapper struct Published<Value>` so
+  `PhoneController`'s class body compiles unchanged where Combine
+  doesn't exist – the file compiles out entirely on Apple platforms
+  (always `canImport(Combine)` there), so the real Combine conformance
+  the iOS app (`ios/Sources/`) relies on via
+  `@StateObject`/`@ObservedObject`/`$controller.settings` is untouched;
+  this container cannot compile the iOS app to verify that directly, so
+  it's stated as a construction guarantee, not a tested one. `Package.swift`
+  adds `.linux` to the `timeandeyePhone` dependency condition for
+  `timeandeyeChecks`. `Sources/timeandeyeChecks/PhoneControllerChecks.swift`
+  drops its `#if os(macOS)` gate (it was never Mac-specific).
+  `Sources/timeandeyeChecks/main.swift` moves the `PhoneController` suite
+  registration from the macOS-only `asyncSuites +=` block into the
+  platform-neutral base literal. `ResolvedPosting`/`PostingMachine`/
+  `MultiDevicePosting` stay macOS-only (they import `timeandeyeMac`), as
+  do `Mac`/`Theme`/`EmailCapture`/`AndeyeLogo`/`AndeyeTheme`/
+  `FullscreenPose`/`JournalStore[SQLite]`/`MenuTitle`/`SupportDir`/
+  `License`. `swift run --scratch-path .build-linux timeandeyeChecks`:
+  `TOTAL: 775 passed, 0 failed` (was 762), with `PhoneController: 13
+  passed, 0 failed` the only suite added – a before/after diff of every
+  suite's pass/fail line confirmed no other suite's count changed.
+
 - [x] **Learning behaviour fixes (all three GO'd, TODO.md 2026-07-23)** –
   `LearningStore` (Sources/timeandeyeCore/LearningStore.swift): (1) `forget`
   now clears a target's `totals`, not just its per-feature counts, so

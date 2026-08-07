@@ -49,14 +49,16 @@ let package = Package(
                           dependencies: ["timeandeyeCore", "timeandeyeMac", "timeandeyeUI"]),
         // Check harness instead of a test target: the build Mac has Command
         // Line Tools only (no XCTest / Swift Testing). Run: swift run timeandeyeChecks
-        // Mac/Theme/Phone are conditional so the platform-neutral Core+Store
+        // Mac/Theme stay macOS-only so the platform-neutral Core+Store
         // subset also builds and runs in-container on Linux (main.swift
-        // #if-gates the suites that need the unconditional targets).
+        // #if-gates the suites that need those targets). Phone also builds
+        // on Linux — PhoneController's Combine use is #if-shimmed — so
+        // PhoneControllerChecks runs in the same in-container subset.
         .executableTarget(name: "timeandeyeChecks",
                           dependencies: ["timeandeyeCore", "timeandeyeStore",
                                          .target(name: "timeandeyeMac", condition: .when(platforms: [.macOS])),
                                          .target(name: "timeandeyeTheme", condition: .when(platforms: [.macOS])),
-                                         .target(name: "timeandeyePhone", condition: .when(platforms: [.macOS, .iOS]))]),
+                                         .target(name: "timeandeyePhone", condition: .when(platforms: [.macOS, .iOS, .linux]))]),
         // Headless end-to-end against a REAL OpenProject as a test user:
         // swift run timeandeyeIntegration <base-url> <key-file>
         .executableTarget(name: "timeandeyeIntegration",

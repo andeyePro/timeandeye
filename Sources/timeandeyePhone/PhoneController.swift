@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 import timeandeyeCore
 import timeandeyeStore
 

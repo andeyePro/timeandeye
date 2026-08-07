@@ -340,13 +340,16 @@ and recorded rather than fixed blind:
 
 ## Open
 
-- [ ] `timeandeyePhone` is excluded from the in-container Linux checks
-  subset (see CLAUDE.md "Build, check, run") because `PhoneController`
-  imports Combine unguarded (`ObservableObject`/`@Published`), and Combine
-  isn't available on the Linux Swift 6.1 toolchain here. Port the
-  observable surface to something portable, or `#if canImport(Combine)`
-  gate just the affected declarations, so `PhoneControllerChecks` can
-  rejoin the in-container run instead of being macOS-only.
+- [x] `timeandeyePhone` now runs in the in-container Linux checks subset:
+  `PhoneController`'s Combine use is `#if canImport(Combine)`-gated with an
+  internal shim for `ObservableObject`/`@Published` on non-Apple platforms
+  (see CHANGELOG 2026-08-07). `PhoneController` still stays Mac/iOS-real on
+  Apple platforms – the shim file compiles out entirely there. Remaining
+  Mac-only suites (`Mac`/`Theme`/`EmailCapture`/`AndeyeLogo`/`AndeyeTheme`/
+  `FullscreenPose`/`JournalStore[SQLite]`/`MenuTitle`/`SupportDir`/
+  `License`/`ResolvedPosting`/`PostingMachine`/`MultiDevicePosting`) import
+  `timeandeyeMac`/`timeandeyeTheme`/CryptoKit directly and have no portable
+  path. (this commit)
 
 - [ ] STANDING PRACTICE (every session, not a one-off): any time you
   trigger a GitHub CI run (any push to main fires checks.yml), set a

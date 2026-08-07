@@ -69,8 +69,9 @@ func checkpointRecoveryChecks(_ c: Checks) {
     }
 }
 // Platform-neutral entries only, so this base literal builds on Linux too;
-// the macOS-only suites (Mac/Theme/Phone sensors, CryptoKit licensing) are
-// appended below in a single #if os(macOS) block, in their original order.
+// the macOS-only suites (Mac sensors/Theme, the timeandeyeMac-dependent
+// posting suites, CryptoKit licensing) are appended below in a single
+// #if os(macOS) block, in their original order.
 var suites: [(String, (Checks) -> Void)] = [
     ("Models", modelsChecks),
     ("OPURLParser", opURLParserChecks),
@@ -168,6 +169,7 @@ var asyncSuites: [(String, (Checks) async -> Void)] = [
     ("SyncIdempotency", syncIdempotencyChecks),
     ("MultiBackendSync", multiBackendSyncChecks),
     ("EndToEnd", endToEndChecks),
+    ("PhoneController", phoneControllerChecks),
 ]
 
 #if os(macOS)
@@ -184,7 +186,6 @@ suites += [
     ("License", licenseChecks),
 ]
 asyncSuites += [
-    ("PhoneController", phoneControllerChecks),
     ("ResolvedPosting", resolvedPostingChecks),
     ("PostingMachine", postingMachineChecks),
     ("MultiDevicePosting", multiDevicePostingChecks),
