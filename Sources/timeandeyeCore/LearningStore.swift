@@ -55,6 +55,13 @@ package struct LearningStore: Codable, Equatable, Sendable {
     private var counts: [Feature: [Target: Double]] = [:]
     private var totals: [Target: Double] = [:]
 
+    /// GENERIC features (hourOfDay) are structurally weak evidence: an hour
+    /// coincidence must never carry as much weight as a real feature match.
+    /// TEACH (`learn`) and SCORE (`scores`) share this one constant so the
+    /// two sides can never drift apart — an hour is worth 0.15 of a real
+    /// signal on the way in AND on the way out.
+    package static let hourOfDayWeight = 0.15
+
     package init() {}
 
     package var isEmpty: Bool { totals.isEmpty }
@@ -105,9 +112,20 @@ package struct LearningStore: Codable, Equatable, Sendable {
     package mutating func learn(_ signal: ActivitySignal, target: Target, weight: Double = 1,
                                disabledRecipes: Set<String> = []) {
         for f in Self.features(from: signal, disabledRecipes: disabledRecipes) {
-            counts[f, default: [:]][target, default: 0] += weight
+            // hourOfDay is down-weighted on the TEACH side to match its
+            // 0.15 score-side weight (`hourOfDayWeight`) — otherwise an
+            // hour coincidence taught full-strength could out-accumulate a
+            // real feature over enough repetitions.
+            let w = f.kind == .hourOfDay ? weight * Self.hourOfDayWeight : weight
+            let existing = counts[f]?[target] ?? 0
+            // Floor at write: a negative-weight learn (correct()'s displacement
+            // discount) must not push a stored count below 0 — only the READ
+            // side used to floor, so a heavily-displaced target's raw count
+            // could go arbitrarily negative and sit there. Read-side max(...,0)
+            // guards stay in place for legacy stores decoded before this fix.
+            counts[f, default: [:]][target] = max(0, existing + w)
         }
-        totals[target, default: 0] += weight
+        totals[target] = max(0, (totals[target] ?? 0) + weight)
     }
 
     /// THE correction operator — the SINGLE definition of how one user
@@ -136,14 +154,43 @@ package struct LearningStore: Codable, Equatable, Sendable {
     /// ERASE this target's accumulated counts on exactly these features, however
     /// large the mountain (a fixed negative weight can't dislodge months of
     /// confirmations — the 2026-07-03 "University Teaching" diagnosis).
-    /// `totals` is deliberately untouched: we can't know how much of it arrived
-    /// through these features, and leaving it makes the smoothing term
-    /// (0.1/(total+1)) HARSHER for the erased features — exactly the suppression
-    /// wanted. Learning on other features/targets is unaffected.
+    ///
+    /// `totals[target]` is SUBTRACTED, not left untouched (2026-07-23,
+    /// Martin — "also clear the target's totals"): leaving it stale kept the
+    /// experience prior (log(total+1)) alive for a fully-forgotten target, so
+    /// the stale association ghost survived the forget. But a WHOLESALE clear
+    /// (totals[target] = 0) is wrong too whenever the target keeps OTHER
+    /// associations: with those other counts intact and total reset to 0,
+    /// their likelihood ratio (c+0.1)/(total+1) shoots up — forgetting one
+    /// signal shape would INFLATE every surviving one, the opposite of "stop
+    /// suggesting this". So this subtracts an ESTIMATE of what the erased
+    /// features contributed — `learn()` bumps every feature of a signal by
+    /// the same weight, so the largest single-feature count actually erased
+    /// is the best read of that signal's teach-weight — then clamps to a
+    /// soundness floor: never below the largest count still on the books for
+    /// this target on ANY surviving feature (so no surviving association's
+    /// ratio can end up above ~1 as a side effect of this write). If nothing
+    /// survives anywhere, `totals[target]` is dropped entirely (nil, not 0) —
+    /// the ghost is fully gone and `isEmpty` holds. On the incident case
+    /// (forgetting a target's ONLY associations) this renders identically to
+    /// a wholesale clear; it differs only in the partial-forget case, where
+    /// learning on other features/targets stays unaffected.
     package mutating func forget(target: Target, features: [Feature]) {
+        var erased = 0.0
         for f in features {
+            erased = max(erased, counts[f]?[target] ?? 0)
             counts[f]?[target] = nil
             if counts[f]?.isEmpty == true { counts[f] = nil }
+        }
+        guard erased > 0, let currentTotal = totals[target] else { return }
+        var survivingMax = 0.0
+        for perTarget in counts.values {
+            survivingMax = max(survivingMax, perTarget[target] ?? 0)
+        }
+        if survivingMax <= 0 {
+            totals[target] = nil
+        } else {
+            totals[target] = max(currentTotal - erased, survivingMax)
         }
     }
 
@@ -163,7 +210,7 @@ package struct LearningStore: Codable, Equatable, Sendable {
                 // hour coincidence must never flip attribution on its own —
                 // one evening of Steam at 22:00 would otherwise make EVERY
                 // 22:xx window score doNotTrack and stop the clock.
-                let kindWeight = f.kind == .hourOfDay ? 0.15 : 1.0
+                let kindWeight = f.kind == .hourOfDay ? Self.hourOfDayWeight : 1.0
                 // Matched features use the learned likelihood; an UNMATCHED
                 // feature costs a CONSTANT (its untaught-task value), not
                 // log(0.1/(total+1)) — the old per-feature penalty GREW with

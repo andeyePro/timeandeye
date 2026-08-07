@@ -28,6 +28,44 @@ func opURLParserChecks(_ c: Checks) {
 
 // MARK: - LearningStore (plan task 4)
 
+/// Every numeric leaf in an encoded `LearningStore` is >= 0 — walks the
+/// generic JSON shape (`JSONSerialization`, not `Decodable`) so it inspects
+/// the RAW stored bytes, not a value that has already passed through one of
+/// `scores()`/`hourAffinity()`'s own `max(...,0)` read-side guards.
+private func allEncodedNumbersNonNegative(_ value: Any) -> Bool {
+    switch value {
+    case let arr as [Any]:
+        return arr.allSatisfy(allEncodedNumbersNonNegative)
+    case let dict as [String: Any]:
+        return dict.values.allSatisfy(allEncodedNumbersNonNegative)
+    case let num as NSNumber:
+        return num.doubleValue >= 0
+    default:
+        return true
+    }
+}
+
+/// Reads the stored count for one (feature kind, feature value) pair out of
+/// an encoded `LearningStore`'s `"counts"` JSON — a flat [Feature, [Target,
+/// Double, ...], Feature, [Target, Double, ...], ...] array. Only sound when
+/// the store has exactly one target learned on that feature (true of every
+/// check that uses it below); good enough to pin the raw stored NUMBER
+/// without a public accessor for the private `counts` dictionary.
+private func decodedCount(_ encoded: Any, kind: String, value: String) -> Double? {
+    guard let root = encoded as? [String: Any], let counts = root["counts"] as? [Any] else { return nil }
+    var i = 0
+    while i + 1 < counts.count {
+        if let feat = counts[i] as? [String: Any],
+           feat["kind"] as? String == kind, feat["value"] as? String == value,
+           let targetArr = counts[i + 1] as? [Any], targetArr.count >= 2,
+           let n = targetArr[1] as? NSNumber {
+            return n.doubleValue
+        }
+        i += 2
+    }
+    return nil
+}
+
 func learningStoreChecks(_ c: Checks) {
     c.check("partial match on a WELL-TAUGHT task beats a never-taught task (B5: no worse-with-use)") {
         var store = LearningStore()
@@ -150,6 +188,114 @@ func learningStoreChecks(_ c: Checks) {
         store.correct(steam, to: taskB, weight: 2, displacingRanked: taskA)   // -1 from A, +2 to B
         try expect(!store.learnedValues(for: taskA).contains("library"), "corrected-away value gone")
         try expect(store.learnedValues(for: taskB).contains("library"), "now associated with B")
+    }
+
+    // MARK: forget — subtract-with-floor (TODO.md "Learning behaviour fixes",
+    // GO'd 2026-07-23). `forget` used to erase per-feature counts but leave
+    // `totals[target]` untouched, so a fully-forgotten target kept its
+    // experience prior (log(total+1)) — the "University Teaching" ghost. The
+    // fix subtracts an ESTIMATE of what the erased features contributed
+    // (never a wholesale clear, which would inflate a target's OTHER
+    // surviving associations instead).
+
+    c.check("forget clears the target's experience prior (totals gone when nothing survives)") {
+        var store = LearningStore()
+        let taught = ActivitySignal(app: "Ghostty", windowTitle: "timeandeye docs", timestamp: t0)
+        for _ in 0..<12 { store.learn(taught, target: taskA, weight: 2) }
+        try expect(!store.isEmpty, "premise: something is learned")
+        let before = store.scores(for: taught, among: [taskA, taskB])
+        try expect(before[taskA]! > before[taskB]!, "premise: the forgotten target currently leads")
+
+        store.forget(target: taskA, features: LearningStore.features(from: taught))
+
+        try expect(store.isEmpty, "the ONLY target's totals are gone (nil) — the experience prior with it")
+        let after = store.scores(for: taught, among: [taskA, taskB])
+        try expectClose(after[taskA]!, after[taskB]!, "no learned lean survives a full forget")
+    }
+
+    c.check("partial forget keeps other associations sound — no score inflation vs a never-taught-A control") {
+        let sigA = ActivitySignal(app: "appalpha", windowTitle: "alpha grove", timestamp: t0)
+        let sigB = ActivitySignal(app: "appbravo", windowTitle: "bravo delta",
+                                  timestamp: t0.addingTimeInterval(5 * 3600))
+        var store = LearningStore()
+        for _ in 0..<10 { store.learn(sigA, target: taskA, weight: 2) }   // A only
+        for _ in 0..<6 { store.learn(sigB, target: taskA, weight: 2) }    // B only
+
+        var control = LearningStore()
+        for _ in 0..<6 { control.learn(sigB, target: taskA, weight: 2) }  // B only, never learned A
+
+        store.forget(target: taskA, features: LearningStore.features(from: sigA))
+
+        let vals = store.learnedValues(for: taskA)
+        try expect(vals.contains("bravo") && vals.contains("appbravo"), "B's associations survive the A-only forget")
+        try expect(!vals.contains("alpha") && !vals.contains("appalpha"), "A's associations are gone")
+        try expect(!store.isEmpty, "the target still has B's association")
+
+        // The failure mode a wholesale totals-clear would cause: with A's
+        // counts erased but B's counts intact, resetting totals to 0 (rather
+        // than subtracting an estimate) would INFLATE B's likelihood ratio
+        // past what a store that never learned A in the first place scores.
+        let scoresAfter = store.scores(for: sigB, among: [taskA, taskB])
+        let scoresControl = control.scores(for: sigB, among: [taskA, taskB])
+        try expect(scoresAfter[taskA]! <= scoresControl[taskA]! + 1e-9,
+                   "A's score on a B-shaped signal must not exceed the never-learned-A control " +
+                   "(\(scoresAfter[taskA]!) vs \(scoresControl[taskA]!))")
+    }
+
+    // MARK: floor at write — negative-weight learns (correct()'s displacement
+    // discount) must not push a STORED count/total below 0; only the read
+    // path floored before this fix.
+
+    c.check("floor at write: correct() never drives stored counts/totals negative (inspect encoded JSON)") {
+        var store = LearningStore()
+        for _ in 0..<20 {
+            store.correct(ghostty, to: taskB, weight: 1, displacingRanked: taskA)   // taskA only ever displaced
+        }
+        let data = try JSONEncoder().encode(store)
+        let obj = try JSONSerialization.jsonObject(with: data)
+        try expect(allEncodedNumbersNonNegative(obj),
+                   "every stored count/total must be floored at write, not just at read")
+    }
+
+    // MARK: hourOfDay teach weight — down-weighted to match its 0.15
+    // score-side weight, via one shared constant used by both learn() and
+    // scores() so the two sides cannot drift apart.
+
+    c.check("hourOfDay teach weight matches its 0.15 score weight (learn() and scores() share one constant)") {
+        try expectEq(LearningStore.hourOfDayWeight, 0.15, "the documented shared constant")
+
+        let w = 6.0
+        let sig = ActivitySignal(app: "solo", timestamp: t0)   // app + hourOfDay only, no title/url
+        var store = LearningStore()
+        store.learn(sig, target: taskA, weight: w)
+
+        // TEACH side: the raw encoded storage, bypassing the read-side floor.
+        let data = try JSONEncoder().encode(store)
+        let obj = try JSONSerialization.jsonObject(with: data)
+        let hour = String(Calendar(identifier: .gregorian).component(.hour, from: t0))
+        let appCount = try unwrap(decodedCount(obj, kind: "app", value: "solo"), "app count present")
+        let hourCount = try unwrap(decodedCount(obj, kind: "hourOfDay", value: hour), "hourOfDay count present")
+        try expectEq(appCount, w, "a normal feature gets the FULL teach weight")
+        try expectClose(hourCount, w * LearningStore.hourOfDayWeight, accuracy: 1e-9,
+                        "hourOfDay gets weight * hourOfDayWeight, not the full weight")
+
+        // SCORE side: reproduce scores()'s documented formula using the SAME
+        // shared constant — this only reconciles with store.scores() if the
+        // two sides use one number, never two that could drift apart.
+        let total = w
+        let kindApp = 1.0
+        let kindHour = LearningStore.hourOfDayWeight
+        var logpA = kindApp * log((appCount + 0.1) / (total + 1))
+        logpA += kindHour * log((hourCount + 0.1) / (total + 1))
+        logpA += log(total + 1)                        // a strong (non-hour) match is present
+        let logpB = (kindApp + kindHour) * log(0.1)     // taskB: nothing matches at all
+        let maxV = max(logpA, logpB)
+        let eA = exp(logpA - maxV), eB = exp(logpB - maxV)
+        let expected = eA / (eA + eB)
+
+        let actual = store.scores(for: sig, among: [taskA, taskB])[taskA]!
+        try expectClose(actual, expected, accuracy: 1e-9,
+                        "scores() must reproduce the documented formula exactly, using the shared constant")
     }
 }
 

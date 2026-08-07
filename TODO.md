@@ -470,18 +470,20 @@ and recorded rather than fixed blind:
 - [x] Attribution learning coherence pass (2026-07-13) – model written down
   (docs/superpowers/specs/2026-07-13-attribution-learning.md), first property
   coverage (L1-L7), one correction operator. No behaviour change. See CHANGELOG.
-- [ ] Learning behaviour fixes — GO all three (Martin, 2026-07-23); build in
-  the next Swift session (surfaced by the 2026-07-13
-  pass; full block + the 2026-07-13 decay re-analysis in
-  a private path). Priority order after re-analysis:
-  (1) **make [✕ forget] complete** – also clear the target's `totals`, so
-  "stop suggesting this" fully works (the one targeted fix for the narrow
-  stale-association residual); (2) floor counts at write; (3) down-weight the
-  hourOfDay teach side to match its 0.15 score weight. RECENCY DECAY:
-  re-analysed and NOT recommended – scoring is store-size-independent, closed
-  backend tasks leave the candidate pool so stale associations self-clean, and
-  "dropped" has no clean signal; leave associations and pins as-is. L7 pins
-  the current no-decay.
+- [x] Learning behaviour fixes – GO all three (Martin, 2026-07-23) (this
+  commit): (1) `forget` now subtracts an ESTIMATE of the erased signal's
+  teach-weight from the target's `totals` (largest single-feature count
+  erased), clamped to never go below the max surviving count for that
+  target – a wholesale clear was rejected as it would have inflated the
+  target's OTHER surviving associations; renders identically to a wholesale
+  clear on the incident case (a target's only associations); (2) counts and
+  totals now floor at 0 on write (`learn`), not just on read; (3) hourOfDay's
+  teach-side weight matches its 0.15 score-side weight via one shared
+  constant (`LearningStore.hourOfDayWeight`). RECENCY DECAY: re-analysed and
+  NOT recommended – scoring is store-size-independent, closed backend tasks
+  leave the candidate pool so stale associations self-clean, and "dropped"
+  has no clean signal; leave associations and pins as-is. L7 pins the
+  current no-decay.
 - [x] Public API surface sealed to a three-tier contract (2026-07-12) –
   ~1,370 `public`→`package` demotions; spec at
   docs/superpowers/specs/2026-07-12-public-api-surface.md. See CHANGELOG.

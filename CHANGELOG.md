@@ -2,6 +2,42 @@
 
 ## 2026-08-07
 
+- [x] **Learning behaviour fixes (all three GO'd, TODO.md 2026-07-23)** –
+  `LearningStore` (Sources/timeandeyeCore/LearningStore.swift): (1) `forget`
+  now clears a target's `totals`, not just its per-feature counts, so
+  `[✕ forget]` fully suppresses a target instead of leaving its experience
+  prior (`log(total+1)`) alive as a stale-association ghost. Implemented as
+  SUBTRACT-WITH-FLOOR, not a wholesale clear (pinned design decision): the
+  amount subtracted is the largest single-feature count actually erased
+  (every `learn()` bumps every feature of a signal by the same weight, so
+  that max is the best read of the erased signal's teach-weight), clamped to
+  never go below the largest count still on the books for that target on any
+  SURVIVING feature – a wholesale clear (`totals[target] = 0`) would instead
+  have inflated the target's other associations' likelihood ratio
+  `(c+0.1)/(total+1)`, the opposite of "stop suggesting this". When nothing
+  survives anywhere, `totals[target]` is dropped entirely (nil, not 0) so
+  `isEmpty` holds; on the incident case (forgetting a target's only
+  associations) this renders identically to a wholesale clear, differing
+  only in the partial-forget case, where other features/targets stay
+  unaffected. (2) `learn()` now floors counts and totals at 0 on WRITE
+  (`max(0, existing + weight)`), not just on read – a negative-weight learn
+  (`correct()`'s displacement discount) could previously drive a stored
+  value arbitrarily negative; the read-side `max(...,0)` guards stay for
+  legacy stores decoded before this fix. (3) the hourOfDay feature's TEACH
+  weight now matches its 0.15 SCORE weight (previously taught at full
+  strength, scored at 0.15) via one new shared constant,
+  `LearningStore.hourOfDayWeight`, used by both `learn()` and `scores()` so
+  the two sides cannot drift apart again. Four new checks in
+  `Sources/timeandeyeChecks/CoreLogicChecks.swift` (`learningStoreChecks`);
+  three (forget-clears-prior, floor-at-write, hourOfDay-teach-weight) fail
+  against the pre-fix code, confirmed by a temporary revert-and-rerun before
+  restoring the fix. Linux subset: `TOTAL: 762 passed, 0 failed`
+  (`.build-linux`, `swift-6.1-RELEASE-debian12-aarch64`) – up from the
+  758-passed baseline (ff490cd). macOS targets (`timeandeyeMac`,
+  `timeandeyeUI`, `timeandeyeApp`, `ios/`) not compiled this session (no
+  macOS in this container). Recency decay stays explicitly out of scope
+  (re-analysed, not recommended – see TODO.md).
+
 - [x] **Away mode records focus evidence** – a real ~24h away stretch left
   Martin nothing to reconstruct from (`SessionTracker.handle` discarded
   every event while `away` was pinned): the at-computer work after
