@@ -243,6 +243,25 @@ func dominantSpanChecks(_ c: Checks) {
         try expectNil(FocusSpan.dominant(among: [], from: t(0), to: t(1000)))
     }
 
+    c.check("away-observed spans never win dominance") {
+        // Evidence rows must never win a session's identity, however long
+        // they run — this is the choke point `dominant(...)` filters at,
+        // defending both teaching and contradiction refile in one place.
+        func awaySpan(_ from: TimeInterval, _ to: TimeInterval) -> FocusSpan {
+            FocusSpan(target: .doNotTrack, certainty: 0,
+                     signal: ActivitySignal(app: "away", timestamp: t(from)),
+                     start: t(from), end: t(to),
+                     provenance: SessionProvenance(sourceRaw: "observedWhileAway"),
+                     observedWhileAway: true)
+        }
+        let spans = [awaySpan(0, 600), span("normal", 0, 60)]
+        let win = try unwrap(FocusSpan.dominant(among: spans, from: t(0), to: t(600)))
+        try expectEq(win.signal.app, "normal", "a 600s away row must not beat a 60s real one")
+
+        // A window covered ONLY by away evidence has no dominant span at all.
+        try expectNil(FocusSpan.dominant(among: [awaySpan(0, 600)], from: t(0), to: t(600)))
+    }
+
     c.check("bucketed slice matches a window-scoped fetch exactly") {
         // The batch pass filters ONE wide fetch per session; the winner must be
         // the same span a narrow per-session fetch would have surfaced.

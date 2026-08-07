@@ -402,6 +402,27 @@ and recorded rather than fixed blind:
   as part of the platform-neutral checks subset – the away-mode gap
   described above is unchanged, this only means the suite covering it is
   no longer Mac-only to exercise.
+  Note (2026-08-07, this commit): requirement (b) — Core recording — has
+  landed. Focus/window changes during an away stretch now emit `FocusSpan`
+  rows (target `.doNotTrack`, certainty 0, `observedWhileAway: true`,
+  provenance `"observedWhileAway"`) via `SessionTracker.onSpanClosed`,
+  emitted PER FOCUS CHANGE (not batched at the end) so a crash mid-away
+  keeps everything already observed instead of losing the whole stretch.
+  `FocusSpan.dominant(...)` and the app-breakdown aggregator both exclude
+  these rows, so they can never win a session's identity or bill/teach/
+  aggregate. Requirement (a) — the pinned attribution stays byte-for-byte
+  undisturbed — holds by construction (a wholly separate shadow track;
+  proven by a control-run comparison in the checks). The store's existing
+  30-day spans prune horizon (JournalPrune) applies to this evidence same
+  as any other span — the recovery flow below must not assume unbounded
+  history. Still open: requirement (c), the recovery flow itself
+  (Settings replay UI) — blocked on Martin's design answer to fromClaude
+  item 18 (re-run the attribution engine over the recorded events, or
+  present the raw window timeline for manual splitting?). Mac-half
+  follow-ups once recovery is designed: filter `observedWhileAway` at
+  `windowBoundaries`, `reassignSpentApp`, and the TimelineView zoom strip
+  (none of these read spans on Linux, so the checks subset can't cover
+  them — Mac-only work, needs a Mac session).
 
 - [ ] Once andeye.com serves the canonical /terms + /privacy: delete
   `site/docs/terms.md` + `site/docs/privacy.md` here and turn `site/src/pages/

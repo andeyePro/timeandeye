@@ -271,15 +271,41 @@ public struct FocusSpan: Equatable, Codable, Sendable {
     /// What decided this span's target (nil on spans stored before
     /// 2026-07-10) — flush folds spans' provenance into the session's.
     public var provenance: SessionProvenance?
+    /// Evidence only — true for a span captured WHILE `SessionTracker.away`
+    /// was pinned (target `.doNotTrack`, certainty 0): the focus/window
+    /// change record from an away stretch that no real session ever owns.
+    /// Away-observed spans must NEVER bill, teach, refile or aggregate —
+    /// `dominant(...)` filters them out first, and their `.doNotTrack`
+    /// target already keeps them out of billing/teaching/aggregation on its
+    /// own. Exists so a long away stretch is reconstructable afterwards
+    /// (2026-08-07 incident: ~24h away left no record at all). Additive and
+    /// leniently decoded — defaults false, so every span journalled before
+    /// this field existed decodes as ordinary (non-away) evidence.
+    public var observedWhileAway: Bool
 
     public init(target: Target, certainty: Double, signal: ActivitySignal,
-                start: Date, end: Date, provenance: SessionProvenance? = nil) {
+                start: Date, end: Date, provenance: SessionProvenance? = nil,
+                observedWhileAway: Bool = false) {
         self.target = target
         self.certainty = certainty
         self.signal = signal
         self.start = start
         self.provenance = provenance
         self.end = end
+        self.observedWhileAway = observedWhileAway
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        target = try c.decode(Target.self, forKey: .target)
+        certainty = try c.decode(Double.self, forKey: .certainty)
+        signal = try c.decode(ActivitySignal.self, forKey: .signal)
+        start = try c.decode(Date.self, forKey: .start)
+        end = try c.decode(Date.self, forKey: .end)
+        provenance = try c.decodeIfPresent(SessionProvenance.self, forKey: .provenance)
+        // Absent on spans journalled before this field existed — same
+        // lenient shape as WindowFrame.title above.
+        observedWhileAway = try c.decodeIfPresent(Bool.self, forKey: .observedWhileAway) ?? false
     }
 }
 
@@ -296,6 +322,10 @@ extension FocusSpan {
     /// query and reuses this against each session's window) pick identically.
     public static func dominant(among spans: [FocusSpan], from: Date, to: Date) -> FocusSpan? {
         spans.lazy
+            // Evidence rows never win a session's identity — this is the one
+            // choke point that defends both teaching and contradiction
+            // refile against away-observed noise.
+            .filter { !$0.observedWhileAway }
             .filter { $0.end > from && $0.start < to }
             .max { $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start) }
     }

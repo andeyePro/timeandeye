@@ -111,6 +111,30 @@ func provenanceChecks(_ c: Checks) {
         try expectNil(decoded.provenance)
     }
 
+    c.check("focus span Codable: legacy spans decode with observedWhileAway false") {
+        // Same strip-the-key idiom as the legacy-provenance case above — a
+        // span journalled before 2026-08-07 has no observedWhileAway key at
+        // all, and must decode as ordinary (non-away) evidence, not throw.
+        let span = FocusSpan(target: .task(.op(1)), certainty: 0.9,
+                             signal: sig("X", "Y", at: 0), start: t(0), end: t(60),
+                             provenance: .userAssigned)
+        let data = try JSONEncoder().encode(span)
+        var json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        json.removeValue(forKey: "observedWhileAway")
+        let stripped = try JSONSerialization.data(withJSONObject: json)
+        let decoded = try JSONDecoder().decode(FocusSpan.self, from: stripped)
+        try expectEq(decoded.observedWhileAway, false)
+
+        // Round-trip: a span written WITH the flag set keeps it set.
+        let away = FocusSpan(target: .doNotTrack, certainty: 0,
+                             signal: sig("X", "Y", at: 0), start: t(0), end: t(60),
+                             provenance: SessionProvenance(sourceRaw: "observedWhileAway"),
+                             observedWhileAway: true)
+        let decodedAway = try JSONDecoder().decode(FocusSpan.self,
+                                                    from: JSONEncoder().encode(away))
+        try expectEq(decodedAway.observedWhileAway, true)
+    }
+
     c.check("unknown-sweep repoint remembers prior provenance for undo") {
         let session = Session(task: .op(1), start: t(0), end: t(600), certainty: 0.4,
                               provenance: SessionProvenance(source: .ranked))

@@ -2,6 +2,46 @@
 
 ## 2026-08-07
 
+- [x] **Away mode records focus evidence** – a real ~24h away stretch left
+  Martin nothing to reconstruct from (`SessionTracker.handle` discarded
+  every event while `away` was pinned): the at-computer work after
+  returning was unreconstructable. Focus/window changes during an away
+  stretch now land in the journal as evidence: `FocusSpan` rows with
+  target `.doNotTrack`, certainty 0, `observedWhileAway: true`, and
+  provenance `"observedWhileAway"`, emitted per focus change via
+  `SessionTracker.onSpanClosed` (a one-way sink) so a crash mid-away keeps
+  everything already observed instead of losing the whole stretch. The
+  real pinned session is completely untouched by construction — recording
+  runs on a wholly separate shadow track (`awaySignal`/`awayStart`/
+  `lastAwayEventAt`) that never reads or writes `currentSignal`/
+  `currentStart`/`spans`/`state`; a check compares the away-recording run
+  against a control run with the away-period focus events stripped out
+  and asserts the pinned session comes out byte-for-byte identical.
+  `FocusSpan.dominant(...)` filters `observedWhileAway` spans out FIRST,
+  so evidence rows can never win a session's identity (defends both
+  teaching and contradiction refile in one choke point); the app-
+  breakdown aggregator already excludes them via its existing
+  `target == .task(ref)` filter, since away rows always carry
+  `.doNotTrack` (documented, not changed). Locking closes any open
+  observation immediately (a locked surface isn't evidence, matching the
+  real session's own lock handling), and clearing away closes the last
+  open observation at the last event actually SEEN — never `Date()`, so a
+  late clear can't fabricate elapsed time nobody observed. `observedWhileAway`
+  is additive and leniently decoded (defaults `false`), so every span
+  journalled before today decodes unchanged. Store: no changes — the flag
+  rides in the existing spans JSON column, and the existing 30-day spans
+  prune horizon (JournalPrune) applies to this evidence the same as any
+  other span. 8 new checks added across `ProvenanceChecks` (legacy decode
+  + round-trip), `ContradictionRefileChecks` (dominance exclusion), and
+  `SessionTrackerChecks` (recording, no-disturb, lock interaction, a
+  30-day-horizon-aware SQLite round-trip simulating a mid-away crash, and
+  the last-seen-event close point). Linux platform-neutral subset (this
+  session, `.build-linux` scratch path): `TOTAL: 758 passed, 0 failed`.
+  macOS suite not run this session – Mac-half follow-ups (filtering
+  `observedWhileAway` at `windowBoundaries`, `reassignSpentApp`, and the
+  TimelineView zoom strip) and the recovery-flow UI (requirement (c),
+  still open pending Martin's design answer) are deferred; see TODO.md.
+
 - [x] **In-container Linux checks subset** – `timeandeyeChecks` now builds
   and runs the platform-neutral Core+Store subset on the Linux Swift 6.1
   toolchain, without touching macOS suite membership. Added a `CSQLite`

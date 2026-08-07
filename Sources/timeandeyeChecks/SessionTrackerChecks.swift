@@ -1,5 +1,6 @@
 import Foundation
 import timeandeyeCore
+import timeandeyeStore
 
 // MARK: - SessionTracker (plan task 8)
 
@@ -956,6 +957,197 @@ func sessionTrackerChecks(_ c: Checks) {
         guard case .tracking(.task(.op(2)), _) = tracker.state else {
             throw CheckFailure(description: "a switch after away clears must follow normally, got \(tracker.state)")
         }
+    }
+
+    // MARK: - Away recording (2026-08-07: a real ~24h away stretch left
+    // nothing to reconstruct from — focus/window changes during away now
+    // land in the journal as evidence, WITHOUT disturbing the pinned
+    // session's attribution in any way).
+
+    c.check("away records focus evidence without disturbing the pinned session") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var awaySpans: [FocusSpan] = []
+        var prompts: [TrackerPrompt] = []
+        var sessions: [Session] = []
+        tracker.onSpanClosed = { awaySpans.append($0) }
+        tracker.onPrompt = { prompts.append($0) }
+        tracker.onSession = { sessions.append($0) }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        tracker.away = true
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 30)))   // B
+        tracker.handle(.focus(sig("Chrome", "Docs", at: 90)))          // C — closes B
+        tracker.handle(.input(t(120)))                                 // last-seen away event
+        tracker.away = false                                           // closes C at t(120)
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "state must stay tracking op(1) through away, got \(tracker.state)")
+        }
+        tracker.stop(at: t(150))
+
+        let evidence = awaySpans.filter(\.observedWhileAway)
+        try expectEq(evidence.count, 2)
+        try expectEq(evidence[0].target, .doNotTrack)
+        try expectEq(evidence[0].start, t(30))
+        try expectEq(evidence[0].end, t(90))
+        try expectEq(evidence[1].target, .doNotTrack)
+        try expectEq(evidence[1].start, t(90))
+        try expectEq(evidence[1].end, t(120))
+        try expect(prompts.isEmpty, "away evidence must never prompt")
+
+        // Control run: the identical script minus the away-period focus
+        // events — the pinned session must come out byte-for-byte the same.
+        let (control, controlAttributor) = makeTracker()
+        controlAttributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var controlSessions: [Session] = []
+        control.onSession = { controlSessions.append($0) }
+        control.start(task: .op(1), at: t(0))
+        control.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        control.stop(at: t(150))
+
+        try expectEq(sessions.count, controlSessions.count)
+        try expectEq(sessions.first?.task, controlSessions.first?.task)
+        try expectEq(sessions.first?.start, controlSessions.first?.start)
+        try expectEq(sessions.first?.end, controlSessions.first?.end)
+        try expectEq(sessions.first?.certainty, controlSessions.first?.certainty)
+    }
+
+    c.check("away evidence never closes the pinned span or fires a prompt") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var prompts: [TrackerPrompt] = []
+        var sessions: [Session] = []
+        tracker.onPrompt = { prompts.append($0) }
+        tracker.onSession = { sessions.append($0) }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        tracker.away = true
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 30)))
+        // A sleep well beyond the grace window, and an input gap well
+        // beyond the idle threshold — either would stop the clock and
+        // prompt outside away. Neither may touch the pinned session here.
+        tracker.handle(.willSleep(t(60)))
+        tracker.handle(.didWake(t(200)))        // 140 s slept, grace is 60 s
+        tracker.handle(.input(t(300)))
+        tracker.handle(.input(t(1100)))         // 800 s gap, threshold is 600 s
+        guard case .tracking(.task(.op(1)), _) = tracker.state else {
+            throw CheckFailure(description: "away must survive a beyond-grace sleep and a beyond-threshold idle gap, got \(tracker.state)")
+        }
+        try expect(sessions.isEmpty, "nothing may flush until the pinned session actually stops")
+        tracker.away = false
+        tracker.stop(at: t(1200))
+        try expectEq(sessions.count, 1)
+        try expect(prompts.isEmpty, "away evidence, sleep and an idle gap must never prompt while away holds the session")
+    }
+
+    c.check("pinned certainty and span count are unchanged by away recording") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var allSpans: [FocusSpan] = []
+        tracker.onSpanClosed = { allSpans.append($0) }
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        tracker.away = true
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 30)))
+        tracker.handle(.focus(sig("Chrome", "Docs", at: 90)))
+        tracker.away = false
+        tracker.stop(at: t(150))
+
+        let (control, controlAttributor) = makeTracker()
+        controlAttributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var controlSpans: [FocusSpan] = []
+        control.onSpanClosed = { controlSpans.append($0) }
+        control.start(task: .op(1), at: t(0))
+        control.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        control.stop(at: t(150))
+
+        let real = allSpans.filter { !$0.observedWhileAway }
+        try expectEq(real.count, controlSpans.count, "away recording must not fragment or duplicate the real span")
+        try expectEq(real.count, 1)
+        try expectEq(real[0].target, controlSpans[0].target)
+        try expectEq(real[0].start, controlSpans[0].start)
+        try expectEq(real[0].end, controlSpans[0].end)
+        try expectClose(real[0].certainty, controlSpans[0].certainty)
+    }
+
+    c.check("lock while away records no phantom window evidence") {
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var evidence: [FocusSpan] = []
+        tracker.onSpanClosed = { if $0.observedWhileAway { evidence.append($0) } }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.away = true
+        tracker.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))    // A
+        tracker.handle(.screenLocked(t(30)))
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 60)))   // B — locked: must be dropped
+        tracker.handle(.screenUnlocked(t(90)))
+        tracker.handle(.focus(sig("Chrome", "Docs", at: 120)))         // C
+        tracker.away = false
+        tracker.stop(at: t(150))
+
+        try expect(!evidence.contains { $0.start < t(90) && $0.end > t(30) },
+                  "no observedWhileAway span may cover the locked interval")
+        try expect(!evidence.contains { $0.signal.app == "Ghostty" && $0.signal.windowTitle == "Investment" },
+                  "B was captured while locked and must never appear as evidence")
+    }
+
+    c.check("away evidence survives a restart (SQLite round-trip)") {
+        // Mid-away-stretch crash simulation: away is deliberately never
+        // cleared and the tracker is deliberately never stopped — only
+        // observations that had ALREADY closed (via a later focus change)
+        // may have reached the store. Uses REAL wall-clock-relative
+        // timestamps (not the shared fixed `t()` base, which is over a year
+        // in the past): reopening a store prunes spans older than 30 days
+        // (JournalPrune), and the far-past fixture base would be wiped by
+        // that prune on the second open before this test could see it.
+        let now = Date()
+        func near(_ s: TimeInterval) -> Date { now.addingTimeInterval(s) }
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("andeyett-away-\(UUID().uuidString).sqlite").path
+        let store = try SQLiteJournalStore(path: path)
+        let attributor = Attributor(instanceHost: host)
+        let tracker = SessionTracker(attributor: attributor, config: TrackerConfig()) { tasks }
+        attributor.confirm(ActivitySignal(app: "Ghostty", windowTitle: "timeandeye", timestamp: near(0)),
+                           task: .op(1))
+        tracker.onSpanClosed = { try? store.save($0) }
+
+        tracker.start(task: .op(1), at: near(0))
+        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "timeandeye", timestamp: near(0))))
+        tracker.away = true
+        tracker.handle(.focus(ActivitySignal(app: "Ghostty", windowTitle: "Investment", timestamp: near(30))))   // B
+        tracker.handle(.focus(ActivitySignal(app: "Chrome", windowTitle: "Docs", timestamp: near(90))))          // C — closes B
+        tracker.handle(.focus(ActivitySignal(app: "Safari", windowTitle: "News", timestamp: near(150))))         // D — closes C; D itself never closes
+
+        let reopened = try SQLiteJournalStore(path: path)
+        let saved = try reopened.spans(from: near(-1), to: near(1000)).filter(\.observedWhileAway)
+        try expectEq(saved.count, 2, "B and C closed before the simulated crash; D never did")
+        try expect(saved.contains { $0.signal.app == "Ghostty" && $0.signal.windowTitle == "Investment"
+                    && $0.start == near(30) && $0.end == near(90) })
+        try expect(saved.contains { $0.signal.app == "Chrome" && $0.signal.windowTitle == "Docs"
+                    && $0.start == near(90) && $0.end == near(150) })
+    }
+
+    c.check("clearing away closes the open observation at the last event, never later") {
+        // away is a plain property with no timestamp of its own — the close
+        // point must come from the last event actually seen, never Date().
+        let (tracker, attributor) = makeTracker()
+        attributor.confirm(sig("Ghostty", "timeandeye", at: 0), task: .op(1))
+        var evidence: [FocusSpan] = []
+        tracker.onSpanClosed = { if $0.observedWhileAway { evidence.append($0) } }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        tracker.away = true
+        tracker.handle(.focus(sig("Ghostty", "Investment", at: 30)))
+        tracker.handle(.input(t(45)))    // the LAST event seen while away
+        tracker.away = false             // cleared with no timestamp of its own
+
+        try expectEq(evidence.count, 1)
+        try expectEq(evidence[0].end, t(45), "must close at the last SEEN event, not later")
+        try expect(!evidence.contains { $0.end > t(45) }, "no row may extend past the last event")
     }
 
     // MARK: - Async email capture: retroactive enrichment (2026-07-03 fix)

@@ -69,6 +69,9 @@ public enum TimeAggregator {
     private static func appBreakdown(for ref: TaskRef, windows: [(Date, Date)],
                                      spans: [FocusSpan]) -> [Node] {
         var perApp: [String: TimeInterval] = [:]
+        // Away-observed spans always carry target .doNotTrack, never
+        // .task(_), so this filter already excludes them from the app
+        // breakdown — no separate observedWhileAway check needed here.
         for span in spans where span.target == .task(ref) {
             for (start, end) in windows {
                 let overlap = min(span.end, end).timeIntervalSince(max(span.start, start))

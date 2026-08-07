@@ -152,6 +152,20 @@ package final class SessionTracker {
     /// while the Mac is locked (the window isn't really in use).
     private var screenLocked = false
 
+    /// Away-observation shadow track (2026-08-07, focus-evidence-while-away):
+    /// records focus/window evidence DURING an away stretch as a separate,
+    /// throwaway accumulator that never touches the real open visit
+    /// (currentSignal/currentStart/spans/state) — the pinned attribution
+    /// stays byte-for-byte undisturbed by construction. At most one
+    /// observation is open at a time.
+    private var awaySignal: ActivitySignal?
+    private var awayStart: Date?
+    /// The last event timestamp seen while away — the ONLY close point an
+    /// open observation may use. Never `Date()`: an away stretch can span
+    /// real hours, and clearing it late must not fabricate elapsed time that
+    /// was never actually observed.
+    private var lastAwayEventAt: Date?
+
     /// Start of the current continuous tracked slice: the earliest of all
     /// accumulated (not-yet-flushed) spans and the open visit. Unlike the
     /// app's per-visit `targetSince`, this is unaffected by sub-grace
@@ -413,7 +427,21 @@ package final class SessionTracker {
 
     /// "I'm leaving my desk": pin the current task and keep tracking it,
     /// ignoring focus changes, idle, sleep and calls until cleared.
-    package var away = false
+    package var away = false {
+        didSet {
+            guard away != oldValue else { return }
+            if away {
+                // Starting a fresh stretch: never bridge two stretches — any
+                // leftover shadow state (e.g. from a lock racing away) must
+                // not leak an interval into the one that's just begun.
+                awaySignal = nil
+                awayStart = nil
+                lastAwayEventAt = nil
+            } else {
+                closeAwayObservation(at: lastAwayEventAt ?? .distantPast)
+            }
+        }
+    }
 
     package func handle(_ event: SensorEvent) {
         // Lock state is resolved even while away: a locked screen must not keep
@@ -422,16 +450,25 @@ package final class SessionTracker {
         // still pins it / idle handling unchanged) — only the bogus "you were
         // in Ghostty while the Mac was locked" detail is suppressed.
         switch event {
-        case .screenLocked(let date): screenLocked = true; endCurrentSpan(at: date); return
+        case .screenLocked(let date):
+            screenLocked = true
+            closeAwayObservation(at: date)   // locked: the surface stops being evidence
+            endCurrentSpan(at: date)
+            return
         case .screenUnlocked: screenLocked = false; return
         default: break
         }
         if away {
             // Hold the current session open: ignore everything except noting
             // input time (so returning doesn't immediately idle-stop once away
-            // is cleared). No span is closed, so the whole away stretch stays
-            // on the pinned task.
+            // is cleared) and recording focus evidence on the shadow track
+            // below. No span on the REAL session is ever closed here — the
+            // whole away stretch stays on the pinned task.
+            if let ts = timestamp(of: event) {
+                lastAwayEventAt = max(lastAwayEventAt ?? ts, ts)
+            }
             if case .input(let date) = event { lastInput = max(lastInput ?? date, date) }
+            if case .focus(let signal) = event { recordAwayObservation(signal) }
             return
         }
         switch event {
@@ -467,6 +504,18 @@ package final class SessionTracker {
     }
 
     // MARK: - Event handling
+
+    /// Pure timestamp extraction for the away shadow track: every
+    /// SensorEvent carries a moment somewhere — `.focus`/`.focusEnrichment`
+    /// on the nested signal, everything else directly as the payload date.
+    private func timestamp(of event: SensorEvent) -> Date? {
+        switch event {
+        case .focus(let signal), .focusEnrichment(let signal): return signal.timestamp
+        case .input(let date), .willSleep(let date), .didWake(let date),
+             .screenLocked(let date), .screenUnlocked(let date): return date
+        case .microphone(_, let at): return at
+        }
+    }
 
     private func handleInput(_ date: Date) {
         evaluatePendingSwitch(at: date)
@@ -807,6 +856,41 @@ package final class SessionTracker {
     }
 
     // MARK: - Spans, review queue, sessions
+
+    /// Record one focus/window observation during an away stretch —
+    /// evidence only, and completely separate from the real session: closes
+    /// any prior open observation at THIS signal's moment (a focus change
+    /// means the prior surface just ended), then opens a fresh one on the
+    /// new surface — unless the screen is locked, matching the treatment
+    /// `.screenLocked` gives the real session's spans (a locked surface
+    /// isn't evidence). Touches nothing the attribution pipeline reads —
+    /// no state/currentSignal/currentStart/spans mutation — so the pinned
+    /// session stays byte-for-byte undisturbed by construction.
+    /// `onSpanClosed` is a one-way sink, so emitting per focus change (via
+    /// `closeAwayObservation`) is what lets a 24h away stretch survive a
+    /// crash: losing the process at hour 23 still keeps the 23h already
+    /// emitted, instead of losing the whole stretch (2026-08-07 incident).
+    private func recordAwayObservation(_ signal: ActivitySignal) {
+        let now = signal.timestamp
+        closeAwayObservation(at: now)
+        guard !screenLocked else { return }
+        awaySignal = signal
+        awayStart = now
+    }
+
+    /// Close the open away observation (if any) and emit it as a `FocusSpan`
+    /// marked `observedWhileAway` — target `.doNotTrack`, certainty 0:
+    /// evidence, never billable. `end` must always be an already-SEEN event
+    /// timestamp, never `Date()` (an away stretch can span real hours; a
+    /// late clear must not fabricate elapsed time nobody actually observed).
+    private func closeAwayObservation(at end: Date) {
+        defer { awaySignal = nil; awayStart = nil }
+        guard let signal = awaySignal, let start = awayStart, end > start else { return }
+        onSpanClosed(FocusSpan(target: .doNotTrack, certainty: 0, signal: signal,
+                               start: start, end: end,
+                               provenance: SessionProvenance(sourceRaw: "observedWhileAway"),
+                               observedWhileAway: true))
+    }
 
     private func endCurrentSpan(at end: Date) {
         defer { currentSignal = nil; currentStart = nil }
