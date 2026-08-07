@@ -362,8 +362,21 @@ and recorded rather than fixed blind:
   07-13) can't have executed this check as recorded; treat historical
   suite-count claims from container sessions as unverified.
 
-- [ ] Claude Desktop (and Electron apps generally): switching chats is
-  invisible to tracking. Cause (code-read 2026-07-23): SensorHub polls
+- [ ] Away mode ("I'm leaving my desk", ⌘⇧L) must keep RECORDING window/
+  focus evidence while pinned. Intended use is off-computer work on the
+  pinned task for potentially 8h+ (client days), so NO duration cap.
+  Today `SessionTracker.handle` discards all events while `away` is set,
+  so an away stretch leaves zero journal evidence — if you forget to
+  toggle off, the at-computer work after returning is unreconstructable
+  (bit Martin for ~24h, 2026-08-07). Requirements: (a) attribution stays
+  pinned exactly as now — recording must not disturb the pinned session;
+  (b) focus/window/input events still land in the journal, marked as
+  observed-while-away; (c) a recovery flow (Settings) that replays the
+  recorded evidence over a chosen away stretch so the user can rebuild
+  and re-attribute what they actually did at the computer after
+  returning. Design open: does recovery re-run the attribution engine
+  over the recorded events, or just present the raw window timeline for
+  manual splitting? Cause (code-read 2026-07-23): SensorHub polls
   frontmost app + focused-window AXTitle + tab URL every 2 s
   (Sources/timeandeyeMac/Sensors.swift poll()/focusedWindowTitle);
   Electron keeps renderer accessibility OFF until an AT opts in, and the
