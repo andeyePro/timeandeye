@@ -2,6 +2,53 @@
 
 ## 2026-08-07
 
+- [x] **Banked-slice repair on the Phone engine (reassign / adjust / delete)** –
+  a slice `PhoneController.stop()` already pushed to OP was previously
+  permanent on iOS. `Sources/timeandeyePhone/PhoneController.swift` gains
+  three operations mirroring the Mac's `AppController.reassignTimelineSessions`
+  / `applyTimelineEdit` / `deleteTimelineSession`, sharing Core's
+  `PostingSever` two laws: `reassign(sessionID:to:)` severs the old linkage
+  (`PostingSever.plan(cell:entryID:)`), clears `opTimeEntryID`/`pushedToOP`,
+  stamps `.userAssigned` provenance + `Attributor.humanWord` certainty, and
+  re-pushes under the new task; `adjust(sessionID:start:end:)` journals the
+  new extent, PATCHes the linked entry (`backend.updateTimeEntry`) when the
+  ledger cell is unlocked, parks `.diverged` when `lockedInvoiceRef` is set
+  (billed time is never amended), and re-queues a sub-minute
+  handled-without-an-entry slice that grows past 60 s (`pushedToOP = false`,
+  drops the `.skipped` ledger row); `deleteSlice(sessionID:)` retracts per
+  the plan then deletes the journal row, and on a FAILED remote delete
+  retains `entryID` and marks the row `.failed` under
+  `PostingSever.retractIntentReason` (compensation law – never orphan a live
+  remote entry). All three reject `PhoneController.liveCheckpointID` as a
+  no-op (`relabelCurrent` owns the running slice). A new defaulted
+  `backend:` init parameter (`injectedBackend`, additive-only) lets checks
+  inject a fake `TaskBackend` without touching the Keychain/network path;
+  `ios/Sources/AndeyeApp.swift`'s bare `PhoneController()` call is
+  unaffected (not compiled this session – no Xcode/macOS in this
+  container). `Sources/timeandeyeChecks/PhoneControllerChecks.swift` adds 8
+  checks (reused the existing `FakeBackend` from `BillingChecks.swift`,
+  same module): no-backend reassign rewrites task/certainty/provenance and
+  unlinks; a pushed reassign issues exactly one `deleteTimeEntry` for the
+  OLD entry and the next push creates under the new task; an
+  invoice-locked cell makes zero remote calls across all three operations
+  and parks `.diverged`; a failing remote delete leaves `entryID` intact
+  and marks the row `.failed`; `adjust` issues exactly one
+  `updateTimeEntry` with the new start+duration; a sub-minute
+  handled-without-an-entry slice grown past 60 s re-enters the push queue;
+  all three are no-ops on the live checkpoint id; `deleteSlice` clears the
+  row from `bankedSessions`/`spentNodes`/`todaysTotal`. TDD: checks written
+  first against the mirrored design, then two laws re-broken to prove they
+  bite – commenting `adjust`'s lock guard failed "an invoice-locked cell
+  makes zero remote calls…" (`expected diverged, got posted`), and
+  clearing `entryID` on a failed retract in `severLinkage`'s catch branch
+  failed "a failing remote delete leaves the entryID intact…" (`expected
+  Optional("flaky-1"), got nil`) – both restored, diffed clean against the
+  pre-break file. `swift run --scratch-path .build-linux timeandeyeChecks`:
+  `TOTAL: 783 passed, 0 failed` (was 775), `PhoneController: 21 passed, 0
+  failed` (was 13) the only suite that grew. macOS/iOS targets
+  (`timeandeyeMac`/`timeandeyeUI`/`timeandeyeApp`, the `ios/` Xcode
+  project) were not compiled this session – this container has no macOS.
+
 - [x] **`timeandeyePhone` joins the in-container Linux checks subset** –
   `Sources/timeandeyePhone/PhoneController.swift` gates `import Combine`
   behind `#if canImport(Combine)`; a new internal-shim file

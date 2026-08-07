@@ -33,13 +33,22 @@ public final class PhoneController: ObservableObject {
     private let settingsStore: JSONFileStore<AndeyeSettings>
     private var backend: (any TaskBackend)?
     private let ranker = TaskRanker()
+    /// Test-injectable backend override — when set, `rebuildBackend()` uses
+    /// it instead of building an `OPBackend` from settings + the Keychain,
+    /// so checks can exercise reassign/adjust/delete's wire calls with a
+    /// fake `TaskBackend` and no network/Keychain dependency. nil in
+    /// production: `ios/Sources/AndeyeApp.swift`'s bare `PhoneController()`
+    /// is unaffected.
+    private let injectedBackend: (any TaskBackend)?
 
     /// The clock, injectable so checks can cross the 30-second slice
     /// threshold without waiting. The app never touches it.
     let now: () -> Date
 
-    public init(dataDir: URL = AppSupport.directory(), now: @escaping () -> Date = Date.init) {
+    public init(dataDir: URL = AppSupport.directory(), now: @escaping () -> Date = Date.init,
+                backend: (any TaskBackend)? = nil) {
         self.now = now
+        self.injectedBackend = backend
         let dir = dataDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         settingsStore = JSONFileStore<AndeyeSettings>(
@@ -169,6 +178,10 @@ public final class PhoneController: ObservableObject {
     }
 
     private func rebuildBackend() {
+        if let injectedBackend {
+            backend = injectedBackend
+            return
+        }
         backend = nil
         connectedAs = nil
         let raw = settings.opBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -204,6 +217,173 @@ public final class PhoneController: ObservableObject {
             defaultActivityID: settings.defaultActivityID,
             activityOverrides: settings.activityOverrides,
             includeComments: false)
+    }
+
+    // MARK: - Banked-slice repair (reassign / adjust / delete)
+    //
+    // A slice `stop()` already pushed to OP is not permanent: it can be
+    // re-pointed to another task, resized, or withdrawn. Every path here
+    // obeys the two laws pinned in Core's `PostingSever` (shared with the
+    // Mac's `AppController.applyTimelineEdit`/`reassignTimelineSessions`/
+    // `deleteTimelineSession`, which these mirror for the single-slice phone
+    // surface):
+    //   - LOCK: a cell covered by a sent invoice is never amended or
+    //     deleted — the local record still changes (the user's word), the
+    //     billed entry parks `.diverged` for a human to reconcile at
+    //     invoicing time.
+    //   - COMPENSATION: an unlocked live entry is retracted now; if the
+    //     delete fails, the ledger row keeps its `entryID` marked `.failed`
+    //     under `PostingSever.retractIntentReason` so nothing is silently
+    //     orphaned at the backend.
+    // All three reject `liveCheckpointID` — `relabelCurrent` owns the
+    // running slice, not these banked-slice paths.
+
+    /// The ledger identity these paths post to — always the phone's one
+    /// backend (OP), matching `pushIfEligible`'s `SyncEngine` id.
+    private var ledgerBackendID: String { OPBackend.stableID }
+
+    private func postingCell(_ id: UUID) -> PostingRecord? {
+        (try? journal.postingRecord(session: id, backendID: ledgerBackendID)) ?? nil
+    }
+
+    /// Mirrors `AppController.clearPrimaryPosting`: never clear a row the
+    /// engine has taken `.inflight` (it owns the in-progress intent).
+    private func clearLedgerRow(_ id: UUID) {
+        guard postingCell(id)?.state != .inflight else { return }
+        try? journal.clearPostingRecord(session: id, backendID: ledgerBackendID)
+    }
+
+    /// Lock law: the local edit stands, the billed entry is left untouched
+    /// and surfaced for a human. Mirrors `AppController.parkDiverged`.
+    private func parkDiverged(_ cell: PostingRecord?) {
+        guard let cell else { return }
+        var parked = cell
+        parked.state = .diverged
+        parked.lastError = "locked by invoice \(cell.lockedInvoiceRef ?? "?") — "
+            + "the local edit and the billed entry disagree; unlock the invoice to reconcile"
+        parked.updatedAt = now()
+        _ = try? journal.setPostingRecord(parked, unlessState: [.inflight])
+    }
+
+    /// Sever `session`'s linkage honouring `PostingSever.plan`. Returns
+    /// whether the caller may treat the row as cleanly cleared (locked or a
+    /// failed retract both return false — the row must not be re-posted
+    /// under a new task). Mirrors `AppController.severPrimaryLinkage`.
+    @discardableResult
+    private func severLinkage(_ session: Session) async -> Bool {
+        let cell = postingCell(session.id)
+        switch PostingSever.plan(cell: cell, entryID: session.opTimeEntryID) {
+        case .noLinkage:
+            clearLedgerRow(session.id)
+            return true
+        case .locked:
+            parkDiverged(cell)
+            return false
+        case .retract(let entryID):
+            guard let backend else { clearLedgerRow(session.id); return true }
+            do {
+                try await backend.deleteTimeEntry(id: entryID)
+                clearLedgerRow(session.id)
+                return true
+            } catch {
+                // Compensation law: the entry is still live — retain it under
+                // the retract intent the engine's next pass completes; CAS so
+                // a racing pass's in-flight intent is never clobbered.
+                _ = try? journal.setPostingRecord(PostingRecord(
+                    sessionID: session.id, backendID: ledgerBackendID,
+                    state: .failed, entryID: entryID,
+                    lastError: PostingSever.retractIntentReason,
+                    updatedAt: now()), unlessState: [.inflight])
+                return false
+            }
+        }
+    }
+
+    /// Refresh the ledger snapshot after an in-place PATCH, mirroring
+    /// `AppController.recordPrimaryAmend` — `postedStart`/`postedDuration`
+    /// must follow the amended extent or the next divergence check compares
+    /// against the stale pre-edit window.
+    private func recordAmend(_ session: Session, entryID: RemoteEntryID?) {
+        var row = postingCell(session.id)
+            ?? PostingRecord(sessionID: session.id, backendID: ledgerBackendID, state: .posted)
+        row.state = .posted
+        row.entryID = entryID
+        row.postedStart = session.start
+        row.postedDuration = session.end.timeIntervalSince(session.start)
+        row.lastError = nil
+        row.sessionStamp = ((try? journal.sessionStamp(session.id)) ?? nil)
+        row.updatedAt = now()
+        _ = try? journal.setPostingRecord(row, unlessState: [.inflight])
+    }
+
+    /// "This banked slice was really this task": sever the old linkage,
+    /// re-point the session, and stamp the human-word certainty on the new
+    /// task — mirrors `AppController.reassignTimelineSessions` for one slice.
+    public func reassign(sessionID: UUID, to task: TaskRef) async {
+        guard sessionID != Self.liveCheckpointID,
+              var session = try? journal.session(id: sessionID) else { return }
+        await severLinkage(session)
+        session.task = task
+        session.opTimeEntryID = nil
+        session.pushedToOP = false
+        session.provenance = .userAssigned
+        // A human re-pointing a slice is the user's word: the new task
+        // carries the human-word certainty (never the old task's number).
+        session.certainty = Attributor.humanWord
+        try? journal.update(session)
+        try? journal.escalateOrigin(session.id, to: .edited)
+        touchRecency(task)
+        await pushIfEligible()   // re-post under the new task
+    }
+
+    /// Resize a banked slice's extent. PATCHes the linked remote entry when
+    /// the cell is unlocked; a locked cell parks `.diverged` instead
+    /// (billed time is never amended). A sub-minute slice that was marked
+    /// handled without an entry re-enters the push queue if the resize grows
+    /// it past the 60 s floor. Mirrors the same-task tail of
+    /// `AppController.applyTimelineEdit`.
+    public func adjust(sessionID: UUID, start: Date, end: Date) async {
+        guard sessionID != Self.liveCheckpointID,
+              var session = try? journal.session(id: sessionID) else { return }
+        session.start = start
+        session.end = end
+        if session.pushedToOP, session.opTimeEntryID == nil,
+           session.end.timeIntervalSince(session.start) >= 60 {
+            session.pushedToOP = false
+            clearLedgerRow(session.id)   // drop the skipped ledger row too
+        }
+        try? journal.update(session)
+        try? journal.escalateOrigin(session.id, to: .edited)
+        guard let backend, backend.owns(session.task),
+              let taskID = session.task.backendTaskID,
+              let entryID = session.opTimeEntryID else { return }
+        let cell = postingCell(session.id)
+        if cell?.lockedInvoiceRef != nil {
+            parkDiverged(cell)
+            return
+        }
+        do {
+            try await backend.updateTimeEntry(
+                id: entryID, taskID: taskID, start: session.start,
+                duration: session.end.timeIntervalSince(session.start),
+                activityID: settings.activityOverrides[session.task] ?? settings.defaultActivityID,
+                comment: session.comment)
+            recordAmend(session, entryID: entryID)
+        } catch {
+            lastError = "\(backend.displayName) update failed: \(error)"
+        }
+    }
+
+    /// Withdraw a banked slice entirely: retract its remote linkage per the
+    /// plan, then remove the journal row. Mirrors
+    /// `AppController.deleteTimelineSession`'s totality rule — billed time
+    /// never quietly outlives its session (a locked cell parks `.diverged`;
+    /// the local delete still stands).
+    public func deleteSlice(sessionID: UUID) async {
+        guard sessionID != Self.liveCheckpointID,
+              let session = try? journal.session(id: sessionID) else { return }
+        await severLinkage(session)
+        try? journal.deleteSession(sessionID)
     }
 
     // MARK: - Totals + export

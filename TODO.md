@@ -891,6 +891,12 @@ and recorded rather than fixed blind:
   free/paid split is by SPM MODULE, not by repo: if Pro backends go
   closed-source, they move to a private `andeyePro` package the release
   builds depend on — the TaskBackend seam makes that a clean lift.
+  Engine-side slice-repair landed 2026-08-07: `PhoneController.reassign`/
+  `adjust`/`deleteSlice` let a banked (already-`stop()`-pushed) slice be
+  re-pointed, resized, or withdrawn, obeying the same `PostingSever` lock +
+  compensation laws as the Mac's timeline editor. The SwiftUI surface in
+  `ios/` that calls these is still open — undo/redo on the phone is
+  explicitly out of scope for that surface too, deferred alongside it.
 - [ ] Safari tab URLs — CODE LANDED 2026-07-08 overnight ("URL of front
   document" branch beside the Chrome-like verb; Opera was already in the
   chrome-like set). HARDWARE-VERIFY pending: first Safari focus should fire

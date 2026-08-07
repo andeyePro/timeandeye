@@ -8,12 +8,34 @@ private final class PhoneClock: @unchecked Sendable {
 }
 
 @MainActor
-private func makeController(dir: URL? = nil) -> (PhoneController, PhoneClock, URL) {
+private func makeController(dir: URL? = nil,
+                            backend: (any TaskBackend)? = nil) -> (PhoneController, PhoneClock, URL) {
     let clock = PhoneClock()
     let dataDir = dir ?? FileManager.default.temporaryDirectory
         .appendingPathComponent("andeye-phone-\(UUID().uuidString)")
-    let pc = PhoneController(dataDir: dataDir) { clock.now }
+    let pc = PhoneController(dataDir: dataDir, now: { clock.now }, backend: backend)
     return (pc, clock, dataDir)
+}
+
+/// Manufactures a slice that already lived through a successful `stop()`
+/// push: journalled, `pushedToOP`/`opTimeEntryID` mirroring a `.posted`
+/// ledger row, and the entry present at `fake` — the starting point every
+/// banked-slice repair check needs, without driving the real sync engine.
+@MainActor
+@discardableResult
+private func makePushedSession(_ pc: PhoneController, task: TaskRef, entryID: RemoteEntryID,
+                               start: Date, minutes: Double = 30,
+                               fake: FakeBackend) throws -> Session {
+    let s = Session(task: task, start: start, end: start.addingTimeInterval(minutes * 60),
+                    certainty: 1.0, pushedToOP: true, comment: nil,
+                    opTimeEntryID: entryID, provenance: .userAssigned)
+    try pc.journal.save(s)
+    try pc.journal.setPostingRecord(PostingRecord(
+        sessionID: s.id, backendID: OPBackend.stableID, state: .posted, entryID: entryID,
+        postedStart: s.start, postedDuration: minutes * 60))
+    fake.held.append(RemoteTimeEntry(id: entryID, taskID: task.backendTaskID ?? "",
+                                     start: s.start, durationSeconds: minutes * 60))
+    return s
 }
 
 func phoneControllerChecks(_ c: Checks) async {
@@ -205,5 +227,200 @@ func phoneControllerChecks(_ c: Checks) async {
         try expect(csv.contains("Client visit"), "task name resolved in the export")
         let dataRows = csv.split(separator: "\n").dropFirst()
         try expectEq(dataRows.count, 1, "one banked slice; the live checkpoint is excluded")
+    }
+
+    // MARK: - Banked-slice repair (reassign / adjust / delete)
+
+    await c.check("reassign with no backend rewrites task/certainty/provenance and unlinks") {
+        let (pc, clock, _) = await MainActor.run { makeController() }
+        let a = TaskRef.op(1)
+        let b = TaskRef.op(2)
+        let original = Session(task: a, start: clock.now, end: clock.now.addingTimeInterval(1_800),
+                               certainty: 0.4, provenance: SessionProvenance(sourceRaw: "opTaskTitle"))
+        try await MainActor.run { try pc.journal.save(original) }
+        await pc.reassign(sessionID: original.id, to: b)
+        let saved = try await MainActor.run { try unwrap(try pc.journal.session(id: original.id)) }
+        try expectEq(saved.task, b, "task rewritten")
+        try expectEq(saved.certainty, Attributor.humanWord, "human-word certainty")
+        try expectEq(saved.provenance, SessionProvenance.userAssigned)
+        try expectNil(saved.opTimeEntryID, "unlinked — nothing was ever pushed")
+        try expectEq(saved.pushedToOP, false)
+    }
+
+    await c.check("reassign of a pushed slice retracts the OLD entry and the next push creates under the new task") {
+        let fake = FakeBackend(owns: .op)
+        let (pc, clock, _) = await MainActor.run { makeController(backend: fake) }
+        let a = TaskRef.op(1)
+        let b = TaskRef.op(2)
+        let s = try await MainActor.run {
+            try makePushedSession(pc, task: a, entryID: "old-1", start: clock.now, fake: fake)
+        }
+        await pc.reassign(sessionID: s.id, to: b)
+        try expectEq(fake.deleted, ["old-1"], "exactly one delete, for the OLD entry")
+        try expectEq(fake.created.count, 1, "the next push created one entry")
+        try expectEq(fake.created[0].taskID, "2", "created under the new task")
+    }
+
+    await c.check("an invoice-locked cell makes zero remote calls on reassign/adjust/delete and parks .diverged") {
+        // WHY three slices in one check: the criterion is one law (the lock
+        // law) proven across all three repair paths — splitting it into
+        // three checks would triple the setup for the same assertion shape.
+        let fake = FakeBackend(owns: .op)
+        let (pc, clock, _) = await MainActor.run { makeController(backend: fake) }
+        let a = TaskRef.op(1)
+        let b = TaskRef.op(2)
+
+        func lock(_ sessionID: UUID, ref: String) async throws {
+            try await MainActor.run {
+                var row = try unwrap(try pc.journal.postingRecord(session: sessionID, backendID: OPBackend.stableID))
+                row.lockedInvoiceRef = ref
+                try pc.journal.setPostingRecord(row)
+            }
+        }
+        func cellState(_ sessionID: UUID) async throws -> PostingState {
+            try await MainActor.run {
+                try unwrap(try pc.journal.postingRecord(session: sessionID, backendID: OPBackend.stableID)).state
+            }
+        }
+
+        let sr = try await MainActor.run {
+            try makePushedSession(pc, task: a, entryID: "locked-r", start: clock.now, fake: fake)
+        }
+        try await lock(sr.id, ref: "INV-1")
+        await pc.reassign(sessionID: sr.id, to: b)
+        let savedR = try await MainActor.run { try unwrap(try pc.journal.session(id: sr.id)) }
+        try expectEq(savedR.task, b, "local reassign stands even though billed")
+        try expectEq(try await cellState(sr.id), .diverged)
+
+        let sa = try await MainActor.run {
+            try makePushedSession(pc, task: a, entryID: "locked-a", start: clock.now, fake: fake)
+        }
+        try await lock(sa.id, ref: "INV-2")
+        let newEnd = sa.end.addingTimeInterval(600)
+        await pc.adjust(sessionID: sa.id, start: sa.start, end: newEnd)
+        let savedA = try await MainActor.run { try unwrap(try pc.journal.session(id: sa.id)) }
+        try expectEq(savedA.end, newEnd, "local resize stands even though billed")
+        try expectEq(try await cellState(sa.id), .diverged)
+
+        let sd = try await MainActor.run {
+            try makePushedSession(pc, task: a, entryID: "locked-d", start: clock.now, fake: fake)
+        }
+        try await lock(sd.id, ref: "INV-3")
+        await pc.deleteSlice(sessionID: sd.id)
+        let savedD = try await MainActor.run { try pc.journal.session(id: sd.id) }
+        try expectNil(savedD, "local delete stands even though billed")
+        try expectEq(try await cellState(sd.id), .diverged)
+
+        try expectEq(fake.created.count, 0, "zero remote creates")
+        try expectEq(fake.updated.count, 0, "zero remote updates")
+        try expectEq(fake.deleted.count, 0, "zero remote deletes")
+    }
+
+    await c.check("a failing remote delete leaves the entryID intact and marks the row .failed") {
+        let fake = FakeBackend(owns: .op)
+        let (pc, clock, _) = await MainActor.run { makeController(backend: fake) }
+        let a = TaskRef.op(1)
+        let s = try await MainActor.run {
+            try makePushedSession(pc, task: a, entryID: "flaky-1", start: clock.now, fake: fake)
+        }
+        fake.failNextDeletes = 1
+        await pc.deleteSlice(sessionID: s.id)
+        let cell = try await MainActor.run {
+            try pc.journal.postingRecord(session: s.id, backendID: OPBackend.stableID)
+        }
+        let row = try unwrap(cell, "the row survives a failed delete")
+        try expectEq(row.state, .failed)
+        try expectEq(row.entryID, "flaky-1", "entryID retained — never orphan the live entry")
+        try expectEq(row.lastError, PostingSever.retractIntentReason)
+        let savedSession = try await MainActor.run { try pc.journal.session(id: s.id) }
+        try expectNil(savedSession, "the local delete still stands")
+    }
+
+    await c.check("adjust issues exactly one updateTimeEntry with the new start and duration") {
+        let fake = FakeBackend(owns: .op)
+        let (pc, clock, _) = await MainActor.run { makeController(backend: fake) }
+        let a = TaskRef.op(1)
+        let s = try await MainActor.run {
+            try makePushedSession(pc, task: a, entryID: "adj-1", start: clock.now, fake: fake)
+        }
+        let newStart = s.start.addingTimeInterval(600)
+        let newEnd = s.end.addingTimeInterval(1_200)
+        await pc.adjust(sessionID: s.id, start: newStart, end: newEnd)
+        try expectEq(fake.updated.count, 1)
+        let call = try unwrap(fake.updated.first)
+        try expectEq(call.id, "adj-1")
+        try expectEq(call.start, newStart)
+        try expectEq(call.duration, newEnd.timeIntervalSince(newStart))
+        let saved = try await MainActor.run { try unwrap(try pc.journal.session(id: s.id)) }
+        try expectEq(saved.start, newStart)
+        try expectEq(saved.end, newEnd)
+    }
+
+    await c.check("a sub-minute handled slice grown past 60s re-enters the push queue") {
+        let fake = FakeBackend(owns: .op)
+        let (pc, clock, _) = await MainActor.run { makeController(backend: fake) }
+        let a = TaskRef.op(1)
+        // Handled-without-an-entry: pushedToOP true, no opTimeEntryID, a
+        // .skipped ledger row (the sub-minute posting-floor shape).
+        let s = Session(task: a, start: clock.now, end: clock.now.addingTimeInterval(40),
+                        certainty: 1.0, pushedToOP: true)
+        try await MainActor.run {
+            try pc.journal.save(s)
+            try pc.journal.setPostingRecord(PostingRecord(sessionID: s.id, backendID: OPBackend.stableID,
+                                                           state: .skipped))
+        }
+        await pc.adjust(sessionID: s.id, start: s.start, end: s.start.addingTimeInterval(90))
+        let saved = try await MainActor.run { try unwrap(try pc.journal.session(id: s.id)) }
+        try expectEq(saved.pushedToOP, false, "re-enters the queue")
+        let eligible = try await MainActor.run {
+            try pc.journal.sessions(needingPostTo: OPBackend.stableID, atOrAbove: 0.8)
+        }
+        try expect(eligible.contains { $0.id == s.id }, "the grown slice is eligible again")
+        let cell = try await MainActor.run {
+            try pc.journal.postingRecord(session: s.id, backendID: OPBackend.stableID)
+        }
+        try expectNil(cell, "the skipped ledger row was dropped")
+    }
+
+    await c.check("reassign/adjust/deleteSlice are no-ops on the live checkpoint id") {
+        let fake = FakeBackend(owns: .op)
+        let (pc, clock, _) = await MainActor.run { makeController(backend: fake) }
+        let ref = await MainActor.run { pc.addLocalTask(name: "Live task") }
+        await MainActor.run { pc.start(ref) }
+        let before = try await MainActor.run {
+            try unwrap(try pc.journal.session(id: PhoneController.liveCheckpointID))
+        }
+        await pc.reassign(sessionID: PhoneController.liveCheckpointID, to: .op(9))
+        await pc.adjust(sessionID: PhoneController.liveCheckpointID, start: clock.now,
+                        end: clock.now.addingTimeInterval(120))
+        await pc.deleteSlice(sessionID: PhoneController.liveCheckpointID)
+        let after = try await MainActor.run { try pc.journal.session(id: PhoneController.liveCheckpointID) }
+        let stillThere = try unwrap(after, "checkpoint row survives — deleteSlice was a no-op, not a crash")
+        try expectEq(stillThere.task, before.task)
+        try expectEq(stillThere.start, before.start)
+        try expectEq(fake.created.count, 0)
+        try expectEq(fake.updated.count, 0)
+        try expectEq(fake.deleted.count, 0)
+    }
+
+    await c.check("deleteSlice removes the row from bankedSessions, spentNodes and todaysTotal") {
+        let (pc, clock, _) = await MainActor.run { makeController() }
+        let ref = await MainActor.run { pc.addLocalTask(name: "Vanishing task") }
+        await MainActor.run { pc.start(ref) }
+        await MainActor.run { clock.now += 600; pc.stop() }
+        let saved = try await MainActor.run {
+            try pc.journal.sessions(from: clock.now - 3_600, to: clock.now + 3_600)
+                .filter { $0.id != PhoneController.liveCheckpointID }
+        }
+        let s = try unwrap(saved.first)
+        await pc.deleteSlice(sessionID: s.id)
+        let (banked, nodes, total) = await MainActor.run {
+            (pc.bankedSessions(from: clock.now - 3_600, to: clock.now + 3_600),
+             pc.spentNodes(from: clock.now - 3_600, to: clock.now + 3_600),
+             pc.todaysTotal())
+        }
+        try expectEq(banked.count, 0, "gone from bankedSessions")
+        try expectEq(nodes.count, 0, "gone from spentNodes")
+        try expectEq(total, 0, "gone from todaysTotal")
     }
 }
