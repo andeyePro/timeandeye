@@ -16,8 +16,8 @@
   (Related decision closed: the 60 s switch hold stays, not a setting.)
 - [ ] Delete Projects/timeandeye-preflip (Martin, ~week of 2026-07-20) — the
   last unrewritten pre-flip copy; everything private in it is preserved in
-  andeyePro. File in OpenProject once a session has OP access again (none on
-  2026-07-17); Martin re-runs the OP assign command before the next vibe.
+  andeyePro. FILED in OpenProject 2026-08-12 (checkbox on WP 223) per the
+  2026-07-17 note; the folder deletion itself remains Martin's.
 
 - [x] Fix CI on the fresh public repo — DONE 2026-07-17: first Actions run
   failed to COMPILE timeandeyeMac (runner Xcode drifted ahead while CI was
