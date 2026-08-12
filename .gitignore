@@ -20,6 +20,8 @@ site/.astro/
 # Per-machine tool state
 .claude/settings.local.json
 .vs/
+.vibe-allow-op
+.vibe-allow-ssh
 
 # Python bytecode
 __pycache__/
