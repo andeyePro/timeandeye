@@ -296,13 +296,15 @@ call, not a mechanical fix:
   rows whose entry id moved on). Retry returns the cleared rows and ⌘Z
   re-quarantines (never over a `.posted` or `.inflight` row — no orphaned
   or double-posted entries).
-- [ ] Live pick (`userPicked`) and Stop join the ⌘Z stack — Martin's call
-  2026-07-23 ("I suspect cmd-Z should undo a live pick and even a stop").
-  Build with it: (a) ⌘⇧Z REDO over the whole app undo stack (none exists
-  today); (b) undo TRANSPARENCY — every ⌘Z/⌘⇧Z surfaces a one-line notice
-  naming what it just undid/redid (he hit a silent mystery-undo 2026-07-22:
-  sound fired, no clue what changed). Boundary kept: money already posted
-  to a backend is never clawed back silently (established design).
+- [x] Live pick (`userPicked`) and Stop join the ⌘Z stack — DONE
+  2026-08-13 with (a) ⌘⇧Z REDO (UndoStack redo stack, NSUndoManager-style
+  routing — spec docs/superpowers/specs/2026-08-13-undo-redo-core.md) and
+  (b) undo TRANSPARENCY (every ⌘Z/⌘⇧Z banner names what it changed, and
+  the banner now floats above the popover). Money already posted is
+  still never clawed back silently. Remaining conversion batches (3
+  billable marks, 4 forget family, 5 review/timeline audit) tracked in
+  the spec — unconverted steps are honest redo boundaries, never
+  silently skipped.
 - [x] `ingestAIResponse` applies N assignments as N undo steps (each fully
   undoable); grouping into one step means making the call async (UI ripple).
   DONE 2026-07-10 without the ripple: `UndoStack.groupSync` — a

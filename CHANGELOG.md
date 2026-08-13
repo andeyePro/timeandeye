@@ -2,6 +2,16 @@
 
 ## 2026-08-13
 
+- [x] **Live picks and Stop join ⌘Z (spec batch 2)** – picking a task in
+  the popover registers "switch to <task>": ⌘Z un-teaches the pick
+  (attributor + calendar-rule snapshots restore) and puts the clock back
+  on what was running (or stops it if the pick had started tracking);
+  ⌘⇧Z re-picks. Stop registers "stop tracking <task>": ⌘Z resumes the
+  stopped task — the stop-to-undo gap stays untracked, nothing is
+  invented, the flushed slice stays banked — and ⌘⇧Z stops again. Both
+  are self-re-registering, so the ping-pong sustains indefinitely.
+  Mac 951/0.
+
 - [x] **⌘⇧Z redo + transparent, always-visible undo notices (his 23 Jul
   call + reply 12)** – `UndoStack` gains a redo stack with NSUndoManager-
   style routing (spec: docs/superpowers/specs/2026-08-13-undo-redo-core.md):

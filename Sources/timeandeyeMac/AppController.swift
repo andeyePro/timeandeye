@@ -1793,6 +1793,10 @@ public final class AppController: ObservableObject {
         fireNotice = nil
         siteLearnNotice = nil
         siteFireNotice = nil
+        // Live picks join ⌘Z (his 23 Jul call; undo-redo spec batch 2).
+        let prior = trackerState
+        let restore = attributorSnapshotRestore()
+        let savedCalendarRules = calendarRules
         tracker.confirm(task: task.ref, at: Date())
         // Re-emit the unchanged surface so span accrual restarts immediately
         // (B1's other half): after a manual stop the sensor's dedup key
@@ -1804,6 +1808,26 @@ public final class AppController: ObservableObject {
         }
         teachCalendarRule(to: task.ref, at: Date(), in: calendarEventWindow)
         persistAssociations()
+        registerUndo("switch to \(task.subject)",
+                     redo: { [weak self] in self?.userPicked(task) }) { [weak self] in
+            guard let self else { return }
+            restore()                      // un-teach the pick (sticky/prime/counts)
+            self.calendarRules = savedCalendarRules
+            switch prior {
+            case .tracking(.task(let ref), _):
+                // Back onto the task that was running. Relabel, not confirm —
+                // an undo must not teach. (If focus moved surfaces between
+                // pick and ⌘Z, the pre-stretch banks under the picked task —
+                // a visible, editable corner, never silent loss.)
+                self.tracker.relabelCurrentSession(to: ref)
+            default:
+                // Was stopped (or non-task): the pick started the clock, so
+                // undoing it stops the clock again.
+                self.tracker.stop(at: Date())
+            }
+            self.persistAssociations()
+            self.objectWillChange.send()
+        }
         lastPrompt = nil
     }
 
@@ -1903,7 +1927,21 @@ public final class AppController: ObservableObject {
     package func userStopped() {
         if away { away = false; tracker.away = false }
         scheduledStop = nil
+        // Stop joins ⌘Z too (same call): ⌘Z after a stop resumes the stopped
+        // task — the stop-to-undo gap stays untracked (nothing is invented);
+        // ⌘⇧Z stops it again. The flushed slice itself stays banked.
+        guard case .tracking(.task(let ref), _) = trackerState else {
+            tracker.stop(at: Date())
+            return
+        }
         tracker.stop(at: Date())
+        registerUndo("stop tracking \(name(of: .task(ref)))",
+                     redo: { [weak self] in self?.userStopped() }) { [weak self] in
+            guard let self else { return }
+            self.tracker.start(task: ref, at: Date())
+            self.sensors.reemitCurrentSurface()
+            self.objectWillChange.send()
+        }
     }
 
     /// "Reassign": relabel the RUNNING session to `ref`, keeping its elapsed
