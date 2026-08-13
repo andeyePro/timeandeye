@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-13
+
+- [x] **Content-guard: pseudo-PII whitelist replaces the docs warn-off**
+  (Martin's call, same day) – `.vibe-content-allow` now whitelists the
+  repo's deliberate pseudo-PII by explicit pattern (emails at the
+  IANA-reserved documentation domains `@example.com` / `@*.example`, plus
+  the published `time@andeye.com`), and the blanket `path-warn:TODO.md` /
+  `path-warn:CHANGELOG.md` entries are gone – a REAL address pasted into
+  either file warns again. Checks fixtures, committed `.vss` audits and
+  the two guard-config files keep their path-level warn-off (rationale in
+  the file); BLOCK-tier secret rules fire everywhere regardless.
+
 ## 2026-08-07
 
 - [x] **Ambiguous-web-page hold, Core half (2026-07-23 policy landed)** –

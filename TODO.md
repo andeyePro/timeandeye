@@ -1,13 +1,81 @@
 # TODO
 
+## Martin's 13 Aug replies — decided build programme (pre-approved, no
+## further asks; full Q&A in brain2 Time&I-Q&A-archive, 2026-08-13 section)
+
+- [ ] #1 PRIORITY — correction ledger + teach-scope fix (replies 9 + 15).
+  Mis-attribution from over-learned corrections is hurting him daily (an
+  Obsidian "Ambi4-fromMartin" window tracked as andeye insurance 87% off a
+  past correction). Sub-parts: (a) journal every teach — gesture, surface,
+  features written, weight, timestamp, originating slice; (b) surface it —
+  the evidence card names the exact correction that produced a learned
+  association ("taught 2 Aug when you reassigned X on surface Y"), and a
+  ledger view lists corrections with everything each has since decided;
+  (c) teach scope — a block recategorisation must NOT teach every window/
+  flit inside the block; investigate the current mechanism first (his
+  hypothesis: tiny windows inside a big corrected block inherit the block's
+  task, then hijack their true owners' later time); teach only what the
+  user demonstrably meant; (d) forget must re-attribute — forgetting from
+  the card re-runs attribution for the affected slice(s) so the slice
+  changes with the card (today the card changes, the slice doesn't);
+  (e) cut the user-visible pause before tracking follows a tab change.
+- [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
+  10m total", menu bar keeps the running total, the reassign row clearly
+  acts on the small figure; relabel touches only the current tab/window
+  span (the 2026-07-17 decision below — build both halves together).
+- [ ] Away rescue = MORE AUTO (reply 2, answers the old design question as
+  (a)): the engine replays the recorded away evidence and proposes a
+  rebuilt timeline the user confirms. PLUS his extension: an end-time edit
+  that leaves recorded windows with no task auto-applies the engine's
+  attribution to them — at engine certainty (low confidence stays red and
+  queues), never touching posted/invoice-locked spans, one ⌘Z with the
+  edit.
+- [ ] Double-forget escalation (reply 4): a second forget in succession on
+  the same slice offers "forget another association" or "delete ALL
+  learned experience for this target" (the literal zero-out stays rejected
+  as the single-forget behaviour).
+- [ ] Correction-propagation UI (reply 8, his spec near-verbatim): when an
+  entry is changed, determine whether other entries should change; if so,
+  open a graphical selector — a time bar reaching back to the first entry
+  that could change, irrelevant entries dimmed, click-drag to select or
+  deselect ranges, click to toggle individuals/sub-ranges — then one
+  approve applies the change set.
+- [ ] Settings restructure (reply 10): new Billing section holding the
+  currency symbol AND a list of billable projects/tasks (Currency should
+  not be a whole section for one field); fix the currency field's 3-line
+  label squish beside empty space; rewrite the garbled caption below it
+  (two captions run together today); find out why no "Donut" section is
+  visible (feel-test 10 promised one); relocate or cross-link the "N
+  entries posted to OpenProject look mis-filed" notice (odd under
+  Connections) and make its review link HIGHLIGHT the suspect entries on
+  the timeline (today it opens a bare timeline with no indication).
+- [ ] Monochrome menu bar redundancy (reply 11): the Palettes pane already
+  says "Set both to the same colour to disable colour signalling" — work
+  out why Monochrome exists as well; remove or clearly differentiate.
+- [ ] Billable visibility + redo (reply 12): billable state must be visible
+  where entries/tasks/projects render (badge or symbol — today it shows
+  nowhere outside Settings); ⌘⇧Z REDO (raises the existing undo-stack item
+  below from planned to user-hurting); the undo/redo notice must never
+  hide behind the Time&I popover.
+- [ ] Agent UI visibility (reply 10 — "Can you actually see the UI? Please
+  fix it so you can"): headless SwiftUI snapshot harness — render the key
+  views (Settings panes, popover, evidence card, review) to PNG via
+  ImageRenderer in a Mac-side target run over the build bridge, pull the
+  images back for the session to Read. GUI screencapture is impossible
+  (the scoped ambitick user has no window session); this is the route.
+- [x] Feel-test instruction rule (replies 14/16): every feel-test ships
+  step-by-step click paths — adopted 2026-08-13, fromClaude items 1-2
+  rewritten to it.
+
 ## Post-flip (2026-07-17)
 
-- [ ] Reassign scope (Martin's call, 2026-07-17): a Reassign click relabels
-  ONLY the current tab/window's span — the assumption is the user was happy
-  with tracking until they switched; no ⌥ whole-session sweep for now (could
-  extend later if the reassign clearly informs prior spans, parked as
-  annoyance-risk). The visible tracked-time decrease is the user's alert.
-  Martin tests for a few days once built.
+- [ ] Reassign scope (Martin's call, 2026-07-17; display half approved
+  2026-08-13 — see the 13 Aug programme above, build both together): a
+  Reassign click relabels ONLY the current tab/window's span — the
+  assumption is the user was happy with tracking until they switched; no ⌥
+  whole-session sweep for now (could extend later if the reassign clearly
+  informs prior spans, parked as annoyance-risk). The visible tracked-time
+  decrease is the user's alert. Martin tests for a few days once built.
 - [ ] Popover mode default (Martin's call, 2026-07-17): keep the snap-back to
   the default after each action — vary-per-click, no master toggle. Clicking
   the "Reassign/Switch to" label should ALSO vary from the default for that
@@ -419,9 +487,10 @@ and recorded rather than fixed blind:
   30-day spans prune horizon (JournalPrune) applies to this evidence same
   as any other span — the recovery flow below must not assume unbounded
   history. Still open: requirement (c), the recovery flow itself
-  (Settings replay UI) — blocked on Martin's design answer to fromClaude
-  item 18 (re-run the attribution engine over the recorded events, or
-  present the raw window timeline for manual splitting?). Mac-half
+  (Settings replay UI) — UNBLOCKED 2026-08-13, Martin chose "more auto":
+  the engine replays the recorded events and proposes a rebuilt timeline
+  to confirm (see the 13 Aug programme above, which also adds his
+  end-time-orphan auto-apply extension). Mac-half
   follow-ups once recovery is designed: filter `observedWhileAway` at
   `windowBoundaries`, `reassignSpentApp`, and the TimelineView zoom strip
   (none of these read spans on Linux, so the checks subset can't cover

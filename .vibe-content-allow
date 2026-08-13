@@ -1,12 +1,27 @@
 # vibe content-guard allowlist.
+#
+# WHITELIST MODEL (Martin, 2026-08-13): pseudo-PII that is deliberately usable
+# anywhere in this repo is whitelisted below by explicit pattern; anything
+# else stays guarded. Content entries are whole-line ERE matches, so keep each
+# pattern anchored to a literal that is itself pseudo-PII (reserved example
+# domains / the public product address) — never a plain word that could appear
+# on a line beside something real. Caveat carried from the path-warn design:
+# a content ERE suppresses every finding on a matching line, so never let a
+# whitelisted literal share a line with anything sensitive.
+#
+# Emails at IANA-reserved documentation domains (example.com / *.example):
+.*@example\.com.*
+.*@[A-Za-z0-9.-]+\.example([^A-Za-z0-9-].*)?
+# The public product contact address (deliberately published):
+.*time@andeye\.com.*
+#
 # path-warn entries: WARN-tier rules (emails, IPs, home paths, mdns) are
-# skipped for these files' staged/range diffs, because their example-domain
-# fixture addresses (example.com / *.example) are deliberate. BLOCK-tier
-# secret rules ALWAYS still fire on every file - a path-warn can never mask
-# a real secret, unlike a content ERE.
+# skipped for these files' staged/range diffs. BLOCK-tier secret rules ALWAYS
+# still fire on every file - a path-warn can never mask a real secret.
+# Checks fixtures are dense with reserved-domain synthetic identities; the
+# committed /vss session audits quote the guard's own categories when
+# describing what they verified.
 path-warn:Sources/timeandeyeChecks/*
-path-warn:TODO.md
-path-warn:CHANGELOG.md
 path-warn:.vss/*
 # The two guard-config files themselves: gitignore entries like the one for
 # vibe's settings.local.json runtime config false-positive the hostname WARN
