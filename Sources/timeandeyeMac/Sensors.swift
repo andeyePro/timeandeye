@@ -6,8 +6,13 @@ import ApplicationServices
 import timeandeyeCore
 
 /// All real-world observation, emitting Core's SensorEvents through one callback.
-/// Polling design (2 s) keeps the AX surface minimal; event-driven AXObserver
-/// is a future refinement.
+/// Polling design (2 s) keeps the AX surface minimal; since 2026-08-13 an
+/// event-driven layer (app-activation notification + AXObserver on the
+/// focused window's title) triggers an EARLY poll so a tab/app switch is
+/// seen in ~0.3 s instead of up to a full poll period — the timer remains
+/// the backstop and the only authority; events never read anything
+/// themselves, they only advance WHEN the same poll runs (C10 honoured:
+/// everything still fires on the main run loop).
 package final class SensorHub {
     /// Every emitter today runs on the main run loop (Timer poll, workspace/
     /// distributed notification blocks on .main queues), and the consumer
@@ -31,6 +36,15 @@ package final class SensorHub {
 
     private var pollTimer: Timer?
     private var lastSurfaceKey: String?
+    // Event-driven early-poll layer (13 Aug reply 15: the pause before
+    // tracking follows a tab change "wastes user time"). Trailing-coalesced
+    // + spaced so page-load title churn can never hammer the AppleScript
+    // URL fetch harder than ~2 polls/s on the affected window.
+    private var axObserver: AXObserver?
+    private var axObservedPID: pid_t = 0
+    private var axTitleElement: AXUIElement?
+    private var eventPollTimer: Timer?
+    private var lastEventPollAt = Date.distantPast
     private var micMonitor: MicMonitor?
     private var screenLocked = false
     private let emailCapture = EmailCaptureEngine()
@@ -99,13 +113,118 @@ package final class SensorHub {
         }
         micMonitor?.start()
 
+        // App activation is the one focus change AppKit already events for
+        // free — poll immediately instead of waiting out the 2 s tick, and
+        // move the AX title observer onto the newly-front app.
+        workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                              object: nil, queue: .main) { [weak self] note in
+            guard let self else { return }
+            self.scheduleEventPoll()
+            if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication {
+                self.attachAXObserver(to: app)
+            }
+        }
+
         pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.poll()
         }
         // Focus sampling doesn't care about sub-second phase; tolerance lets
         // the OS coalesce this wakeup with the mic poll (same cadence).
         pollTimer?.tolerance = 0.5
+        if let front = NSWorkspace.shared.frontmostApplication {
+            attachAXObserver(to: front)
+        }
         poll()
+    }
+
+    // MARK: - Event-driven early poll (tab/window switches)
+
+    /// Coalesce bursts (a loading page retitles constantly) and keep event
+    /// polls ≥0.5 s apart; the poll itself — the SAME poll the timer runs —
+    /// happens on the main run loop via this one-shot timer.
+    private func scheduleEventPoll() {
+        eventPollTimer?.invalidate()
+        let sinceLast = Date().timeIntervalSince(lastEventPollAt)
+        let delay = max(0.25, 0.5 - sinceLast)
+        eventPollTimer = Timer.scheduledTimer(withTimeInterval: delay,
+                                              repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.lastEventPollAt = Date()
+            self.poll()
+        }
+    }
+
+    /// Observe the front app for focused-window changes, and its focused
+    /// window for title changes (a Chrome tab switch IS a title change on
+    /// the same window). Best-effort: any AX failure just leaves the 2 s
+    /// timer as the sole cadence, exactly as before.
+    private func attachAXObserver(to app: NSRunningApplication) {
+        guard accessibilityTrusted else { return }
+        let pid = app.processIdentifier
+        guard pid > 0, pid != axObservedPID else { return }
+        detachAXObserver()
+        var created: AXObserver?
+        let callback: AXObserverCallback = { _, _, notification, refcon in
+            guard let refcon else { return }
+            let hub = Unmanaged<SensorHub>.fromOpaque(refcon).takeUnretainedValue()
+            if notification as String == kAXFocusedWindowChangedNotification {
+                hub.reobserveFocusedWindowTitle()
+            }
+            hub.scheduleEventPoll()
+        }
+        guard AXObserverCreate(pid, callback, &created) == .success,
+              let observer = created else { return }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        let appElement = AXUIElementCreateApplication(pid)
+        AXObserverAddNotification(observer, appElement,
+                                  kAXFocusedWindowChangedNotification as CFString, refcon)
+        CFRunLoopAddSource(CFRunLoopGetMain(),
+                           AXObserverGetRunLoopSource(observer), .defaultMode)
+        axObserver = observer
+        axObservedPID = pid
+        reobserveFocusedWindowTitle()
+        DebugLog.write("sensor events: observing \(app.localizedName ?? String(pid))")
+    }
+
+    /// (Re-)point the title observer at the CURRENT focused window — title
+    /// notifications only arrive per-element, so a window switch must move
+    /// the subscription.
+    private func reobserveFocusedWindowTitle() {
+        guard let observer = axObserver else { return }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        if let previous = axTitleElement {
+            AXObserverRemoveNotification(observer, previous,
+                                         kAXTitleChangedNotification as CFString)
+            axTitleElement = nil
+        }
+        let appElement = AXUIElementCreateApplication(axObservedPID)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement,
+                                            kAXFocusedWindowAttribute as CFString,
+                                            &focused) == .success,
+              let window = focused, CFGetTypeID(window) == AXUIElementGetTypeID()
+        else { return }
+        let element = unsafeDowncast(window as AnyObject, to: AXUIElement.self)
+        if AXObserverAddNotification(observer, element,
+                                     kAXTitleChangedNotification as CFString,
+                                     refcon) == .success {
+            axTitleElement = element
+        }
+    }
+
+    private func detachAXObserver() {
+        if let observer = axObserver {
+            if let element = axTitleElement {
+                AXObserverRemoveNotification(observer, element,
+                                             kAXTitleChangedNotification as CFString)
+            }
+            CFRunLoopRemoveSource(CFRunLoopGetMain(),
+                                  AXObserverGetRunLoopSource(observer), .defaultMode)
+        }
+        axObserver = nil
+        axObservedPID = 0
+        axTitleElement = nil
     }
 
     /// Drop the surface dedup key so the NEXT poll re-emits the current
@@ -118,6 +237,9 @@ package final class SensorHub {
     package func stop() {
         pollTimer?.invalidate()
         pollTimer = nil
+        eventPollTimer?.invalidate()
+        eventPollTimer = nil
+        detachAXObserver()
         micMonitor?.stop()
     }
 

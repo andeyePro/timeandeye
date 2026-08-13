@@ -2,6 +2,20 @@
 
 ## 2026-08-13
 
+- [x] **Tab/app switches register in ~0.3 s, not up to 2 s+ (reply 15's
+  pause)** – the 2 s sensor poll was the only thing watching for focus
+  changes, so every tab switch waited out the tick (plus the AppleScript
+  round-trip) before tracking followed. SensorHub gains an event-driven
+  early-poll layer: NSWorkspace app-activation notifications and an
+  AXObserver on the front app (focused-window changes) + its focused
+  window (title changes — a Chrome tab switch IS a title change) all
+  trigger the SAME poll early, trailing-coalesced and spaced ≥0.5 s so a
+  loading page's title churn can never hammer the URL fetch. The 2 s
+  timer stays as backstop and sole authority; events only advance WHEN it
+  runs; all callbacks stay on the main run loop (C10 guard honoured).
+  Best-effort AX: any failure leaves exactly the old behaviour. No check
+  coverage possible off-device — flagged for Martin's on-device feel.
+
 - [x] **Headless UI snapshots — the agent can now SEE the app** –
   Martin's reply 10 ("Can you actually see the UI? Please fix it so you
   can"). New `timeandeyeSnapshots` executable + `SnapshotHarness` in
