@@ -2,6 +2,20 @@
 
 ## 2026-08-13
 
+- [x] **Double-forget escalation (reply 4)** – forgetting twice in
+  succession on the same slice's card unlocks the deeper clean: "✕ still
+  wrong? delete ALL learned experience for <task>" — every learned count
+  on every feature, the experience total, and every remembered surface
+  pointing at that task, wiped in one click, one ⌘Z restores the lot
+  (`LearningStore.eraseAllExperience` / `Attributor.forgetAllExperience`,
+  ledger-journalled as `forgetAll`). Pins, stickies and email/site rules
+  stay — rules are visible and individually deletable in the ledger;
+  "experience" is the invisible accumulated stuff this clears. Other
+  targets' counts and totals are untouched (their scores can only
+  recover, never fall — checked). Single-forget behaviour unchanged; the
+  literal zero-out stays rejected there. Manual updated. New wipe check.
+  Linux 802/0, Mac 948/0.
+
 - [x] **Mis-filed POSTED entries are marked where you look (reply 10)** –
   the Posting-health "review them on the timeline" link used to open a
   bare timeline with no indication of which entries were suspect. The

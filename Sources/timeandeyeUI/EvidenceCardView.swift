@@ -359,12 +359,23 @@ struct EvidenceCardView: View {
     // MARK: - Unlearn controls (the card's facts live in `cardFacts`)
 
     @ViewBuilder
+    /// How many forgets this card presentation has performed, and toward
+    /// whom the last one aimed — a SECOND forget in succession on the same
+    /// slice reads as "still wrong, dig deeper" and unlocks the
+    /// delete-all-experience escalation (Martin, 13 Aug reply 4).
+    @State private var forgetsThisCard = 0
+    @State private var lastForgottenTarget: Target?
+
     private var unlearnSection: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let u = unlearn {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .top, spacing: 6) {
-                        Button { controller.forget(u, signal: signal) } label: {
+                        Button {
+                            forgetsThisCard += 1
+                            lastForgottenTarget = forgottenTarget(of: u)
+                            controller.forget(u, signal: signal)
+                        } label: {
                             Text(forgetLabel(u)).font(.caption2)
                         }
                         .buttonStyle(.borderless)
@@ -395,6 +406,35 @@ struct EvidenceCardView: View {
                 // of the row(s) below it ("mangled" on click).
                 .animation(nil, value: unlearn)
             }
+            // Second forget in succession on this slice (reply 4): keep
+            // offering the next single forget above, AND unlock the deeper
+            // clean — wipe EVERYTHING learned toward the task the forgets
+            // keep aiming at. One click, one ⌘Z.
+            if forgetsThisCard >= 2, case .task(let ref)? = lastForgottenTarget {
+                Button {
+                    controller.forgetAllExperience(for: .task(ref), signal: signal)
+                    forgetsThisCard = 0
+                    lastForgottenTarget = nil
+                } label: {
+                    Text("✕ still wrong? delete ALL learned experience for \(controller.name(of: .task(ref)))")
+                        .font(.caption2)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Erase every learned association and remembered surface toward this task — pins and your direct assignments stay; undo with ⌘Z")
+            }
+        }
+    }
+
+    /// The task a given forget takes learning away from — what the
+    /// escalation would wipe wholesale.
+    private func forgottenTarget(of u: Attributor.Unlearn) -> Target? {
+        switch u {
+        case .emailRule(let rule): return .task(rule.target)
+        case .siteRule(let rule): return .task(rule.target)
+        case .primedSurface(let surface): return controller.primedTarget(for: surface)
+        case .sessionSticky: return recorded?.target ?? explanation.chosen
+        case .rankedAssociation(let target): return target
         }
     }
 

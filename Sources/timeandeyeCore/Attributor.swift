@@ -1119,6 +1119,24 @@ package final class Attributor {
         forgetApply(u, signal: signal)
     }
 
+    /// The double-forget escalation (13 Aug reply 4): wipe everything
+    /// LEARNED toward one task — every count on every feature, the
+    /// experience total, and every remembered surface pointing at it. Pins,
+    /// stickies (the day's direct word) and email/site RULES stay: rules
+    /// are visible and individually deletable in the ledger; "experience"
+    /// is the invisible accumulated stuff this exists to clear.
+    package func forgetAllExperience(for target: Target, signal: ActivitySignal,
+                                    now: Date = Date()) {
+        learning.eraseAllExperience(target: target)
+        if case .task(let ref) = target {
+            primedSurfaces = primedSurfaces.filter { $0.value != ref }
+        }
+        corrections.append(.init(at: now, gesture: "forgetAll", app: signal.app,
+                                 windowTitle: signal.windowTitle,
+                                 tabURL: signal.tabURL, target: target,
+                                 weight: 0, isForget: true))
+    }
+
     private func forgetApply(_ u: Unlearn, signal: ActivitySignal) {
         switch u {
         case .emailRule(let rule):

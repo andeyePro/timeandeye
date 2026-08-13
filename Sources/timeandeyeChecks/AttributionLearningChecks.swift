@@ -502,4 +502,45 @@ func attributionLearningChecks(_ c: Checks) {
                                    recorded: .userAssigned, recordedTarget: wrong),
                      Attributor.Unlearn.primedSurface(surface))
     }
+
+    // MARK: Reply 4 (13 Aug) — the double-forget escalation wipes EVERYTHING
+    // learned toward one task (every feature's counts, the experience total,
+    // every prime pointing at it) without touching other targets — so no
+    // surviving association gets mathematically boosted as a side effect.
+    c.check("forgetAllExperience erases one target everywhere, others untouched") {
+        let sigA = ActivitySignal(app: "obsidian", windowTitle: "vault alpha", timestamp: now)
+        let sigB = ActivitySignal(app: "chrome", windowTitle: "docs beta",
+                                  tabURL: "https://docs.example/x", timestamp: now)
+        let wrong = Target.task(.op(1)), keeper = Target.task(.op(2))
+        let a = Attributor(instanceHost: host)
+        var store = LearningStore()
+        store.learn(sigA, target: wrong, weight: 2)
+        store.learn(sigB, target: wrong, weight: 2)      // a second, unrelated surface
+        store.learn(sigA, target: keeper, weight: 2)
+        a.replaceLearning(store)
+        a.primedSurfaces[Surface(signal: sigA)] = .op(1)
+        a.primedSurfaces[Surface(signal: sigB)] = .op(2) // other task's prime survives
+
+        let keeperBefore = a.learning.scores(for: sigA, among: [keeper, .task(.op(3))])
+
+        a.forgetAllExperience(for: wrong, signal: sigA, now: now)
+
+        try expect(!a.learning.pullsToward(wrong, for: sigA), "sigA counts gone")
+        try expect(!a.learning.pullsToward(wrong, for: sigB), "sigB counts gone too — not signal-scoped")
+        try expect(a.learning.pullsToward(keeper, for: sigA), "the other task keeps its learning")
+        try expectEq(a.primedSurfaces[Surface(signal: sigA)], nil, "primes to the wiped task go")
+        try expectEq(a.primedSurfaces[Surface(signal: sigB)], TaskRef.op(2), "other primes stay")
+        // No side-PENALTY: the keeper's own counts and totals are untouched,
+        // so its score never falls. (It may legitimately RISE — the wiped
+        // target no longer shares the features, so their specificity
+        // recovers to 1.0. That is the desired direction, not a side
+        // effect to guard against.)
+        let keeperAfter = a.learning.scores(for: sigA, among: [keeper, .task(.op(3))])
+        try expect((keeperAfter[keeper] ?? -1) >= (keeperBefore[keeper] ?? 0) - 1e-9,
+                   "the keeper's score never falls from wiping another target")
+        // And the wipe is journalled honestly.
+        let rec = a.corrections.records.last!
+        try expect(rec.isForget && rec.gesture == "forgetAll")
+        try expectEq(rec.target, wrong)
+    }
 }

@@ -3605,6 +3605,31 @@ public final class AppController: ObservableObject {
         return "\(text(onTab)) on this tab · \(text(total)) total"
     }
 
+    /// The remembered target behind a primed surface — what the card's
+    /// double-forget escalation would wipe (reply 4).
+    package func primedTarget(for surface: Surface) -> Target? {
+        attributor.primedSurfaces[surface].map { .task($0) }
+    }
+
+    /// The double-forget escalation (reply 4): wipe everything learned
+    /// toward one task, snapshot-undoable exactly like a single forget.
+    package func forgetAllExperience(for target: Target, signal: ActivitySignal) {
+        let savedPrimes = attributor.primedSurfaces
+        let savedLearning = attributor.learning
+        attributor.forgetAllExperience(for: target, signal: signal)
+        persistAssociations()
+        tracker.reevaluate()
+        registerUndo("restore learned experience for \(name(of: target))") { [weak self] in
+            guard let self else { return }
+            self.attributor.primedSurfaces = savedPrimes
+            self.attributor.replaceLearning(savedLearning)
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }
+        objectWillChange.send()
+    }
+
     /// The live "would then fall back to…" preview — never mutates (see
     /// `Attributor.explainWithout`).
     package func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,

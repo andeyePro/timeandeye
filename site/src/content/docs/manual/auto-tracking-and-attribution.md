@@ -75,7 +75,10 @@ The card shows, top to bottom:
   drove the decision, a **✕ forget** (or **✕ suppress** for a learned
   association, which can't be deleted outright, only counter-taught) removes
   exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you
-  click.
+  click. Forget twice in a row on the same slice and a deeper clean appears:
+  **delete ALL learned experience** for the task the forgets keep aiming at -
+  every learned association and remembered surface toward it goes (pins and
+  your direct assignments stay), one ⌘Z restores the lot.
 - **sees:** - the evidence andeye actually captured: app and site/title
   always, plus the correspondent, domain and subject when the surface is an
   open message in Gmail, Outlook Web, Proton Mail, Yahoo Mail or Fastmail.

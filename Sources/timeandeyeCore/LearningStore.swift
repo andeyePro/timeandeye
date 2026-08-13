@@ -292,6 +292,20 @@ package struct LearningStore: Codable, Equatable, Sendable {
         return expd.mapValues { $0 / sum }
     }
 
+    /// The nuclear forget (13 Aug reply 4's double-forget escalation):
+    /// erase EVERY count toward `target` on every feature, and its
+    /// experience total. Unlike `forget(target:features:)` this is not
+    /// signal-scoped — it is "stop suggesting this task from learning,
+    /// everywhere". Other targets' counts are untouched, so nothing gets
+    /// mathematically boosted as a side effect.
+    package mutating func eraseAllExperience(target: Target) {
+        for (feature, perTarget) in counts where perTarget[target] != nil {
+            counts[feature]?[target] = nil
+            if counts[feature]?.isEmpty == true { counts[feature] = nil }
+        }
+        totals[target] = nil
+    }
+
     /// Whether any of this signal's features hold positive learned weight
     /// toward `target` — i.e. whether a [✕ suppress] aimed at that target
     /// would actually erase something. Drives the recorded-provenance

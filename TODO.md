@@ -51,10 +51,10 @@
   attribution to them — at engine certainty (low confidence stays red and
   queues), never touching posted/invoice-locked spans, one ⌘Z with the
   edit.
-- [ ] Double-forget escalation (reply 4): a second forget in succession on
-  the same slice offers "forget another association" or "delete ALL
-  learned experience for this target" (the literal zero-out stays rejected
-  as the single-forget behaviour).
+- [x] Double-forget escalation (reply 4) — DONE 2026-08-13 (CHANGELOG):
+  second forget on the same card unlocks "delete ALL learned experience
+  for <task>" (counts + totals + primes toward it; pins/stickies/rules
+  stay; one ⌘Z; ledger-journalled). Single-forget behaviour unchanged.
 - [ ] Correction-propagation UI (reply 8, his spec near-verbatim): when an
   entry is changed, determine whether other entries should change; if so,
   open a graphical selector — a time bar reaching back to the first entry
