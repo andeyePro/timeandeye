@@ -465,4 +465,41 @@ func attributionLearningChecks(_ c: Checks) {
         try expect(b.learning == bareReinforce,
                    "a displaced pin (direct human word) still carries no discount")
     }
+
+    // MARK: Fix 3 (2026-08-13) — a card anchored on a RECORDED slice aims
+    // its ✕ at the store that decided the record. Today's ladder returned
+    // the current (correct!) prime while the ranked counts that mis-filed
+    // the slice sat beneath it — forgetting deleted the good correction and
+    // left the bad one (the Obsidian case, Martin's reply 9).
+    c.check("forgettable targets the recorded decider, not today's shadowing prime (fix 3)") {
+        let sig = ActivitySignal(app: "obsidian", windowTitle: "ambinote alpha", timestamp: now)
+        let wrong = Target.task(.op(1))   // decided the recorded slice (ranked counts)
+        let right = TaskRef.op(2)         // the user's later correction, now the prime
+        let a = Attributor(instanceHost: host)
+        var store = LearningStore()
+        for _ in 0..<3 { store.learn(sig, target: wrong, weight: 2) }
+        a.replaceLearning(store)
+        a.primedSurfaces[Surface(signal: sig)] = right
+        let surface = Surface(signal: sig)
+
+        // Today's ladder: the prime shadows the ranked counts.
+        try expectEq(a.forgettable(for: sig, now: now),
+                     Attributor.Unlearn.primedSurface(surface))
+        // The recorded story says ranked → the ✕ aims at the deciding counts.
+        let recorded = SessionProvenance(source: .ranked)
+        try expectEq(a.forgettable(for: sig, now: now,
+                                   recorded: recorded, recordedTarget: wrong),
+                     Attributor.Unlearn.rankedAssociation(wrong))
+        // Counts already drained → fall back to the ladder (never a dead no-op).
+        var drained = a.learning
+        drained.forget(target: wrong, features: LearningStore.features(from: sig))
+        a.replaceLearning(drained)
+        try expectEq(a.forgettable(for: sig, now: now,
+                                   recorded: recorded, recordedTarget: wrong),
+                     Attributor.Unlearn.primedSurface(surface))
+        // A human-word record has nothing learned behind it → ladder too.
+        try expectEq(a.forgettable(for: sig, now: now,
+                                   recorded: .userAssigned, recordedTarget: wrong),
+                     Attributor.Unlearn.primedSurface(surface))
+    }
 }

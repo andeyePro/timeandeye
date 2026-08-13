@@ -2,6 +2,20 @@
 
 ## 2026-08-13
 
+- [x] **Forget aims at what actually decided the slice (diagnosis
+  fix 3)** – the Evidence Card's [✕] mirrored TODAY's ladder, so on a
+  slice mis-filed by ranked counts it offered to forget the current —
+  correct — prime while the bad counts sat shadowed beneath it
+  (forgetting deleted the good correction and left the bad one). A card
+  anchored on a recorded slice now maps the RECORDED provenance to its
+  store (ranked → suppress the recorded target's counts, primed/rule/
+  sticky → that store) while it still holds something for the signal;
+  human-word records and drained stores fall back to the ladder. The
+  slice itself re-derives on the existing post-forget refile pass
+  (persistAssociations already schedules it; refileMode governs, posted
+  rows still never move silently). New forgettable-targeting check.
+  Linux 796/0, Mac 942/0.
+
 - [x] **Bulk gestures teach only what the user meant (diagnosis fix 1)** –
   `TeachScope` (Core, checked on Linux): in a multi-session timeline
   reassign, sub-2-minute sessions teach nothing (their flit surfaces no

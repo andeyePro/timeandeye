@@ -1029,6 +1029,45 @@ package final class Attributor {
         return nil
     }
 
+    /// `forgettable` for a card showing a RECORDED slice: the ✕ must remove
+    /// the store that decided the record, not whatever shadows it on today's
+    /// ladder (2026-08-13 diagnosis, fix 3 — the Obsidian case: today's
+    /// ladder returned the current, CORRECT prime while the ranked counts
+    /// that actually mis-filed the slice sat beneath it, so forgetting
+    /// deleted the good correction and left the bad one). Maps the recorded
+    /// provenance to its store while that store still holds something for
+    /// this signal; otherwise — including the human/tracker verbs
+    /// ("userAssigned", "aiApplied", …), where nothing learned decided —
+    /// falls back to today's ladder unchanged.
+    package func forgettable(for signal: ActivitySignal, now: Date,
+                            recorded provenance: SessionProvenance?,
+                            recordedTarget: Target?) -> Unlearn? {
+        if let source = provenance?.source {
+            switch source {
+            case .ranked:
+                if let target = recordedTarget,
+                   learning.pullsToward(target, for: signal,
+                                        disabledRecipes: disabledSiteRecipes) {
+                    return .rankedAssociation(target)
+                }
+            case .primedSurface:
+                let surface = Surface(signal: signal)
+                if primedSurfaces[surface] != nil { return .primedSurface(surface) }
+            case .emailRule:
+                if let rule = emailRuleMatch(signal), !rule.pinned { return .emailRule(rule) }
+            case .siteRule:
+                if let rule = siteRuleMatch(signal), !rule.pinned { return .siteRule(rule) }
+            case .sessionSticky:
+                if let sticky = stickyLookup(for: signal, now: now) {
+                    return .sessionSticky(sticky.key)
+                }
+            default:
+                break
+            }
+        }
+        return forgettable(for: signal, now: now)
+    }
+
     /// Remove exactly what an Unlearn names. `signal` supplies the features a
     /// rankedAssociation suppression erases. Persist + reevaluate afterwards
     /// (the caller's job, as with every other mutation here).

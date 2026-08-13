@@ -28,9 +28,10 @@
   normalisation + primed.json migration, prime-displacement discount —
   CHANGELOG this date; fix 6 flagged in fromClaude). Fixes 1 (TeachScope
   duration-gated/weighted bulk teaches) and 4 (card never mixes slice
-  certainty with span provenance) LANDED later same day. Remaining: fix 3
-  (forget refiles the recorded slice + forgettable targets recorded
-  provenance), then the ledger (a)+(b) and latency (e).
+  certainty with span provenance) LANDED later same day. Fix 3 (forgettable
+  targets the RECORDED provenance; slice re-derives via the existing
+  post-forget refile pass) LANDED same day — the whole 6-part fix set is
+  now in. Remaining: the ledger (a)+(b) and latency (e).
 - [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
   10m total", menu bar keeps the running total, the reassign row clearly
   acts on the small figure; relabel touches only the current tab/window

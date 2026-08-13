@@ -292,6 +292,20 @@ package struct LearningStore: Codable, Equatable, Sendable {
         return expd.mapValues { $0 / sum }
     }
 
+    /// Whether any of this signal's features hold positive learned weight
+    /// toward `target` — i.e. whether a [✕ suppress] aimed at that target
+    /// would actually erase something. Drives the recorded-provenance
+    /// forgettable path (2026-08-13 diagnosis, fix 3): the card must target
+    /// the store that DECIDED the recorded slice, but only while its counts
+    /// still exist.
+    package func pullsToward(_ target: Target, for signal: ActivitySignal,
+                            disabledRecipes: Set<String> = []) -> Bool {
+        for f in Self.features(from: signal, disabledRecipes: disabledRecipes) {
+            if (counts[f]?[target] ?? 0) > 0 { return true }
+        }
+        return false
+    }
+
     /// The target the learned counts pull this signal toward hardest — the
     /// largest positive count total on the signal's features, nil when nothing
     /// positive is learned on them. Drives `Attributor.forgettable`'s

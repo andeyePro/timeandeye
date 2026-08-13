@@ -3515,6 +3515,17 @@ public final class AppController: ObservableObject {
         attributor.forgettable(for: signal, now: now)
     }
 
+    /// The recorded-slice flavour: the card's ✕ targets the store that
+    /// decided the RECORD (fix 3, 2026-08-13 diagnosis). Nil provenance —
+    /// the popover's live card — is today's ladder unchanged.
+    package func forgettable(for signal: ActivitySignal,
+                            recorded provenance: SessionProvenance?,
+                            recordedTarget: Target?,
+                            now: Date = Date()) -> Attributor.Unlearn? {
+        attributor.forgettable(for: signal, now: now,
+                               recorded: provenance, recordedTarget: recordedTarget)
+    }
+
     /// The live "would then fall back to…" preview — never mutates (see
     /// `Attributor.explainWithout`).
     package func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,

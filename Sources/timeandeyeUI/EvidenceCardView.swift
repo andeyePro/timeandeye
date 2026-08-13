@@ -77,7 +77,14 @@ struct EvidenceCardView: View {
     }
     private var identity: ContextIdentity { controller.identity(of: signal) }
     private var hasEmailGrain: Bool { identity.segments.contains { $0.kind.isEmailGrain } }
-    private var unlearn: Attributor.Unlearn? { controller.forgettable(for: signal) }
+    private var unlearn: Attributor.Unlearn? {
+        // A card anchored on a recorded slice aims the ✕ at the store that
+        // DECIDED that record (fix 3); the live popover card (recorded nil)
+        // keeps today's ladder.
+        controller.forgettable(for: signal,
+                               recorded: recorded?.provenance,
+                               recordedTarget: recorded?.target)
+    }
     /// Every distinct counterparty on this message — more than one triggers
     /// the checkbox expansion instead of a plain correspondent row.
     private var correspondentChoices: [String] { ContextIdentity.correspondentChoices(signal) }
