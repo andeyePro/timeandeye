@@ -6,18 +6,23 @@
 - [ ] #1 PRIORITY — correction ledger + teach-scope fix (replies 9 + 15).
   Mis-attribution from over-learned corrections is hurting him daily (an
   Obsidian "Ambi4-fromMartin" window tracked as andeye insurance 87% off a
-  past correction). Sub-parts: (a) journal every teach — gesture, surface,
-  features written, weight, timestamp, originating slice; (b) surface it —
-  the evidence card names the exact correction that produced a learned
-  association ("taught 2 Aug when you reassigned X on surface Y"), and a
-  ledger view lists corrections with everything each has since decided;
-  (c) teach scope — a block recategorisation must NOT teach every window/
-  flit inside the block; investigate the current mechanism first (his
-  hypothesis: tiny windows inside a big corrected block inherit the block's
-  task, then hijack their true owners' later time); teach only what the
-  user demonstrably meant; (d) forget must re-attribute — forgetting from
-  the card re-runs attribution for the affected slice(s) so the slice
-  changes with the card (today the card changes, the slice doesn't);
+  past correction). DIAGNOSED 2026-08-13 — full teach-path inventory, the
+  three real over-learn mechanisms (feature generalisation with no
+  specificity discount; per-session flit dominance inside multi-session
+  blocks; bulk review assign teaching every surface), the forget-doesn't-
+  refile root cause, and a 6-part minimal fix set with file:line targets:
+  docs/superpowers/specs/2026-08-13-correction-overlearning-diagnosis.md.
+  BUILD next (fix set first — it stops the bleeding — then the ledger):
+  (a) journal every teach — gesture, surface, features written, weight,
+  timestamp, originating slice (the spec's inventory table is the exact
+  write-point list to instrument); (b) surface it — the evidence card
+  names the exact correction that produced a learned association ("taught
+  2 Aug when you reassigned X on surface Y"), and a ledger view lists
+  corrections with everything each has since decided; (c) teach scope =
+  spec fixes 1+2 (duration-gated/weighted teaches, IDF-style specificity
+  weighting); (d) forget must re-attribute = spec fixes 3+4 (+5 surface-
+  key normalisation, 6 symmetric discount — 6 surfaced to Martin when
+  built, it's flagged an owner call in the attribution-learning spec);
   (e) cut the user-visible pause before tracking follows a tab change.
 - [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
   10m total", menu bar keeps the running total, the reassign row clearly
