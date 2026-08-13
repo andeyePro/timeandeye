@@ -334,6 +334,7 @@ public final class AppController: ObservableObject {
     private let settingsStore: JSONFileStore<AndeyeSettings>
     private let learningStore: JSONFileStore<LearningStore>
     private let primedStore: JSONFileStore<[Surface: TaskRef]>
+    private let correctionsStore: JSONFileStore<CorrectionLedger>
     private let pinsStore: JSONFileStore<[Pin]>
     private let emailRulesStore: JSONFileStore<[EmailRule]>
     /// Site rules (2026-07-09 site-recipes spec §5): siterules.json beside
@@ -465,6 +466,7 @@ public final class AppController: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         settingsStore = JSONFileStore<AndeyeSettings>(url: dir.appendingPathComponent("settings.json"))
         learningStore = JSONFileStore<LearningStore>(url: dir.appendingPathComponent("learning.json"))
+        correctionsStore = JSONFileStore<CorrectionLedger>(url: dir.appendingPathComponent("corrections.json"))
         primedStore = JSONFileStore<[Surface: TaskRef]>(url: dir.appendingPathComponent("primed.json"))
         pinsStore = JSONFileStore<[Pin]>(url: dir.appendingPathComponent("pins.json"))
         emailRulesStore = JSONFileStore<[EmailRule]>(url: dir.appendingPathComponent("emailrules.json"))
@@ -531,6 +533,10 @@ public final class AppController: ObservableObject {
             // 1.13.4") so an app update can't orphan old primes; idempotent,
             // self-terminating on the next persist (fix 5, 2026-08-13 spec).
             attributor.primedSurfaces = Surface.migratingLegacyKeys(primed)
+        }
+        if var ledger = (try? correctionsStore.load()).flatMap({ $0 }) {
+            ledger.prune()
+            attributor.corrections = ledger
         }
         attributor.emailMatchOrder = loadedSettings.emailMatchOrder
         attributor.disabledSiteRecipes = Set(loadedSettings.siteRecipesDisabled)
@@ -853,7 +859,8 @@ public final class AppController: ObservableObject {
             let savedPrimed = attributor.primedSurfaces
             let savedDisplaced = attributor.displacedByCorrection
             let savedStickies = attributor.sessionStickies
-            attributor.confirm(signal, task: .local(def.id), tasks: taskCache)
+            attributor.confirm(signal, task: .local(def.id), tasks: taskCache,
+                               gesture: "newLocalTask")
             persistAssociations()
             tracker.reevaluate()
             primeRestore = { [weak self] in
@@ -1805,6 +1812,7 @@ public final class AppController: ObservableObject {
         invalidateSliceDetails()    // …and stales the slice-detail memo too, or
                                     // an open disclosure keeps pre-rule certainty
         try? learningStore.save(attributor.learning)
+        try? correctionsStore.save(attributor.corrections)
         try? primedStore.save(attributor.primedSurfaces)
         try? pinsStore.save(attributor.pins)
         try? emailRulesStore.save(attributor.emailRules)
@@ -1943,7 +1951,8 @@ public final class AppController: ObservableObject {
         // old task when focus returns (Martin: "Reassign andeye" kept
         // reverting to a 70%-certain KLARC on every return).
         if let signal = tracker.currentFocusSignal {
-            attributor.assign(signal, target: .task(ref), tasks: taskCache)
+            attributor.assign(signal, target: .task(ref), tasks: taskCache,
+                              gesture: "reassign")
             persistAssociations()
         }
         teachCalendarRule(to: ref, at: now, in: calendarEventWindow)
@@ -2080,7 +2089,8 @@ public final class AppController: ObservableObject {
         DebugLog.write("stored local task comment for \(ref.storageKey)")
     }
 
-    package func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true) {
+    package func assignReview(_ ids: [UUID], to target: Target, undoable: Bool = true,
+                              gesture: String = "reviewAssign") {
         // Unknown task category §4: sweeping to Unknown also re-points its
         // overlapping unpushed low-certainty sessions to the human-word
         // certainty (the user's own filing decision — spec §The three tiers),
@@ -2142,7 +2152,8 @@ public final class AppController: ObservableObject {
                 guard let w = TeachScope.reviewTeachWeight(
                     coveredDuration: entry.covered,
                     surfaceCount: weighted.count) else { continue }
-                attributor.assign(entry.signal, target: target, tasks: taskCache, weight: w)
+                attributor.assign(entry.signal, target: target, tasks: taskCache,
+                                  weight: w, gesture: gesture)
                 taught.append(entry.signal)
             }
             // Calendar teach, same Unknown-guarded shape as the live paths —
@@ -2278,7 +2289,8 @@ public final class AppController: ObservableObject {
                         self.updateJournalSummary()
                     }
                 }
-                assignReview(assignment.segmentIDs, to: assignment.target)
+                assignReview(assignment.segmentIDs, to: assignment.target,
+                             gesture: "walkConfirm")
                 guard case .task(let ref) = assignment.target else { continue }
                 for prior in stamps {
                     guard var s = try? journal.session(id: prior.id) else { continue }
@@ -3526,6 +3538,44 @@ public final class AppController: ObservableObject {
                                recorded: provenance, recordedTarget: recordedTarget)
     }
 
+    /// The card's "how was this taught" line (ledger (b), 13 Aug reply 9):
+    /// the most recent ledger record teaching `target` on this signal's
+    /// surface — exact surface beats app-level. Nil when the ledger predates
+    /// the teaching or nothing learned is in play.
+    package func correctionStory(toward target: Target?, for signal: ActivitySignal) -> String? {
+        guard let target,
+              let rec = attributor.corrections.lastTeach(toward: target, for: signal)
+        else { return nil }
+        let verb = Self.gestureLabels[rec.gesture] ?? rec.gesture
+        let when = rec.at.formatted(date: .abbreviated, time: .shortened)
+        let place = rec.windowTitle ?? rec.tabURL ?? rec.app
+        return "taught \(when) — \(verb) on \(place)"
+    }
+
+    /// Raw ledger verbs → user-facing phrases. Unknown verbs (a future
+    /// build's) fall back to the raw string rather than hiding the record.
+    package static let gestureLabels: [String: String] = [
+        "pick": "you picked it",
+        "assign": "you assigned it",
+        "reassign": "you reassigned to it",
+        "reviewAssign": "you assigned it in Review",
+        "walkConfirm": "you confirmed it in the review walk-through",
+        "aiApplied": "an AI suggestion you applied",
+        "timelineReassign": "you reassigned the slice",
+        "timelineEdit": "you edited the slice",
+        "allocate": "you allocated a span",
+        "dontTrack": "you marked it don't-track",
+        "boost": "you boosted it in the why panel",
+        "teach": "you taught it from the why panel",
+        "newLocalTask": "you created the task on this window",
+        "forget": "you forgot it",
+    ]
+
+    /// Ledger view feed (newest first).
+    package var correctionRecords: [CorrectionLedger.Record] {
+        attributor.corrections.newestFirst
+    }
+
     /// The live "would then fall back to…" preview — never mutates (see
     /// `Attributor.explainWithout`).
     package func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,
@@ -3919,7 +3969,7 @@ public final class AppController: ObservableObject {
     /// weighting" action behind the why-panel.
     package func teachSurface(_ span: FocusSpan, to ref: TaskRef) {
         let restore = attributorSnapshotRestore()
-        attributor.confirm(span.signal, task: ref, tasks: taskCache)
+        attributor.confirm(span.signal, task: ref, tasks: taskCache, gesture: "teach")
         persistAssociations()
         tracker.reevaluate()
         registerUndo("unteach \(name(of: .task(ref)))") { restore() }
@@ -4619,7 +4669,7 @@ public final class AppController: ObservableObject {
             // derived for the OLD task — that would be dishonest AND leave a
             // corrected slice stuck below the push bar.
             session.certainty = Attributor.humanWord
-            teachAssociation(for: session)
+            teachAssociation(for: session, gesture: "timelineEdit")
         }
         // A sub-minute session was marked handled without an OP entry; if an
         // edit grows it to pushable size it must re-enter the push queue.
@@ -4688,7 +4738,8 @@ public final class AppController: ObservableObject {
     /// that flit's surface at full strength). Single-session gestures
     /// (timeline editor, hand-drawn splits/allocations) keep count 1 and
     /// always teach — the user pointed at that exact thing.
-    private func teachAssociation(for session: Session, inSelectionOf count: Int = 1) {
+    private func teachAssociation(for session: Session, inSelectionOf count: Int = 1,
+                                  gesture: String = "timelineReassign") {
         // Unknown task category: re-pointing to Unknown is an explicit
         // "don't know", not a correction — same guard `assignReview` applies
         // (Target.teachesAttributor), so a span allocated to Unknown via any
@@ -4698,7 +4749,8 @@ public final class AppController: ObservableObject {
             sessionDuration: session.end.timeIntervalSince(session.start),
             selectionCount: count) else { return }
         guard let dominant = dominantSpan(of: session) else { return }
-        attributor.assign(dominant.signal, target: .task(session.task), tasks: taskCache)
+        attributor.assign(dominant.signal, target: .task(session.task), tasks: taskCache,
+                          gesture: gesture)
         persistAssociations()
     }
 
@@ -4713,7 +4765,8 @@ public final class AppController: ObservableObject {
         await undoGroup("don't track \(name(of: .task(session.task)))") {
             if let dominant = dominantSpan(of: session) {
                 let restore = attributorSnapshotRestore()
-                attributor.assign(dominant.signal, target: .doNotTrack, tasks: taskCache)
+                attributor.assign(dominant.signal, target: .doNotTrack, tasks: taskCache,
+                                  gesture: "dontTrack")
                 persistAssociations()
                 registerUndo("unlearn don't-track") { restore() }
             }
@@ -4990,7 +5043,9 @@ public final class AppController: ObservableObject {
     private func replaceSession(_ session: Session, with pieces: [Session]) async {
         await deleteTimelineSession(session)
         for piece in pieces { await createTimelineSession(piece) }
-        for piece in pieces where piece.task != session.task { teachAssociation(for: piece) }
+        for piece in pieces where piece.task != session.task {
+            teachAssociation(for: piece, gesture: "allocate")
+        }
     }
 
     /// Split a slice: the given time ranges (selected windows in the detail
@@ -5157,7 +5212,7 @@ public final class AppController: ObservableObject {
             // synchronous button handler.
             undoStack.groupSync("AI assign \(assignments.count) review rows") {
                 for a in assignments {
-                    assignReview([a.segmentID], to: a.target)
+                    assignReview([a.segmentID], to: a.target, gesture: "aiApplied")
                 }
             }
             undoCount = undoStack.count

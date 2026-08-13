@@ -160,6 +160,7 @@ var suites: [(String, (Checks) -> Void)] = [
     ("CertaintyCalculus", certaintyCalculusChecks),
     ("AttributionLearning", attributionLearningChecks),
     ("TeachScope", teachScopeChecks),
+    ("CorrectionLedger", correctionLedgerChecks),
 ]
 var asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

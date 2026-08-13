@@ -712,19 +712,22 @@ package final class Attributor {
     /// ranked belief's real score ([] degrades gracefully: rule/prime/URL
     /// sources still snapshot correctly).
     package func confirm(_ signal: ActivitySignal, task: TaskRef,
-                        tasks: [WorkTask] = [], now: Date = Date()) {
+                        tasks: [WorkTask] = [], now: Date = Date(),
+                        gesture: String = "pick") {
         let displaced = recordDisplaced(signal, by: .task(task), tasks: tasks, now: now)
         recordSticky(signal, target: .task(task), now: now)
         primeSurface(signal, to: task)
         // The whole correction — reinforce +2, and SUBTRACT from the displaced
-        // learned belief when (and only when) it was engine-ranked — is ONE
-        // operator call (reviewer B9: the mistaken association used to keep its
-        // counts and keep winning on sibling surfaces, so the user had to
-        // correct each one individually). A displaced pin/prime/sticky isn't a
-        // count problem, so its target is not passed to the operator.
+        // learned belief when it was engine-ranked or a standing prime — is
+        // ONE operator call (reviewer B9 + 2026-08-13 fix 6). A displaced
+        // pin/sticky/human word isn't a count problem, so its target is not
+        // passed to the operator.
+        let discounted = rankedDisplaced(displaced)
         learning.correct(signal, to: .task(task), weight: 2,
-                         displacingRanked: rankedDisplaced(displaced),
+                         displacingRanked: discounted,
                          disabledRecipes: disabledSiteRecipes)
+        recordCorrection(signal, target: .task(task), weight: 2,
+                         displaced: discounted, gesture: gesture, now: now)
     }
 
     /// The displaced belief to subtract against, or nil: a correction
@@ -760,10 +763,30 @@ package final class Attributor {
     /// does not subtract from a displaced ranked belief the way a +2 confirm
     /// does (attribution-learning spec §Open decisions 3, "boost symmetry": an
     /// owner call, left as-is here).
-    package func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double) {
+    package func learnSurface(_ signal: ActivitySignal, to task: TaskRef, weight: Double,
+                             now: Date = Date(), gesture: String = "boost") {
         primeSurface(signal, to: task)
         learning.learn(signal, target: .task(task), weight: weight,
                        disabledRecipes: disabledSiteRecipes)
+        recordCorrection(signal, target: .task(task), weight: weight,
+                         displaced: nil, gesture: gesture, now: now)
+    }
+
+    /// The correction LEDGER (13 Aug reply 9): every learning write appends
+    /// one record — when, which gesture, what surface, taught what, at what
+    /// weight, displacing what — so the card can name the exact correction
+    /// behind a learned association and the ledger view can list them all.
+    /// Owned here because this file IS the write funnel; persisted by the
+    /// controller alongside the other stores.
+    package var corrections = CorrectionLedger()
+
+    private func recordCorrection(_ signal: ActivitySignal, target: Target,
+                                  weight: Double, displaced: Target?,
+                                  gesture: String, now: Date) {
+        corrections.append(.init(at: now, gesture: gesture, app: signal.app,
+                                 windowTitle: signal.windowTitle,
+                                 tabURL: signal.tabURL, target: target,
+                                 weight: weight, displaced: displaced))
     }
 
     /// Review-window or prompt assignment. Always a SOFT prime (caps at
@@ -778,7 +801,8 @@ package final class Attributor {
     /// (2026-08-13 diagnosis, fix 1) so a briefly-seen surface in a sweep
     /// carries proportionally less conviction into the count model.
     package func assign(_ signal: ActivitySignal, target: Target,
-                       tasks: [WorkTask] = [], weight: Double = 2, now: Date = Date()) {
+                       tasks: [WorkTask] = [], weight: Double = 2, now: Date = Date(),
+                       gesture: String = "assign") {
         let displaced = recordDisplaced(signal, by: target, tasks: tasks, now: now)
         recordSticky(signal, target: target, now: now)
         let surface = Surface(signal: signal)
@@ -791,9 +815,12 @@ package final class Attributor {
         // One operator call: reinforce, subtract from the displaced belief
         // only when it was engine-ranked or a standing prime (B9 + fix 6).
         // Same correction as `confirm`.
+        let discounted = rankedDisplaced(displaced)
         learning.correct(signal, to: target, weight: weight,
-                         displacingRanked: rankedDisplaced(displaced),
+                         displacingRanked: discounted,
                          disabledRecipes: disabledSiteRecipes)
+        recordCorrection(signal, target: target, weight: weight,
+                         displaced: discounted, gesture: gesture, now: now)
     }
 
     /// Add or update a pin (by id). New pins go last → most recent for ties.
@@ -1070,8 +1097,29 @@ package final class Attributor {
 
     /// Remove exactly what an Unlearn names. `signal` supplies the features a
     /// rankedAssociation suppression erases. Persist + reevaluate afterwards
-    /// (the caller's job, as with every other mutation here).
-    package func forget(_ u: Unlearn, signal: ActivitySignal) {
+    /// (the caller's job, as with every other mutation here). Un-learning is
+    /// a correction too, so it lands in the ledger (isForget) — "we need to
+    /// know how the correction was made" covers removals as much as teaches.
+    package func forget(_ u: Unlearn, signal: ActivitySignal, now: Date = Date()) {
+        let forgotten: Target? = {
+            switch u {
+            case .emailRule(let rule): return .task(rule.target)
+            case .siteRule(let rule): return .task(rule.target)
+            case .primedSurface(let surface): return primedSurfaces[surface].map { .task($0) }
+            case .sessionSticky(let key): return sessionStickies.first { $0.key == key }?.target
+            case .rankedAssociation(let target): return target
+            }
+        }()
+        if let forgotten {
+            corrections.append(.init(at: now, gesture: "forget", app: signal.app,
+                                     windowTitle: signal.windowTitle,
+                                     tabURL: signal.tabURL, target: forgotten,
+                                     weight: 0, isForget: true))
+        }
+        forgetApply(u, signal: signal)
+    }
+
+    private func forgetApply(_ u: Unlearn, signal: ActivitySignal) {
         switch u {
         case .emailRule(let rule):
             emailRules.removeAll { $0.sameRule(as: rule) }
@@ -1138,7 +1186,10 @@ package final class Attributor {
             pendingPrime = savedPending
             displacedByCorrection = savedDisplaced
         }
-        forget(u, signal: signal)
+        // The APPLY half only — a preview must not land in the correction
+        // ledger (it isn't a gesture, and the defer above doesn't restore
+        // `corrections` precisely so real forgets survive undo-free reads).
+        forgetApply(u, signal: signal)
         return forgettable(for: signal, now: now)
     }
 }

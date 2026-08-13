@@ -31,7 +31,11 @@
   certainty with span provenance) LANDED later same day. Fix 3 (forgettable
   targets the RECORDED provenance; slice re-derives via the existing
   post-forget refile pass) LANDED same day — the whole 6-part fix set is
-  now in. Remaining: the ledger (a)+(b) and latency (e).
+  now in. Ledger (a)+(b) LANDED same day (CorrectionLedger + card
+  naming + Corrections segment — CHANGELOG). Remaining: latency (e), and
+  the deeper "what has each correction since decided" reverse index is
+  deferred until provenance can carry a correction id (needs a
+  primed-store schema change — design first).
 - [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
   10m total", menu bar keeps the running total, the reassign row clearly
   acts on the small figure; relabel touches only the current tab/window

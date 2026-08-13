@@ -267,7 +267,30 @@ struct EvidenceCardView: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // The exact correction behind a learned pull (ledger (b), 13 Aug
+            // reply 9): when, via which gesture, on what window — so "a past
+            // correction" is never an unaccountable black box again.
+            if let story = correctionStory {
+                Text("↳ \(story)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             unlearnSection
+        }
+    }
+
+    /// The ledger record behind whatever learned store is in play: the
+    /// recorded slice's decider when the card anchors on a ranked record,
+    /// else today's remembered/ranked pull.
+    private var correctionStory: String? {
+        switch explanation.source {
+        case .primedSurface, .ranked:
+            return controller.correctionStory(toward: explanation.chosen, for: signal)
+        default:
+            if recorded?.provenance?.source == .ranked {
+                return controller.correctionStory(toward: recorded?.target, for: signal)
+            }
+            return nil
         }
     }
 

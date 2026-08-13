@@ -2,6 +2,23 @@
 
 ## 2026-08-13
 
+- [x] **Correction ledger — every teach is journalled and named** –
+  Martin's 13 Aug reply 9 ("start tracking all my corrections and showing
+  me what has been corrected based on what correction. We need to know how
+  the correction was made too"). `CorrectionLedger` (Core): every learning
+  write — pick, reassign, review assign, walk-through confirm, AI apply,
+  timeline reassign/edit, span allocate, don't-track, boost, why-panel
+  teach, new-local-task prime, forget — appends one record (when, gesture
+  verb, surface, target, weight, what it displaced); persisted at
+  corrections.json, capped 2000 records / 180 days. The Evidence Card
+  names the exact correction behind a learned pull ("↳ taught 13 Aug —
+  you reassigned the slice on <window>") whenever BECAUSE reads
+  remembered/learned; the Context-rules ledger gains a third
+  **Corrections** segment (searchable audit trail, newest first).
+  Previews (`forgettableWithout`) structurally cannot write history.
+  Manual updated (site + MANUAL.md). 4 new check cases. Linux 800/0,
+  Mac 946/0.
+
 - [x] **Forget aims at what actually decided the slice (diagnosis
   fix 3)** – the Evidence Card's [✕] mirrored TODAY's ladder, so on a
   slice mis-filed by ranked counts it offered to forget the current —

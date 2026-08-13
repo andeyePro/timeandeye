@@ -11,7 +11,9 @@ import timeandeyeTheme
 /// (EmailRule) and Sites (SiteRule + the per-recipe capture toggles strip —
 /// the recipes' privacy-legibility surface).
 struct RulesLedgerView: View {
-    enum Segment: String, CaseIterable { case email = "Email", sites = "Sites" }
+    enum Segment: String, CaseIterable {
+        case email = "Email", sites = "Sites", corrections = "Corrections"
+    }
 
     @ObservedObject var controller: AppController
     @State private var segment: Segment = .email
@@ -50,10 +52,12 @@ struct RulesLedgerView: View {
                 .fixedSize()
                 TextField("search rules…", text: $search)
                     .textFieldStyle(.roundedBorder)
-                Button("Copy rules") {
-                    controller.copyToClipboard(segment == .email
-                        ? controller.rulesExportText() : controller.siteRulesExportText())
-                    rulesCopied = true
+                if segment != .corrections {
+                    Button("Copy rules") {
+                        controller.copyToClipboard(segment == .email
+                            ? controller.rulesExportText() : controller.siteRulesExportText())
+                        rulesCopied = true
+                    }
                 }
                 if rulesCopied {
                     Text("Copied").font(.caption).foregroundStyle(.secondary)
@@ -63,6 +67,7 @@ struct RulesLedgerView: View {
             switch segment {
             case .email: emailSegment
             case .sites: sitesSegment
+            case .corrections: correctionsSegment
             }
             if let deleted = justDeleted {
                 HStack(spacing: 6) {
@@ -133,6 +138,50 @@ struct RulesLedgerView: View {
             Button("Cancel", role: .cancel) { pendingSiteDelete = nil }
         } message: { rules in
             Text(confirmSiteMessage(rules))
+        }
+    }
+
+    // MARK: - Corrections segment (the correction ledger, 13 Aug reply 9)
+
+    /// Read-only history of every learning write — when, which gesture, on
+    /// what window, teaching what. The forget affordances stay on the
+    /// Evidence Card (where the live context is); this list is the audit
+    /// trail that makes "based on a past correction" accountable.
+    @ViewBuilder private var correctionsSegment: some View {
+        let needle = search.lowercased()
+        let rows = controller.correctionRecords.filter { rec in
+            needle.isEmpty
+                || rec.app.lowercased().contains(needle)
+                || (rec.windowTitle?.lowercased().contains(needle) ?? false)
+                || (rec.tabURL?.lowercased().contains(needle) ?? false)
+                || controller.name(of: rec.target).lowercased().contains(needle)
+        }
+        if rows.isEmpty {
+            Text(search.isEmpty
+                 ? "No corrections recorded yet — the ledger starts with the first teach after this update."
+                 : "No corrections match the search.")
+                .font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(rows.prefix(300)) { rec in
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(rec.at.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(.secondary)
+                            Text(rec.isForget
+                                 ? "forgot \(controller.name(of: rec.target))"
+                                 : "\(AppController.gestureLabels[rec.gesture] ?? rec.gesture) → \(controller.name(of: rec.target))")
+                                .font(.caption)
+                        }
+                        Text(rec.windowTitle ?? rec.tabURL ?? rec.app)
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+            .listStyle(.inset)
         }
     }
 
