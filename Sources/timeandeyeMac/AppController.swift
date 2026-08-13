@@ -2970,10 +2970,15 @@ public final class AppController: ObservableObject {
     /// the notification and the published count.
     private let undoStack = UndoStack()
     @Published package private(set) var undoCount = 0
+    @Published package private(set) var redoCount = 0
 
-    private func registerUndo(_ label: String, inverse: @escaping () async -> Void) {
-        undoStack.register(label, inverse: inverse)
+    /// `redo` (optional): an id-stable replay per the 2026-08-13 undo-redo
+    /// spec's conversion rule — supplying it makes the step ⌘⇧Z-able.
+    private func registerUndo(_ label: String, redo: (() async -> Void)? = nil,
+                              inverse: @escaping () async -> Void) {
+        undoStack.register(label, inverse: inverse, redo: redo)
         undoCount = undoStack.count
+        redoCount = undoStack.redoCount
     }
 
     /// Bundle every mutation in `body` into ONE undo step (a handle drag that
@@ -2991,16 +2996,36 @@ public final class AppController: ObservableObject {
     private var undoChain: Task<Void, Never>?
 
     package func undo() {
-        guard let last = undoStack.pop() else {
-            NSSound(named: "Funk")?.play()
-            return
-        }
-        undoCount = undoStack.count
-        notifyContent(symbol: "arrow.uturn.backward", text: last.label, sound: "Pop")
         let previous = undoChain
         undoChain = Task { @MainActor in
             await previous?.value      // inverse N completes before N+1 starts
-            await last.inverse()
+            if let label = await undoStack.performUndo() {
+                // The notice names what JUST changed (his 22 Jul silent
+                // mystery-undo), and the banner now floats above the popover.
+                notifyContent(symbol: "arrow.uturn.backward",
+                              text: "undid — \(label)", sound: "Pop")
+            } else {
+                NSSound(named: "Funk")?.play()
+            }
+            undoCount = undoStack.count
+            redoCount = undoStack.redoCount
+        }
+    }
+
+    /// ⌘⇧Z (his 23 Jul call; urgent since reply 12's overshoot). Same serial
+    /// chain as undo, so an inverse and a replay can never interleave.
+    package func redo() {
+        let previous = undoChain
+        undoChain = Task { @MainActor in
+            await previous?.value
+            if let label = await undoStack.performRedo() {
+                notifyContent(symbol: "arrow.uturn.forward",
+                              text: "redid — \(label)", sound: "Pop")
+            } else {
+                NSSound(named: "Funk")?.play()
+            }
+            undoCount = undoStack.count
+            redoCount = undoStack.redoCount
         }
     }
 
@@ -3012,8 +3037,12 @@ public final class AppController: ObservableObject {
     private func installUndoKey() {
         undoKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.modifierFlags.contains(.command),
-               event.charactersIgnoringModifiers == "z" {
-                self?.undo()
+               event.charactersIgnoringModifiers?.lowercased() == "z" {
+                if event.modifierFlags.contains(.shift) {
+                    self?.redo()      // ⌘⇧Z
+                } else {
+                    self?.undo()
+                }
                 return nil
             }
             return event
@@ -6059,7 +6088,9 @@ enum Notifier {
 
         let p = NSPanel(contentRect: rect, styleMask: [.nonactivatingPanel, .borderless],
                         backing: .buffered, defer: false)
-        p.level = .statusBar
+        // Above the menu-bar popover (reply 12: the undo notice was hidden
+        // behind it — .statusBar sits below the popover's .popUpMenu level).
+        p.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true

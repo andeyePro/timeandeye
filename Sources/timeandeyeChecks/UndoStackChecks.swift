@@ -209,4 +209,70 @@ func undoStackChecks(_ c: Checks) async {
         try expectEq(journal, pristine,
                      "one undo restores the exact pre-edit rows, never a fused row")
     }
+
+    // MARK: - Redo (2026-08-13 undo-redo spec)
+
+    await c.check("redoable entry: ⌘Z arms ⌘⇧Z, ⌘⇧Z re-applies and re-arms ⌘Z") {
+        let u = UndoStack()
+        var value = 0
+        // The forward action sets value=1; a converted site registers both
+        // the snapshot inverse AND the id-stable replay.
+        value = 1
+        u.register("set to 1", inverse: { value = 0 }, redo: { value = 1 })
+        try expectEq(u.count, 1); try expectEq(u.redoCount, 0)
+
+        let undone = await u.performUndo()
+        try expectEq(undone, "set to 1")
+        try expectEq(value, 0, "undo restored the snapshot")
+        try expectEq(u.count, 0); try expectEq(u.redoCount, 1)
+
+        let redone = await u.performRedo()
+        try expectEq(redone, "set to 1")
+        try expectEq(value, 1, "redo replayed the forward action")
+        try expectEq(u.count, 1, "the step is back on the undo stack")
+        try expectEq(u.redoCount, 0)
+
+        _ = await u.performUndo()
+        try expectEq(value, 0, "the returned entry's inverse is still valid after a redo")
+    }
+
+    await c.check("a legacy entry (no replay, silent inverse) is a redo boundary") {
+        let u = UndoStack()
+        u.register("legacy A", inverse: { })
+        u.register("redoable B", inverse: { }, redo: { })
+        _ = await u.performUndo()                 // B → redo armed
+        try expectEq(u.redoCount, 1)
+        _ = await u.performUndo()                 // A → boundary: redo clears
+        try expectEq(u.redoCount, 0, "undoing past a non-redoable step clears redo — never skips it")
+        let redone = await u.performRedo()
+        try expectEq(redone, nil, "⌘⇧Z at a boundary is honestly empty")
+    }
+
+    await c.check("a self-re-registering inverse sustains undo/redo indefinitely; a fresh edit clears redo") {
+        let u = UndoStack()
+        var value = 0
+        // The full NSUndoManager discipline: every run of the action
+        // registers the inverse ACTION (not a one-shot restore), so
+        // undo↔redo can ping-pong forever.
+        func setValue(_ v: Int) {
+            let old = value
+            value = v
+            u.register("set value", inverse: { setValue(old) })
+        }
+        setValue(1)
+        try expectEq(u.count, 1)
+
+        _ = await u.performUndo()
+        try expectEq(value, 0)
+        try expectEq(u.redoCount, 1, "the inverse's own registration became the redo entry")
+        _ = await u.performRedo()
+        try expectEq(value, 1, "redo replays the forward action")
+        try expectEq(u.count, 1, "…whose registration re-armed undo")
+        _ = await u.performUndo()
+        try expectEq(value, 0)
+        try expectEq(u.redoCount, 1, "self-sustaining: still redoable on the second lap")
+        // A NEW ordinary edit invalidates any armed redo future.
+        u.register("fresh edit", inverse: { })
+        try expectEq(u.redoCount, 0, "a fresh edit clears the redo stack")
+    }
 }

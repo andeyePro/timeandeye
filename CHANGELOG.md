@@ -2,6 +2,23 @@
 
 ## 2026-08-13
 
+- [x] **⌘⇧Z redo + transparent, always-visible undo notices (his 23 Jul
+  call + reply 12)** – `UndoStack` gains a redo stack with NSUndoManager-
+  style routing (spec: docs/superpowers/specs/2026-08-13-undo-redo-core.md):
+  registrations made while an inverse runs become the redo entry;
+  registrations made while a replay runs rebuild the undo entry; converted
+  sites can pass an explicit id-stable `redo:` closure; undoing a
+  non-redoable legacy step clears redo honestly (⌘⇧Z never silently skips
+  a step); any fresh edit invalidates the redo future. `AppController`
+  gains `redo()` (⌘⇧Z on the same key monitor, same serial chain as undo
+  so inverses and replays never interleave). Every ⌘Z/⌘⇧Z banner now says
+  WHAT it changed ("undid — <label>") — his 22 Jul silent mystery-undo —
+  and the banner floats above the menu-bar popover (it sat at .statusBar,
+  below the popover's level: reply 12's hidden notice). 3 new UndoStack
+  checks incl. the self-re-registering ping-pong. Site conversions
+  (live pick/Stop, billable marks, forget family) follow per the spec's
+  batches. Manual updated. Linux 805/0, Mac 951/0.
+
 - [x] **Billable state visible where it lives (reply 12's badge half)** –
   "you don't see what's billable anywhere": every effectively-billable
   timeline slice now wears the user's currency symbol bottom-left (same

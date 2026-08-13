@@ -550,6 +550,10 @@ control). Each shortcut works while that window (or the popover) is frontmost.
 - **⌘Z** - undo, as many times as you like: task switches, timeline edits,
   review sweeps, pins and learned rules, colours, deletes - each press steps
   one action back. The history lasts until you quit Time&I.
+- **⌘⇧Z** - redo. Overshoot your undos and step forward again; a small
+  banner names what each ⌘Z / ⌘⇧Z just changed, so nothing is ever a
+  mystery. Some undone steps can't be re-applied safely - redo goes
+  quiet there rather than skipping them.
 
 ### Popover
 
