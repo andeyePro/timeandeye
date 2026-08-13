@@ -455,14 +455,14 @@ struct SettingsView: View {
                             selection: hexColourBinding(\.colourLow, fallback: .systemRed))
                 ColorPicker("High-certainty colour",
                             selection: hexColourBinding(\.colourHigh, fallback: .systemGreen))
-                Text("Set both to the same colour to disable colour signalling.")
+                // The two ways to switch colour signalling off sit together,
+                // contrasted, or they read as duplicates (Martin, 2026-08-13).
+                Toggle("Monochrome menu bar", isOn: $controller.settings.menuMonochrome)
+                Text("No colour at all: macOS tints the item like its own menu-bar icons (adapts to light/dark). Prefer one fixed colour of your choosing instead? Set both pickers above to it.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show certainty %", isOn: $controller.settings.showPercent)
                 Toggle("Draw in certainty", isOn: $controller.settings.menuDrawInCertainty)
                 Text("The mark draws on in proportion to certainty — just the eye when unsure, the whole &I when certain.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Monochrome menu bar", isOn: $controller.settings.menuMonochrome)
-                Text("The item goes template-mono, tinted by macOS like its own icons. Colour signalling is off while this is on.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Stepper(controller.settings.menuTaskChars == 0

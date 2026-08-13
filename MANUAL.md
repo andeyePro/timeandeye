@@ -428,11 +428,11 @@ in the Time Donut legend also offers **Shade tasks around this**.
   review. Push the slider past 100% to never auto-push and review everything.
 - **Comments** - auto-comment time entries (the apps/docs used), and whether
   a typed note goes to the time entry, the task's feed, or both.
-- **Menu bar** - the low/high certainty colours, a certainty %, **Draw in
-  certainty** (the mark strokes in proportion to certainty, eye first),
-  **Monochrome menu bar** (template-mono like macOS's own items; colour
-  signalling off while on), and how many letters of the task name show
-  after the time.
+- **Menu bar** - the low/high certainty colours, **Monochrome menu bar**
+  (template-mono like macOS's own items — no colour at all; for one fixed
+  colour of your own, set both certainty colours to it), a certainty %,
+  **Draw in certainty** (the mark strokes in proportion to certainty, eye
+  first), and how many letters of the task name show after the time.
 - **Popover default mode** - "Reassign" (default) or "Switch to".
 - **Donut button opens** - Timeline / Last viewed / Donut.
 - **Switch Buffer** and grace windows, idle and sleep handling.

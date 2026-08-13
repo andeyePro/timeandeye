@@ -49,9 +49,13 @@
   entries posted to OpenProject look mis-filed" notice (odd under
   Connections) and make its review link HIGHLIGHT the suspect entries on
   the timeline (today it opens a bare timeline with no indication).
-- [ ] Monochrome menu bar redundancy (reply 11): the Palettes pane already
-  says "Set both to the same colour to disable colour signalling" — work
-  out why Monochrome exists as well; remove or clearly differentiate.
+- [x] Monochrome menu bar redundancy (reply 11) — DONE 2026-08-13: NOT
+  redundant (same-colour = one fixed colour of your choosing; Monochrome =
+  macOS template tint matching the system's own icons, adapts light/dark),
+  but the two no-colour affordances sat far apart and read as duplicates.
+  Monochrome now sits directly under the colour pickers with a caption
+  contrasting the two; manual (site + MANUAL.md) synced. Suite 933/0 on
+  the bridge.
 - [ ] Billable visibility + redo (reply 12): billable state must be visible
   where entries/tasks/projects render (badge or symbol — today it shows
   nowhere outside Settings); ⌘⇧Z REDO (raises the existing undo-stack item
