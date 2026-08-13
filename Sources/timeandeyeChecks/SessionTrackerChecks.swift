@@ -721,6 +721,35 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[1].end, t(180))
     }
 
+    c.check("relabel moves ONLY the current tab's stretch; earlier surfaces bank as they stood") {
+        // Reassign scope (2026-07-17 decision, built 13 Aug): 9 minutes on
+        // surface A tracked happily as op(1), then a switch to surface B —
+        // reassigning to op(2) from B must bank A's stretch as op(1) and
+        // move only B's time, NOT re-tag the whole session.
+        let (tracker, _) = makeTracker()
+        var sessions: [Session] = []
+        tracker.onSession = { sessions.append($0) }
+
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Ghostty", "timeandeye", at: 0)))
+        tracker.handle(.focus(sig("Chrome", "ambi4 docs", at: 540)))   // closes A's span
+        tracker.relabelCurrentSession(to: .op(2))
+        guard case .tracking(.task(.op(2)), _) = tracker.state else {
+            throw CheckFailure(description: "relabel holds op(2), got \(tracker.state)")
+        }
+        // The pre-stretch time flushed immediately, as it stood.
+        try expectEq(sessions.count, 1, "surface A's stretch banks at the reassign")
+        try expectEq(sessions[0].task, TaskRef.op(1))
+        try expectEq(sessions[0].start, t(0))
+        try expectEq(sessions[0].end, t(540))
+
+        tracker.stop(at: t(600))
+        let op2 = sessions.filter { $0.task == .op(2) }
+        try expectEq(op2.count, 1, "surface B's stretch is the corrected slice")
+        try expectEq(op2.first?.start, t(540))
+        try expectEq(op2.first?.end, t(600))
+    }
+
     c.check("relabelCurrentSession re-tags every accumulated span, not just the future") {
         // Correct a mis-attributed RUNNING session: the elapsed (already-closed)
         // span re-attributes to the new task too, so the whole slice journals as

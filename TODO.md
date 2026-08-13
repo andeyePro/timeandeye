@@ -38,10 +38,12 @@
   "what has each correction since decided" reverse index, deferred until
   provenance can carry a correction id (needs a primed-store schema
   change — design first).
-- [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
-  10m total", menu bar keeps the running total, the reassign row clearly
-  acts on the small figure; relabel touches only the current tab/window
-  span (the 2026-07-17 decision below — build both halves together).
+- [x] Reassign scope display (reply 3 = y) — DONE 2026-08-13, both halves
+  (CHANGELOG): relabel banks pre-stretch time as it stood and moves only
+  the current tab/window's contiguous stretch; popover Reassign label
+  shows "moves 1m on this tab · 10m total" when the figures differ.
+  Martin tests for a few days (the 2026-07-17 item below stays open as
+  the feel gate).
 - [ ] Away rescue = MORE AUTO (reply 2, answers the old design question as
   (a)): the engine replays the recorded away evidence and proposes a
   rebuilt timeline the user confirms. PLUS his extension: an end-time edit
@@ -93,8 +95,8 @@
 
 ## Post-flip (2026-07-17)
 
-- [ ] Reassign scope (Martin's call, 2026-07-17; display half approved
-  2026-08-13 — see the 13 Aug programme above, build both together): a
+- [ ] Reassign scope (Martin's call, 2026-07-17; BUILT 2026-08-13 with the
+  display half — this item now tracks only his few-days feel test): a
   Reassign click relabels ONLY the current tab/window's span — the
   assumption is the user was happy with tracking until they switched; no ⌥
   whole-session sweep for now (could extend later if the reassign clearly

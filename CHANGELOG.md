@@ -2,6 +2,20 @@
 
 ## 2026-08-13
 
+- [x] **Reassign moves only the current tab's time — and says so (his
+  2026-07-17 scope call + reply 3's approved display)** –
+  `relabelCurrentSession` now banks everything BEFORE the current
+  tab/window's contiguous stretch to the task it stood as (its own
+  finished slice) and re-points only the stretch itself; a session that
+  never left one surface degrades to exactly the old whole-session
+  relabel (existing checks unchanged). The popover's Reassign mode label
+  shows "moves 1m on this tab · 10m total" whenever the two differ, so
+  the scope is legible before the click; the menu-bar clock keeps the
+  running total, nothing changes meaning when the popover opens
+  (`SessionTracker.currentSurfaceElapsed` /
+  `AppController.reassignScopeCaption`). Manual updated (popover page +
+  MANUAL.md). New scoped-relabel check. Linux 801/0, Mac 947/0.
+
 - [x] **Tab/app switches register in ~0.3 s, not up to 2 s+ (reply 15's
   pause)** – the 2 s sensor poll was the only thing watching for focus
   changes, so every tab switch waited out the tick (plus the AppleScript

@@ -3576,6 +3576,26 @@ public final class AppController: ObservableObject {
         attributor.corrections.newestFirst
     }
 
+    /// "1m on this tab · 10m total" — reply 3's approved reassign-scope
+    /// display: the popover shows BOTH figures (menu bar keeps the running
+    /// total) with the reassign row acting on the small one. Nil when the
+    /// two coincide within a minute (single-surface session — nothing to
+    /// disambiguate) or when not tracking.
+    package func reassignScopeCaption(now: Date = Date()) -> String? {
+        guard case .tracking = trackerState,
+              let onTab = tracker.currentSurfaceElapsed(at: now),
+              let sliceStart = tracker.liveSliceStart else { return nil }
+        let total = now.timeIntervalSince(sliceStart)
+        guard total - onTab >= 60 else { return nil }
+        func text(_ seconds: TimeInterval) -> String {
+            let t = Int(seconds.rounded())
+            if t < 60 { return "<1m" }
+            if t < 3600 { return "\(t / 60)m" }
+            return String(format: "%dh %02dm", t / 3600, (t % 3600) / 60)
+        }
+        return "\(text(onTab)) on this tab · \(text(total)) total"
+    }
+
     /// The live "would then fall back to…" preview — never mutates (see
     /// `Attributor.explainWithout`).
     package func explainWithout(_ u: Attributor.Unlearn, _ signal: ActivitySignal,

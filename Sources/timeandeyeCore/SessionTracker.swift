@@ -309,6 +309,24 @@ package final class SessionTracker {
         guard case .tracking = state else { return }
         pendingSwitch = nil
         pendingNotify = nil
+        // Reassign scope (Martin's 2026-07-17 call, display approved 13 Aug
+        // reply 3): a Reassign relabels ONLY the current tab/window's
+        // stretch — the assumption is the user was happy with the tracking
+        // until they switched here. Everything before the stretch flushes to
+        // the task it stood as, its own finished slice; the current surface
+        // carries on as the corrected task. A session that has only ever
+        // been on this surface has no earlier spans, so this degrades to
+        // exactly the old whole-session relabel.
+        if let cut = currentSurfaceStretchStart(), spans.contains(where: { $0.start < cut }) {
+            let signal = currentSignal
+            let start = currentStart
+            let held = spans.filter { $0.start >= cut }
+            spans = spans.filter { $0.start < cut }
+            flushSessions(asOf: cut)             // pre-stretch time, as it stood
+            spans = held
+            currentSignal = signal
+            currentStart = start
+        }
         // Pinned spans keep their attested target: a rapid pick-comment-pick
         // sequence (Martin's Time&I → Mon&I → Time&I test, 2026-07-09) is a
         // relabel each way, and re-tagging the commented middle stretch
@@ -323,6 +341,27 @@ package final class SessionTracker {
         // here as well double-counted the correction (weight 2 twice).
         state = .tracking(.task(task), certainty: 0.95)
         currentDecision = .userAssigned
+    }
+
+    /// When focus ARRIVED on the current surface, walking back through
+    /// contiguous same-surface spans — the start of the stretch a Reassign
+    /// moves, and the clock behind the popover's "on this tab" figure.
+    private func currentSurfaceStretchStart() -> Date? {
+        guard let signal = currentSignal, var cut = currentStart else { return nil }
+        let key = Surface(signal: signal)
+        for span in spans.reversed() {
+            guard Surface(signal: span.signal) == key else { break }
+            cut = span.start
+        }
+        return cut
+    }
+
+    /// Elapsed on the CURRENT tab/window stretch (what a Reassign would
+    /// move), nil when not tracking. The popover shows this beside the
+    /// slice total so a reassign's scope is legible before the click.
+    package func currentSurfaceElapsed(at now: Date = Date()) -> TimeInterval? {
+        guard case .tracking = state, let start = currentSurfaceStretchStart() else { return nil }
+        return max(0, now.timeIntervalSince(start))
     }
 
     /// Whether a span covers a comment-pinned moment for ITS OWN target —

@@ -886,6 +886,17 @@ struct PopoverView: View {
                 Text(changeMode ? "Reassign" : "Switch to")
                     .font(.caption)
                     .foregroundStyle(inDefaultMode ? .secondary : AndeyeColors.highlight)
+                // Reassign scope, legible BEFORE the click (reply 3 = y): a
+                // reassign moves only the current tab/window's stretch, so
+                // when that differs from the slice total, both figures show
+                // here — the menu bar keeps the running total, nothing
+                // changes meaning when the popover opens.
+                if changeMode, let scope = controller.reassignScopeCaption() {
+                    Text("moves \(scope)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if !inDefaultMode {
                     Button { changeMode = controller.settings.popoverDefaultsToChangeMode } label: {
                         Image(systemName: "xmark.circle")
