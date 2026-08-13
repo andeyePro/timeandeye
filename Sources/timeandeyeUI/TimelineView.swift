@@ -126,6 +126,9 @@ struct TimelineView: View {
     @State private var showAllocatePicker = false
     @State private var barWidth: CGFloat = 900
     @State private var selectedSpanIdx = Set<Int>()
+    // Correction-propagation pass (reply 8): active = the bar is a picker.
+    @State private var propagationActive = false
+    @State private var propagationSelection = Set<UUID>()
     /// Anchor for Finder-style shift-range selection in the window strip.
     @State private var spanAnchor: Int?
     /// Anchor for the same in the slice bar (by slice id).
@@ -177,6 +180,47 @@ struct TimelineView: View {
                     .onChange(of: geo.size.width) { _, w in barWidth = w }
             }
             .frame(height: 96)
+            // Correction propagation (reply 8's picker): a fresh correction
+            // that would also move other entries offers them here — enter
+            // the pass and the bar dims everything irrelevant, outlines the
+            // candidates (all preselected), click toggles, one approve
+            // applies the survivors as your word.
+            if let offer = controller.propagationOffer, editing == nil {
+                HStack(spacing: 8) {
+                    if propagationActive {
+                        Text("Click entries to keep or drop them, then approve.")
+                            .font(.caption)
+                        Spacer()
+                        Button("Move \(propagationSelection.count) to \(controller.name(of: .task(offer.target)))") {
+                            let picked = propagationSelection
+                            propagationActive = false
+                            propagationSelection = []
+                            Task { await controller.applyPropagation(picked) }
+                        }
+                        .font(.caption)
+                        .disabled(propagationSelection.isEmpty)
+                        Button("Cancel") {
+                            propagationActive = false
+                            propagationSelection = []
+                            controller.clearPropagationOffer()
+                        }
+                        .font(.caption)
+                    } else {
+                        Text("That correction could also move \(offer.findings.count) other entr\(offer.findings.count == 1 ? "y" : "ies") to \(controller.name(of: .task(offer.target))).")
+                            .font(.caption)
+                        Spacer()
+                        Button("Review them here") {
+                            propagationActive = true
+                            propagationSelection = Set(offer.findings.map(\.sessionID))
+                        }
+                        .font(.caption)
+                        Button("Not now") { controller.clearPropagationOffer() }
+                            .font(.caption)
+                    }
+                }
+                .padding(6)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            }
             if !selection.isEmpty && editing == nil {
                 reassignBar
             }
@@ -729,8 +773,12 @@ struct TimelineView: View {
         // dimmer.
         let shape = SliceShape(zigzag: isLive)
         let comment = session.comment ?? ""
+        let inPass = propagationActive && controller.propagationOffer != nil
+        let isCandidate = inPass
+            && controller.propagationOffer?.findings.contains { $0.sessionID == session.id } == true
         shape
-            .fill(Color(nsColor: controller.colour(for: session.task)).opacity(0.9))
+            .fill(Color(nsColor: controller.colour(for: session.task))
+                .opacity(inPass && !isCandidate ? 0.25 : 0.9))
             .overlay(alignment: .leading) {
                 if w > 44 {
                     Text(controller.name(of: .task(session.task)))
@@ -805,8 +853,26 @@ struct TimelineView: View {
             // `.local` here is the SLICE's own frame (0..<w); add its x0 to get
             // back to a bar-relative x, so a shift-click's date is exactly
             // where you clicked rather than snapping to the slice's edge.
+            .overlay {
+                if isCandidate {
+                    shape.stroke(propagationSelection.contains(session.id)
+                                 ? Color.accentColor : Color.secondary.opacity(0.5),
+                                 style: StrokeStyle(lineWidth: 2, dash: [4, 2]))
+                }
+            }
             .onTapGesture(coordinateSpace: .local) { location in
-                selectSlice(session, isLive: isLive, atX: x0 + location.x, width: width)
+                if inPass {
+                    // In the pass, a click on a candidate toggles it; clicks
+                    // elsewhere are inert so the picker can't be derailed.
+                    guard isCandidate else { return }
+                    if propagationSelection.contains(session.id) {
+                        propagationSelection.remove(session.id)
+                    } else {
+                        propagationSelection.insert(session.id)
+                    }
+                } else {
+                    selectSlice(session, isLive: isLive, atX: x0 + location.x, width: width)
+                }
             }
             .contextMenu { billableMenu(session) }
     }

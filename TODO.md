@@ -55,12 +55,12 @@
   second forget on the same card unlocks "delete ALL learned experience
   for <task>" (counts + totals + primes toward it; pins/stickies/rules
   stay; one ⌘Z; ledger-journalled). Single-forget behaviour unchanged.
-- [ ] Correction-propagation UI (reply 8, his spec near-verbatim): when an
-  entry is changed, determine whether other entries should change; if so,
-  open a graphical selector — a time bar reaching back to the first entry
-  that could change, irrelevant entries dimmed, click-drag to select or
-  deselect ranges, click to toggle individuals/sub-ranges — then one
-  approve applies the change set.
+- [ ] Correction-propagation UI (reply 8) — v1 SHIPPED 2026-08-13
+  (CHANGELOG): correction gestures offer same-target contradictions on
+  the timeline (dim + dashed candidates, click-toggle, one approve as
+  the user's word). REMAINING polish from his spec: click-DRAG range
+  select/deselect over candidates, and auto-widening the visible window
+  back to the first affected entry.
 - [ ] Settings restructure (reply 10): PARTLY DONE 2026-08-13 — Billing
   section landed (currency + Billable items list, label squish and
   garbled caption fixed, snapshot-verified; CHANGELOG). CLOSED 2026-08-13: the

@@ -2,6 +2,20 @@
 
 ## 2026-08-13
 
+- [x] **Correction propagation — his time-bar picker (reply 8)** – after
+  a correction gesture (popover reassign, timeline reassign/edit/split),
+  the contradiction pass runs immediately and, when the same correction
+  would also move OTHER entries, the timeline offers them: enter the
+  pass and everything irrelevant dims, the candidates wear dashed
+  outlines (all preselected), a click keeps or drops each, and one
+  approve moves the survivors as the user's word (humanWord +
+  TeachScope-gated teaching, one ⌘Z; deselected candidates stay behind
+  as ordinary suggestions; applying never re-offers what was just
+  declined). Rides the refileMode setting — off stays silent. Sub-range
+  drag-toggle and auto-widening the visible window to the earliest
+  candidate are the noted polish tail. Manual updated. Mac 955/0 +
+  snapshots build clean.
+
 - [x] **Away rescue, Mac half — the recovery flow ships (reply 2)** –
   Settings gains an **Away rescue** section: scan finds recorded away
   stretches (contiguous observedWhileAway evidence, 10-min gaps split),

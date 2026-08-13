@@ -1992,6 +1992,7 @@ public final class AppController: ObservableObject {
             attributor.assign(signal, target: .task(ref), tasks: taskCache,
                               gesture: "reassign")
             persistAssociations()
+            offerPropagation(toward: ref)
         }
         teachCalendarRule(to: ref, at: now, in: calendarEventWindow)
         // Preserve the displayed clock onto the corrected task and continue.
@@ -2847,6 +2848,55 @@ public final class AppController: ObservableObject {
 
     /// The suggestion row's "refile all": apply every current suggestion as
     /// one digest (one undo), whatever their scores — the user just said so.
+    // MARK: - Correction propagation (reply 8's time-bar picker)
+
+    /// After a user correction teaches a task, the entries that correction
+    /// would ALSO move (today's-rules contradictions now pointing at the
+    /// same task). The timeline offers them as a dim-and-select pass; the
+    /// user's approval applies them as their word.
+    package struct PropagationOffer: Equatable {
+        package var target: TaskRef
+        package var findings: [ContradictionRefile.Finding]
+    }
+    @Published package private(set) var propagationOffer: PropagationOffer?
+
+    /// Run the contradiction pass NOW (the debounced one is for background
+    /// hygiene; a fresh correction should offer its propagation while the
+    /// gesture is still in hand) and stage the same-target suggestions.
+    /// Respects refileMode: .off never offers; .auto has already moved the
+    /// confident ones, so only the residue offers.
+    private var suppressPropagationOffer = false
+
+    private func offerPropagation(toward ref: TaskRef) {
+        // Applying an approved propagation routes through the same reassign
+        // path — re-offering the candidates the user JUST deselected would
+        // be nagging, so the apply suppresses the follow-on offer.
+        guard !suppressPropagationOffer else { return }
+        retroPassTimer?.invalidate()
+        runContradictionPass()
+        let hits = refileSuggestions.filter { $0.newTask == ref }
+        propagationOffer = hits.isEmpty ? nil : PropagationOffer(target: ref, findings: hits)
+    }
+
+    package func clearPropagationOffer() { propagationOffer = nil }
+
+    /// Apply the APPROVED subset as the user's word (humanWord certainty,
+    /// TeachScope-gated teaching — the same lane as any bulk reassign);
+    /// deselected candidates simply stay behind as ordinary suggestions.
+    package func applyPropagation(_ selected: Set<UUID>) async {
+        guard let offer = propagationOffer else { return }
+        propagationOffer = nil
+        let ids = Set(offer.findings.map(\.sessionID)).intersection(selected)
+        guard !ids.isEmpty else { return }
+        let sessions = ids.compactMap { try? journal.session(id: $0) }
+        guard !sessions.isEmpty else { return }
+        suppressPropagationOffer = true
+        await reassignTimelineSessions(sessions, to: offer.target)
+        suppressPropagationOffer = false
+        refileSuggestions.removeAll { ids.contains($0.sessionID) }
+        actionNote = "Moved \(sessions.count) more entr\(sessions.count == 1 ? "y" : "ies") → \(name(of: .task(offer.target)))"
+    }
+
     package func applyRefileSuggestions() {
         let findings = refileSuggestions
         guard !findings.isEmpty else { return }
@@ -4806,6 +4856,7 @@ public final class AppController: ObservableObject {
             // corrected slice stuck below the push bar.
             session.certainty = Attributor.humanWord
             teachAssociation(for: session, gesture: "timelineEdit")
+            offerPropagation(toward: session.task)
         }
         // A sub-minute session was marked handled without an OP entry; if an
         // edit grows it to pushable size it must re-enter the push queue.
@@ -5004,6 +5055,7 @@ public final class AppController: ObservableObject {
             // multi-session reassign teach nothing (TeachScope, fix 1).
             teachAssociation(for: session, inSelectionOf: teachSelectionCount)
         }
+        offerPropagation(toward: task)
         await syncIfEnabled()
     }
 
@@ -5220,6 +5272,7 @@ public final class AppController: ObservableObject {
             registerUndo("unteach split") { restoreLearning() }
             for (original, pieces) in work { await replaceSession(original, with: pieces) }
         }
+        offerPropagation(toward: target)
     }
 
     /// Timeline span-select "Allocate": the counterpart to `splitAndReassign`
