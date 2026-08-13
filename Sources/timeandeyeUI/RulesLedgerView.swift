@@ -40,6 +40,17 @@ struct RulesLedgerView: View {
     // must not change a row's identity while it's expanded).
     @State private var expanded: Set<String> = []
     @State private var rulesCopied = false
+    // Corrections segment: expanded rows + their computed reverse-index
+    // summaries (cached per expansion; the query is bounded but not free).
+    @State private var expandedCorrections = Set<UUID>()
+    @State private var correctionImpacts: [UUID: CorrectionImpact.Summary] = [:]
+
+    private func impactDuration(_ seconds: TimeInterval) -> String {
+        let t = Int(seconds.rounded())
+        if t < 60 { return "<1m" }
+        if t < 3600 { return "\(t / 60)m" }
+        return String(format: "%dh %02dm", t / 3600, (t % 3600) / 60)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -177,8 +188,36 @@ struct RulesLedgerView: View {
                         Text(rec.windowTitle ?? rec.tabURL ?? rec.app)
                             .font(.caption2).foregroundStyle(.secondary)
                             .lineLimit(1)
+                        // The reverse index (reply 9): click a teach row to
+                        // see what it has since decided.
+                        if expandedCorrections.contains(rec.id),
+                           let impact = correctionImpacts[rec.id] {
+                            if impact.isEmpty {
+                                Text("hasn't decided any entries since")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                            } else {
+                                Text("since decided \(impact.hits.count) entr\(impact.hits.count == 1 ? "y" : "ies") · \(impactDuration(impact.totalSeconds))"
+                                     + (impact.hits.contains { !$0.exactSurface }
+                                        ? " (some via same-app pull, not this exact window)" : ""))
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
                     .padding(.vertical, 1)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if expandedCorrections.contains(rec.id) {
+                            expandedCorrections.remove(rec.id)
+                        } else {
+                            expandedCorrections.insert(rec.id)
+                            if !rec.isForget, correctionImpacts[rec.id] == nil {
+                                correctionImpacts[rec.id] = controller.correctionImpact(for: rec)
+                            } else if rec.isForget {
+                                correctionImpacts[rec.id] = .init(hits: [], totalSeconds: 0)
+                            }
+                        }
+                    }
                 }
             }
             .listStyle(.inset)

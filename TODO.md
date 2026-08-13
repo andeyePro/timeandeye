@@ -34,10 +34,11 @@
   now in. Ledger (a)+(b) LANDED same day (CorrectionLedger + card
   naming + Corrections segment — CHANGELOG). Latency (e) LANDED
   2026-08-13 (event-driven early poll — CHANGELOG; needs Martin's
-  on-device feel, no off-device check possible). Remaining: the deeper
-  "what has each correction since decided" reverse index, deferred until
-  provenance can carry a correction id (needs a primed-store schema
-  change — design first).
+  on-device feel, no off-device check possible). The reverse index LANDED
+  2026-08-13 (CorrectionImpact, computed at view time — exact for
+  prime-decided slices, honestly-flagged same-app pull for ranked ones;
+  no schema change needed — CHANGELOG). The #1-priority programme is now
+  fully built; what remains everywhere is Martin's on-device feel.
 - [x] Reassign scope display (reply 3 = y) — DONE 2026-08-13, both halves
   (CHANGELOG): relabel banks pre-stretch time as it stood and moves only
   the current tab/window's contiguous stretch; popover Reassign label

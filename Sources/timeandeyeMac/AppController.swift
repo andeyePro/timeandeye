@@ -3702,6 +3702,25 @@ public final class AppController: ObservableObject {
         attributor.corrections.newestFirst
     }
 
+    /// The reverse index (reply 9): which slices this correction has since
+    /// decided. On-demand per expanded row; one bounded spans query pairs
+    /// each session with its deciding surface (the contradiction pass's own
+    /// batch pattern).
+    package func correctionImpact(for record: CorrectionLedger.Record) -> CorrectionImpact.Summary {
+        let to = Date()
+        let from = max(record.at, to.addingTimeInterval(-30 * 86_400))
+        let sessions = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID }
+        guard !sessions.isEmpty else { return .init(hits: [], totalSeconds: 0) }
+        let spans = (try? journal.spans(from: from, to: to)) ?? []
+        let paired = sessions.map { s in
+            (session: s,
+             surface: FocusSpan.dominant(among: spans, from: s.start, to: s.end)
+                .map { Surface(signal: $0.signal) })
+        }
+        return CorrectionImpact.summary(for: record, sessions: paired)
+    }
+
     /// "1m on this tab · 10m total" — reply 3's approved reassign-scope
     /// display: the popover shows BOTH figures (menu bar keeps the running
     /// total) with the reassign row acting on the small one. Nil when the

@@ -2,6 +2,20 @@
 
 ## 2026-08-13
 
+- [x] **Ledger reverse index + the suite now compiles the UI** – the last
+  piece of reply 9's ledger ask ("showing me what has been corrected
+  based on what correction"): click a Corrections row and it shows what
+  that correction has since decided — entries, total time, and an honest
+  flag when some of it was same-app ranked pull rather than the exact
+  window. Computed at view time (`CorrectionImpact`, Core-checked): for
+  prime-decided slices the surface match is exact; for ranked ones any
+  stored back-pointer would be no less approximate, so no persisted
+  schema changed. And `timeandeyeChecks` gains `timeandeyeUI` as a
+  macOS-conditional dependency, so the Mac suite now COMPILES the whole
+  SwiftUI layer every run — the structural fix for the 13 Aug dangling-
+  @ViewBuilder incident (the Linux subset is untouched). 2 new checks.
+  Linux 812/0, Mac 958/0.
+
 - [x] **End-time-orphan auto-apply (fromClaude answer 4, default-go)** –
   trimming an entry's start/end in the editor now auto-fills any vacated
   stretch that recorded windows still cover but no entry does:

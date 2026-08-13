@@ -58,6 +58,12 @@ let package = Package(
                           dependencies: ["timeandeyeCore", "timeandeyeStore",
                                          .target(name: "timeandeyeMac", condition: .when(platforms: [.macOS])),
                                          .target(name: "timeandeyeTheme", condition: .when(platforms: [.macOS])),
+                                         // UI rides along on macOS so `swift run
+                                         // timeandeyeChecks` COMPILES the SwiftUI
+                                         // layer (no suite imports it): a dangling
+                                         // @ViewBuilder shipped green 2026-08-13
+                                         // because nothing here built it.
+                                         .target(name: "timeandeyeUI", condition: .when(platforms: [.macOS])),
                                          .target(name: "timeandeyePhone", condition: .when(platforms: [.macOS, .iOS, .linux]))]),
         // Headless end-to-end against a REAL OpenProject as a test user:
         // swift run timeandeyeIntegration <base-url> <key-file>

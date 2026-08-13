@@ -202,7 +202,9 @@ segment's rules on the clipboard as plain text.
 
 A third **Corrections** segment is the audit trail of everything Time&I has
 been taught: every pick, reassign, review assign and forget, with when it
-happened, which gesture taught it, and on which window. When the Evidence
+happened, which gesture taught it, and on which window. Click a correction
+to see what it has since decided - how many entries, how much time, and
+whether any of that was same-app pull rather than the exact window. When the Evidence
 Card says a task was "remembered from a past correction" or chosen on
 learned associations, the card also names that exact correction — so you
 can always see what a surprising attribution traces back to.
