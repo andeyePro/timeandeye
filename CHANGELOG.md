@@ -2,6 +2,14 @@
 
 ## 2026-08-13
 
+- [x] **Redo conversions: billable marks + forget family (spec batches
+  3-4)** – the three billable setters (entry override, project flag,
+  task tri-state — reply 12's exact overshoot case) and both forgets
+  (single + delete-all-experience) now carry id-stable replays, so
+  ⌘⇧Z re-applies them cleanly after an overshoot. Review/timeline
+  conversions (batch 5) stay pending their id-stability audit;
+  unconverted steps remain honest redo boundaries. Mac 951/0.
+
 - [x] **Live picks and Stop join ⌘Z (spec batch 2)** – picking a task in
   the popover registers "switch to <task>": ⌘Z un-teaches the pick
   (attributor + calendar-rule snapshots restore) and puts the clock back

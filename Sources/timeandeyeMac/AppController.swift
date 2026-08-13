@@ -3686,7 +3686,14 @@ public final class AppController: ObservableObject {
         attributor.forgetAllExperience(for: target, signal: signal)
         persistAssociations()
         tracker.reevaluate()
-        registerUndo("restore learned experience for \(name(of: target))") { [weak self] in
+        registerUndo("restore learned experience for \(name(of: target))",
+                     redo: { [weak self] in
+            guard let self else { return }
+            self.attributor.forgetAllExperience(for: target, signal: signal)
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }) { [weak self] in
             guard let self else { return }
             self.attributor.primedSurfaces = savedPrimes
             self.attributor.replaceLearning(savedLearning)
@@ -3748,7 +3755,15 @@ public final class AppController: ObservableObject {
         attributor.forget(u, signal: signal)
         persistAssociations()
         tracker.reevaluate()
-        registerUndo(forgetUndoLabel(u)) { [weak self] in
+        // Redoable (spec batch 4): the replay re-runs the same forget —
+        // pure store ops, id-stable by construction.
+        registerUndo(forgetUndoLabel(u), redo: { [weak self] in
+            guard let self else { return }
+            self.attributor.forget(u, signal: signal)
+            self.persistAssociations()
+            self.tracker.reevaluate()
+            self.objectWillChange.send()
+        }) { [weak self] in
             guard let self else { return }
             self.attributor.emailRules = savedRules
             self.attributor.siteRules = savedSiteRules
@@ -5813,7 +5828,12 @@ public final class AppController: ObservableObject {
             leftBehind: billing.manuallySetTasks(in: members),
             strandedSeconds: strandedFinanceSeconds(tasks: Set(members.map(\.ref))))
         let previous = billing
-        registerUndo("mark \(name) \(billable ? "billable" : "non-billable")") { [weak self] in
+        registerUndo("mark \(name) \(billable ? "billable" : "non-billable")",
+                     redo: { [weak self] in
+            self?.billing.setProject(key, billable: billable)
+            self?.saveBilling()
+            self?.scheduleBillableSync()
+        }) { [weak self] in
             self?.billing = previous
             self?.saveBilling()
         }
@@ -5838,7 +5858,12 @@ public final class AppController: ObservableObject {
             name: task.subject, billable: becomesBillable, leftBehind: [],
             strandedSeconds: strandedFinanceSeconds(tasks: [task.ref]))
         let previous = billing
-        registerUndo("billable setting \(task.subject)") { [weak self] in
+        registerUndo("billable setting \(task.subject)",
+                     redo: { [weak self] in
+            self?.billing.setTask(task.ref, state: state)
+            self?.saveBilling()
+            self?.scheduleBillableSync()
+        }) { [weak self] in
             self?.billing = previous
             self?.saveBilling()
         }
@@ -5899,7 +5924,16 @@ public final class AppController: ObservableObject {
         guard var row = try? journal.session(id: session.id),
               row.billableOverride != override else { return }
         let previous = row.billableOverride
-        registerUndo("billable mark \(name(of: .task(row.task)))") { [weak self] in
+        // Redoable (spec batch 3): the replay is an id-keyed flag write —
+        // exactly the overshoot case reply 12 hit (many ⌘Z, no ⌘⇧Z back).
+        registerUndo("billable mark \(name(of: .task(row.task)))",
+                     redo: { [weak self] in
+            guard let self, var current = try? self.journal.session(id: session.id) else { return }
+            current.billableOverride = override
+            try? self.journal.update(current)
+            self.updateJournalSummary()
+            self.scheduleBillableSync()
+        }) { [weak self] in
             guard let self, var current = try? self.journal.session(id: session.id) else { return }
             current.billableOverride = previous
             try? self.journal.update(current)
