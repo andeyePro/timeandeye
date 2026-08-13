@@ -2,6 +2,19 @@
 
 ## 2026-08-13
 
+- [x] **Mis-filed POSTED entries are marked where you look (reply 10)** –
+  the Posting-health "review them on the timeline" link used to open a
+  bare timeline with no indication of which entries were suspect. The
+  contradiction pass now publishes the flagged sessions themselves
+  (`contradictedPostedFindings`); the timeline gives each an orange
+  outline + ⚠ with a tooltip naming where today's rules would file it,
+  and the same notice appears in the Review window (cross-link — the
+  Connections placement stays, it IS posting health). Posted money still
+  never moves off a pass. Also settled reply 10's "no Donut section":
+  none was ever built — the feel-test listed one in error; the donut
+  controls live under Behaviour ("Donut button opens") and the Time
+  Donut's own legend. Manual updated. Linux 801/0, Mac 947/0.
+
 - [x] **Reassign moves only the current tab's time — and says so (his
   2026-07-17 scope call + reply 3's approved display)** –
   `relabelCurrentSession` now banks everything BEFORE the current

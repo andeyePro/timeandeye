@@ -757,6 +757,27 @@ struct TimelineView: View {
                 }
             }
             .overlay(shape.stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
+            // Posted entries today's rules contradict wear a standing orange
+            // outline + ⚠ (reply 10: the Posting-health "review them on the
+            // timeline" link used to land on a bare timeline with nothing
+            // marked). Money never moves off a pass, so the mark is the
+            // whole affordance — the tooltip says what today's rules would
+            // say, the editor is one click away.
+            .overlay {
+                if controller.contradictedPostedFindings[session.id] != nil {
+                    shape.stroke(Color.orange, lineWidth: selected ? 1 : 2)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if controller.contradictedPostedFindings[session.id] != nil, w > 16 {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.orange)
+                        .padding(.bottom, 2)
+                        .padding(.trailing, isLive ? 8 : 3)
+                        .allowsHitTesting(false)
+                }
+            }
             .frame(width: w, height: 44)
             // Handles overlaid AFTER the frame so the HStack spans the slice
             // width (previously sized to nothing → handles only landed on the
@@ -766,7 +787,10 @@ struct TimelineView: View {
             // The hover tooltip carries the comment too, so reading one needs
             // no click even on a sliver too thin for the bubble.
             .help("\(controller.name(of: .task(session.task)))  \(slot(session))"
-                  + (comment.isEmpty ? "" : "\n\(comment)"))
+                  + (comment.isEmpty ? "" : "\n\(comment)")
+                  + (controller.contradictedPostedFindings[session.id].map {
+                      "\n⚠ posted, but today's rules would say \(controller.name(of: .task($0.newTask)))"
+                  } ?? ""))
             // `.local` here is the SLICE's own frame (0..<w); add its x0 to get
             // back to a bar-relative x, so a shift-click's date is exactly
             // where you clicked rather than snapping to the slice's edge.

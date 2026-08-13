@@ -34,6 +34,7 @@ import timeandeyeMac
 /// is deliberately NO whole-day confirm.
 struct ReviewView: View {
     @ObservedObject var controller: AppController
+    @Environment(\.openWindow) private var openWindow
     /// The selection (`ReviewSelection`, Core-checked): a flat set of slice
     /// ids plus the span anchor — a "selected group" is just all of its
     /// slices being members.
@@ -867,6 +868,26 @@ struct ReviewView: View {
                 Button("Dismiss") { controller.dismissRefileSuggestions() }
                     .font(.caption)
                     .help("Never suggest these again")
+            }
+            .padding(6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        }
+        // POSTED entries today's rules contradict live in Review too now
+        // (reply 10: "Connections seems an odd place to hide" the notice —
+        // it stays in Posting health, this is the cross-link where mis-filed
+        // things conceptually live). The jump lands on a timeline where the
+        // suspects wear an orange outline + ⚠.
+        if controller.contradictedPostedCount > 0 {
+            HStack(spacing: 8) {
+                Text("\(controller.contradictedPostedCount) already-posted entr\(controller.contradictedPostedCount == 1 ? "y looks" : "ies look") mis-filed — never moved automatically")
+                    .font(.caption).foregroundStyle(.orange)
+                Spacer()
+                Button("Review on the timeline (marked ⚠)") {
+                    controller.timeWindowView = .timeline
+                    openWindow(id: "time")
+                    AndeyeWindows.activateOnceVisible(opened: "time")
+                }
+                .font(.caption).buttonStyle(.link)
             }
             .padding(6)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))

@@ -67,9 +67,11 @@ The card shows, top to bottom:
   (never ones you assigned or pinned) refile automatically when a later
   correction or rule confidently contradicts them - batched into the same
   "recently cleared - undo" receipt as the retro pass, so being right
-  costs you nothing; already-posted entries are flagged in Posting health
-  instead of moved; weaker contradictions appear as one "look mis-filed"
-  row in Review with refile-all and dismiss. If something LEARNED
+  costs you nothing; already-posted entries are never moved - they're
+  flagged in Posting health and Review, and marked ⚠ on the timeline with
+  a tooltip saying where today's rules would file them; weaker
+  contradictions appear as one "look mis-filed" row in Review with
+  refile-all and dismiss. If something LEARNED
   drove the decision, a **✕ forget** (or **✕ suppress** for a learned
   association, which can't be deleted outright, only counter-taught) removes
   exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you

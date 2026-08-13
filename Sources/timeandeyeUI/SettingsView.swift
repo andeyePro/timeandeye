@@ -326,7 +326,7 @@ struct SettingsView: View {
                         HStack(spacing: 4) {
                             Text("\(controller.contradictedPostedCount) entr\(controller.contradictedPostedCount == 1 ? "y" : "ies") posted to \(name) look\(controller.contradictedPostedCount == 1 ? "s" : "") mis-filed under today's rules —")
                                 .font(.caption).foregroundStyle(.orange)
-                            Button("review them on the timeline") {
+                            Button("review them on the timeline (marked ⚠)") {
                                 controller.timeWindowView = .timeline
                                 openWindow(id: "time")
                                 AndeyeWindows.activateOnceVisible(opened: "time")

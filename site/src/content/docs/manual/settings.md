@@ -98,7 +98,9 @@ bound to the same value, so you can enter a figure directly.
   one-click Retry) and a count of entries that disagree with your journal
   and can't be fixed automatically (usually because they're locked into an
   invoice), plus a "review them on the timeline" link when posted entries
-  look mis-filed under today's rules. Ordinary edits and deletions of
+  look mis-filed under today's rules — the timeline marks each suspect
+  with an orange outline and ⚠, and its tooltip says where today's rules
+  would file it. The same notice appears in the Review window. Ordinary edits and deletions of
   already-posted time propagate to the backend on their own within a
   minute or two.
 

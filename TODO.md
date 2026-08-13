@@ -63,13 +63,13 @@
   approve applies the change set.
 - [ ] Settings restructure (reply 10): PARTLY DONE 2026-08-13 — Billing
   section landed (currency + Billable items list, label squish and
-  garbled caption fixed, snapshot-verified; CHANGELOG). STILL OPEN: why
-  no "Donut" section is visible (feel-test 10 promised one — the donut
-  controls live under Behaviour/Colours; decide whether to gather them or
-  reword the feel-test); relocate or cross-link the "N entries posted to
-  OpenProject look mis-filed" notice (odd under Connections) and make its
-  review link HIGHLIGHT the suspect entries on the timeline (today it
-  opens a bare timeline with no indication).
+  garbled caption fixed, snapshot-verified; CHANGELOG). CLOSED 2026-08-13: the
+  mis-filed notice now also shows in Review, and the timeline marks each
+  suspect posted entry with an orange outline + ⚠ and a tooltip naming
+  where today's rules would file it (CHANGELOG). The "Donut section"
+  turned out to be a feel-test wording error — no such section was ever
+  built; donut controls live under Behaviour ("Donut button opens") and
+  the Time Donut legend itself; nothing to gather.
 - [x] Monochrome menu bar redundancy (reply 11) — DONE 2026-08-13: NOT
   redundant (same-colour = one fixed colour of your choosing; Monochrome =
   macOS template tint matching the system's own icons, adapts light/dark),

@@ -2642,6 +2642,11 @@ public final class AppController: ObservableObject {
     /// Posted slices today's rules confidently contradict — flagged in
     /// Posting health, never moved.
     @Published package private(set) var contradictedPostedCount = 0
+    /// The flagged POSTED sessions themselves (id → what today's rules would
+    /// say), so the timeline can highlight them when the Posting-health link
+    /// opens it — reply 10: the link used to land on a bare timeline with no
+    /// indication of which entries were suspect.
+    @Published package private(set) var contradictedPostedFindings: [UUID: ContradictionRefile.Finding] = [:]
 
     /// Re-derive recent slices against today's rules and act per the
     /// approved design: engine-decided ≥ bar refile as ONE undoable digest;
@@ -2652,6 +2657,7 @@ public final class AppController: ObservableObject {
         guard settings.refileMode != .off else {
             refileSuggestions = []
             contradictedPostedCount = 0
+            contradictedPostedFindings = [:]
             return
         }
         let bar = settings.certaintyAutoPushThreshold
@@ -2681,6 +2687,7 @@ public final class AppController: ObservableObject {
         guard !sessions.isEmpty else {
             refileSuggestions = []
             contradictedPostedCount = 0
+            contradictedPostedFindings = [:]
             return
         }
         let attributor = self.attributor
@@ -2709,6 +2716,8 @@ public final class AppController: ObservableObject {
                                             dismissed: Set(settings.refileDismissals),
                                             score: scoring)
         contradictedPostedCount = plan.postedFlags.count
+        contradictedPostedFindings = Dictionary(uniqueKeysWithValues:
+            plan.postedFlags.map { ($0.sessionID, $0) })
         // Review mode: nothing moves by itself — confident engine-decided
         // contradictions queue as suggestions alongside the rest.
         if settings.refileMode == .review {
