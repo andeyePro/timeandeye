@@ -2,6 +2,16 @@
 
 ## 2026-08-13
 
+- [x] **Billable state visible where it lives (reply 12's badge half)** –
+  "you don't see what's billable anywhere": every effectively-billable
+  timeline slice now wears the user's currency symbol bottom-left (same
+  corner grammar as the comment bubble; slivers skip it), and the Time
+  Donut legend's TASK rows gain the "billable" capsule the project rows
+  already had — including tasks inheriting it from their project (the
+  exact "I set Ambi4 to be billable and saw nothing" case). Manual
+  updated. ⌘⇧Z redo + the undo-notice z-order remain the reply-12
+  remainder (the undo/redo core item). Linux 802/0, Mac 948/0.
+
 - [x] **Double-forget escalation (reply 4)** – forgetting twice in
   succession on the same slice's card unlocks the deeper clean: "✕ still
   wrong? delete ALL learned experience for <task>" — every learned count

@@ -53,7 +53,10 @@ midnight. Day boundaries are marked with the date.
   hands the decision back to the task and project. The same menu offers
   **Billable: whole task** and **Billable: whole project**, which mark the
   clicked entry and set the task or project billable for future time in one
-  undoable step. The slice editor's footer shows the entry's billable state.
+  undoable step. The slice editor's footer shows the entry's billable state,
+  and every effectively-billable slice wears a small currency-symbol mark
+  in its bottom-left corner on the timeline, so billable state is visible
+  at a glance.
   The live (running) slice has no Billable menu of its own - mark it once it
   ends, or set the task's or project's billable flag directly and the live
   entry inherits it.
@@ -83,6 +86,7 @@ midnight. Day boundaries are marked with the date.
   picker.
 - **Billable flags**: right-click a project or task to mark it billable or
   non-billable (tasks can also inherit from their project); billable rows
-  carry a "billable" label in the legend. Marking a project billable warns
+  carry a "billable" label in the legend (tasks too, including tasks that
+  inherit it from their project). Marking a project billable warns
   you about already-tracked hours that will NOT be invoiced (flips apply to
   new time only) and leaves manually-set tasks as they were.

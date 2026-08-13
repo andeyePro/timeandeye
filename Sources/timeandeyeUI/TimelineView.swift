@@ -778,6 +778,21 @@ struct TimelineView: View {
                         .allowsHitTesting(false)
                 }
             }
+            // Billable state, visible on the entry itself (reply 12: the
+            // marks were invisible everywhere) — the user's currency symbol
+            // in the slice's own label colour, bottom-left, mirroring the
+            // comment bubble's corner grammar. Skipped on slivers.
+            .overlay(alignment: .bottomLeading) {
+                if w > 16, session.id != AppController.liveSessionID,
+                   controller.isSessionBillable(session) {
+                    Text(controller.currencySymbolText)
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(labelColour(for: session.task).opacity(0.75))
+                        .padding(.bottom, 1)
+                        .padding(.leading, 3)
+                        .allowsHitTesting(false)
+                }
+            }
             .frame(width: w, height: 44)
             // Handles overlaid AFTER the frame so the HStack spans the slice
             // width (previously sized to nothing → handles only landed on the

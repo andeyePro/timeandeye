@@ -5784,6 +5784,12 @@ public final class AppController: ObservableObject {
         return report
     }
 
+    /// The symbol billable totals wear — the user's override else the
+    /// locale's own (reply 12: the symbol was invisible outside Settings).
+    package var currencySymbolText: String {
+        settings.currencySymbolOverride ?? CurrencyDefault.symbol()
+    }
+
     /// Effective billability of one journalled entry: its own override when
     /// marked, else its task's resolution — drives the Timeline's checkmarks
     /// and the slice editor's footer.

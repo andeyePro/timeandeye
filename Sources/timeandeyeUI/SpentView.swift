@@ -670,6 +670,18 @@ struct SpentView: View {
                                              marked: isActiveTask(j),
                                              local: local, size: 9)
                                 Text(task.label).lineLimit(1)
+                                // Billable state is visible where it is SET
+                                // (reply 12: "I set Ambi4 to be billable and
+                                // saw nothing") — effective resolution, so an
+                                // inheriting task under a billable project
+                                // reads billable too.
+                                if let ref = task.ref,
+                                   let cached = controller.taskCache.first(where: { $0.ref == ref }),
+                                   controller.isTaskBillable(cached) {
+                                    Text("billable").font(.system(size: 8))
+                                        .padding(.horizontal, 3)
+                                        .background(.quaternary, in: Capsule())
+                                }
                                 Spacer()
                                 Text(hm(task.seconds)).foregroundStyle(.secondary)
                             }
