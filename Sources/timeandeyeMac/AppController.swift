@@ -5176,9 +5176,15 @@ public final class AppController: ObservableObject {
 
     /// Replace a session with split pieces (delete original + OP entry,
     /// create each piece, teach moved pieces). Caller wraps in an undo group.
-    private func replaceSession(_ session: Session, with pieces: [Session]) async {
+    private func replaceSession(_ session: Session, with pieces: [Session],
+                                teaching: Bool = true) async {
         await deleteTimelineSession(session)
         for piece in pieces { await createTimelineSession(piece) }
+        // `teaching: false` = an ENGINE-decided rewrite (the away rescue):
+        // the L2 discipline holds — only a user's own correction gesture may
+        // move the count model, and a rescue's pieces are the engine's read,
+        // not the user's word.
+        guard teaching else { return }
         for piece in pieces where piece.task != session.task {
             teachAssociation(for: piece, gesture: "allocate")
         }
@@ -5248,6 +5254,90 @@ public final class AppController: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Away rescue (reply 2 = more auto; Core planner in AwayRescue)
+
+    /// A recorded away stretch offered for rescue: contiguous
+    /// observedWhileAway evidence (gaps over 10 min split stretches).
+    package struct AwayStretch: Identifiable, Equatable {
+        package var id: Date { start }
+        package var start: Date
+        package var end: Date
+        package var evidenceSeconds: TimeInterval
+    }
+
+    /// Recent rescueable stretches, newest first. On-demand (the Settings
+    /// disclosure's scan button), never on the hot path; bounded by the
+    /// store's 30-day spans horizon anyway (JournalPrune).
+    package func awayStretches(days: Int = 30) -> [AwayStretch] {
+        let to = Date()
+        let from = to.addingTimeInterval(-Double(days) * 86_400)
+        let rows = ((try? journal.spans(from: from, to: to)) ?? [])
+            .filter { $0.observedWhileAway }
+            .sorted { $0.start < $1.start }
+        var out: [AwayStretch] = []
+        for row in rows {
+            if var last = out.last, row.start.timeIntervalSince(last.end) <= 600 {
+                last.end = max(last.end, row.end)
+                last.evidenceSeconds += row.end.timeIntervalSince(row.start)
+                out[out.count - 1] = last
+            } else {
+                out.append(AwayStretch(start: row.start, end: row.end,
+                                       evidenceSeconds: row.end.timeIntervalSince(row.start)))
+            }
+        }
+        return out.reversed()
+    }
+
+    /// The engine's rebuilt-timeline proposal for one stretch.
+    package func awayRescuePreview(_ stretch: AwayStretch) -> AwayRescue.Plan {
+        let evidence = (try? journal.spans(from: stretch.start, to: stretch.end)) ?? []
+        let cache = taskCache
+        return AwayRescue.plan(evidence: evidence, from: stretch.start, to: stretch.end) {
+            [weak self] signal, at in
+            guard let self else { return nil }
+            let e = self.attributor.explain(signal, tasks: cache, now: at)
+            guard let chosen = e.chosen else { return nil }
+            return (chosen, e.chosenScore, SessionProvenance(source: e.source))
+        }
+    }
+
+    /// Apply a confirmed rescue: each proposal carves its range out of the
+    /// overlapping UNPUSHED sessions (posted/locked time is never touched —
+    /// the reply-2 guard) at the ENGINE's certainty and provenance, so
+    /// below-bar pieces arrive red and queue for review instead of passing
+    /// as the user's word. Never teaches (L2: an engine rewrite is not a
+    /// correction). One ⌘Z for the whole rescue.
+    package func applyAwayRescue(_ plan: AwayRescue.Plan) async {
+        guard !plan.isEmpty else { return }
+        var carved = 0
+        await undoGroup("away rescue") {
+            for p in plan.proposals {
+                guard case .task(let ref) = p.target else { continue }
+                let sessions = ((try? journal.sessions(from: p.start.addingTimeInterval(-2),
+                                                       to: p.end.addingTimeInterval(2))) ?? [])
+                    .filter { $0.id != Self.liveCheckpointID && $0.id != Self.liveSessionID
+                                && !$0.pushedToOP }
+                let work = TimelineMath.splitAcross(sessions,
+                                                    reassign: [(p.start, p.end)], to: ref)
+                for (original, pieces) in work {
+                    var adjusted = pieces
+                    for i in adjusted.indices
+                    where adjusted[i].task == ref && adjusted[i].start >= p.start
+                        && adjusted[i].end <= p.end.addingTimeInterval(1) {
+                        adjusted[i].certainty = p.certainty
+                        adjusted[i].provenance = p.provenance
+                    }
+                    await replaceSession(original, with: adjusted, teaching: false)
+                    carved += 1
+                }
+            }
+        }
+        actionNote = carved == 0
+            ? "Nothing to rebuild — that stretch's time is posted or already moved"
+            : "Rebuilt \(plan.proposals.count) stretch\(plan.proposals.count == 1 ? "" : "es") — one ⌘Z restores"
+        updateJournalSummary()
     }
 
     /// Reassign a whole task's period sessions to another task.

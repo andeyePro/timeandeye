@@ -133,6 +133,13 @@ bound to the same value, so you can enter a figure directly.
 
 ### Maintenance
 
+- **Away rescue** - forgot to switch Away off? While Away is pinned, Time&I
+  keeps recording what is actually on screen (evidence only - it never
+  bills or teaches). Pick a recorded stretch, preview the timeline the
+  engine would rebuild from that evidence, and confirm: confident pieces
+  re-file to their real tasks, uncertain ones come back red and queue for
+  review, posted time is never touched, and one ⌘Z restores the lot.
+  Evidence is kept for about 30 days.
 - **Duplicate reconcile** - scans for OpenProject time entries logged twice
   against the same task and minute. Click a match to see every difference
   between its entries, then Apply: the richest entry survives (the others'

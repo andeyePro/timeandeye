@@ -44,13 +44,13 @@
   shows "moves 1m on this tab · 10m total" when the figures differ.
   Martin tests for a few days (the 2026-07-17 item below stays open as
   the feel gate).
-- [ ] Away rescue = MORE AUTO (reply 2, answers the old design question as
-  (a)): the engine replays the recorded away evidence and proposes a
-  rebuilt timeline the user confirms. PLUS his extension: an end-time edit
-  that leaves recorded windows with no task auto-applies the engine's
-  attribution to them — at engine certainty (low confidence stays red and
-  queues), never touching posted/invoice-locked spans, one ⌘Z with the
-  edit.
+- [ ] Away rescue = MORE AUTO (reply 2): the rescue flow SHIPPED
+  2026-08-13 (AwayRescue planner + Settings ▸ Away rescue preview/apply —
+  CHANGELOG; snapshot-verified). REMAINING: his end-time extension — an
+  end-time edit that leaves recorded windows with no task auto-applies
+  the engine's attribution to them at engine certainty, never touching
+  posted/locked, one ⌘Z with the edit (same carve mechanism, hook it into
+  applyTimelineEdit's shrink path).
 - [x] Double-forget escalation (reply 4) — DONE 2026-08-13 (CHANGELOG):
   second forget on the same card unlocks "delete ALL learned experience
   for <task>" (counts + totals + primes toward it; pins/stickies/rules

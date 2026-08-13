@@ -2,6 +2,29 @@
 
 ## 2026-08-13
 
+- [x] **Away rescue, Mac half — the recovery flow ships (reply 2)** –
+  Settings gains an **Away rescue** section: scan finds recorded away
+  stretches (contiguous observedWhileAway evidence, 10-min gaps split),
+  Preview shows the engine's rebuilt timeline (time range → task →
+  certainty, red below the review bar, plus what stays as tracked), and
+  one click applies it — each proposal carves its range out of the
+  overlapping UNPUSHED sessions at the ENGINE's certainty and provenance
+  (below-bar pieces queue for review; posted time never touched; never
+  teaches — L2; one ⌘Z restores the whole rescue). Snapshot-verified.
+  Manual updated (settings page + popover section). Closes the away-mode
+  item's requirement (c); the Mac-half span filters
+  (windowBoundaries/reassignSpentApp/zoom strip) remain the tail.
+
+- [x] **UI compile gate — a real hole closed** – the check suite has no
+  timeandeyeUI dependency, so a UI-only compile break sails through it:
+  a dangling `@ViewBuilder` from the double-forget commit shipped GREEN
+  (8295843..33e9046, caught by the snapshot build ~1h later, fixed here;
+  a type-check-ceiling break in TimelineView's tooltip went with it).
+  CI now also runs `swift build --product timeandeyeApp`, and CLAUDE.md
+  documents the gate. Suite-green claims in the four affected commit
+  messages were true of the suite but NOT of the UI targets — this entry
+  is the correction.
+
 - [x] **Away rescue, Core half (reply 2 = "more auto")** – `AwayRescue.plan`
   replays the observedWhileAway evidence the 7 Aug recording work
   journals: attributes each span via the engine at its own moment, merges

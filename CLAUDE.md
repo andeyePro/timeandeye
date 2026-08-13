@@ -43,9 +43,15 @@ package, not a module in this one.
 ```bash
 rm -rf .build                  # required after any module rename/pull (case-insensitive fs caches by dir name)
 swift run timeandeyeChecks       # the whole suite – expect: TOTAL: N passed, 0 failed
+swift build --product timeandeyeApp  # the UI compile gate – the suite does NOT build timeandeyeUI
 ./scripts/make-app.sh          # build + install timeandeye.app (macOS 14+, CLT only)
 cd ios && xcodegen             # regenerate andeye.xcodeproj after project.yml changes
 ```
+
+The check suite deliberately has no timeandeyeUI dependency, so UI-only
+compile breaks pass it silently – after touching Sources/timeandeyeUI,
+always also build the app product (or `swift run timeandeyeSnapshots`,
+which renders every key view to PNG for visual verification).
 
 No XCTest anywhere – the build Mac has Command Line Tools only, so
 `timeandeyeChecks` is a plain executable that IS the test suite (tiny

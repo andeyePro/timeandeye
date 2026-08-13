@@ -358,7 +358,6 @@ struct EvidenceCardView: View {
 
     // MARK: - Unlearn controls (the card's facts live in `cardFacts`)
 
-    @ViewBuilder
     /// How many forgets this card presentation has performed, and toward
     /// whom the last one aimed — a SECOND forget in succession on the same
     /// slice reads as "still wrong, dig deeper" and unlocks the
@@ -366,6 +365,7 @@ struct EvidenceCardView: View {
     @State private var forgetsThisCard = 0
     @State private var lastForgottenTarget: Target?
 
+    @ViewBuilder
     private var unlearnSection: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let u = unlearn {

@@ -801,11 +801,7 @@ struct TimelineView: View {
             .position(x: x0 + w / 2, y: 56)
             // The hover tooltip carries the comment too, so reading one needs
             // no click even on a sliver too thin for the bubble.
-            .help("\(controller.name(of: .task(session.task)))  \(slot(session))"
-                  + (comment.isEmpty ? "" : "\n\(comment)")
-                  + (controller.contradictedPostedFindings[session.id].map {
-                      "\n⚠ posted, but today's rules would say \(controller.name(of: .task($0.newTask)))"
-                  } ?? ""))
+            .help(sliceHelp(session, comment: comment))
             // `.local` here is the SLICE's own frame (0..<w); add its x0 to get
             // back to a bar-relative x, so a shift-click's date is exactly
             // where you clicked rather than snapping to the slice's edge.
@@ -813,6 +809,17 @@ struct TimelineView: View {
                 selectSlice(session, isLive: isLive, atX: x0 + location.x, width: width)
             }
             .contextMenu { billableMenu(session) }
+    }
+
+    /// The slice tooltip, built outside the view chain (the inline
+    /// concatenation pushed slice() past the type-check ceiling).
+    private func sliceHelp(_ session: Session, comment: String) -> String {
+        var text = "\(controller.name(of: .task(session.task)))  \(slot(session))"
+        if !comment.isEmpty { text += "\n\(comment)" }
+        if let finding = controller.contradictedPostedFindings[session.id] {
+            text += "\n⚠ posted, but today's rules would say \(controller.name(of: .task(finding.newTask)))"
+        }
+        return text
     }
 
     // MARK: - Billable (right-click a slice)

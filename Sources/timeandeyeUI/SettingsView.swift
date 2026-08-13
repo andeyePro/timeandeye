@@ -871,7 +871,85 @@ struct SettingsView: View {
             }
     }
 
+    @State private var awayStretches: [AppController.AwayStretch] = []
+    @State private var awayScanned = false
+    @State private var awayPreview: (stretch: AppController.AwayStretch, plan: AwayRescue.Plan)?
+
+    private func rescueDuration(_ seconds: TimeInterval) -> String {
+        let t = Int(seconds.rounded())
+        if t < 60 { return "<1m" }
+        if t < 3600 { return "\(t / 60)m" }
+        return String(format: "%dh %02dm", t / 3600, (t % 3600) / 60)
+    }
+
     @ViewBuilder private var maintenanceSections: some View {
+            // Away rescue (reply 2 = more auto): pick a recorded away
+            // stretch, see the engine's rebuilt timeline, one click applies
+            // it (engine certainty — low-confidence pieces queue for
+            // review), one ⌘Z restores. Evidence lives ~30 days.
+            Section("Away rescue") {
+                Text("Forgot to switch Away off? Time&I kept recording what was on screen. Pick a stretch and it rebuilds that timeline from the evidence — you confirm before anything changes.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(awayScanned ? "Rescan" : "Find recorded away stretches") {
+                    awayStretches = controller.awayStretches()
+                    awayScanned = true
+                    awayPreview = nil
+                }
+                if awayScanned && awayStretches.isEmpty {
+                    Text("No recorded away evidence in the last 30 days.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(awayStretches) { stretch in
+                    HStack {
+                        Text("\(stretch.start.formatted(date: .abbreviated, time: .shortened)) – \(stretch.end.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption)
+                        Spacer()
+                        Text(rescueDuration(stretch.evidenceSeconds) + " observed")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Button("Preview") {
+                            awayPreview = (stretch, controller.awayRescuePreview(stretch))
+                        }
+                        .font(.caption)
+                    }
+                }
+                if let preview = awayPreview {
+                    if preview.plan.isEmpty {
+                        Text("Nothing attributable in that stretch — it stays as tracked.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(preview.plan.proposals.enumerated()), id: \.offset) { _, p in
+                            HStack(spacing: 6) {
+                                Text("\(p.start.formatted(date: .omitted, time: .shortened)) – \(p.end.formatted(date: .omitted, time: .shortened))")
+                                Text(controller.name(of: p.target))
+                                Text("\(Int((p.certainty * 100).rounded()))%")
+                                    .foregroundStyle(p.certainty < 0.6 ? .red : .secondary)
+                                Spacer()
+                                Text(p.app).foregroundStyle(.secondary)
+                            }
+                            .font(.caption2)
+                            .padding(.leading, 8)
+                        }
+                        HStack(spacing: 4) {
+                            Text("\(rescueDuration(preview.plan.keptSeconds)) stays as tracked.")
+                                .font(.caption2).foregroundStyle(.secondary)
+                            Button("Rebuild this stretch") {
+                                let plan = preview.plan
+                                awayPreview = nil
+                                Task { await controller.applyAwayRescue(plan) }
+                            }
+                            .font(.caption)
+                        }
+                        Text("Applies at the engine's own certainty — uncertain pieces come back red and queue for review; posted time is never touched; one ⌘Z restores the lot.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let note = controller.actionNote {
+                    Text(note).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+
             Section("Maintenance") {
                 HStack {
                     Button(scanning ? "Scanning…" : "Scan for duplicate OpenProject entries") {
