@@ -1759,17 +1759,29 @@ struct TimelineView: View {
                                 }
                             }
                         },
-                        // The slice's journalled outcome: what this window's
-                        // time actually STANDS as. The card anchors BECAUSE
-                        // on it whenever today's re-derivation disagrees —
-                        // rules learned since tracking must not read as the
-                        // reason (Martin's 2026-07-10 report).
-                        recorded: .init(target: .task(session.task),
-                                        certainty: session.certainty,
-                                        at: spans[i].start,
-                                        end: spans[i].end,
-                                        provenance: spans[i].provenance
-                                            ?? session.provenance),
+                        // The recorded line must be ONE decision's story,
+                        // never a composite (2026-08-13 diagnosis, fix 4:
+                        // pairing the SLICE's task+certainty with the SPAN's
+                        // own provenance produced "= insurance 87% – follows
+                        // Brain2", a sentence no single attribute() call ever
+                        // said). A span that carries its own provenance shows
+                        // its own decision whole — target, certainty and
+                        // reason; a legacy span (nil provenance) falls back
+                        // to the session's triple, equally whole. The card
+                        // still anchors BECAUSE on the recorded story
+                        // whenever today's re-derivation disagrees (Martin's
+                        // 2026-07-10 report).
+                        recorded: spans[i].provenance != nil
+                            ? .init(target: spans[i].target,
+                                    certainty: spans[i].certainty,
+                                    at: spans[i].start,
+                                    end: spans[i].end,
+                                    provenance: spans[i].provenance)
+                            : .init(target: .task(session.task),
+                                    certainty: session.certainty,
+                                    at: spans[i].start,
+                                    end: spans[i].end,
+                                    provenance: session.provenance),
                         // "+ all" lives top-right OF THE CARD (Martin,
                         // 2026-07-11 — that's where he looks for it): one
                         // click extends the selection to every window in
