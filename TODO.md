@@ -77,11 +77,12 @@
   Monochrome now sits directly under the colour pickers with a caption
   contrasting the two; manual (site + MANUAL.md) synced. Suite 933/0 on
   the bridge.
-- [ ] Billable visibility + redo (reply 12): billable state must be visible
-  where entries/tasks/projects render (badge or symbol — today it shows
-  nowhere outside Settings); ⌘⇧Z REDO (raises the existing undo-stack item
-  below from planned to user-hurting); the undo/redo notice must never
-  hide behind the Time&I popover.
+- [ ] Billable visibility + redo (reply 12): badge half DONE 2026-08-13
+  (currency mark on billable timeline slices; "billable" capsule on donut
+  legend task rows incl. inherited — CHANGELOG; landed in be829e4, TODO
+  note followed one commit late). REMAINING: ⌘⇧Z REDO (raises the
+  existing undo-stack item from planned to user-hurting); the undo/redo
+  notice must never hide behind the Time&I popover.
 - [x] Agent UI visibility (reply 10) — DONE 2026-08-13: timeandeyeSnapshots
   + SnapshotHarness render every Settings pane, popover, Review and rules
   ledger to PNG over the bridge (NSHostingView offscreen — ImageRenderer
