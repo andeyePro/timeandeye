@@ -52,12 +52,18 @@ package enum AwayRescue {
     /// - minSlice: proposals shorter than this are noise and stay pinned.
     /// - attribute: the engine at the span's own moment. Returning nil (or
     ///   a non-task target) leaves that evidence with the pinned task.
+    /// `requireAwayMarked: false` is the END-TIME-ORPHAN mode (13 Aug
+    /// reply 2's extension): the vacated stretch's evidence is ordinary
+    /// recorded windows, not the away shadow track — same replay, same
+    /// guards.
     package static func plan(evidence: [FocusSpan], from: Date, to: Date,
                             minSlice: TimeInterval = 60,
+                            requireAwayMarked: Bool = true,
                             attribute: (ActivitySignal, Date) -> (target: Target, certainty: Double, provenance: SessionProvenance?)?)
         -> Plan {
         let window = evidence
-            .filter { $0.observedWhileAway && $0.end > from && $0.start < to }
+            .filter { (!requireAwayMarked || $0.observedWhileAway)
+                        && $0.end > from && $0.start < to }
             .sorted { $0.start < $1.start }
         var runs: [Proposal] = []
         for span in window {

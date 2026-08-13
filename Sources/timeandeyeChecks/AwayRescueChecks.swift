@@ -69,6 +69,22 @@ func awayRescueChecks(_ c: Checks) {
         try expectClose(plan.keptSeconds, 900, "non-away and sub-floor evidence stays pinned")
     }
 
+    c.check("orphan mode (requireAwayMarked false) accepts ordinary recorded windows") {
+        // The end-time-orphan auto-apply replays NORMAL spans — the vacated
+        // stretch was tracked time, not the away shadow track.
+        let normal = FocusSpan(target: .task(.op(9)), certainty: 0.8,
+                               signal: ActivitySignal(app: "obsidian", windowTitle: "notes",
+                                                      timestamp: t(0)),
+                               start: t(0), end: t(300), provenance: nil)
+        let away = AwayRescue.plan(evidence: [normal], from: t(0), to: t(300),
+                                   attribute: engine)
+        try expect(away.isEmpty, "away mode still ignores non-away rows")
+        let orphan = AwayRescue.plan(evidence: [normal], from: t(0), to: t(300),
+                                     requireAwayMarked: false, attribute: engine)
+        try expectEq(orphan.proposals.count, 1)
+        try expectEq(orphan.proposals[0].target, Target.task(.op(1)))
+    }
+
     c.check("a merged run keeps its strongest reading") {
         let confident: (ActivitySignal, Date) -> (target: Target, certainty: Double, provenance: SessionProvenance?)? = { sig, _ in
             (.task(.op(1)), sig.windowTitle == "strong" ? 0.95 : 0.5,

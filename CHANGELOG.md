@@ -2,6 +2,16 @@
 
 ## 2026-08-13
 
+- [x] **End-time-orphan auto-apply (fromClaude answer 4, default-go)** –
+  trimming an entry's start/end in the editor now auto-fills any vacated
+  stretch that recorded windows still cover but no entry does:
+  `AwayRescue.plan` in orphan mode (`requireAwayMarked: false` — same
+  replay, same guards) attributes the uncovered subranges at the
+  engine's certainty and provenance (below-bar arrives red and queues),
+  interval-subtracts anything a neighbouring session still covers, never
+  teaches (L2), and folds into the SAME ⌘Z as the edit. Manual updated.
+  +1 orphan-mode check. Linux 810/0, Mac 956/0, app product builds.
+
 - [x] **Correction propagation — his time-bar picker (reply 8)** – after
   a correction gesture (popover reassign, timeline reassign/edit/split),
   the contradiction pass runs immediately and, when the same correction

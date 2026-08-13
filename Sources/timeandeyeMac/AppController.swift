@@ -4798,6 +4798,62 @@ public final class AppController: ObservableObject {
         await syncIfEnabled()
     }
 
+    /// fromClaude answer 4 (default-go): an edit that VACATES a stretch
+    /// still covered by recorded windows auto-applies the engine over the
+    /// uncovered parts — at engine certainty (below-bar arrives red and
+    /// queues), never touching anything another session still covers, all
+    /// inside the caller's undo group so the whole thing is one ⌘Z with
+    /// the edit. Never teaches (L2).
+    private func autoApplyOrphanedWindows(from: Date, to: Date) async {
+        guard to.timeIntervalSince(from) >= 60 else { return }
+        let neighbours = ((try? journal.sessions(from: from, to: to)) ?? [])
+            .filter { $0.id != Self.liveCheckpointID && $0.end > from && $0.start < to }
+            .sorted { $0.start < $1.start }
+        var uncovered: [(Date, Date)] = [(from, to)]
+        for n in neighbours {
+            var next: [(Date, Date)] = []
+            for (lo, hi) in uncovered {
+                if n.end <= lo || n.start >= hi { next.append((lo, hi)); continue }
+                if n.start > lo { next.append((lo, n.start)) }
+                if n.end < hi { next.append((n.end, hi)) }
+            }
+            uncovered = next
+        }
+        let evidence = (try? journal.spans(from: from, to: to)) ?? []
+        let cache = taskCache
+        var created: [Session] = []
+        for (lo, hi) in uncovered where hi.timeIntervalSince(lo) >= 60 {
+            let plan = AwayRescue.plan(evidence: evidence, from: lo, to: hi,
+                                       requireAwayMarked: false) { [weak self] signal, at in
+                guard let self else { return nil }
+                let e = self.attributor.explain(signal, tasks: cache, now: at)
+                guard let chosen = e.chosen else { return nil }
+                return (chosen, e.chosenScore, SessionProvenance(source: e.source))
+            }
+            for prop in plan.proposals {
+                guard case .task(let ref) = prop.target else { continue }
+                var row = Session(task: ref, start: prop.start, end: prop.end,
+                                  certainty: prop.certainty)
+                row.provenance = prop.provenance
+                try? journal.save(row)
+                created.append(row)
+            }
+        }
+        guard !created.isEmpty else { return }
+        let ids = created.map(\.id)
+        registerUndo("un-fill \(created.count) auto-applied entr\(created.count == 1 ? "y" : "ies")") { [weak self] in
+            guard let self else { return }
+            for id in ids {
+                if let row = try? self.journal.session(id: id) {
+                    await self.deleteTimelineSession(row, undoable: false)
+                }
+            }
+        }
+        actionNote = "Auto-filled \(created.count) uncovered entr\(created.count == 1 ? "y" : "ies") from the recorded windows"
+        updateJournalSummary()
+        await syncIfEnabled()
+    }
+
     /// Persist a timeline edit; PATCH the OP entry when one exists.
     package func applyTimelineEdit(_ session: Session, undoable: Bool = true) async {
         if undoable,
@@ -4867,6 +4923,15 @@ public final class AppController: ObservableObject {
         }
         try? journal.update(session)
         try? journal.escalateOrigin(session.id, to: .edited)
+        // Vacated stretches with recorded windows auto-fill (answer 4).
+        if let previous {
+            if session.end < previous.end {
+                await autoApplyOrphanedWindows(from: session.end, to: previous.end)
+            }
+            if session.start > previous.start {
+                await autoApplyOrphanedWindows(from: previous.start, to: session.start)
+            }
+        }
         if let backend, backend.owns(session.task),
            let taskID = session.task.backendTaskID, let entryID = session.opTimeEntryID {
             // Lock law (spec §The lock law): never AMEND an invoice-locked

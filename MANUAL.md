@@ -397,6 +397,11 @@ midnight. Day boundaries are marked with the date.
   The live (running) slice has no Billable menu of its own - mark it once it
   ends, or set the task's or project's billable flag directly and the live
   entry inherits it.
+- **Auto-fill on trim**: shrink an entry's start or end in the editor and,
+  if the vacated stretch still has recorded windows with no entry covering
+  them, Time&I re-files that time from the evidence automatically - at the
+  engine's own certainty, so anything uncertain arrives red and queues for
+  review. It all rides the same single ⌘Z as the edit.
 - **Allocate a stretch**: shift-drag (or shift-click, then shift-click again to
   extend) selects a time range, shown as a translucent band with its start and
   end - it isn't bound to any slice's edges, so it can cut straight through

@@ -46,11 +46,10 @@
   the feel gate).
 - [ ] Away rescue = MORE AUTO (reply 2): the rescue flow SHIPPED
   2026-08-13 (AwayRescue planner + Settings ▸ Away rescue preview/apply —
-  CHANGELOG; snapshot-verified). REMAINING: his end-time extension — an
-  end-time edit that leaves recorded windows with no task auto-applies
-  the engine's attribution to them at engine certainty, never touching
-  posted/locked, one ⌘Z with the edit (same carve mechanism, hook it into
-  applyTimelineEdit's shrink path).
+  CHANGELOG; snapshot-verified). His end-time extension LANDED
+  later same day (orphan-mode planner + applyTimelineEdit hook —
+  CHANGELOG). The 13 Aug away-rescue decision is now fully built; only
+  the older away item's Mac-half span filters remain (below).
 - [x] Double-forget escalation (reply 4) — DONE 2026-08-13 (CHANGELOG):
   second forget on the same card unlocks "delete ALL learned experience
   for <task>" (counts + totals + primes toward it; pins/stickies/rules
