@@ -2127,24 +2127,36 @@ public final class AppController: ObservableObject {
         // journal/timeline stay untouched, but no sticky, no learned
         // association, no future clock-stop lean.
         if target.teachesAttributor {
-            // Teach from EVERY distinct surface covered by the selection —
-            // the old first(where:) taught only the first row (approvals-
-            // drawer spec §1 side-bug), throwing away the rest of the evidence.
-            let signals = pendingReview.teachingSignals(for: Set(ids))
-            for signal in signals {
-                attributor.assign(signal, target: target, tasks: taskCache)
+            // Teach from every distinct surface covered by the selection —
+            // but at TeachScope's duration-scaled weight, and skipping
+            // sub-floor surfaces entirely in a multi-surface sweep (no count
+            // teach, no prime): a flit row riding along in a bulk assign is
+            // not something the user demonstrably meant (2026-08-13
+            // diagnosis, fix 1 — this path taught AND primed every surface
+            // at full +2, mechanism 3 of the over-learning report). A
+            // single-surface assign is the user's direct word and teaches at
+            // full strength whatever its duration.
+            let weighted = pendingReview.teachingSignalsWithDurations(for: Set(ids))
+            var taught: [ActivitySignal] = []
+            for entry in weighted {
+                guard let w = TeachScope.reviewTeachWeight(
+                    coveredDuration: entry.covered,
+                    surfaceCount: weighted.count) else { continue }
+                attributor.assign(entry.signal, target: target, tasks: taskCache, weight: w)
+                taught.append(entry.signal)
             }
             // Calendar teach, same Unknown-guarded shape as the live paths —
             // the review queue's own signals are typically PAST timestamps
             // (unlike userPicked/changeCurrentTask's "now"), so this checks
-            // the cached lookback window rather than the live one.
+            // the cached lookback window rather than the live one. Only
+            // taught surfaces teach a calendar rule too.
             if case .task(let ref) = target {
                 let lookback = calendarLookbackEvents()
-                for signal in signals {
+                for signal in taught {
                     teachCalendarRule(to: ref, at: signal.timestamp, in: lookback)
                 }
             }
-            if !signals.isEmpty { persistAssociations() }
+            if !taught.isEmpty { persistAssociations() }
         }
         reloadReview()
     }
@@ -4658,12 +4670,22 @@ public final class AppController: ObservableObject {
 
     /// Teach the attributor the dominant surface→task association inside a
     /// reassigned session, so future time on that window stops mis-filing.
-    private func teachAssociation(for session: Session) {
+    /// `inSelectionOf` is the size of the gesture that carried this session:
+    /// in a multi-session reassign, a sub-floor session is a flit riding
+    /// along and teaches nothing (TeachScope, 2026-08-13 diagnosis fix 1 —
+    /// mechanism 2: a short session dominated by a flit taught and primed
+    /// that flit's surface at full strength). Single-session gestures
+    /// (timeline editor, hand-drawn splits/allocations) keep count 1 and
+    /// always teach — the user pointed at that exact thing.
+    private func teachAssociation(for session: Session, inSelectionOf count: Int = 1) {
         // Unknown task category: re-pointing to Unknown is an explicit
         // "don't know", not a correction — same guard `assignReview` applies
         // (Target.teachesAttributor), so a span allocated to Unknown via any
         // of this helper's callers never masquerades as learned evidence.
         guard Target.task(session.task).teachesAttributor else { return }
+        guard TeachScope.bulkReassignTeaches(
+            sessionDuration: session.end.timeIntervalSince(session.start),
+            selectionCount: count) else { return }
         guard let dominant = dominantSpan(of: session) else { return }
         attributor.assign(dominant.signal, target: .task(session.task), tasks: taskCache)
         persistAssociations()
@@ -4759,6 +4781,7 @@ public final class AppController: ObservableObject {
                 restoreLearning()
             }
         }
+        let teachSelectionCount = sessions.filter { $0.id != Self.liveSessionID }.count
         for var session in sessions where session.id != Self.liveSessionID {
             // Re-creating under the new task is simpler and more reliable than
             // PATCHing the work-package link. Sever the old linkage honouring
@@ -4777,7 +4800,9 @@ public final class AppController: ObservableObject {
             session.certainty = Attributor.humanWord
             try? journal.update(session)
             try? journal.escalateOrigin(session.id, to: .edited)
-            teachAssociation(for: session)   // stop the same window mis-filing again
+            // Stop the same window mis-filing again — but flit sessions in a
+            // multi-session reassign teach nothing (TeachScope, fix 1).
+            teachAssociation(for: session, inSelectionOf: teachSelectionCount)
         }
         await syncIfEnabled()
     }

@@ -159,6 +159,7 @@ var suites: [(String, (Checks) -> Void)] = [
     ("DominantSpan", dominantSpanChecks),
     ("CertaintyCalculus", certaintyCalculusChecks),
     ("AttributionLearning", attributionLearningChecks),
+    ("TeachScope", teachScopeChecks),
 ]
 var asyncSuites: [(String, (Checks) async -> Void)] = [
     ("UndoStack", undoStackChecks),

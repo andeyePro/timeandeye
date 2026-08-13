@@ -26,9 +26,11 @@
   (e) cut the user-visible pause before tracking follows a tab change.
   PROGRESS 2026-08-13: fixes 2/5/6 LANDED (specificity blend, surface-key
   normalisation + primed.json migration, prime-displacement discount —
-  CHANGELOG this date; fix 6 flagged in fromClaude). Remaining: fixes 1
-  (duration-gated teaches), 3 (forget refiles), 4 (card certainty/
-  provenance pairing), then the ledger (a)+(b) and latency (e).
+  CHANGELOG this date; fix 6 flagged in fromClaude). Fixes 1 (TeachScope
+  duration-gated/weighted bulk teaches) and 4 (card never mixes slice
+  certainty with span provenance) LANDED later same day. Remaining: fix 3
+  (forget refiles the recorded slice + forgettable targets recorded
+  provenance), then the ledger (a)+(b) and latency (e).
 - [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
   10m total", menu bar keeps the running total, the reassign row clearly
   acts on the small figure; relabel touches only the current tab/window

@@ -567,16 +567,26 @@ package extension Array where Element == ReviewSegment {
     /// each surface's signal carries the union of its rows' evidence — the
     /// same merge rule `SessionTracker.queueReview` applies at queue time.
     func teachingSignals(for ids: Set<UUID>) -> [ActivitySignal] {
+        teachingSignalsWithDurations(for: ids).map(\.signal)
+    }
+
+    /// `teachingSignals` plus each surface's covered duration (the summed
+    /// span of its selected rows) — the input `TeachScope.reviewTeachWeight`
+    /// scales bulk-assign teaching by (2026-08-13 diagnosis, fix 1).
+    func teachingSignalsWithDurations(for ids: Set<UUID>)
+        -> [(signal: ActivitySignal, covered: TimeInterval)] {
         var indexOf: [String: Int] = [:]
-        var out: [ActivitySignal] = []
+        var out: [(signal: ActivitySignal, covered: TimeInterval)] = []
         for s in self where ids.contains(s.id) {
             let key = "\(s.app)|\(s.windowTitle ?? "")|\(s.tabURL ?? "")"
+            let duration = Swift.max(0, s.end.timeIntervalSince(s.start))
             if let i = indexOf[key] {
-                out[i].mergeEmailEvidence(correspondents: s.correspondents,
-                                          subject: s.emailSubject)
+                out[i].covered += duration
+                out[i].signal.mergeEmailEvidence(correspondents: s.correspondents,
+                                                 subject: s.emailSubject)
             } else {
                 indexOf[key] = out.count
-                out.append(s.signal)
+                out.append((s.signal, duration))
             }
         }
         return out

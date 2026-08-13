@@ -773,8 +773,12 @@ package final class Attributor {
     /// so it never calls this (Target.teachesAttributor, 2026-07-10).
     /// A durable email rule is no longer written here either (2026-07-03 spec
     /// §5.4) — see `confirm` (including its `tasks` note).
+    /// `weight` defaults to the full confirmation +2; bulk gestures pass the
+    /// duration-scaled weight `TeachScope.reviewTeachWeight` hands them
+    /// (2026-08-13 diagnosis, fix 1) so a briefly-seen surface in a sweep
+    /// carries proportionally less conviction into the count model.
     package func assign(_ signal: ActivitySignal, target: Target,
-                       tasks: [WorkTask] = [], now: Date = Date()) {
+                       tasks: [WorkTask] = [], weight: Double = 2, now: Date = Date()) {
         let displaced = recordDisplaced(signal, by: target, tasks: tasks, now: now)
         recordSticky(signal, target: target, now: now)
         let surface = Surface(signal: signal)
@@ -784,9 +788,10 @@ package final class Attributor {
             primedSurfaces[surface] = nil
         }
         if pendingPrime?.surface == surface { pendingPrime = nil }
-        // One operator call: reinforce +2, subtract from the displaced belief
-        // only when it was engine-ranked (B9). Same correction as `confirm`.
-        learning.correct(signal, to: target, weight: 2,
+        // One operator call: reinforce, subtract from the displaced belief
+        // only when it was engine-ranked or a standing prime (B9 + fix 6).
+        // Same correction as `confirm`.
+        learning.correct(signal, to: target, weight: weight,
                          displacingRanked: rankedDisplaced(displaced),
                          disabledRecipes: disabledSiteRecipes)
     }

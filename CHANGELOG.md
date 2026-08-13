@@ -2,6 +2,28 @@
 
 ## 2026-08-13
 
+- [x] **Bulk gestures teach only what the user meant (diagnosis fix 1)** –
+  `TeachScope` (Core, checked on Linux): in a multi-session timeline
+  reassign, sub-2-minute sessions teach nothing (their flit surfaces no
+  longer get taught AND primed at full confirmation strength — mechanism 2
+  of the 13 Aug diagnosis); in a multi-surface review assign (drawer
+  sweep, AI paste, walk-through confirm all route here), sub-floor
+  surfaces are skipped outright and the rest teach at a covered-duration-
+  scaled weight (full +2 only from 5 min of evidence — mechanism 3).
+  Single-target gestures (one slice, one hand-drawn range, one row)
+  always teach full-strength: the user pointed at that exact thing.
+  `Attributor.assign` gains a `weight:` parameter;
+  `teachingSignalsWithDurations` carries per-surface covered time.
+  4 new TeachScope checks. Linux 795/0, Mac 941/0.
+
+- [x] **Evidence card never mixes two decisions' stories (diagnosis
+  fix 4)** – the timeline card's recorded line paired the SLICE's
+  task+certainty with the window SPAN's own provenance, producing
+  composites like "= insurance 87% – follows Brain2" that no single
+  engine decision ever said. A span carrying its own provenance now shows
+  its own decision whole (target, certainty, reason); legacy spans fall
+  back to the session's triple, equally whole.
+
 - [x] **Over-learning fix set, Core trio (diagnosis fixes 2/5/6)** – first
   slice of Martin's 13 Aug #1 priority (spec:
   docs/superpowers/specs/2026-08-13-correction-overlearning-diagnosis.md).
