@@ -57,15 +57,15 @@
   that could change, irrelevant entries dimmed, click-drag to select or
   deselect ranges, click to toggle individuals/sub-ranges — then one
   approve applies the change set.
-- [ ] Settings restructure (reply 10): new Billing section holding the
-  currency symbol AND a list of billable projects/tasks (Currency should
-  not be a whole section for one field); fix the currency field's 3-line
-  label squish beside empty space; rewrite the garbled caption below it
-  (two captions run together today); find out why no "Donut" section is
-  visible (feel-test 10 promised one); relocate or cross-link the "N
-  entries posted to OpenProject look mis-filed" notice (odd under
-  Connections) and make its review link HIGHLIGHT the suspect entries on
-  the timeline (today it opens a bare timeline with no indication).
+- [ ] Settings restructure (reply 10): PARTLY DONE 2026-08-13 — Billing
+  section landed (currency + Billable items list, label squish and
+  garbled caption fixed, snapshot-verified; CHANGELOG). STILL OPEN: why
+  no "Donut" section is visible (feel-test 10 promised one — the donut
+  controls live under Behaviour/Colours; decide whether to gather them or
+  reword the feel-test); relocate or cross-link the "N entries posted to
+  OpenProject look mis-filed" notice (odd under Connections) and make its
+  review link HIGHLIGHT the suspect entries on the timeline (today it
+  opens a bare timeline with no indication).
 - [x] Monochrome menu bar redundancy (reply 11) — DONE 2026-08-13: NOT
   redundant (same-colour = one fixed colour of your choosing; Monochrome =
   macOS template tint matching the system's own icons, adapts light/dark),
@@ -78,12 +78,13 @@
   nowhere outside Settings); ⌘⇧Z REDO (raises the existing undo-stack item
   below from planned to user-hurting); the undo/redo notice must never
   hide behind the Time&I popover.
-- [ ] Agent UI visibility (reply 10 — "Can you actually see the UI? Please
-  fix it so you can"): headless SwiftUI snapshot harness — render the key
-  views (Settings panes, popover, evidence card, review) to PNG via
-  ImageRenderer in a Mac-side target run over the build bridge, pull the
-  images back for the session to Read. GUI screencapture is impossible
-  (the scoped ambitick user has no window session); this is the route.
+- [x] Agent UI visibility (reply 10) — DONE 2026-08-13: timeandeyeSnapshots
+  + SnapshotHarness render every Settings pane, popover, Review and rules
+  ledger to PNG over the bridge (NSHostingView offscreen — ImageRenderer
+  placeholder-glyphs AppKit-backed containers); run
+  `bash .vibe/mac-test.sh run timeandeyeSnapshots /tmp/andeye-snaps` then
+  scp the PNGs back and Read them. First use verified + fixed the Billing
+  pane visually (CHANGELOG).
 - [x] Feel-test instruction rule (replies 14/16): every feel-test ships
   step-by-step click paths — adopted 2026-08-13, fromClaude items 1-2
   rewritten to it.

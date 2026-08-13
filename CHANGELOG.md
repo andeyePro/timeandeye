@@ -2,6 +2,31 @@
 
 ## 2026-08-13
 
+- [x] **Headless UI snapshots — the agent can now SEE the app** –
+  Martin's reply 10 ("Can you actually see the UI? Please fix it so you
+  can"). New `timeandeyeSnapshots` executable + `SnapshotHarness` in
+  timeandeyeUI: renders every Settings pane, the popover, Review and the
+  rules ledger to PNG offscreen (NSHostingView + cacheDisplay — chosen
+  over ImageRenderer, which placeholder-glyphs every AppKit-backed
+  container: List, NavigationSplitView, Form) and needs no window
+  session, so it runs over the build bridge and the images pull back for
+  the session to read. `SettingsView` gains an `initialCategory`
+  parameter for pane-addressable rendering. screencapture remains
+  impossible for the scoped build account; this is the eyes route.
+
+- [x] **Settings ▸ Billing — one home, legible (his reply 10, snapshot-
+  verified before/after)** – the Currency category is renamed Billing and
+  rebuilt: the currency-symbol field is a one-line `LabeledContent` with
+  a symbol-sized box (the old Form label column hyphen-wrapped
+  "Curren-cy symbol" over three lines beside a 120pt field); the caption
+  is one plain sentence (the old inline-link HStack scrambled its own
+  reading order when wrapping — his garbled quote reproduced exactly in
+  the snapshot); a new **Billable items** section lists everything
+  currently flagged billable (projects + explicit task overrides,
+  `AppController.billableItems()`) so billable state is finally visible
+  somewhere; Billing mappings unchanged beneath. Manual updated (site
+  settings page + MANUAL.md). Linux 800/0, Mac 946/0.
+
 - [x] **Correction ledger — every teach is journalled and named** –
   Martin's 13 Aug reply 9 ("start tracking all my corrections and showing
   me what has been corrected based on what correction. We need to know how

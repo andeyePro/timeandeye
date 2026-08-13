@@ -36,7 +36,7 @@ package enum SettingsIA {
             case .menuBar:       return "Menu bar"
             case .colours:       return "Colours"
             case .localTasks:    return "Local tasks"
-            case .billing:       return "Currency"
+            case .billing:       return "Billing"
             case .emailCalendar: return "Email & Calendar"
             case .maintenance:   return "Maintenance"
             case .diagnostics:   return "Diagnostics"

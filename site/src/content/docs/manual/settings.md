@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: The Settings window's categories - the auto-push threshold, behaviour, menu bar, colours, local tasks, connections, currency, email and calendar matching, maintenance - and the ⌘F search that finds any setting.
+description: The Settings window's categories - the auto-push threshold, behaviour, menu bar, colours, local tasks, connections, billing, email and calendar matching, maintenance - and the ⌘F search that finds any setting.
 ---
 
 Settings (⌘,) is organised into categories: a sidebar on the left, the
@@ -102,11 +102,14 @@ bound to the same value, so you can enter a figure directly.
   already-posted time propagate to the backend on their own within a
   minute or two.
 
-### Currency
+### Billing
 
 - **Currency symbol** - shown wherever billable totals render; leave blank
-  for your locale's own symbol. Projects default to non-billable - opt them
-  in from the Time Donut legend (right-click a project or task).
+  for your locale's own symbol.
+- **Billable items** - everything currently flagged billable (projects, and
+  tasks with their own override), in one list. Projects and tasks default
+  to non-billable - flag them in the Time Donut legend (right-click a
+  project or task).
 - **Billing mappings** - with a finance backend connected, each billable
   project picks the backend task its time bills to.
 

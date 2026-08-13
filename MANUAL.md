@@ -508,9 +508,11 @@ in the Time Donut legend also offers **Shade tasks around this**.
   calendars to ignore (comma-separated names - birthdays and subscribed
   holiday calendars are already excluded), and how far back the Review
   queue looks for a matching past event.
-- **Currency symbol** - shown wherever billable totals render; leave blank
-  for your locale's own symbol. Projects default to non-billable - opt them
-  in from the Time Donut legend (right-click a project or task).
+- **Billing** - the currency symbol (blank = your locale's own), a
+  **Billable items** list of everything currently flagged billable, and
+  (with a finance backend) the billing mappings. Projects and tasks
+  default to non-billable - flag them in the Time Donut legend
+  (right-click a project or task).
 
 ## Data, sync and safety
 

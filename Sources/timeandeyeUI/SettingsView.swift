@@ -49,7 +49,16 @@ struct SettingsView: View {
 
     /// Which category the sidebar shows; nil only transiently (a sidebar List
     /// selection is Optional) — the detail falls back to .backend.
-    @State private var selectedCategory: SettingsIA.Category? = .tracking
+    /// `initialCategory` exists for the snapshot harness (render a named
+    /// pane headlessly) — in-app construction never passes it.
+    @State private var selectedCategory: SettingsIA.Category?
+    private let initialCategory: SettingsIA.Category
+
+    init(controller: AppController, initialCategory: SettingsIA.Category = .tracking) {
+        self.controller = controller
+        self.initialCategory = initialCategory
+        _selectedCategory = State(initialValue: initialCategory)
+    }
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
 
@@ -746,23 +755,58 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var billingSections: some View {
-            Section("Currency") {
-                TextField("Currency symbol", text: Binding(
-                    get: { controller.settings.currencySymbolOverride ?? "" },
-                    set: { controller.settings.currencySymbolOverride = $0.isEmpty ? nil : $0 }),
-                    prompt: Text(CurrencyDefault.symbol()))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 120)
-                HStack(spacing: 4) {
-                    Text("Shown wherever billable totals appear; leave blank for your locale's symbol (\(CurrencyDefault.symbol())). Projects default to non-billable — opt them in from the")
+            // One Billing home (Martin, 13 Aug reply 10: "Currency isn't
+            // great - one huge menu item for a single setting - this should
+            // be under Billing, which should also have a list of Billable
+            // items"). The label sits on ONE line beside a symbol-sized
+            // field (the old Form label column hyphen-wrapped "Curren-cy
+            // symbol" over three lines beside a 120pt box); the caption is
+            // one plain sentence — the old inline-button HStack scrambled
+            // its own reading order when the text wrapped (snapshot-verified
+            // before and after).
+            Section("Billing") {
+                LabeledContent("Currency symbol") {
+                    TextField("", text: Binding(
+                        get: { controller.settings.currencySymbolOverride ?? "" },
+                        set: { controller.settings.currencySymbolOverride = $0.isEmpty ? nil : $0 }),
+                        prompt: Text(CurrencyDefault.symbol()))
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.center)
+                        .frame(width: 56)
+                        .labelsHidden()
+                }
+                Text("Shown wherever billable totals appear; leave blank for your locale's symbol (\(CurrencyDefault.symbol())).")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // What is actually billable right now — the visibility half of
+            // reply 12 ("you don't see what's billable anywhere") gets its
+            // Settings anchor here; badges elsewhere ride the billable-
+            // visibility TODO item.
+            Section("Billable items") {
+                let items = controller.billableItems()
+                if items.isEmpty {
+                    Text("Nothing is billable yet — projects and tasks default to non-billable.")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(items, id: \.label) { item in
+                        LabeledContent(item.label) {
+                            Text(item.detail).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                HStack(spacing: 4) {
+                    Text("Flag items billable in the").font(.caption).foregroundStyle(.secondary)
                     Button("Time Donut legend") {
                         controller.timeWindowView = .spent
                         openWindow(id: "time")
                         AndeyeWindows.activateOnceVisible(opened: "time")
                     }
                     .buttonStyle(.link).font(.caption)
-                    Text("(right-click a project or task).").font(.caption).foregroundStyle(.secondary)
+                    Text("— right-click a project or task.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
 

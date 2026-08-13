@@ -63,5 +63,12 @@ let package = Package(
         // swift run timeandeyeIntegration <base-url> <key-file>
         .executableTarget(name: "timeandeyeIntegration",
                           dependencies: ["timeandeyeCore", "timeandeyeMac"]),
+        // Headless SwiftUI snapshots (macOS only): renders named UI views to
+        // PNG via ImageRenderer so an agent session can SEE the rendered UI
+        // over the build bridge (screencapture is impossible for the scoped
+        // build account — no window session). Run: swift run timeandeyeSnapshots
+        // [outdir]. Sources are #if os(macOS)-guarded; Linux never builds it.
+        .executableTarget(name: "timeandeyeSnapshots",
+                          dependencies: [.target(name: "timeandeyeUI", condition: .when(platforms: [.macOS]))]),
     ]
 )

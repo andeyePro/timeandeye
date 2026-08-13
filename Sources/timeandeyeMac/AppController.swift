@@ -5623,6 +5623,26 @@ public final class AppController: ObservableObject {
         financeMappings.mappings[key]
     }
 
+    /// Settings ▸ Billing's "Billable items" rows: every project flagged
+    /// billable and every task carrying an explicit override — the one place
+    /// that answers "what is billable right now" (13 Aug reply 10/12).
+    package func billableItems() -> [(label: String, detail: String)] {
+        var out: [(label: String, detail: String)] = []
+        for (key, flag) in billing.projects where flag.billable {
+            let localPrefix = "local/name:"
+            let name = key.hasPrefix(localPrefix)
+                ? String(key.dropFirst(localPrefix.count)) + " (personal)"
+                : taskCache.first { projectKey(for: $0) == key }?.project ?? key
+            out.append((name, "project — billable"))
+        }
+        for (key, flag) in billing.tasks where flag.state != .inherit {
+            let name = taskCache.first { $0.ref.storageKey == key }?.subject ?? key
+            out.append((name, flag.state == .billable
+                        ? "task — billable" : "task — non-billable"))
+        }
+        return out.sorted { $0.label < $1.label }
+    }
+
     /// The Settings gesture: map (or nil = unmap) a source project to a
     /// finance-backend task. Persistence + the criterion-10 reopen ride the
     /// store's change handler.
