@@ -194,16 +194,37 @@ package struct LearningStore: Codable, Equatable, Sendable {
         }
     }
 
+    /// How discriminating a feature is: 1.0 when at most one target holds a
+    /// positive count on it, shrinking as more targets share it
+    /// (1 / (1 + ln n)). A token like "obsidian" or a vault name, taught to
+    /// four projects by four corrections, must not carry a correction's full
+    /// confirmation strength onto every sibling window — that is exactly the
+    /// over-learning mechanism behind the 2026-08-13 diagnosis (a flit
+    /// window inheriting "andeye insurance" at 87% off generic shared
+    /// tokens). A feature only one target has ever been taught keeps weight
+    /// 1.0, so single-target learning — and every check pinned on it — is
+    /// byte-identical to the pre-specificity behaviour.
+    private func specificity(of f: Feature) -> Double {
+        let n = counts[f]?.values.reduce(into: 0) { if $1 > 0 { $0 += 1 } } ?? 0
+        guard n > 1 else { return 1 }
+        return 1 / (1 + log(Double(n)))
+    }
+
     /// Softmax-normalised scores (sum to 1) over `candidates` for this signal.
     package func scores(for signal: ActivitySignal, among candidates: [Target],
                        disabledRecipes: Set<String> = []) -> [Target: Double] {
         guard !candidates.isEmpty else { return [:] }
         let feats = Self.features(from: signal, disabledRecipes: disabledRecipes)
+        // Specificity per feature, computed once (identical for every
+        // candidate — it reads the global count spread, not the candidate).
+        let spec = Dictionary(uniqueKeysWithValues:
+            Set(feats).map { ($0, specificity(of: $0)) })
         var raw: [Target: Double] = [:]
         for t in candidates {
             let total = max(totals[t] ?? 0, 0)
             var logp = 0.0
             var strongMatches = 0
+            var bestSpec = 0.0
             for f in feats {
                 let c = max(counts[f]?[t] ?? 0, 0)
                 // GENERIC features (hourOfDay) are heavily down-weighted: an
@@ -220,8 +241,23 @@ package struct LearningStore: Codable, Equatable, Sendable {
                 // still score below the constant: 1-in-1000 is genuine
                 // negative evidence.
                 if c > 0 {
-                    if f.kind != .hourOfDay { strongMatches += 1 }
-                    logp += kindWeight * log((c + 0.1) / (total + 1))
+                    if f.kind == .hourOfDay {
+                        logp += kindWeight * log((c + 0.1) / (total + 1))
+                    } else {
+                        // A match on a shared-by-many feature is BLENDED
+                        // toward the unmatched constant by its specificity:
+                        // at s=1 (only one target ever taught on it) this is
+                        // exactly the old matched term, and as s falls the
+                        // match converges on "no better than not matching at
+                        // all". Scaling the log-ratio alone would run the
+                        // WRONG way — log-likelihoods are negative, so a
+                        // bare s× made generic matches look stronger.
+                        let s = spec[f] ?? 1
+                        strongMatches += 1
+                        bestSpec = max(bestSpec, s)
+                        logp += kindWeight * (s * log((c + 0.1) / (total + 1))
+                                              + (1 - s) * log(0.1))
+                    }
                 } else {
                     logp += kindWeight * log(0.1)
                 }
@@ -230,8 +266,12 @@ package struct LearningStore: Codable, Equatable, Sendable {
             // constant unmatched penalties, an unconditional log(total+1)
             // made any well-taught target beat untaught ones on signals it
             // knows NOTHING about. Zero strong matches = an untaught
-            // target's score (± the tiny generic terms).
-            if strongMatches > 0 { logp += log(total + 1) }
+            // target's score (± the tiny generic terms). Scaled by the BEST
+            // matched feature's specificity: experience earned entirely on
+            // generic shared tokens must not add a full log(total+1) on top
+            // of an already-diluted match (the 0.2-prior arm of the 87%
+            // mis-read in the 2026-08-13 diagnosis).
+            if strongMatches > 0 { logp += bestSpec * log(total + 1) }
             raw[t] = logp
         }
         let maxV = raw.values.max()!

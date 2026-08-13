@@ -24,6 +24,11 @@
   key normalisation, 6 symmetric discount — 6 surfaced to Martin when
   built, it's flagged an owner call in the attribution-learning spec);
   (e) cut the user-visible pause before tracking follows a tab change.
+  PROGRESS 2026-08-13: fixes 2/5/6 LANDED (specificity blend, surface-key
+  normalisation + primed.json migration, prime-displacement discount —
+  CHANGELOG this date; fix 6 flagged in fromClaude). Remaining: fixes 1
+  (duration-gated teaches), 3 (forget refiles), 4 (card certainty/
+  provenance pairing), then the ledger (a)+(b) and latency (e).
 - [ ] Reassign scope display (reply 3 = y): popover shows "1m on this tab ·
   10m total", menu bar keeps the running total, the reassign row clearly
   acts on the small figure; relabel touches only the current tab/window

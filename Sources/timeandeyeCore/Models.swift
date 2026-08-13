@@ -254,8 +254,69 @@ package struct Surface: Hashable, Codable, Sendable {
             }
             self.detail = detail
         } else {
-            self.detail = signal.windowTitle ?? ""
+            self.detail = Self.normalisedTitleKey(signal.windowTitle ?? "", app: signal.app)
         }
+    }
+
+    /// Title-keyed surface identity, minus the app's own trailing signature.
+    /// Many apps stamp "<document> - <App Name> <version>" into the window
+    /// title (Obsidian: "note - vault - Obsidian 1.13.4"), so a raw-title key
+    /// silently orphans every persisted prime the moment the app updates
+    /// (2026-08-13 over-learning diagnosis, fix 5). Strips ONE trailing
+    /// "<sep> <app name> [version]" segment — separators "-", "–", "—", "|",
+    /// "·" with surrounding spaces; version = dot/digit word, optionally
+    /// v-prefixed; app-name compare is case-insensitive. URL-keyed surfaces
+    /// never reach this (they key on host+path above), and a stray call on
+    /// one is inert: a URL detail never ends with a spaced separator + the
+    /// app's own name.
+    package static func normalisedTitleKey(_ title: String, app: String) -> String {
+        let appName = app.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !appName.isEmpty, !title.isEmpty else { return title }
+        for sep in [" - ", " – ", " — ", " | ", " · "] {
+            guard let range = title.range(of: sep, options: .backwards) else { continue }
+            var tail = String(title[range.upperBound...])
+                .trimmingCharacters(in: .whitespaces)
+            // Drop one trailing version word ("1.13.4", "v2.1") before the
+            // app-name compare.
+            var words = tail.split(separator: " ").map(String.init)
+            if let last = words.last {
+                var v = last.lowercased()
+                if v.hasPrefix("v") { v = String(v.dropFirst()) }
+                if !v.isEmpty, v.allSatisfy({ $0.isNumber || $0 == "." }),
+                   v.first?.isNumber == true {
+                    words.removeLast()
+                }
+            }
+            tail = words.joined(separator: " ")
+            if tail.lowercased() == appName {
+                return String(title[..<range.lowerBound])
+            }
+        }
+        return title
+    }
+
+    /// One-shot migration for maps persisted under pre-normalisation keys
+    /// (primed.json): re-keys every title-keyed entry through
+    /// `normalisedTitleKey`. On a collision (an old raw key and its
+    /// normalised twin both present) the already-normalised entry wins — it
+    /// is the newer write by construction. Idempotent, so calling it on
+    /// every load is safe; the next persist saves the normalised keys and
+    /// the migration becomes a no-op.
+    package static func migratingLegacyKeys(_ map: [Surface: TaskRef]) -> [Surface: TaskRef] {
+        var out: [Surface: TaskRef] = [:]
+        // Normalised (or already-clean) keys first, so raw legacy twins
+        // cannot clobber them below.
+        for (surface, task) in map {
+            let norm = Surface(app: surface.app,
+                               detail: normalisedTitleKey(surface.detail, app: surface.app))
+            if norm == surface { out[surface] = task }
+        }
+        for (surface, task) in map {
+            let norm = Surface(app: surface.app,
+                               detail: normalisedTitleKey(surface.detail, app: surface.app))
+            if norm != surface && out[norm] == nil { out[norm] = task }
+        }
+        return out
     }
 }
 

@@ -23,6 +23,53 @@ func modelsChecks(_ c: Checks) {
         try expectEq(Surface(signal: titled), Surface(app: "Ghostty", detail: "timeandeye"))
     }
 
+    // Fix 5 of the 2026-08-13 over-learning diagnosis: title-keyed surface
+    // identity must survive the app stamping "<sep> <App Name> [version]"
+    // into the title — otherwise every app update orphans the persisted
+    // primes keyed on the old version string.
+    c.check("surface title key drops the app's own trailing signature") {
+        let t0 = Date(timeIntervalSince1970: 0)
+        // The incident shape: hyphen separator + app name + dotted version.
+        let obsidian = ActivitySignal(app: "Obsidian",
+                                      windowTitle: "Ambi4-fromMartin - brain2 - Obsidian 1.13.4",
+                                      timestamp: t0)
+        try expectEq(Surface(signal: obsidian).detail, "Ambi4-fromMartin - brain2")
+        // Version bump → SAME surface (the whole point of the fix).
+        let updated = ActivitySignal(app: "Obsidian",
+                                     windowTitle: "Ambi4-fromMartin - brain2 - Obsidian 1.14.0",
+                                     timestamp: t0)
+        try expectEq(Surface(signal: obsidian), Surface(signal: updated))
+        // App name with no version, other separators, case-insensitive.
+        try expectEq(Surface.normalisedTitleKey("draft — Pages", app: "Pages"), "draft")
+        try expectEq(Surface.normalisedTitleKey("spec | CODE", app: "Code"), "spec")
+        try expectEq(Surface.normalisedTitleKey("plan · Notes v2.1", app: "Notes"), "plan")
+        // NOT stripped: tail isn't the app, hyphen without spaces, bare title.
+        try expectEq(Surface.normalisedTitleKey("a - b", app: "Obsidian"), "a - b")
+        try expectEq(Surface.normalisedTitleKey("Ambi4-fromMartin", app: "Obsidian"),
+                     "Ambi4-fromMartin")
+        try expectEq(Surface.normalisedTitleKey("", app: "Obsidian"), "")
+        // A URL-shaped detail is inert through the migration path.
+        try expectEq(Surface.normalisedTitleKey("github.com/foo", app: "Chrome"),
+                     "github.com/foo")
+    }
+
+    c.check("primed-map legacy keys migrate to normalised surfaces, normalised wins collisions") {
+        let raw = Surface(app: "Obsidian", detail: "note - Obsidian 1.13.4")
+        let norm = Surface(app: "Obsidian", detail: "note")
+        let untouched = Surface(app: "Chrome", detail: "github.com/foo")
+        // Raw-only: re-keyed.
+        let m1 = Surface.migratingLegacyKeys([raw: .op(1), untouched: .op(2)])
+        try expectEq(m1[norm], TaskRef.op(1))
+        try expectEq(m1[untouched], TaskRef.op(2))
+        try expect(m1[raw] == nil, "the raw key must not survive migration")
+        // Collision: the already-normalised entry (the newer write) wins.
+        let m2 = Surface.migratingLegacyKeys([raw: .op(1), norm: .op(3)])
+        try expectEq(m2[norm], TaskRef.op(3))
+        try expectEq(m2.count, 1)
+        // Idempotent.
+        try expectEq(Surface.migratingLegacyKeys(m1), m1)
+    }
+
     c.check("session round-trips through JSON") {
         let s = Session(task: .op(7), start: Date(timeIntervalSince1970: 100),
                         end: Date(timeIntervalSince1970: 700), certainty: 0.83)

@@ -396,4 +396,73 @@ func attributionLearningChecks(_ c: Checks) {
                        "seed \(seed): operator without a displacement must equal a bare +w reinforce")
         }
     }
+
+    // MARK: L8 — specificity. A title token shared across many targets is
+    // weak evidence: even a heavily-taught target matching ONLY the shared
+    // token must not outvote a lightly-taught target matching a token that is
+    // its alone (2026-08-13 over-learning diagnosis, fix 2 — the "Obsidian/
+    // brain2 tokens carry a correction onto every sibling window" mechanism).
+    // Matched terms blend toward the unmatched constant as specificity falls;
+    // single-target features keep specificity 1.0 and byte-identical scoring.
+    c.check("L8: a generic token shared across targets cannot outvote a specific one") {
+        let t0 = now
+        let sig = { (app: String, title: String) in
+            ActivitySignal(app: app, windowTitle: title, timestamp: t0)
+        }
+        var store = LearningStore()
+        // "vault" is shared vocabulary: op(1) taught on it heavily, op(2) and
+        // op(3) once each (so three targets hold positive "vault" counts).
+        for _ in 0..<4 { store.learn(sig("appa", "vault alpha"), target: .task(.op(1)), weight: 2) }
+        store.learn(sig("appb", "vault beta"), target: .task(.op(2)), weight: 2)
+        store.learn(sig("appc", "vault gamma"), target: .task(.op(3)), weight: 2)
+        // "ambiproj" belongs to op(4) alone, taught once.
+        store.learn(sig("appd", "ambiproj delta"), target: .task(.op(4)), weight: 2)
+
+        // A window carrying BOTH tokens: the specific owner must win over the
+        // vault-heavy target (pre-fix, op(1)'s accumulated generic counts +
+        // experience prior took this at a large margin).
+        let probe = sig("appe", "vault ambiproj")
+        let scores = store.scores(for: probe, among: pool)
+        try expect((scores[.task(.op(4))] ?? 0) > (scores[.task(.op(1))] ?? 0) + 1e-9,
+                   "specific-token owner must beat the generic-token accumulator " +
+                   "(op4 \(scores[.task(.op(4))] ?? 0) vs op1 \(scores[.task(.op(1))] ?? 0))")
+        let top = scores.max { $0.value < $1.value }?.key
+        try expectEq(top, Target.task(.op(4)), "the specific owner wins outright")
+    }
+
+    // MARK: Fix 6 (2026-08-13) — correcting a PRIMED surface drains the old
+    // target's counts exactly like displacing a ranked belief: the prime is
+    // the residue of a past correction, and leaving its target's counts
+    // intact made a bad correction unkillable (+2 per gesture in, discount
+    // never firing once the prime existed). Byte-compared against the
+    // operator's ranked-displacement form, the tightest observable pin.
+    c.check("correcting a primed surface discounts the displaced target (fix 6)") {
+        let sig = ActivitySignal(app: "obsidian", windowTitle: "vaultnote alpha", timestamp: now)
+        let old = TaskRef.op(1), new = TaskRef.op(2)
+        var seeded = LearningStore()
+        for _ in 0..<3 { seeded.learn(sig, target: .task(old), weight: 2) }
+
+        let a = Attributor(instanceHost: host)
+        a.replaceLearning(seeded)
+        a.primedSurfaces[Surface(signal: sig)] = old   // the relaunch-restored prime state
+        let ctx = [WorkTask(ref: old, subject: "old", status: "Now"),
+                   WorkTask(ref: new, subject: "new", status: "Now")]
+        a.assign(sig, target: .task(new), tasks: ctx, now: now)
+
+        var expected = seeded
+        expected.correct(sig, to: .task(new), weight: 2, displacingRanked: .task(old))
+        try expect(a.learning == expected,
+                   "assign over a primed surface must run the operator WITH the discount arm")
+        // A displaced PIN must still never be subtracted against: sanity via
+        // the ladder — pin the surface, correct, and expect a bare +2.
+        let b = Attributor(instanceHost: host)
+        b.replaceLearning(seeded)
+        b.upsert(Pin(rule: .components(PinScope(kind: .app, prefix: ["obsidian"])),
+                     task: old))
+        b.assign(sig, target: .task(new), tasks: ctx, now: now)
+        var bareReinforce = seeded
+        bareReinforce.correct(sig, to: .task(new), weight: 2)
+        try expect(b.learning == bareReinforce,
+                   "a displaced pin (direct human word) still carries no discount")
+    }
 }

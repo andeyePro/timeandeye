@@ -2,6 +2,24 @@
 
 ## 2026-08-13
 
+- [x] **Over-learning fix set, Core trio (diagnosis fixes 2/5/6)** – first
+  slice of Martin's 13 Aug #1 priority (spec:
+  docs/superpowers/specs/2026-08-13-correction-overlearning-diagnosis.md).
+  (2) `LearningStore.scores` gains per-feature SPECIFICITY: a title token
+  positively taught to several targets blends its matched term toward the
+  unmatched constant (1/(1+ln n) blend) and scales the experience prior by
+  the best matched specificity — so generic shared vocabulary ("obsidian",
+  a vault name) can no longer carry a correction onto every sibling window
+  at confirmation strength; single-target features keep weight 1.0 and
+  byte-identical scores. (5) `Surface` title keys drop the app's own
+  trailing "<sep> App Name [version]" signature and `primed.json` legacy
+  keys migrate one-shot on load — an app update can no longer orphan every
+  persisted prime. (6) correcting a PRIMED surface now discounts the
+  displaced target's counts exactly like displacing a ranked belief (a
+  prime is the residue of a past correction; pins/sticky/human word still
+  never discounted). New checks: L8 specificity, fix-6 operator pin,
+  surface-normalisation + migration cases. Suites: Linux 791/0, Mac 937/0.
+
 - [x] **Content-guard: pseudo-PII whitelist replaces the docs warn-off**
   (Martin's call, same day) – `.vibe-content-allow` now whitelists the
   repo's deliberate pseudo-PII by explicit pattern (emails at the

@@ -527,7 +527,10 @@ public final class AppController: ObservableObject {
                                 learning: learning,
                                 ranker: TaskRanker(config: RankingConfig(statusOrder: loadedSettings.statusOrder)))
         if let primed = (try? primedStore.load()).flatMap({ $0 }) {
-            attributor.primedSurfaces = primed
+            // One-shot re-key of pre-normalisation title keys ("… - Obsidian
+            // 1.13.4") so an app update can't orphan old primes; idempotent,
+            // self-terminating on the next persist (fix 5, 2026-08-13 spec).
+            attributor.primedSurfaces = Surface.migratingLegacyKeys(primed)
         }
         attributor.emailMatchOrder = loadedSettings.emailMatchOrder
         attributor.disabledSiteRecipes = Set(loadedSettings.siteRecipesDisabled)

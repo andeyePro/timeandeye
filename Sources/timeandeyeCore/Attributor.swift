@@ -727,14 +727,23 @@ package final class Attributor {
                          disabledRecipes: disabledSiteRecipes)
     }
 
-    /// The displaced belief to subtract against, or nil: a correction only
-    /// discounts a belief the ENGINE ranked (`.ranked`); a human's earlier
-    /// word, a pin or a prime is not evidence to subtract against. The
-    /// Attributor's single decision point for the operator's discount arm, so
-    /// confirm and assign can never disagree on it.
+    /// The displaced belief to subtract against, or nil: a correction
+    /// discounts a belief the ENGINE ranked (`.ranked`) — and, since
+    /// 2026-08-13 (over-learning diagnosis fix 6), a displaced PRIME too: a
+    /// prime is itself the residue of a past correction, so overriding it is
+    /// the user saying that past correction was wrong here, and leaving the
+    /// old target's counts fully intact was what made a bad correction
+    /// unkillable (reinforce +2 per gesture, discount never firing once a
+    /// prime existed). A displaced pin, sticky or direct human word is still
+    /// never subtracted against. The Attributor's single decision point for
+    /// the operator's discount arm, so confirm and assign can never disagree
+    /// on it.
     private func rankedDisplaced(
         _ displaced: (target: Target, source: AttributionExplanation.Source)?) -> Target? {
-        (displaced?.source == .ranked) ? displaced?.target : nil
+        switch displaced?.source {
+        case .ranked, .primedSurface: return displaced?.target
+        default: return nil
+        }
     }
 
     /// Remember this surface → task as a soft prime, clearing any stale pending
