@@ -2,6 +2,17 @@
 
 ## 2026-08-13
 
+- [x] **Away rescue, Core half (reply 2 = "more auto")** – `AwayRescue.plan`
+  replays the observedWhileAway evidence the 7 Aug recording work
+  journals: attributes each span via the engine at its own moment, merges
+  same-target runs across gaps ≤2 min, floors sub-minute noise, clips to
+  the rescue window, and proposes a rebuilt timeline. Low-certainty
+  proposals carry the engine's own red read (they queue for review on
+  apply — the reply-2 guards); unattributable/doNotTrack evidence and
+  unbridged gaps stay with the pinned task, quantified as `keptSeconds`.
+  The Settings preview/apply UI is the Mac half, next. 4 new checks.
+  Linux 809/0, Mac 955/0.
+
 - [x] **Redo conversions: billable marks + forget family (spec batches
   3-4)** – the three billable setters (entry override, project flag,
   task tri-state — reply 12's exact overshoot case) and both forgets
