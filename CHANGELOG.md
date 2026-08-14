@@ -2,6 +2,21 @@
 
 ## 2026-08-14
 
+- [x] **Audible playback counts as presence — no more idle-out mid-video** –
+  watching a video with hands off the keyboard tripped the idle timeout
+  and retro-trimmed the session to the last mouse move (Martin's
+  passive-media item). New `SensorEvent.mediaPlayback` from an output-
+  device `AudioActivityMonitor` (the mic monitor generalised to a device
+  selector — same CoreAudio property, default OUTPUT device): while audio
+  renders, the idle check holds off; when it ends, presence extends
+  exactly to that moment, so genuine idleness counts from the silence and
+  a later return trims there, not to the last input. State stays truthful
+  through Away stretches. Transition-logged (findable if a Mac's output
+  device never goes quiet). The broader "consuming without audio" design
+  question (muted video, long reads, remote desktop) is with Martin —
+  this ships the 90% case. +1 tracker check (both halves). Manual (both)
+  synced.
+
 - [x] **Calendar candidates: real meetings beat week-long all-day spans** –
   Martin's report: a week-long all-day event from a secondary calendar was
   offered as the attribution candidate while a genuine short timed meeting

@@ -232,6 +232,51 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(prompts, [.resumeAfterIdle(stoppedAt: t(40))])
     }
 
+    c.check("audible playback is presence: no idle-out mid-video; idle counts from playback end") {
+        var config = TrackerConfig()
+        config.idleThresholdSeconds = 600
+        let (tracker, attributor) = makeTracker(config: config)
+        var sessions: [Session] = []
+        var prompts: [TrackerPrompt] = []
+        tracker.onSession = { sessions.append($0) }
+        tracker.onPrompt = { prompts.append($0) }
+        attributor.confirm(sig("Chrome", "Documentary", at: 0), task: .op(1))
+
+        // Playback still running when input returns after a threshold-
+        // busting gap: the watch was presence — nothing stops, no prompt.
+        tracker.start(task: .op(1), at: t(0))
+        tracker.handle(.focus(sig("Chrome", "Documentary", at: 0)))
+        tracker.handle(.input(t(40)))
+        tracker.handle(.mediaPlayback(active: true, at: t(60)))
+        tracker.handle(.input(t(1500)))   // 1460 s "idle", video still playing
+        guard case .tracking = tracker.state else {
+            throw CheckFailure(description: "playback-covered gap must not idle-stop, got \(tracker.state)")
+        }
+        try expectEq(prompts, [], "no idle prompt while the video plays")
+        tracker.stop(at: t(1560))
+        try expectEq(sessions.count, 1)
+        try expectEq(sessions[0].end, t(1560), "the whole watched stretch tracks")
+
+        // Playback ENDS mid-gap: genuine idleness counts from the moment the
+        // audio fell silent — the retro-trim lands there, not at the last
+        // mouse move and not at the return.
+        let (tracker2, attributor2) = makeTracker(config: config)
+        var sessions2: [Session] = []
+        var prompts2: [TrackerPrompt] = []
+        tracker2.onSession = { sessions2.append($0) }
+        tracker2.onPrompt = { prompts2.append($0) }
+        attributor2.confirm(sig("Chrome", "Documentary", at: 0), task: .op(1))
+        tracker2.start(task: .op(1), at: t(0))
+        tracker2.handle(.focus(sig("Chrome", "Documentary", at: 0)))
+        tracker2.handle(.input(t(40)))
+        tracker2.handle(.mediaPlayback(active: true, at: t(60)))
+        tracker2.handle(.mediaPlayback(active: false, at: t(900)))   // video ends
+        tracker2.handle(.input(t(1600)))   // 700 s after silence > 600 threshold
+        try expectEq(sessions2.count, 1)
+        try expectEq(sessions2[0].end, t(900), "trim to playback end, not last mouse move")
+        try expectEq(prompts2, [.resumeAfterIdle(stoppedAt: t(900))])
+    }
+
     c.check("sleep trims and wake prompts") {
         let (tracker, attributor) = makeTracker()
         var sessions: [Session] = []

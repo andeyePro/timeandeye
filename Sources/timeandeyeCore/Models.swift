@@ -186,6 +186,11 @@ package enum SensorEvent: Equatable, Sendable {
     case willSleep(Date)
     case didWake(Date)
     case microphone(active: Bool, at: Date)
+    /// The default OUTPUT device started/stopped rendering — audible
+    /// playback. Presence signal (2026-08-14): a playing video/podcast with
+    /// no keyboard/mouse activity is consumption, not absence, so the idle
+    /// timeout must not retro-trim it (Martin's passive-media item).
+    case mediaPlayback(active: Bool, at: Date)
     case screenLocked(Date)
     case screenUnlocked(Date)
 }

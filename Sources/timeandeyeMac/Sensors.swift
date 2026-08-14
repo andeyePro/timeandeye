@@ -49,7 +49,8 @@ package final class SensorHub {
     private var axTitleElement: AXUIElement?
     private var eventPollTimer: Timer?
     private var lastEventPollAt = Date.distantPast
-    private var micMonitor: MicMonitor?
+    private var micMonitor: AudioActivityMonitor?
+    private var playbackMonitor: AudioActivityMonitor?
     private var screenLocked = false
     private let emailCapture = EmailCaptureEngine()
     private let tabURL = TabURLEngine()
@@ -113,10 +114,20 @@ package final class SensorHub {
             self?.emit(.screenUnlocked(Date()))
         }
 
-        micMonitor = MicMonitor { [weak self] active in
+        micMonitor = AudioActivityMonitor(
+            deviceSelector: kAudioHardwarePropertyDefaultInputDevice) { [weak self] active in
             self?.emit(.microphone(active: active, at: Date()))
         }
         micMonitor?.start()
+        playbackMonitor = AudioActivityMonitor(
+            deviceSelector: kAudioHardwarePropertyDefaultOutputDevice) { [weak self] active in
+            // Transition-only, so the log can't flood; if a Mac's output
+            // device never goes quiet this line is how we'd find out (the
+            // idle timeout would silently stop firing there).
+            DebugLog.write("media playback -> \(active)")
+            self?.emit(.mediaPlayback(active: active, at: Date()))
+        }
+        playbackMonitor?.start()
 
         // App activation is the one focus change AppKit already events for
         // free — poll immediately instead of waiting out the 2 s tick, and
@@ -247,6 +258,7 @@ package final class SensorHub {
         eventPollTimer = nil
         detachAXObserver()
         micMonitor?.stop()
+        playbackMonitor?.stop()
     }
 
     // MARK: - Polling
@@ -357,21 +369,27 @@ package final class SensorHub {
     // subprocess, off-main; still triggers the Automation prompt once).
 }
 
-/// System-wide microphone-in-use via the default input device's
-/// kAudioDevicePropertyDeviceIsRunningSomewhere.
-final class MicMonitor {
+/// System-wide audio activity via a default device's
+/// kAudioDevicePropertyDeviceIsRunningSomewhere — one monitor, two uses:
+/// the default INPUT device = microphone live (call detection), the default
+/// OUTPUT device = audible playback (media presence, 2026-08-14: a playing
+/// video/podcast is consumption, not absence, so it holds off the idle
+/// timeout).
+final class AudioActivityMonitor {
     private let onChange: (Bool) -> Void
+    private let deviceSelector: AudioObjectPropertySelector
     private var deviceID = AudioDeviceID(0)
     private var lastActive = false
     private var timer: Timer?
 
-    init(onChange: @escaping (Bool) -> Void) {
+    init(deviceSelector: AudioObjectPropertySelector, onChange: @escaping (Bool) -> Void) {
+        self.deviceSelector = deviceSelector
         self.onChange = onChange
     }
 
     func start() {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mSelector: deviceSelector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)

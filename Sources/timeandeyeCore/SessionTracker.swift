@@ -119,6 +119,8 @@ package final class SessionTracker {
     private var lastInput: Date?
     private var pendingReview: ReviewSegment?
     private var micActiveSince: Date?
+    /// Audible-playback presence (see `handleMediaPlayback`).
+    private var mediaPlaybackActive = false
     private var callSegments: [ReviewSegment] = []
     private var idleStoppedAt: Date?
     /// A confident switch is provisional during the grace window: the DISPLAY
@@ -507,6 +509,11 @@ package final class SessionTracker {
                 lastAwayEventAt = max(lastAwayEventAt ?? ts, ts)
             }
             if case .input(let date) = event { lastInput = max(lastInput ?? date, date) }
+            // Playback state must stay truthful through an away stretch so
+            // clearing Away doesn't idle-check against a stale flag.
+            if case .mediaPlayback(let active, let at) = event {
+                handleMediaPlayback(active: active, at: at)
+            }
             if case .focus(let signal) = event { recordAwayObservation(signal) }
             return
         }
@@ -517,8 +524,20 @@ package final class SessionTracker {
         case .willSleep(let date): sleepingSince = date
         case .didWake(let date): handleWake(at: date)
         case .microphone(let active, let at): handleMic(active: active, at: at)
+        case .mediaPlayback(let active, let at): handleMediaPlayback(active: active, at: at)
         case .screenLocked, .screenUnlocked: break   // handled above
         }
+    }
+
+    /// Audible playback = presence (the passive-media rule): while the
+    /// output device renders, the user is consuming what plays, so the
+    /// idle check must not fire. When playback ENDS, presence extends to
+    /// that moment — `lastInput` bumps to the end, so genuine idleness
+    /// counts only from when the audio fell silent, and a later return
+    /// retro-trims to the playback end, not to the last mouse move.
+    private func handleMediaPlayback(active: Bool, at date: Date) {
+        if mediaPlaybackActive, !active { lastInput = max(lastInput ?? date, date) }
+        mediaPlaybackActive = active
     }
 
     /// Resolve a sleep on wake. Within the grace window the clock simply
@@ -552,7 +571,7 @@ package final class SessionTracker {
         case .focus(let signal), .focusEnrichment(let signal): return signal.timestamp
         case .input(let date), .willSleep(let date), .didWake(let date),
              .screenLocked(let date), .screenUnlocked(let date): return date
-        case .microphone(_, let at): return at
+        case .microphone(_, let at), .mediaPlayback(_, let at): return at
         }
     }
 
@@ -561,6 +580,10 @@ package final class SessionTracker {
         defer { lastInput = max(lastInput ?? date, date) }
         guard case .tracking = state, let last = lastInput,
               date.timeIntervalSince(last) > config.idleThresholdSeconds else { return }
+        // Playback still running now means the input gap was covered by
+        // audible media (the end transition would have bumped `lastInput`
+        // otherwise) — presence, not idleness; the defer advances the clock.
+        if mediaPlaybackActive { return }
         idleStop(asOf: last, promptNow: true)
     }
 

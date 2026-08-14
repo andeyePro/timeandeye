@@ -61,7 +61,10 @@ The task list:
   you claim the gap as work. An idle stop also un-sticks itself: come back
   within half an hour and tracking resumes by itself - to whatever the screen
   says if that's clear, otherwise to the task you were on (flagged for review
-  if andeye wasn't sure). A manual stop never restarts on its own.
+  if andeye wasn't sure). A manual stop never restarts on its own. While your
+  Mac is audibly playing something - a video, a talk, music - not touching
+  the keyboard doesn't count as idle: the clock runs until the audio ends,
+  and only then does idle time start counting.
 - **Right-click a task** - open it in your backend, or Comments… for its
   local comment history (notes typed in the comment bar land there whenever
   they can't, or shouldn't, go to a backend feed).
