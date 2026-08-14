@@ -349,6 +349,13 @@ public final class AppController: ObservableObject {
     private let calendarRulesStore: JSONFileStore<[CalendarRule]>
     private var calendarRules: [CalendarRule] = []
     private let billingStore: JSONFileStore<BillableRules>
+    /// Slices whose SQLite save FAILED (disk fault, lock contention) — held
+    /// in hand and retried until they land (save-before-clear, the post-flip
+    /// TODO item: a flush must never lose a slice to a hard save failure).
+    /// Mirrored to a sidecar JSON — a different failure domain than SQLite —
+    /// so even a quit before the retry lands loses nothing recoverable.
+    private let unsavedStore: JSONFileStore<[Session]>
+    private var unsavedSessions: [Session] = []
     /// Colour assignments (colour-strategy spec): first-sight colour records,
     /// a user-ownable colours.json beside pins.json. NOT @Published — records
     /// are appended lazily inside `colour(for:)` DURING view rendering, and
@@ -474,6 +481,8 @@ public final class AppController: ObservableObject {
         calendarRulesStore = JSONFileStore<[CalendarRule]>(url: dir.appendingPathComponent("calendarrules.json"))
         billingStore = JSONFileStore<BillableRules>(url: dir.appendingPathComponent("billing.json"))
         billing = (try? billingStore.load().flatMap { $0 }) ?? BillableRules()
+        unsavedStore = JSONFileStore<[Session]>(url: dir.appendingPathComponent("unsaved-sessions.json"))
+        unsavedSessions = ((try? unsavedStore.load().flatMap { $0 }) ?? [])
         financeMappingsStore = JSONFileStore<[String: FinanceMapping]>(
             url: dir.appendingPathComponent("finance-mappings.json"))
         let loadedMappings = ((try? financeMappingsStore.load().flatMap { $0 }) ?? [:])
@@ -942,6 +951,19 @@ public final class AppController: ObservableObject {
         applyJournalRecency()   // rebuilt locals keep their durable recency too
     }
 
+    /// Land every slice a failed save re-staged (see the `unsavedSessions`
+    /// doc). Runs at startup, at every flush, and on every sync kick; the
+    /// sidecar mirrors the buffer after each attempt so a quit mid-outage
+    /// still recovers on the next launch.
+    private func retryUnsavedSessions() {
+        guard !unsavedSessions.isEmpty else { return }
+        unsavedSessions.removeAll { s in
+            do { try journal.save(s); return true } catch { return false }
+        }
+        try? unsavedStore.save(unsavedSessions)
+        if unsavedSessions.isEmpty { updateJournalSummary() }
+    }
+
     private func wireTracker() {
         tracker.onSession = { [weak self] session in
             guard let self else { return }
@@ -969,8 +991,18 @@ public final class AppController: ObservableObject {
                 note: note, autoCommentText: s.comment,
                 autoCommentEnabled: self.settings.autoComment,
                 toTrackedTime: self.settings.commentToTrackedTime)
+            // Save-before-clear: retry anything an earlier failure held
+            // FIRST (keeps journal order roughly chronological), and a
+            // fresh failure re-stages the slice instead of losing it — the
+            // tracker has already cleared its spans by now, so this buffer
+            // (+ its sidecar) is the only copy.
+            self.retryUnsavedSessions()
             do { try self.journal.save(s) }
-            catch { self.lastError = "Couldn't save tracked time — \(error). Your time up to now may not be recorded." }
+            catch {
+                self.lastError = "Couldn't save tracked time — \(error). The slice is held and will retry."
+                self.unsavedSessions.append(s)
+                try? self.unsavedStore.save(self.unsavedSessions)
+            }
             // The TASK-feed half no longer rides the flush: commitComment
             // posts it immediately to the DISPLAYED task. Consuming it here
             // let a grace-delayed flush from the PREVIOUS task steal the
@@ -1470,6 +1502,7 @@ public final class AppController: ObservableObject {
             }
         }
         promoteStaleCheckpoint()   // recover any session a crash/quit left mid-flight
+        retryUnsavedSessions()     // land slices a previous run's save failure held
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             // queue: .main → this runs on the main actor; assert it so the
@@ -5877,6 +5910,9 @@ public final class AppController: ObservableObject {
         if syncing { syncRequested = true; return }
         syncing = true
         defer { syncing = false }
+        // Held-slice retry rides every sync kick: a slice a save failure
+        // parked must land locally before the engine reads the journal.
+        retryUnsavedSessions()
         let engine = SyncEngine(journal: journal, backends: registry.entries,
                                 invoicePollClock: invoicePollClock)
         engine.excludedSessionIDs = [Self.liveCheckpointID]

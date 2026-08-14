@@ -46,7 +46,7 @@ public final class PhoneController: ObservableObject {
     let now: () -> Date
 
     public init(dataDir: URL = AppSupport.directory(), now: @escaping () -> Date = Date.init,
-                backend: (any TaskBackend)? = nil) {
+                backend: (any TaskBackend)? = nil, journal: (any JournalStore)? = nil) {
         self.now = now
         self.injectedBackend = backend
         let dir = dataDir
@@ -55,12 +55,15 @@ public final class PhoneController: ObservableObject {
             url: dir.appendingPathComponent("settings.json"))
         settings = (try? settingsStore.load().flatMap { $0 })
             ?? AndeyeSettings(opBaseURL: "")
-        journal = (try? SQLiteJournalStore(path: dir.appendingPathComponent("journal.sqlite").path))
+        // Injectable for checks (the save-before-clear failure path needs a
+        // store that can be made to throw); production passes nil.
+        self.journal = journal
+            ?? (try? SQLiteJournalStore(path: dir.appendingPathComponent("journal.sqlite").path))
             ?? InMemoryJournalStore()
         // Same one-time single-slot → posting-ledger upgrade as the Mac (this
         // journal pushed with the same legacy fields); idempotent per row.
-        _ = try? journal.migrateSingleSlotPostings(to: OPBackend.stableID,
-                                                   excluding: [Self.liveCheckpointID])
+        _ = try? self.journal.migrateSingleSlotPostings(to: OPBackend.stableID,
+                                                        excluding: [Self.liveCheckpointID])
         restoreLiveSlice()
         mergeLocalTasks()
         rebuildBackend()
@@ -94,16 +97,46 @@ public final class PhoneController: ObservableObject {
     public func stop() {
         guard let live = tracking else { return }
         tracking = nil
-        try? journal.deleteSession(Self.liveCheckpointID)
         let end = now()
-        guard end.timeIntervalSince(live.since) >= 30 else { return }   // taps, not slices
+        guard end.timeIntervalSince(live.since) >= 30 else {   // taps, not slices
+            try? journal.deleteSession(Self.liveCheckpointID)
+            return
+        }
         let s = Session(task: live.task, start: live.since, end: end,
                         certainty: 1.0, comment: nil)
-        do { try journal.save(s) }
-        catch { lastError = "Couldn't save tracked time — \(error). This slice may not be recorded." }
-        try? journal.escalateOrigin(s.id, to: .manual)
+        do {
+            // Save-before-clear: the checkpoint (the slice's only durable
+            // copy) is deleted ONLY once the save has landed. On failure the
+            // slice is held for retry AND the checkpoint stays, so even an
+            // app death before the retry lands recovers it on relaunch.
+            try journal.save(s)
+            try? journal.deleteSession(Self.liveCheckpointID)
+            try? journal.escalateOrigin(s.id, to: .manual)
+        } catch {
+            lastError = "Couldn't save tracked time — \(error). The slice is held and will retry."
+            unsavedSessions.append(s)
+        }
         touchRecency(live.task)
         Task { await pushIfEligible() }
+    }
+
+    /// Slices a failed save held (see `stop`) — retried on every lifecycle
+    /// tick; the checkpoint row is only released once nothing is left and no
+    /// NEW slice has claimed it.
+    private var unsavedSessions: [Session] = []
+
+    private func retryUnsaved() {
+        guard !unsavedSessions.isEmpty else { return }
+        unsavedSessions.removeAll { s in
+            do {
+                try journal.save(s)
+                try? journal.escalateOrigin(s.id, to: .manual)
+                return true
+            } catch { return false }
+        }
+        if unsavedSessions.isEmpty, tracking == nil {
+            try? journal.deleteSession(Self.liveCheckpointID)
+        }
     }
 
     private func checkpoint() {
@@ -125,6 +158,7 @@ public final class PhoneController: ObservableObject {
     /// Foreground/background hooks call this so a long-running slice's
     /// checkpoint stays fresh without any timer.
     public func appLifecycleTick() {
+        retryUnsaved()
         checkpoint()
     }
 

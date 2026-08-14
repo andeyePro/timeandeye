@@ -423,4 +423,38 @@ func phoneControllerChecks(_ c: Checks) async {
         try expectEq(nodes.count, 0, "gone from spentNodes")
         try expectEq(total, 0, "gone from todaysTotal")
     }
+
+    await c.check("a failed save holds the slice; retry lands it, then releases the checkpoint") {
+        // Save-before-clear (post-flip TODO item, built 2026-08-14): a hard
+        // SQLite failure at stop() must lose NOTHING — the slice re-stages
+        // for retry and the crash checkpoint (the only durable copy) stays
+        // until the save has genuinely landed.
+        let clock = PhoneClock()
+        let store = InMemoryJournalStore()
+        let dataDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("andeye-phone-\(UUID().uuidString)")
+        let pc = await MainActor.run {
+            PhoneController(dataDir: dataDir, now: { clock.now }, journal: store)
+        }
+        let checkpointID = await MainActor.run { PhoneController.liveCheckpointID }
+        let ref = await MainActor.run { pc.addLocalTask(name: "Client day") }
+        await MainActor.run {
+            pc.start(ref)
+            clock.now += 3_600
+            store.failNextSaves = 1
+            pc.stop()
+        }
+        let after = try store.sessions(from: clock.now - 7_200, to: clock.now + 60)
+            .filter { $0.id != checkpointID }
+        try expectEq(after.count, 0, "the save genuinely failed")
+        try expect(try store.session(id: checkpointID) != nil,
+                   "checkpoint must survive a failed save")
+        await MainActor.run { pc.appLifecycleTick() }   // store healed → retry lands
+        let landed = try store.sessions(from: clock.now - 7_200, to: clock.now + 60)
+            .filter { $0.id != checkpointID }
+        try expectEq(landed.count, 1, "the held slice lands on retry")
+        try expectEq(landed.first?.task, ref)
+        try expectNil(try store.session(id: checkpointID),
+                      "checkpoint releases only after the slice landed")
+    }
 }

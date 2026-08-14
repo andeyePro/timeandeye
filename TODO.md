@@ -551,13 +551,15 @@ and recorded rather than fixed blind:
   generalise beyond audio (muted video, long reads, remote desktop,
   presentations) — the broader "user is consuming" signal remains a
   design question.
-- [ ] AFTER the flip: restructure the live-tracking flush to save-before-clear.
-  Today the flush clears the running-slice timer before the SQLite save is
-  confirmed, so a hard save failure (now surfaced via `lastError` + a 5s busy
-  timeout, commit 8e5725e) still can't recover that slice. Hold the slice in
-  hand until the save lands (or re-stage it on failure) so nothing is lost even
-  on a genuine disk/permission fault. Mac AppController.wireTracker onSession
-  and PhoneController.stop(). Not a flip blocker (Martin's call 2026-07-15).
+- [x] AFTER the flip: restructure the live-tracking flush to save-before-clear.
+  DONE 2026-08-14 (CHANGELOG): Mac — a failed flush save re-stages the
+  slice in an in-hand buffer mirrored to a sidecar JSON (different failure
+  domain than SQLite), retried at startup / every flush / every sync kick;
+  phone — stop() deletes the crash checkpoint only AFTER the save lands,
+  a failure holds the slice for lifecycle-tick retry with the checkpoint
+  kept as the durable copy. InMemory mock's `update` aligned to SQLite's
+  INSERT-OR-REPLACE (the phone checkpoint silently no-op'd on the mock).
+  +1 phone check driving the full fail→hold→retry→release path.
 - [ ] Claude desktop app attribution is too coarse: desktop-app time is
   recorded only as the app attributing to itself (the app name repeated in the
   evidence card and window history), with no per-project or per-conversation

@@ -225,7 +225,18 @@ package final class InMemoryJournalStore: JournalStore {
 
     package init() {}
 
+    /// Failure seam for checks (this store exists for checks/mocks): each
+    /// save while > 0 throws and decrements — how the save-before-clear
+    /// paths prove a failed write re-stages instead of losing the slice.
+    package var failNextSaves = 0
+
+    package struct InjectedFailure: Error {}
+
     package func save(_ session: Session) throws {
+        if failNextSaves > 0 {
+            failNextSaves -= 1
+            throw InjectedFailure()
+        }
         sessions.append(session)
     }
 
@@ -335,8 +346,15 @@ package final class InMemoryJournalStore: JournalStore {
     }
 
     package func update(_ session: Session) throws {
-        guard let i = sessions.firstIndex(where: { $0.id == session.id }) else { return }
-        sessions[i] = session
+        // INSERT OR REPLACE, matching the SQLite store's `update` — the
+        // phone's checkpoint writes through `update` on a row that may not
+        // exist yet, and a mock that silently dropped it diverged from what
+        // production does.
+        if let i = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[i] = session
+        } else {
+            sessions.append(session)
+        }
     }
 
     package func deleteSession(_ id: UUID) throws {

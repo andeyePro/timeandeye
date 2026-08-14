@@ -2,6 +2,20 @@
 
 ## 2026-08-14
 
+- [x] **Save-before-clear: a hard save failure can no longer lose a slice**
+  – the post-flip robustness item. Mac: when the flush's SQLite save
+  throws, the slice re-stages in an in-hand buffer mirrored to
+  `unsaved-sessions.json` (a different failure domain than the database)
+  and retries at startup, every flush and every sync kick — previously the
+  tracker had already cleared its spans, so that slice was simply gone.
+  Phone: `stop()` now deletes the crash checkpoint only AFTER the save
+  lands; on failure the slice is held for retry and the checkpoint stays
+  the durable copy (an app death before the retry still recovers on
+  relaunch). Also fixed en route: the in-memory mock's `update` dropped
+  writes to missing rows where SQLite upserts — the phone checkpoint
+  silently didn't checkpoint on the mock. +1 phone check (fail → hold →
+  retry → release). Linux 820/0, Mac 974/0.
+
 - [x] **⌘⇧Z reaches review assigns and timeline edits (undo-redo batch 5)**
   – the last conversion batch: `assignReview`, `applyTimelineEdit` and
   `reassignTimelineSessions` all replay id-stably (id-keyed journal
