@@ -1070,6 +1070,12 @@ public final class AppController: ObservableObject {
                 self.currentTarget = nil
                 self.targetSince = nil
                 self.visitSolid = false
+                // Stale-revert guard (2026-08-14): surviving a stop, this
+                // offered "← <task from hours ago>" against whatever the
+                // NEXT start tracked — one click folded the new session onto
+                // an unrelated task. A revert is about the LAST switch; a
+                // stop ends that story.
+                self.previousTask = nil
                 self.bankedElapsed.removeAll()
                 // Comment-loss edge (2026-07-07 item): the stop flush consumes
                 // notes whose task actually journalled a slice — but a note
@@ -4886,6 +4892,11 @@ public final class AppController: ObservableObject {
     /// undo). Drives the popover's one-click "← <prev>" when a switch was wrong.
     package func revertTargetTask() -> WorkTask? {
         guard case .tracking(let current, _) = trackerState else { return nil }
+        // Freshness (2026-08-14): "that switch was wrong" is a claim about
+        // the LAST FEW MINUTES — after a quarter hour happily tracking, the
+        // offer is more trap than help (and the stop path now clears
+        // `previousTask` outright).
+        guard Date().timeIntervalSince(taskChangedAt) < 15 * 60 else { return nil }
         guard let prev = previousTask, .task(prev) != current,
               let task = taskCache.first(where: { $0.ref == prev }) else { return nil }
         return task
@@ -5539,11 +5550,26 @@ public final class AppController: ObservableObject {
         awayRescueOffer = nil
     }
 
+    /// One offer (and one rebuild) per stretch: three Away-end sites can
+    /// fire within the same 15-minute window, and re-applying a rebuilt
+    /// stretch would carve fresh pieces over time already rebuilt. Both
+    /// in-memory — evidence keeps ~30 days, so a relaunch can still rescue
+    /// from Settings; only the unprompted nag is suppressed.
+    private var offeredAwayStretchEnds: Set<Date> = []
+    private var rebuiltAwayRanges: [(start: Date, end: Date)] = []
+
+    package func isStretchRebuilt(_ stretch: AwayStretch) -> Bool {
+        rebuiltAwayRanges.contains { $0.start < stretch.end && $0.end > stretch.start }
+    }
+
     private func offerAwayRescueIfDue() {
         guard let stretch = awayStretches(days: 1).first,
               Date().timeIntervalSince(stretch.end) < 15 * 60,
-              AwayRescue.shouldOffer(evidenceSeconds: stretch.evidenceSeconds)
+              AwayRescue.shouldOffer(evidenceSeconds: stretch.evidenceSeconds),
+              !offeredAwayStretchEnds.contains(stretch.end),
+              !isStretchRebuilt(stretch)
         else { return }
+        offeredAwayStretchEnds.insert(stretch.end)
         awayRescueOffer = stretch
         notifyContent(symbol: "clock.arrow.circlepath",
                       text: "Recorded \(Int(stretch.evidenceSeconds / 60))m while you were away — the popover offers a rebuild",
@@ -5594,6 +5620,14 @@ public final class AppController: ObservableObject {
     /// correction). One ⌘Z for the whole rescue.
     package func applyAwayRescue(_ plan: AwayRescue.Plan) async {
         guard !plan.isEmpty else { return }
+        // Mark the covered range rebuilt (offer suppression + the Settings
+        // "rebuilt" tag). In-memory by design: a ⌘Z within this run still
+        // allows a re-apply via Settings, and after a relaunch the rescue
+        // remains fully available there.
+        if let lo = plan.proposals.map(\.start).min(),
+           let hi = plan.proposals.map(\.end).max() {
+            rebuiltAwayRanges.append((lo, hi))
+        }
         var carved = 0
         await undoGroup("away rescue") {
             for p in plan.proposals {

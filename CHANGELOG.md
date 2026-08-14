@@ -2,6 +2,17 @@
 
 ## 2026-08-14
 
+- [x] **Stale offers can't misfile time: revert freshness + one rescue
+  offer per stretch** – `previousTask` survived a Stop, so hours later
+  the popover's "← previous task" could fold a NEW session onto an
+  unrelated task in one click; it now clears on stop and the offer
+  expires 15 minutes after the last switch ("that switch was wrong" is a
+  claim about the last few minutes). And the away-rescue offer fired
+  afresh from every Away-end site with no memory: each stretch now
+  offers once, an applied stretch is marked "rebuilt ✓" in Settings and
+  never re-offered (in-memory — after ⌘Z or a relaunch, Settings still
+  rescues it deliberately).
+
 - [x] **Losing a sensing permission is no longer silent** – revoke
   Accessibility (window titles) or browser Automation (tab addresses) —
   an OS update or TCC reset can — and attribution quietly collapsed to

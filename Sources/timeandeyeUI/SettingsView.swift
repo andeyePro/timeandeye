@@ -968,6 +968,9 @@ struct SettingsView: View {
                     HStack {
                         Text("\(stretch.start.formatted(date: .abbreviated, time: .shortened)) – \(stretch.end.formatted(date: .omitted, time: .shortened))")
                             .font(.caption)
+                        if controller.isStretchRebuilt(stretch) {
+                            Text("rebuilt ✓").font(.caption2).foregroundStyle(.secondary)
+                        }
                         Spacer()
                         Text(rescueDuration(stretch.evidenceSeconds) + " observed")
                             .font(.caption2).foregroundStyle(.secondary)
