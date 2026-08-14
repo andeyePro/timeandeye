@@ -197,6 +197,10 @@ package final class SensorHub {
               let observer = created else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         let appElement = AXUIElementCreateApplication(pid)
+        // Same 1 s bound as every other AX read (2026-08-14): the attach
+        // fires on EVERY app activation, cross-process on the main run
+        // loop — a hung app here was the last unbounded AX call left.
+        AXUIElementSetMessagingTimeout(appElement, 1.0)
         AXObserverAddNotification(observer, appElement,
                                   kAXFocusedWindowChangedNotification as CFString, refcon)
         CFRunLoopAddSource(CFRunLoopGetMain(),

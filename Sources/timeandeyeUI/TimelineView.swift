@@ -1757,6 +1757,24 @@ struct TimelineView: View {
         "\(span.signal.app)|\(span.signal.windowTitle ?? "")|\(span.signal.tabURL ?? "")"
     }
 
+    /// One pass per render, not four per CARD (2026-08-14): the + all /
+    /// + similar closures each scanned every span per selected card, which
+    /// after ⌘A was ~4·N² per render pass. Group indices by key once; cards
+    /// do dictionary lookups.
+    private func similarityIndex(for spans: [FocusSpan])
+        -> (identity: [String: Set<Int>], levels: [[String: Set<Int>]]) {
+        var identity: [String: Set<Int>] = [:]
+        for j in spans.indices { identity[spanIdentity(spans[j]), default: []].insert(j) }
+        let levels = SpanSimilarity.Level.allCases.map { level in
+            var groups: [String: Set<Int>] = [:]
+            for j in spans.indices {
+                groups[SpanSimilarity.key(spans[j].signal, at: level), default: []].insert(j)
+            }
+            return groups
+        }
+        return (identity, levels)
+    }
+
 
     /// Finder-style selection: plain click selects just this one, ⌘-click
     /// toggles it, ⇧-click extends a contiguous range from the anchor, and
@@ -1899,6 +1917,7 @@ struct TimelineView: View {
     private func selectedSpanPanes(_ session: Session, spans: [FocusSpan]) -> some View {
         let idxs = selectedSpanIdx.sorted().filter { $0 < spans.count }
         let isLive = session.id == AppController.liveSessionID
+        let index = similarityIndex(for: spans)
         ScrollView(.horizontal, showsIndicators: true) {
             HStack(alignment: .top, spacing: 8) {
                 ForEach(idxs, id: \.self) { i in
@@ -1943,9 +1962,7 @@ struct TimelineView: View {
                         // click extends the selection to every window in
                         // the slice recorded with the same data.
                         selectTwins: {
-                            let twins = Set(spans.indices.filter {
-                                spanIdentity(spans[$0]) == spanIdentity(spans[i])
-                            })
+                            let twins = index.identity[spanIdentity(spans[i])] ?? []
                             return (count: twins.subtracting(selectedSpanIdx).count,
                                     select: { selectedSpanIdx.formUnion(twins) })
                         }(),
@@ -1956,11 +1973,8 @@ struct TimelineView: View {
                         // selected rung back; the focused window always
                         // stays selected (it IS rung 0).
                         similar: {
-                            let sets = SpanSimilarity.Level.allCases.map { level in
-                                Set(spans.indices.filter {
-                                    SpanSimilarity.key(spans[$0].signal, at: level)
-                                        == SpanSimilarity.key(spans[i].signal, at: level)
-                                })
+                            let sets = SpanSimilarity.Level.allCases.enumerated().map { k, level in
+                                index.levels[k][SpanSimilarity.key(spans[i].signal, at: level)] ?? []
                             }
                             let widenSet = sets.first { !$0.subtracting(selectedSpanIdx).isEmpty }
                             let highest = (0..<sets.count).last { sets[$0].isSubset(of: selectedSpanIdx) }

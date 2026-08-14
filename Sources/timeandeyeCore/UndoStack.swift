@@ -26,6 +26,11 @@ package final class UndoStack {
     /// Registrations collected during the CURRENT undo/redo run.
     private var collected: [(label: String, inverse: Inverse)] = []
 
+    // Deliberately UNCAPPED: "infinitely undoable" is a pinned product
+    // decision (the 2026-07-09 infinite-undo audit; a check enforces no
+    // silent depth limit). The memory trade-off — entries can retain whole
+    // LearningStore snapshot closures across weeks of uptime — is with
+    // Martin (fromClaude 18, 2026-08-14) before any cap lands.
     private var stack: [Entry] = []
     private var redoStack: [Entry] = []
     /// Non-nil while inside `group`: inverses accumulate here and the group

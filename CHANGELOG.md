@@ -2,6 +2,17 @@
 
 ## 2026-08-14
 
+- [x] **Hot-path hardening: the last unbounded AX call + card-scan memo** –
+  the AX observer ATTACH (fires on every app activation, cross-process on
+  the main run loop) was the one AX call left without a messaging
+  timeout — same 1 s bound as every read since the sensor rework. The
+  Evidence Card's + all / + similar closures scanned every span per
+  selected card (~4·N² after ⌘A) — one grouped index per render now
+  serves every card. The proposed undo-stack depth cap was REVERTED
+  before commit: it tripped the pinned "infinitely undoable — no silent
+  depth limit" check from the 2026-07-09 audit, so the memory trade-off
+  goes to Martin (fromClaude 18) instead of overriding his pinned call.
+
 - [x] **Stale offers can't misfile time: revert freshness + one rescue
   offer per stretch** – `previousTask` survived a Stop, so hours later
   the popover's "← previous task" could fold a NEW session onto an
