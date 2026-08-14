@@ -2,6 +2,24 @@
 
 ## 2026-08-14
 
+- [x] **Posting failures classify honestly — an expired key can't quarantine
+  billable time** – the OP connector never threw `PermanentPostError`, so
+  every failure looked transient: a 401 retried once a minute burned the
+  30-attempt cap and quarantined the head row `.stuck` (excluded from
+  posting forever, visible only deep in Settings), and a deleted task
+  dammed the queue the same way. Now classified at the connector edge
+  (TaskBackend's contract): 401/403 → new `BackendAuthError` — the pass
+  ends, the failure names itself ("check the connection in Settings") and
+  NO attempt burns (checked: five auth-failing passes leave attempts at 0
+  and the row posts as soon as the key works); 404/422 → permanent
+  (`.skipped` with the reason, queue proceeds). The 422 drop-startTime
+  fallback now also covers AMENDMENTS (an instance refusing timed updates
+  used to 422 the same edit every sync pass forever). And quarantined
+  rows are finally visible where the user looks: a quiet popover line
+  ("N entries can't post" + Fix) whenever any exist, refreshed per sync
+  pass and cleared instantly by Retry. +2 checks (engine auth path, OP
+  status classification incl. the double-422). Manual (both) synced.
+
 - [x] **A comment typed during a dropped flit is no longer lost on stop** –
   the 2026-07-07 edge: a note committed while a sub-grace flit held the
   displayed task never met a flushed slice for that task, and the stop

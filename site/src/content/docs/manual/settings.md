@@ -96,7 +96,7 @@ bound to the same value, so you can enter a figure directly.
   (Plus and up).
 - **Posting health** - appears under its connector only when something
   needs you: a count of entries stuck after repeated failures (with a
-  one-click Retry) and a count of entries that disagree with your journal
+  one-click Retry - the popover also shows a quiet "N entries cannot post" line with a Fix button whenever any exist) and a count of entries that disagree with your journal
   and can't be fixed automatically (usually because they're locked into an
   invoice), plus a "review them on the timeline" link when posted entries
   look mis-filed under today's rules — the timeline marks each suspect

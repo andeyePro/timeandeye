@@ -549,6 +549,46 @@ func opClientChecks(_ c: Checks) async {
             try expectEq(code, 401)
         }
     }
+
+    await c.check("OP post-path classification: 401/403 auth, 404/422 permanent, 5xx transient") {
+        // 2026-08-14: the connector never classified, so every status burned
+        // the transient cap into `.stuck`. TaskBackend's contract says only
+        // the connector can tell a 404-task from a 503 — now it does.
+        func attempt(_ status: Int, body: String = "{}") async -> Error? {
+            let t = MockTransport()
+            t.responses = [(status, body)]
+            let b = OPBackend(baseURL: URL(string: "https://op.example.com")!,
+                              apiKey: "k", transport: t)
+            do {
+                _ = try await b.createTimeEntry(taskID: "7", start: Date(timeIntervalSince1970: 1_750_000_000),
+                                                duration: 600, activityID: nil, comment: nil)
+                return nil
+            } catch { return error }
+        }
+        let e401 = await attempt(401)
+        let e403 = await attempt(403)
+        let e404 = await attempt(404)
+        let e500 = await attempt(500)
+        try expect(e401 is BackendAuthError, "401 = credentials, not row evidence")
+        try expect(e403 is BackendAuthError, "403 = permissions, not row evidence")
+        try expect(e404 is PermanentPostError, "404 = task gone, never retryable")
+        try expect(!(e500 is PermanentPostError) && !(e500 is BackendAuthError),
+                   "5xx stays transient")
+        // 422: the first one triggers the drop-startTime fallback; a SECOND
+        // 422 (the instance genuinely refuses the entry) is permanent.
+        let t = MockTransport()
+        t.responses = [(422, "{}"), (422, "{}")]
+        let b = OPBackend(baseURL: URL(string: "https://op.example.com")!,
+                          apiKey: "k", transport: t)
+        do {
+            _ = try await b.createTimeEntry(taskID: "7", start: Date(timeIntervalSince1970: 1_750_000_000),
+                                            duration: 600, activityID: nil, comment: nil)
+            throw CheckFailure(description: "double 422 must throw")
+        } catch let e {
+            try expect(e is PermanentPostError, "second 422 classifies permanent, got \(e)")
+        }
+        try expectEq(t.requests.count, 2, "the startTime fallback retried exactly once")
+    }
 }
 
 // MARK: - SyncEngine (plan task 11)

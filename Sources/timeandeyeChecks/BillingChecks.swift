@@ -227,6 +227,9 @@ final class FakeBackend: TaskBackend {
     var deleted: [RemoteEntryID] = []
     /// Throw on the next N createTimeEntry calls (heals afterwards).
     var failNextCreates = 0
+    /// Throw BackendAuthError on the next N creates (an expired key) —
+    /// heals afterwards, like a corrected Settings entry.
+    var authErrorNextCreates = 0
     /// Task ids the backend rejects PERMANENTLY (a deleted task, a frozen
     /// entry) — throws PermanentPostError, never heals.
     var permanentlyRejects: Set<String> = []
@@ -279,6 +282,10 @@ final class FakeBackend: TaskBackend {
         }
         if permanentlyRejects.contains(taskID) {
             throw PermanentPostError(reason: "fake: task \(taskID) is gone")
+        }
+        if authErrorNextCreates > 0 {
+            authErrorNextCreates -= 1
+            throw BackendAuthError(reason: "fake: key rejected (401)")
         }
         if failNextCreates > 0 { failNextCreates -= 1; throw Fail() }
         created.append((taskID, duration))
@@ -685,5 +692,35 @@ func multiBackendSyncChecks(_ c: Checks) async {
         s.billableOverride = nil; try journal.update(s)
         await financeSync()
         try expectEq(finance.created.count, 1, "posted history stays — no claw-back")
+    }
+
+    await c.check("auth failure never burns attempts toward .stuck (expired key is not row evidence)") {
+        // 2026-08-14: before BackendAuthError, a 401 fell into the generic
+        // transient catch — 30 minutes of once-a-minute retries quarantined
+        // the HEAD row `.stuck`, silently damming billable time behind a
+        // Settings button, for a failure that said nothing about the row.
+        let journal = InMemoryJournalStore()
+        let pm = FakeBackend(owns: .op)
+        let registry = BackendRegistry()
+        registry.register(pm, id: "pm-a", class: .pm)
+        let s = session(.op(1))
+        try journal.save(s)
+        let engine = SyncEngine(journal: journal, backends: registry.entries)
+        pm.authErrorNextCreates = 5
+        for _ in 0..<5 {
+            let reports = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                                    financeEligible: { _ in false })
+            try expect(reports.first?.error?.contains("check the connection") == true,
+                       "the failure names the real problem")
+        }
+        let row = ((try journal.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)
+        try expectEq(row?.state, .failed, "held retryable — never .stuck")
+        try expectEq(row?.attempts, 0, "no attempt burned by credential failures")
+        // Key fixed in Settings → the same row posts on the next ordinary pass.
+        let healed = await engine.pushEligible(threshold: 0.8, includeComments: false,
+                                               financeEligible: { _ in false })
+        try expectEq(healed.first?.posted, 1, "posts as soon as the key works")
+        try expectEq(((try journal.postingRecord(session: s.id, backendID: "pm-a")) ?? nil)?.state,
+                     .posted)
     }
 }

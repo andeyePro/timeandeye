@@ -154,6 +154,17 @@ public struct PermanentPostError: Error, Equatable, CustomStringConvertible {
     public var description: String { reason }
 }
 
+/// Thrown by a connector when the backend rejected OUR CREDENTIALS or forbade
+/// access (401/403): a configuration problem affecting every row equally,
+/// never evidence about the session it happened to hit. The engine ends the
+/// backend's pass and surfaces it WITHOUT counting an attempt — an expired
+/// API key retried every minute must not quarantine billable time `.stuck`.
+public struct BackendAuthError: Error, Equatable, CustomStringConvertible {
+    public let reason: String
+    public init(reason: String) { self.reason = reason }
+    public var description: String { reason }
+}
+
 /// Thrown by a connector's update/delete when an AMENDMENT can't proceed as
 /// asked — the engine reacts per case rather than retrying blindly.
 public enum AmendmentError: Error, Equatable {

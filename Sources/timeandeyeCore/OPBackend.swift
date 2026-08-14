@@ -95,6 +95,34 @@ package final class OPBackend: TaskBackend {
         return n
     }
 
+    /// Classification is the connector's job (TaskBackend's contract: only
+    /// it can tell a 404-task from a 503). Until 2026-08-14 the POST path
+    /// never classified at all, so a deleted task or a hard validation
+    /// refusal burned the transient-attempts cap into `.stuck` — billable
+    /// time quarantined forever behind a button in Settings.
+    private static func classifyPost(_ error: Error) -> Error {
+        guard case OPClientError.httpStatus(let code, let body) = error else { return error }
+        switch code {
+        case 401: return BackendAuthError(reason: "OpenProject rejected the API key (401)")
+        case 403: return BackendAuthError(reason: "OpenProject forbade this account access (403)")
+        case 404: return PermanentPostError(reason: "the task no longer exists at OpenProject (404)")
+        case 422: return PermanentPostError(reason:
+            "OpenProject rejected the entry (422): \(String(body.prefix(160)))")
+        default: return error
+        }
+    }
+
+    /// Auth-only mapping for AMENDMENT paths: a 404/422 there feeds the
+    /// existing divergence/resurrection machinery and must pass through.
+    private static func classifyAuth(_ error: Error) -> Error {
+        guard case OPClientError.httpStatus(let code, _) = error else { return error }
+        switch code {
+        case 401: return BackendAuthError(reason: "OpenProject rejected the API key (401)")
+        case 403: return BackendAuthError(reason: "OpenProject forbade this account access (403)")
+        default: return error
+        }
+    }
+
     package func createTimeEntry(taskID: String, start: Date, duration: TimeInterval,
                                 activityID: Int?, comment: String?) async throws -> RemoteEntryID? {
         let wpID = try opTaskID(taskID)
@@ -109,19 +137,33 @@ package final class OPBackend: TaskBackend {
             // entry? (Overlap validation, feature off, ...)
             onDebug("422 with startTime, retrying without. body: \(body.prefix(300))")
             startTimesSupported = false
-            return try await client.createTimeEntry(
-                workPackageID: wpID, start: start, duration: duration,
-                activityID: activityID, comment: comment, startTime: nil).map(String.init)
-        }
+            do {
+                return try await client.createTimeEntry(
+                    workPackageID: wpID, start: start, duration: duration,
+                    activityID: activityID, comment: comment, startTime: nil).map(String.init)
+            } catch { throw Self.classifyPost(error) }
+        } catch { throw Self.classifyPost(error) }
     }
 
     package func updateTimeEntry(id: RemoteEntryID, taskID: String, start: Date,
                                 duration: TimeInterval, activityID: Int?,
                                 comment: String?) async throws {
-        try await client.updateTimeEntry(
-            id: opID(id), workPackageID: try opTaskID(taskID), start: start,
-            duration: duration, activityID: activityID, comment: comment,
-            startTime: startTimesSupported ? Self.timeFormatter.string(from: start) : nil)
+        do {
+            try await client.updateTimeEntry(
+                id: opID(id), workPackageID: try opTaskID(taskID), start: start,
+                duration: duration, activityID: activityID, comment: comment,
+                startTime: startTimesSupported ? Self.timeFormatter.string(from: start) : nil)
+        } catch OPClientError.httpStatus(422, let body) where startTimesSupported {
+            // Same fallback as create (2026-08-14): an instance that refuses
+            // timed AMENDMENTS used to 422 the same edit every sync pass
+            // forever — create learned to drop startTime, update never did.
+            onDebug("422 with startTime on update, retrying without. body: \(body.prefix(300))")
+            startTimesSupported = false
+            try await client.updateTimeEntry(
+                id: opID(id), workPackageID: try opTaskID(taskID), start: start,
+                duration: duration, activityID: activityID, comment: comment,
+                startTime: nil)
+        } catch { throw Self.classifyAuth(error) }
     }
 
     package func updateEntryComment(id: RemoteEntryID, comment: String) async throws {

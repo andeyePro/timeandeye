@@ -855,6 +855,20 @@ public final class SyncEngine {
                         catch { onDebug("legacy pushed-mirror failed for \(session.id): \(error)") }
                     }
                     report.posted += 1
+                } catch let auth as BackendAuthError {
+                    // Credentials/permissions, not row evidence: the intent
+                    // row returns to `.failed` WITHOUT an attempt increment
+                    // (an expired key retried every minute used to burn the
+                    // head row to `.stuck` in half an hour), and the whole
+                    // backend pass ends, naming the real problem.
+                    let prior = ((try? journal.postingRecord(
+                        session: session.id, backendID: entry.id)) ?? nil)
+                    try? journal.setPostingRecord(PostingRecord(
+                        sessionID: session.id, backendID: entry.id,
+                        state: .failed, lastError: auth.reason,
+                        attempts: prior?.attempts ?? 0, updatedAt: now))
+                    report.error = "\(auth.reason) — check the connection in Settings"
+                    break sessionLoop
                 } catch let permanent as PermanentPostError {
                     // The backend says this can NEVER succeed (task gone,
                     // entry frozen, no mapping): close the row with the

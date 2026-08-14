@@ -1533,6 +1533,7 @@ public final class AppController: ObservableObject {
         }
         promoteStaleCheckpoint()   // recover any session a crash/quit left mid-flight
         retryUnsavedSessions()     // land slices a previous run's save failure held
+        refreshStuckPostingCount() // stuck state from a previous run surfaces at once
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             // queue: .main → this runs on the main actor; assert it so the
@@ -5919,6 +5920,18 @@ public final class AppController: ObservableObject {
         package let lockedInvoices: [(ref: String, count: Int)]
     }
 
+    /// Quarantined rows across all backends — the popover's quiet "N entries
+    /// can't post" line (2026-08-14: `.stuck` time was invisible outside a
+    /// Settings section nobody visits; billable hours could sit unposted
+    /// indefinitely). Refreshed after every sync pass, not per render.
+    @Published package private(set) var stuckPostingCount = 0
+
+    private func refreshStuckPostingCount() {
+        stuckPostingCount = registry.entries.reduce(0) {
+            $0 + (((try? journal.postingRecords(state: .stuck, backendID: $1.id)) ?? []).count)
+        }
+    }
+
     package func postingHealthReport() -> [PostingHealth] {
         registry.entries.compactMap { entry in
             let stuck = ((try? journal.postingRecords(state: .stuck,
@@ -5982,6 +5995,7 @@ public final class AppController: ObservableObject {
                     .requarantine(rows)
             }
             actionNote = "Retrying \(rows.count) stuck entr\(rows.count == 1 ? "y" : "ies")"
+            refreshStuckPostingCount()   // the popover line clears immediately
             Task { await syncIfEnabled() }
         }
     }
@@ -6065,6 +6079,7 @@ public final class AppController: ObservableObject {
             }
         } while syncRequested
         updateJournalSummary()
+        refreshStuckPostingCount()
     }
 
     // MARK: - Billable flags (project Bool, task tri-state)

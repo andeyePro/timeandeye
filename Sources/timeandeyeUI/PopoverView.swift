@@ -851,6 +851,26 @@ struct PopoverView: View {
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+        // Quarantined postings (2026-08-14): billable time that can no longer
+        // post on its own was invisible outside Settings — surface the count
+        // where the user actually looks, one click from the repair.
+        if controller.stuckPostingCount > 0 {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.arrow.circlepath")
+                    .font(.caption2).foregroundStyle(.orange)
+                Text("\(controller.stuckPostingCount) entr\(controller.stuckPostingCount == 1 ? "y" : "ies") can't post")
+                    .font(.caption).lineLimit(1)
+                Spacer(minLength: 0)
+                Button("Fix…") {
+                    openWindow(id: "settings")
+                    AndeyeWindows.activateOnceVisible(opened: "settings")
+                }
+                .font(.caption).buttonStyle(.borderless)
+                .help("Settings ▸ Connections ▸ Posting health — Retry re-queues them")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
         // Away-end rescue offer (reply 2's more-auto half): ending Away with
         // material recorded evidence offers the rebuild right here — the
         // Maintenance flow alone only helped users who remembered it exists.
