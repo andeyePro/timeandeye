@@ -12,6 +12,10 @@ bound to the same value, so you can enter a figure directly.
 
 ### Tracking
 
+- **Sensing permissions** - Time&I needs macOS Accessibility (window
+  titles) and, for browser tabs, Automation. If either goes missing a
+  notice appears here and in the popover with a one-click jump to System
+  Settings - until fixed, tracking can only tell apps apart.
 - **Auto-push to your connected app** - the one certainty threshold:
   sessions at least this certain post by themselves; everything below
   queues for your review. Push the slider past 100% to never auto-push and

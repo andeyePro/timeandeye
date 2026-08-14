@@ -105,6 +105,9 @@ package enum SettingsIA {
         Item("backend.unlock", "Unlock invoice",
              ["lock", "locked", "invoice", "xero", "billed"], .backend),
         // Tracking
+        Item("tracking.permissions", "Sensing permissions",
+             ["accessibility", "automation", "permission", "privacy",
+              "titles", "degraded", "grant"], .tracking),
         Item("tracking.autoPush", "Auto-push threshold",
              ["certainty", "automatic", "post", "upload", "push", "review"], .tracking),
         Item("tracking.floor", "Review queue floor",

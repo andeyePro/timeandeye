@@ -2,6 +2,18 @@
 
 ## 2026-08-14
 
+- [x] **Losing a sensing permission is no longer silent** – revoke
+  Accessibility (window titles) or browser Automation (tab addresses) —
+  an OS update or TCC reset can — and attribution quietly collapsed to
+  app-level with one debug-log line as the only trace, and neither
+  permission was mentioned anywhere in the manual. Now: the popover and
+  Settings ▸ Tracking show an orange notice naming exactly what degraded,
+  with a one-click jump to the right System Settings pane
+  (`accessibilityMissing` / `automationBlocked`; the Automation flag
+  self-clears on the next successful tab read). ⌘F finds it
+  ("accessibility", "degraded"). Manual (both) gains its first
+  permissions passage.
+
 - [x] **Posting failures classify honestly — an expired key can't quarantine
   billable time** – the OP connector never threw `PermanentPostError`, so
   every failure looked transient: a 401 retried once a minute burned the

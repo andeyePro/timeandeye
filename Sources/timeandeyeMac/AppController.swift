@@ -5641,6 +5641,22 @@ public final class AppController: ObservableObject {
         copyToClipboard(prompt)
     }
 
+    /// Sensing permissions (2026-08-14 — losing either was a TOTAL silent
+    /// degrade: one debug line, no UI, not even a manual mention).
+    /// Accessibility off = every window in an app looks identical (no
+    /// titles); Automation blocked = tab addresses invisible, browser
+    /// tracking falls back to titles and email/site detection starves.
+    package var accessibilityMissing: Bool { !sensors.accessibilityTrusted }
+    package var automationBlocked: Bool { sensors.automationDenied }
+
+    /// Deep-link into System Settings ▸ Privacy & Security. `pane` is the
+    /// anchor name ("Privacy_Accessibility" / "Privacy_Automation").
+    package func openPrivacyPane(_ pane: String) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// Mail systems whose validate-on-use health has crossed the unhealthy
     /// threshold — Settings ▸ Email shows the notice (2026-08-14: a webmail
     /// redesign used to end correspondent capture SILENTLY; the only trace

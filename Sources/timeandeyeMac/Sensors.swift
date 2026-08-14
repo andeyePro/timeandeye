@@ -38,6 +38,10 @@ package final class SensorHub {
     }
     package private(set) var accessibilityTrusted = false
 
+    /// Automation (Apple Events to browsers) appears denied — see
+    /// `TabURLEngine.automationDenied`; the sensing-health surface reads it.
+    package var automationDenied: Bool { tabURL.automationDenied }
+
     private var pollTimer: Timer?
     private var lastSurfaceKey: String?
     // Event-driven early-poll layer (13 Aug reply 15: the pause before

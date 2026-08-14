@@ -95,6 +95,12 @@ package final class TabURLEngine {
     /// Logged once per run, not per fetch — a missing Automation grant fails
     /// EVERY read, and per-fetch logging would flood the debug log.
     private var loggedFetchError = false
+    /// True while Automation appears denied (-1743) for the last-scripted
+    /// browser: tab URLs are invisible, browser surfaces degrade to
+    /// app|title, email/site detection starves. Cleared by any successful
+    /// read — the sensing-health surface reads this (2026-08-14; before,
+    /// the one debug-log line was the only trace).
+    package private(set) var automationDenied = false
 
     package init(deadline: TimeInterval = 1.5) {
         self.deadline = deadline
@@ -133,6 +139,9 @@ package final class TabURLEngine {
                 self.lastCompletedAt = Date()
                 self.lastCompletedKey = key
                 if let failure = read.failure {
+                    if failure.contains("-1743") || failure.contains("Not authorized") {
+                        self.automationDenied = true
+                    }
                     if !self.loggedFetchError {
                         self.loggedFetchError = true
                         // -1743 = Automation permission missing/denied:
@@ -143,6 +152,7 @@ package final class TabURLEngine {
                     }
                     return
                 }
+                self.automationDenied = false
                 guard let url = read.out, !url.isEmpty else { return }
                 if self.cache.set(url, forKey: key) { onChange() }
             }

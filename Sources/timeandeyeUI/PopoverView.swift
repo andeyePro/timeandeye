@@ -851,6 +851,30 @@ struct PopoverView: View {
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+        // Sensing permissions (2026-08-14): losing Accessibility or browser
+        // Automation collapses attribution quietly — say so where the user
+        // looks, with the System Settings pane one click away.
+        if controller.accessibilityMissing || controller.automationBlocked {
+            HStack(spacing: 6) {
+                Image(systemName: "eye.trianglebadge.exclamationmark")
+                    .font(.caption2).foregroundStyle(.orange)
+                Text(controller.accessibilityMissing
+                     ? "Can't see window titles — tracking is degraded"
+                     : "Can't see browser tabs — web tracking is degraded")
+                    .font(.caption).lineLimit(1)
+                Spacer(minLength: 0)
+                Button("Fix…") {
+                    controller.openPrivacyPane(controller.accessibilityMissing
+                                               ? "Privacy_Accessibility" : "Privacy_Automation")
+                }
+                .font(.caption).buttonStyle(.borderless)
+                .help(controller.accessibilityMissing
+                      ? "System Settings ▸ Privacy & Security ▸ Accessibility — turn Time&I on"
+                      : "System Settings ▸ Privacy & Security ▸ Automation — allow Time&I to control your browser")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
         // Quarantined postings (2026-08-14): billable time that can no longer
         // post on its own was invisible outside Settings — surface the count
         // where the user actually looks, one click from the repair.

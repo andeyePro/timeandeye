@@ -382,6 +382,45 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var trackingSections: some View {
+            // Sensing permissions: quiet while healthy; when a grant is
+            // missing, name what degraded and put the System Settings pane
+            // one click away (the popover shows the same notice).
+            if controller.accessibilityMissing || controller.automationBlocked {
+                Section("Sensing permissions") {
+                    if controller.accessibilityMissing {
+                        HStack {
+                            Label {
+                                Text("Accessibility is off — window titles are invisible, so tracking can only tell APPS apart, not what you're doing in them.")
+                                    .font(.caption)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } icon: {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                            }
+                            Spacer()
+                            Button("Open System Settings") {
+                                controller.openPrivacyPane("Privacy_Accessibility")
+                            }
+                        }
+                    }
+                    if controller.automationBlocked {
+                        HStack {
+                            Label {
+                                Text("Browser control (Automation) is blocked — tab addresses are invisible, so browser tracking falls back to window titles and email/site matching starves.")
+                                    .font(.caption)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } icon: {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                            }
+                            Spacer()
+                            Button("Open System Settings") {
+                                controller.openPrivacyPane("Privacy_Automation")
+                            }
+                        }
+                    }
+                }
+            }
             Section("Auto-push") {
                 // ONE threshold: at/above it, sessions post to the
                 // connected app by themselves; everything below it queues
