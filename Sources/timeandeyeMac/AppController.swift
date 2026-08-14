@@ -1071,7 +1071,29 @@ public final class AppController: ObservableObject {
                 self.targetSince = nil
                 self.visitSolid = false
                 self.bankedElapsed.removeAll()
-                self.manualNotes.removeAll()   // stop flush already consumed them
+                // Comment-loss edge (2026-07-07 item): the stop flush consumes
+                // notes whose task actually journalled a slice — but a note
+                // typed while a sub-grace FLIT held the displayed task never
+                // meets one (the flit's time re-tagged elsewhere), so the
+                // removeAll below destroyed the user's words. Bank leftovers
+                // onto the nearest kept slice instead: a slightly mis-homed,
+                // still-editable comment beats silent loss. No slice within
+                // the hour → drop as before (stale words on tomorrow's first
+                // slice would be worse).
+                let leftovers = self.manualNotes.values.flatMap { $0 }
+                    .sorted { $0.at < $1.at }
+                if !leftovers.isEmpty,
+                   var recent = ((try? self.journal.sessions(
+                        from: now.addingTimeInterval(-3600), to: now)) ?? [])
+                       .filter({ $0.id != Self.liveCheckpointID })
+                       .max(by: { $0.end < $1.end }) {
+                    let banked = Self.joinedNote(leftovers)
+                    recent.comment = [recent.comment, banked]
+                        .compactMap { $0 }.filter { !$0.isEmpty }
+                        .joined(separator: "\n")
+                    try? self.journal.update(recent)
+                }
+                self.manualNotes.removeAll()
                 self.taskChangedAt = now
                 self.clearCheckpoint()   // nothing in flight to recover
                 Notifier.notify(symbol: "stop.circle", text: "Stopped", sound: "Basso")

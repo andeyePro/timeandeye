@@ -2,6 +2,14 @@
 
 ## 2026-08-14
 
+- [x] **A comment typed during a dropped flit is no longer lost on stop** –
+  the 2026-07-07 edge: a note committed while a sub-grace flit held the
+  displayed task never met a flushed slice for that task, and the stop
+  clear destroyed it. Leftover notes now bank onto the nearest kept slice
+  journalled within the last hour (slightly mis-homed but visible and
+  editable — better than silent loss); with no such slice they drop as
+  before.
+
 - [x] **Email-matching health is user-visible** – three failed
   validate-on-use reads in a row (a webmail redesign) used to end
   correspondent capture SILENTLY, with one debug-log line as the only

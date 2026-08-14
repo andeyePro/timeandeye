@@ -1234,12 +1234,14 @@ and recorded rather than fixed blind:
 
 ## Comment-loss edge (2026-07-07, pre-existing, low priority)
 
-- [ ] A committed comment (in manualNote) on a slice that is then DROPPED as
+- [x] A committed comment (in manualNote) on a slice that is then DROPPED as
   a sub-grace flit and immediately followed by a stop is lost at
-  AppController onState (:598 clears the un-banked note). Rare; pre-existing
-  (predates the enter-to-commit rework). Fix would bank a pending note onto
-  the nearest kept slice, or hold it for the next slice, before the stop
-  clear. Flagged by the reassign/comment review.
+  AppController onState (the stop branch clears un-banked notes). FIXED
+  2026-08-14 (CHANGELOG): leftovers the stop flush couldn't consume now
+  bank onto the nearest kept slice journalled within the last hour
+  (still editable there); only with no such slice do they drop, as
+  before — stale words on tomorrow's first slice would be worse than
+  the rare loss.
 
 ## Timeline/menu-bar issues from hardware test (2026-07-07, Opus, post-Fable)
 
