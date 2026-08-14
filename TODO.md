@@ -406,12 +406,15 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 These need live verification (UI feel / sensor timing), so they were reviewed
 and recorded rather than fixed blind:
 
-- [ ] Sensor poll runs the Chrome-tab AppleScript + AX title read synchronously
+- [x] Sensor poll runs the Chrome-tab AppleScript + AX title read synchronously
   on the main actor every 2 s (Sensors.swift poll). Same hazard class as the
   2026-06-30 email-capture freeze, just lower probability (a hung/modal Chrome
-  stalls tracking AND the UI). Fix = move poll() off the main run loop or fetch
-  URL/title on a background queue and feed results back as events. Needs
-  on-device soak — the email capture revert proves this path bites.
+  stalls tracking AND the UI). FIXED 2026-08-14 (CHANGELOG): `TabURLEngine`
+  moves the URL read to an off-main osascript subprocess behind a
+  browser+title cache (poll answers instantly, corrected-URL re-poll on
+  arrival), and every AX read carries a 1 s messaging timeout. The
+  on-device soak this item asked for still stands — it rides Martin's
+  next few days of real use alongside the 13 Aug latency feel-test.
 - [x] `fullPickList()`/`searchTasks()` re-ran per SwiftUI render — DONE
   2026-07-09: memoised in AppController (one cache serves all 6 call sites),
   invalidated by taskCache/settings/connectedAs didSet + persistAssociations

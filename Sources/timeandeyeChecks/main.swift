@@ -179,6 +179,7 @@ var asyncSuites: [(String, (Checks) async -> Void)] = [
 #if os(macOS)
 suites += [
     ("EmailCapture", emailCaptureChecks),
+    ("TabURL", tabURLChecks),
     ("EmailSystemRecipes", emailSystemRecipeChecks),
     ("EmailRecipeHealth", emailRecipeHealthChecks),
     ("AndeyeLogo", andeyeLogoChecks),

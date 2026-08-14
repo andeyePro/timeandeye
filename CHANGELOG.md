@@ -1,6 +1,28 @@
 # Changelog
 
-## 2026-08-13
+## 2026-08-14
+
+- [x] **Sensor poll goes fully non-blocking (async tab URL + bounded AX
+  reads)** – the frontmost-tab URL was still read with a synchronous
+  `NSAppleScript` round trip on the main run loop every poll — the same
+  shape that froze the sampler on 2026-06-30, and the 13 Aug event-driven
+  early poll multiplied how often it ran; a hung/modal browser could
+  stall tracking AND the UI. New `TabURLEngine` (the `EmailCaptureEngine`
+  discipline: `/usr/bin/osascript` subprocess, hard deadline, one read in
+  flight, all engine state main-confined): `poll()` now takes the URL
+  from a bounded browser+title cache instantly, the refresh corrects the
+  cache off-main and re-runs the same poll, so a stale/missing URL never
+  stands longer than about a second and the poll never waits on a
+  browser. Fetch cadence: immediately on a surface change, every 10 s
+  otherwise (catches SPA same-title URL changes), with a settle guard so
+  the corrected re-poll can't buy a redundant subprocess. Every AX read
+  (title reads + observer re-homing) now carries a 1 s
+  `AXUIElementSetMessagingTimeout` so a beachballing app can't hold the
+  sensor loop for the system-default several seconds. Automation-denied
+  logging (-1743, once per run) preserved in the engine. New TabURL
+  suite (8 checks) covers the fetch policy and cache; the subprocess
+  path is on-device-only by nature. Needs Martin's on-device feel for
+  regression (tab-switch latency should be unchanged or better).
 
 - [x] **Ledger reverse index + the suite now compiles the UI** – the last
   piece of reply 9's ledger ask ("showing me what has been corrected

@@ -256,9 +256,10 @@ package final class EmailCaptureEngine {
     /// so a hung tab/page can never hold the queue's one in-flight slot (or a
     /// caller's thread) open indefinitely. Arguments are passed as `Process`
     /// argv, not through a shell, so nothing here needs AppleScript-string
-    /// escaping beyond what the source already does.
-    private static func runOsascript(_ source: String,
-                                     deadline: TimeInterval) -> (out: String?, failure: String?) {
+    /// escaping beyond what the source already does. Internal (not private):
+    /// `TabURLEngine` runs its off-main URL reads through this same runner.
+    static func runOsascript(_ source: String,
+                             deadline: TimeInterval) -> (out: String?, failure: String?) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", source]

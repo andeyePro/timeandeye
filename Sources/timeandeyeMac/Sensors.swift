@@ -13,6 +13,10 @@ import timeandeyeCore
 /// the backstop and the only authority; events never read anything
 /// themselves, they only advance WHEN the same poll runs (C10 honoured:
 /// everything still fires on the main run loop).
+/// Since 2026-08-14 the poll itself is NON-BLOCKING: the tab URL comes from
+/// `TabURLEngine`'s cache (refreshed off-main; a corrected URL re-runs this
+/// same poll), and every AX read carries a bounded messaging timeout — a
+/// hung or modal browser can no longer stall the sensor loop or the UI.
 package final class SensorHub {
     /// Every emitter today runs on the main run loop (Timer poll, workspace/
     /// distributed notification blocks on .main queues), and the consumer
@@ -48,6 +52,7 @@ package final class SensorHub {
     private var micMonitor: MicMonitor?
     private var screenLocked = false
     private let emailCapture = EmailCaptureEngine()
+    private let tabURL = TabURLEngine()
 
     /// Settings pass-through: the user's own addresses/domains, which capture
     /// must never report as counterparties.
@@ -199,6 +204,7 @@ package final class SensorHub {
             axTitleElement = nil
         }
         let appElement = AXUIElementCreateApplication(axObservedPID)
+        AXUIElementSetMessagingTimeout(appElement, 1.0)   // same bound as the title read
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement,
                                             kAXFocusedWindowAttribute as CFString,
@@ -273,10 +279,15 @@ package final class SensorHub {
         if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { return }
         let appName = app.localizedName ?? "Unknown"
         let title = focusedWindowTitle(pid: app.processIdentifier)
-        let url = activeTabURL(bundleID: app.bundleIdentifier)
+        // The URL is the CACHED read — instant, possibly nil/stale for one
+        // fetch round trip. The refresh below corrects the cache off-main
+        // and re-runs this same poll, so a wrong URL never stands longer
+        // than ~a second, and the poll never blocks on a browser.
+        let url = tabURL.cachedURL(bundleID: app.bundleIdentifier, title: title)
 
         let key = "\(appName)|\(title ?? "")|\(url ?? "")"
-        if key != lastSurfaceKey {
+        let surfaceChanged = key != lastSurfaceKey
+        if surfaceChanged {
             lastSurfaceKey = key
             let signal = ActivitySignal(app: appName, windowTitle: title, tabURL: url, timestamp: now)
             // The plain signal goes out FIRST and unconditionally — tracking
@@ -284,6 +295,12 @@ package final class SensorHub {
             // later, if at all, as a separate .focusEnrichment event.
             emit(.focus(signal))
             captureEmailIfEligible(signal, bundleID: app.bundleIdentifier)
+        }
+        if let bundleID = app.bundleIdentifier {
+            tabURL.refresh(bundleID: bundleID, title: title,
+                           surfaceChanged: surfaceChanged) { [weak self] in
+                self?.poll()   // main queue; the corrected URL flows out here
+            }
         }
     }
 
@@ -317,12 +334,18 @@ package final class SensorHub {
     private func focusedWindowTitle(pid: pid_t) -> String? {
         guard accessibilityTrusted else { return nil }
         let appElement = AXUIElementCreateApplication(pid)
+        // Bound the round trip: an AX read blocks the CALLING thread until
+        // the target app services it, and this runs on the main run loop —
+        // a beachballing app would otherwise stall tracking and our UI for
+        // the system default (several seconds) per poll.
+        AXUIElementSetMessagingTimeout(appElement, 1.0)
         var window: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString,
                                             &window) == .success,
               let windowRef = window,
               CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
         let windowElement = windowRef as! AXUIElement   // provably safe: type-checked above
+        AXUIElementSetMessagingTimeout(windowElement, 1.0)   // timeouts are per-element ref
         var title: CFTypeRef?
         guard AXUIElementCopyAttributeValue(windowElement,
                                             kAXTitleAttribute as CFString,
@@ -330,45 +353,8 @@ package final class SensorHub {
         return title as? String
     }
 
-    // MARK: - Browser tabs (Apple Events; triggers the Automation prompt once)
-
-    private let chromeLikeBundleIDs: Set<String> = [
-        "com.google.Chrome", "com.operasoftware.Opera", "com.brave.Browser",
-    ]
-
-    /// Logged once per run, not per poll — a missing Automation grant fails
-    /// EVERY read, and per-poll logging would flood the debug log.
-    private var loggedTabURLError = false
-
-    /// The frontmost tab's URL for any browser we can script: Chrome-likes
-    /// share one AppleScript verb; Safari has its own ("URL of front
-    /// document"). nil for everything else — and for browsers whose
-    /// Automation grant is missing (logged once).
-    private func activeTabURL(bundleID: String?) -> String? {
-        guard let bundleID else { return nil }
-        let source: String
-        let appName: String
-        if chromeLikeBundleIDs.contains(bundleID) {
-            appName = bundleID == "com.google.Chrome" ? "Google Chrome"
-                : bundleID == "com.operasoftware.Opera" ? "Opera" : "Brave Browser"
-            source = "tell application \"\(appName)\" to get URL of active tab of front window"
-        } else if bundleID == "com.apple.Safari" {
-            appName = "Safari"
-            source = "tell application \"Safari\" to get URL of front document"
-        } else {
-            return nil
-        }
-        var error: NSDictionary?
-        let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error, !loggedTabURLError {
-            loggedTabURLError = true
-            // -1743 = Automation permission missing/denied for this browser:
-            // every URL read fails SILENTLY, browser surfaces degrade to
-            // app|title, and email detection starves. Make it findable.
-            DebugLog.write("tab URL AppleScript failed for \(appName): \(error)")
-        }
-        return error == nil ? result?.stringValue : nil
-    }
+    // Browser-tab URLs live in TabURLEngine (Apple Events via an osascript
+    // subprocess, off-main; still triggers the Automation prompt once).
 }
 
 /// System-wide microphone-in-use via the default input device's
