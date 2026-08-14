@@ -2,6 +2,17 @@
 
 ## 2026-08-14
 
+- [x] **Silent data loss is now visible (held slices + newer-version rows)**
+  – two invisible skips surfaced in the Maintenance journal summary: "N
+  held after a failed save (retrying)" (the iter-24 save-before-clear
+  buffer, previously surfaced only at the moment of failure via
+  lastError) and "N from a newer Time&I version (not visible here)" —
+  every SQLite row decode now runs through one chokepoint that records
+  distinct undecodable payloads (`JournalStore.undecodableRowsObserved`,
+  default 0 for stores that never drop), where before a row written by a
+  newer build silently vanished from every list (D0.3). The CloudKit
+  pull-side counter rides when sync goes live (TODO).
+
 - [x] **Away rescue offers itself when Away ends** – the rescue flow only
   helped a user who remembered Settings ▸ Maintenance exists, which the
   forgotten-toggle day (the one that cost ~24 h of reconstruction) is

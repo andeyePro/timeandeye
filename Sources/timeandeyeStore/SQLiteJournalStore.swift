@@ -35,6 +35,27 @@ package final class SQLiteJournalStore: JournalStore {
         return try body()
     }
 
+    /// Distinct JSON payloads this run OBSERVED but could not decode —
+    /// typically rows written by a NEWER app version (D0.3: they used to be
+    /// silently `try?`-dropped with zero user-facing trace). Keyed by
+    /// payload hash so repeated query passes never recount the same row.
+    /// Only ever mutated through `decodeRow`, which runs inside the query
+    /// methods' own `locked` sections; the getter takes the lock itself.
+    private var undecodableHashes = Set<Int>()
+
+    package var undecodableRowsObserved: Int {
+        locked { undecodableHashes.count }
+    }
+
+    /// The one decode chokepoint for row reads: a failure records the
+    /// payload (advisory counter above) instead of vanishing. Call ONLY
+    /// from inside a `locked` query body.
+    private func decodeRow<T: Decodable>(_ type: T.Type, from data: Data) -> T? {
+        if let value = try? decoder.decode(type, from: data) { return value }
+        undecodableHashes.insert(data.hashValue)
+        return nil
+    }
+
     package init(path: String) throws {
         if sqlite3_open(path, &db) != SQLITE_OK {
             throw StoreError.open(String(cString: sqlite3_errmsg(db)))
@@ -273,7 +294,7 @@ package final class SQLiteJournalStore: JournalStore {
             FROM sessions WHERE id = ?
             """,
                   bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-            guard let session = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) else { return }   // skip an undecodable row, not the whole read
+            guard let session = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) else { return }   // skip an undecodable row, not the whole read
             let device = sqlite3_column_text(stmt, 3).map { String(cString: $0) } ?? ""
             out.append((session,
                         HLC(physicalMillis: sqlite3_column_int64(stmt, 1),
@@ -288,7 +309,7 @@ package final class SQLiteJournalStore: JournalStore {
     package func allSessions() throws -> [Session] {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE deleted = 0 ORDER BY start") { stmt in
-            if let s = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
+            if let s = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
         }
         return out
     }
@@ -297,7 +318,7 @@ package final class SQLiteJournalStore: JournalStore {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE id = ? AND deleted = 0",
                   bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-            if let s = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
+            if let s = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
         }
         return out.first
     }
@@ -337,7 +358,7 @@ package final class SQLiteJournalStore: JournalStore {
         var out: [Session] = []
         try query("SELECT json FROM sessions WHERE pushed = 0 AND is_op = 1 AND deleted = 0 AND certainty >= ? ORDER BY start",
                   bind: { sqlite3_bind_double($0, 1, threshold) }) { stmt in
-            if let s = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
+            if let s = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
         }
         return out
     }
@@ -351,7 +372,7 @@ package final class SQLiteJournalStore: JournalStore {
             var sessions: [Session] = []
             try query("SELECT json FROM sessions WHERE id = ?",
                       bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-                if let s = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) { sessions.append(s) }
+                if let s = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) { sessions.append(s) }
             }
             guard var session = sessions.first else { return }
             session.pushedToOP = true
@@ -577,7 +598,7 @@ package final class SQLiteJournalStore: JournalStore {
                       sqlite3_bind_double($0, 1, threshold)
                       sqlite3_bind_text($0, 2, backendID, -1, Self.transient)
                   }) { stmt in
-            if let s = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
+            if let s = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
         }
         return out
     }
@@ -621,7 +642,7 @@ package final class SQLiteJournalStore: JournalStore {
             + excluding.map { "'\($0.uuidString)'" }.joined(separator: ",") + ")"
         try query("SELECT json_extract(json, '$.task'), MAX(end) FROM sessions WHERE deleted = 0\(notIn) GROUP BY 1") { stmt in
             guard let text = sqlite3_column_text(stmt, 0) else { return }
-            if let ref = try? self.decoder.decode(TaskRef.self,
+            if let ref = self.decodeRow(TaskRef.self,
                                                   from: Data(String(cString: text).utf8)) {
                 out[ref] = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1))
             }
@@ -638,7 +659,7 @@ package final class SQLiteJournalStore: JournalStore {
                       sqlite3_bind_double($0, 1, to.timeIntervalSince1970)
                       sqlite3_bind_double($0, 2, from.timeIntervalSince1970)
                   }) { stmt in
-            if let s = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
+            if let s = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, never abort the whole read
         }
         return out
     }
@@ -659,7 +680,7 @@ package final class SQLiteJournalStore: JournalStore {
                       sqlite3_bind_double($0, 1, to.timeIntervalSince1970)
                       sqlite3_bind_double($0, 2, from.timeIntervalSince1970)
                   }) { stmt in
-            guard let session = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) else { return }   // skip an undecodable row, not the whole read
+            guard let session = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) else { return }   // skip an undecodable row, not the whole read
             let device = sqlite3_column_text(stmt, 3).map { String(cString: $0) } ?? ""
             out.append(SessionRevision(
                 session: session,
@@ -796,7 +817,7 @@ package final class SQLiteJournalStore: JournalStore {
                       sqlite3_bind_double($0, 1, from.timeIntervalSince1970)
                       sqlite3_bind_double($0, 2, to.timeIntervalSince1970)
                   }) { stmt in
-            if let s = try? self.decoder.decode(FocusSpan.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
+            if let s = self.decodeRow(FocusSpan.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
         }
         return out
     }
@@ -828,7 +849,7 @@ package final class SQLiteJournalStore: JournalStore {
     package func pendingReview() throws -> [ReviewSegment] {
         var out: [ReviewSegment] = []
         try query("SELECT json FROM review_segments WHERE assigned = 0 ORDER BY start") { stmt in
-            if let s = try? self.decoder.decode(ReviewSegment.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
+            if let s = self.decodeRow(ReviewSegment.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
         }
         return out
     }
@@ -840,7 +861,7 @@ package final class SQLiteJournalStore: JournalStore {
                 var segments: [ReviewSegment] = []
                 try query("SELECT json FROM review_segments WHERE id = ?",
                           bind: { sqlite3_bind_text($0, 1, id.uuidString, -1, Self.transient) }) { stmt in
-                    if let s = try? self.decoder.decode(ReviewSegment.self,
+                    if let s = self.decodeRow(ReviewSegment.self,
                                                         from: self.jsonColumn(stmt, 0)) { segments.append(s) }
                 }
                 guard var segment = segments.first else { continue }
@@ -900,7 +921,7 @@ package final class SQLiteJournalStore: JournalStore {
         try pruneRetroDigests()
         var out: [RetroDigest] = []
         try query("SELECT json FROM retro_digests ORDER BY date DESC LIMIT \(limit)") { stmt in
-            if let s = try? self.decoder.decode(RetroDigest.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
+            if let s = self.decodeRow(RetroDigest.self, from: self.jsonColumn(stmt, 0)) { out.append(s) }   // skip one undecodable row, not the whole read
         }
         return out
     }
@@ -929,7 +950,7 @@ extension SQLiteJournalStore: RevisionStore {
             SELECT json, hlc_millis, hlc_counter, hlc_device, origin, deleted
             FROM sessions WHERE hlc_device != ''
             """) { stmt in
-            guard let session = try? self.decoder.decode(Session.self, from: self.jsonColumn(stmt, 0)) else { return }   // skip an undecodable row, not the whole read
+            guard let session = self.decodeRow(Session.self, from: self.jsonColumn(stmt, 0)) else { return }   // skip an undecodable row, not the whole read
             let device = sqlite3_column_text(stmt, 3).map { String(cString: $0) } ?? ""
             out.append(SessionRevision(
                 session: session,

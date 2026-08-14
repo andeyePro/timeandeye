@@ -1002,6 +1002,7 @@ public final class AppController: ObservableObject {
                 self.lastError = "Couldn't save tracked time — \(error). The slice is held and will retry."
                 self.unsavedSessions.append(s)
                 try? self.unsavedStore.save(self.unsavedSessions)
+                self.updateJournalSummary()   // the held count is visible immediately
             }
             // The TASK-feed half no longer rides the flush: commitComment
             // posts it immediately to the DISPLAYED task. Consuming it here
@@ -3092,6 +3093,16 @@ public final class AppController: ObservableObject {
         let awaiting = (try? journal.sessions(
             needingPushAtOrAbove: settings.certaintyAutoPushThreshold).count) ?? 0
         journalSummary = "\(total) sessions journalled · \(pushed) handled · \(awaiting) awaiting push"
+        // Silent-loss visibility (2026-08-14): both of these used to leave
+        // no user-facing trace at all — a held slice retried invisibly, a
+        // newer-version row vanished from every list.
+        if !unsavedSessions.isEmpty {
+            journalSummary += " · \(unsavedSessions.count) held after a failed save (retrying)"
+        }
+        let undecodable = journal.undecodableRowsObserved
+        if undecodable > 0 {
+            journalSummary += " · \(undecodable) from a newer Time&I version (not visible here)"
+        }
         journalFootprintSummary = Self.footprintText(try? journal.journalFootprint())
         journalRevision &+= 1
     }

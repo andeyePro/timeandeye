@@ -151,9 +151,18 @@ public protocol JournalStore {
     func retroDigests(limit: Int) throws -> [RetroDigest]
     /// Remove a digest row (undo has fully applied — nothing left to re-undo).
     func deleteRetroDigest(_ id: UUID) throws
+
+    /// Advisory (D0.3): distinct stored rows this run OBSERVED but could not
+    /// decode — typically rows written by a NEWER app version, which used to
+    /// be silently dropped with no user-facing trace. The default (below)
+    /// returns 0 for stores that never fail a decode (in-memory/mocks).
+    var undecodableRowsObserved: Int { get }
 }
 
 public extension JournalStore {
+    /// Default: nothing observed (see the protocol doc).
+    var undecodableRowsObserved: Int { 0 }
+
     /// Default: no sync replica, nothing overlaps — the raw window IS the
     /// resolved view. (The SQLite store overrides when its clock is attached.)
     func resolvedSessions(from: Date, to: Date) throws -> [Session] {

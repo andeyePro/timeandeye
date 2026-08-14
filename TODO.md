@@ -1308,9 +1308,16 @@ and recorded rather than fixed blind:
   markPushed still writes pushedToOP/opTimeEntryID into the synced session, so
   bookkeeping still competes with edits in whole-record LWW. Depends on D2(b)
   carrying the state. F10 stays genuinely open until this lands.
-- [ ] D0.3: surface decode drops — "N sessions from a newer andeye version
-  aren't visible on this device" instead of silently compactMap-dropping in
-  pull. User-facing; not built (deliberately deferred, per the D0 audit above).
+- [x] D0.3: surface decode drops — "N sessions from a newer andeye version
+  aren't visible on this device" instead of silently compactMap-dropping.
+  STORE HALF BUILT 2026-08-14 (CHANGELOG): every SQLite row decode runs
+  through one chokepoint that records distinct undecodable payloads;
+  `JournalStore.undecodableRowsObserved` (default 0) surfaces in the
+  Maintenance journal summary alongside the new "N held after a failed
+  save (retrying)" count. REMAINING when CloudKit sync goes live: the
+  pull-side transport (CloudKitSyncTransport record→Session decode)
+  drops newer-version records before they reach the replica store — give
+  it the same counter then.
 - [ ] D7 / F14: billing.json is per-device — fold billable rules into synced
   settings when settings-sync lands. Deferred by design (D2(a) ownership bounds
   the harm to one evaluating device); until then, set billable flags on the
