@@ -910,9 +910,27 @@ struct PopoverView: View {
                 // off changeMode alone, so it stays correct when the user flips
                 // popoverDefaultsToChangeMode (then Switch-to is the plain one).
                 let inDefaultMode = changeMode == controller.settings.popoverDefaultsToChangeMode
-                Text(changeMode ? "Reassign" : "Switch to")
-                    .font(.caption)
-                    .foregroundStyle(inDefaultMode ? .secondary : AndeyeColors.highlight)
+                // Martin's 2026-07-17 call: the mode label itself is a
+                // vary-path (clicking the current task was the only one
+                // users could find), and a right-click sets which mode is
+                // the DEFAULT — no trip to Settings.
+                Button { changeMode.toggle() } label: {
+                    Text(changeMode ? "Reassign" : "Switch to")
+                        .font(.caption)
+                        .foregroundStyle(inDefaultMode ? .secondary : AndeyeColors.highlight)
+                }
+                .buttonStyle(.plain)
+                .help("Click: \(changeMode ? "switch instead" : "reassign instead") for the next pick · right-click: change the default")
+                .contextMenu {
+                    Button("Default: Reassign\(controller.settings.popoverDefaultsToChangeMode ? " ✓" : "")") {
+                        controller.settings.popoverDefaultsToChangeMode = true
+                        changeMode = true
+                    }
+                    Button("Default: Switch to\(controller.settings.popoverDefaultsToChangeMode ? "" : " ✓")") {
+                        controller.settings.popoverDefaultsToChangeMode = false
+                        changeMode = false
+                    }
+                }
                 // Reassign scope, legible BEFORE the click (reply 3 = y): a
                 // reassign moves only the current tab/window's stretch, so
                 // when that differs from the slice total, both figures show

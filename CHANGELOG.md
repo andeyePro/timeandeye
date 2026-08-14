@@ -2,6 +2,14 @@
 
 ## 2026-08-14
 
+- [x] **Popover mode label: click to vary, right-click to set the default**
+  – Martin's 2026-07-17 call, verbatim: the "Reassign / Switch to" label
+  was inert text and clicking the current task was the only discoverable
+  vary-path. The label is now a button (flips the mode for that open;
+  snap-back unchanged) and its right-click menu sets which mode IS the
+  default (the existing Setting, ✓ on the current one). Manual (both)
+  synced.
+
 - [x] **Silent data loss is now visible (held slices + newer-version rows)**
   – two invisible skips surfaced in the Maintenance journal summary: "N
   held after a failed save (retrying)" (the iter-24 save-before-clear

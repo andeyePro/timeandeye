@@ -108,11 +108,12 @@
   whole-session sweep for now (could extend later if the reassign clearly
   informs prior spans, parked as annoyance-risk). The visible tracked-time
   decrease is the user's alert. Martin tests for a few days once built.
-- [ ] Popover mode default (Martin's call, 2026-07-17): keep the snap-back to
-  the default after each action — vary-per-click, no master toggle. Clicking
-  the "Reassign/Switch to" label should ALSO vary from the default for that
-  click (currently clicking the current task is the only discoverable
-  vary-path). Candidate: right-click on it to change the default action.
+- [x] Popover mode default (Martin's call, 2026-07-17): keep the snap-back to
+  the default after each action — vary-per-click, no master toggle. DONE
+  2026-08-14 (CHANGELOG): the "Reassign/Switch to" label is now itself a
+  vary-click (flips mode for that open, same snap-back), and
+  right-clicking it sets which mode is the default (writes the existing
+  Setting; ✓ marks the current default). Manual (both) synced.
   (Related decision closed: the 60 s switch hold stays, not a setting.)
 - [ ] Delete Projects/timeandeye-preflip (Martin, ~week of 2026-07-20) — the
   last unrewritten pre-flip copy; everything private in it is preserved in

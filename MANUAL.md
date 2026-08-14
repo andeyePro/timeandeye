@@ -53,8 +53,9 @@ The task list:
   it was tracked, banked as its own entry. When those two figures differ, the
   mode label shows both ("moves 1m on this tab · 10m total") so the scope is
   clear before you click; the menu-bar clock keeps showing the running
-  total. Which mode is the default when you open the popover is a Setting;
-  clicking the current task title flips to the other for that open.
+  total. Clicking the mode label (or the current task title, or ⌘T) flips
+  to the other mode for that open; right-click the label to change which
+  mode is the default (also a Setting).
 - **Filter / search.** The field is focused when the popover opens, so you can
   type immediately. With it empty the list shows your recent and likely tasks
   first, then everything else, all scrollable. Typing fuzzy-searches every task.
