@@ -45,12 +45,12 @@
   shows "moves 1m on this tab · 10m total" when the figures differ.
   Martin tests for a few days (the 2026-07-17 item below stays open as
   the feel gate).
-- [ ] Away rescue = MORE AUTO (reply 2): the rescue flow SHIPPED
+- [x] Away rescue = MORE AUTO (reply 2): the rescue flow SHIPPED
   2026-08-13 (AwayRescue planner + Settings ▸ Away rescue preview/apply —
   CHANGELOG; snapshot-verified). His end-time extension LANDED
   later same day (orphan-mode planner + applyTimelineEdit hook —
-  CHANGELOG). The 13 Aug away-rescue decision is now fully built; only
-  the older away item's Mac-half span filters remain (below).
+  CHANGELOG). The older away item's Mac-half span filters landed
+  2026-08-14 (below) — the whole away programme is now built.
 - [x] Double-forget escalation (reply 4) — DONE 2026-08-13 (CHANGELOG):
   second forget on the same card unlocks "delete ALL learned experience
   for <task>" (counts + totals + primes toward it; pins/stickies/rules
@@ -473,7 +473,7 @@ and recorded rather than fixed blind:
   07-13) can't have executed this check as recorded; treat historical
   suite-count claims from container sessions as unverified.
 
-- [ ] Away mode ("I'm leaving my desk", ⌘⇧L) must keep RECORDING window/
+- [x] Away mode ("I'm leaving my desk", ⌘⇧L) must keep RECORDING window/
   focus evidence while pinned. Intended use is off-computer work on the
   pinned task for potentially 8h+ (client days), so NO duration cap.
   Today `SessionTracker.handle` discards all events while `away` is set,
@@ -518,15 +518,17 @@ and recorded rather than fixed blind:
   proven by a control-run comparison in the checks). The store's existing
   30-day spans prune horizon (JournalPrune) applies to this evidence same
   as any other span — the recovery flow below must not assume unbounded
-  history. Still open: requirement (c), the recovery flow itself
-  (Settings replay UI) — UNBLOCKED 2026-08-13, Martin chose "more auto":
-  the engine replays the recorded events and proposes a rebuilt timeline
-  to confirm (see the 13 Aug programme above, which also adds his
-  end-time-orphan auto-apply extension). Mac-half
-  follow-ups once recovery is designed: filter `observedWhileAway` at
-  `windowBoundaries`, `reassignSpentApp`, and the TimelineView zoom strip
-  (none of these read spans on Linux, so the checks subset can't cover
-  them — Mac-only work, needs a Mac session).
+  history. Requirement (c), the recovery flow, SHIPPED 2026-08-13
+  (Settings ▸ Away rescue, engine replay + preview/apply — CHANGELOG;
+  Martin chose "more auto", his end-time-orphan auto-apply extension
+  landed same day). Mac-half span filters DONE 2026-08-14 (CHANGELOG):
+  `observedWhileAway` rows are now excluded from `windowBoundaries`
+  (snap edges), `reassignSpentApp` (carve ranges) and `timelineSpans`
+  (the timeline's window-detail strip + span-reassign bar) — the away
+  rescue readers keep reading them deliberately. Whole item closed;
+  known consequence, revisit only if it annoys: a rescued/pinned
+  stretch's slices show no window panes in the timeline (the Away
+  rescue preview is the sanctioned viewer for that evidence).
 
 - [ ] Once andeye.com serves the canonical /terms + /privacy: delete
   `site/docs/terms.md` + `site/docs/privacy.md` here and turn `site/src/pages/

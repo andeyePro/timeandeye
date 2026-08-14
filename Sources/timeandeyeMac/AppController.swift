@@ -3613,7 +3613,12 @@ public final class AppController: ObservableObject {
     }
 
     package func timelineSpans(for session: Session) -> [FocusSpan] {
-        (try? journal.spans(from: session.start, to: session.end)) ?? []
+        // Away-observed shadow rows never render as real window detail (the
+        // Away rescue preview is their sanctioned viewer) — without this a
+        // pinned away stretch showed its shadow windows as if tracked, and
+        // the span-reassign bar could teach from them.
+        ((try? journal.spans(from: session.start, to: session.end)) ?? [])
+            .filter { !$0.observedWhileAway }
     }
 
     /// Why the attributor would pick a task for this window — drives the
@@ -4643,7 +4648,10 @@ public final class AppController: ObservableObject {
     /// instead of being split across the slice boundary.
     package func windowBoundaries(from: Date, to: Date) -> [Date] {
         var edges = Set<Date>()
-        for s in (try? journal.spans(from: from, to: to)) ?? [] {
+        // Shadow evidence recorded during an away stretch never offers snap
+        // edges — an edit should snap to REAL tracked windows only.
+        for s in ((try? journal.spans(from: from, to: to)) ?? [])
+            where !s.observedWhileAway {
             edges.insert(s.start)
             edges.insert(s.end)
         }
@@ -5158,8 +5166,11 @@ public final class AppController: ObservableObject {
         var work: [(Session, [Session])] = []
         var movedSeconds: TimeInterval = 0
         for session in candidates {
+            // Shadow rows can't carve: an away stretch is the pinned task by
+            // the user's explicit word, so an app-level sweep must not split
+            // it at windows that were merely OBSERVED while away.
             let spans = ((try? journal.spans(from: session.start, to: session.end)) ?? [])
-                .filter { $0.signal.app == appLabel }
+                .filter { $0.signal.app == appLabel && !$0.observedWhileAway }
             guard !spans.isEmpty else { continue }
             let ranges = spans.map {
                 (start: max($0.start, session.start), end: min($0.end, session.end))

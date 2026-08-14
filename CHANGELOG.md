@@ -2,6 +2,18 @@
 
 ## 2026-08-14
 
+- [x] **Away shadow evidence stops masquerading as real window detail** –
+  the last Mac-half of the away-mode programme: rows recorded while
+  "I'm leaving my desk" was pinned (`observedWhileAway`) are now
+  excluded from `windowBoundaries` (edit snapping no longer offers
+  shadow edges), `reassignSpentApp` (an app-level sweep can't carve a
+  pinned away stretch at merely-observed windows) and `timelineSpans`
+  (the timeline's window-detail strip and span-reassign bar — so no
+  teaching from shadow rows). The away-rescue readers keep reading them
+  by design; identity/teaching/aggregation were already defended at the
+  `FocusSpan.dominant` choke point. The 2026-08-07 away item is now
+  fully closed.
+
 - [x] **Sensor poll goes fully non-blocking (async tab URL + bounded AX
   reads)** – the frontmost-tab URL was still read with a synchronous
   `NSAppleScript` round trip on the main run loop every poll — the same
