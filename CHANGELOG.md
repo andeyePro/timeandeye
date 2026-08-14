@@ -2,6 +2,18 @@
 
 ## 2026-08-14
 
+- [x] **Light-mode highlight contrast + both-appearance agent eyes** – the
+  shared highlight (`AndeyeTheme.Colours.highlight`, foreground text/
+  glyphs) is now appearance-resolved: dark keeps the proven light blue,
+  light mode gets a deep blue instead of the washed-out light blue the
+  2026-07-12 review flagged (canImport-guarded platform colour — iOS gets
+  the same split, no new dependency for any consumer). And the snapshot
+  harness renders EVERY view in BOTH appearances (`-light`/`-dark`
+  suffixed PNGs, per-render `NSAppearance`), so light-only contrast bugs
+  are visible to agent eyes from now on — verified by pulling both
+  popover renders over the bridge and looking. Final light-blue value
+  awaits Martin's on-device eye.
+
 - [x] **Save-before-clear: a hard save failure can no longer lose a slice**
   – the post-flip robustness item. Mac: when the flush's SQLite save
   throws, the slice re-stages in an in-hand buffer mirrored to

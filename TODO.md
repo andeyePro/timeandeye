@@ -626,8 +626,15 @@ and recorded rather than fixed blind:
   fact-model); extract a shared debounce helper (3 hand-rolled copies);
   `connectorHealth` recompute per connector (memo). Detail in the
   /code-review report at a private path
-- [ ] Light-mode contrast: `AndeyeColors.highlight` needs a light-scheme
+- [x] Light-mode contrast: `AndeyeColors.highlight` needs a light-scheme
   variant (light blue reads weak on white/blue; dark mode confirmed good).
+  DONE 2026-08-14 (CHANGELOG): the highlight is now appearance-resolved —
+  dark keeps the proven light blue, light mode gets a deep blue
+  (canImport-guarded platform colour; iOS gets the same split). The
+  snapshot harness now renders EVERY view in both appearances
+  (-light/-dark suffixes), so this class of bug is visible to agent eyes
+  from now on. Needs Martin's on-device look for the final word on the
+  light-blue value.
 - [ ] Re-shoot the deleted review-drawer screenshot with mocked data.
   
   longer in the tree. Nothing referenced it, but a replacement
