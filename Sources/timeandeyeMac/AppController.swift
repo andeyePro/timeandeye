@@ -2147,7 +2147,14 @@ public final class AppController: ObservableObject {
             let pinsSnapshot = attributor.pins
             let stickiesSnapshot = attributor.sessionStickies
             let calendarSnapshot = calendarRules
-            registerUndo("assign \(ids.count) review rows") { [weak self] in
+            // Replay is id-stable (journal.assign + the Unknown re-points are
+            // all id-keyed; teaches recompute from the same rows), so ⌘⇧Z
+            // re-runs the assign — batch 5 of the undo-redo spec.
+            registerUndo("assign \(ids.count) review rows",
+                         redo: { [weak self] in
+                             self?.assignReview(ids, to: target, undoable: true,
+                                                gesture: gesture)
+                         }) { [weak self] in
                 guard let self else { return }
                 try? self.journal.assign(ids, to: nil)
                 for r in repoints {
@@ -4894,7 +4901,14 @@ public final class AppController: ObservableObject {
             // restore an identical snapshot — a no-op.
             let restoreLearning = previous.task != session.task
                 ? attributorSnapshotRestore() : nil
-            registerUndo("edit \(name(of: .task(previous.task)))") { [weak self] in
+            // Replay is id-stable (journal.update on the same session id; the
+            // sever/teach/orphan-fill paths re-run exactly as the original
+            // call did), so ⌘⇧Z re-applies the edit — batch 5. `session` is
+            // the caller's edited struct, captured before normalisation.
+            registerUndo("edit \(name(of: .task(previous.task)))",
+                         redo: { [weak self] in
+                             await self?.applyTimelineEdit(session, undoable: true)
+                         }) { [weak self] in
                 guard let self else { return }
                 var restore = previous
                 // Trust the CURRENT row's remote linkage over the snapshot's:
@@ -5106,7 +5120,13 @@ public final class AppController: ObservableObject {
         if undoable {
             let originals = sessions.filter { $0.id != Self.liveSessionID }
             let restoreLearning = attributorSnapshotRestore()
-            registerUndo("reassign \(originals.count) slices") { [weak self] in
+            // Replay is id-stable (per-id sever + journal.update; no session
+            // recreation), so ⌘⇧Z re-runs the reassign — batch 5.
+            registerUndo("reassign \(originals.count) slices",
+                         redo: { [weak self] in
+                             await self?.reassignTimelineSessions(sessions, to: task,
+                                                                  undoable: true)
+                         }) { [weak self] in
                 guard let self else { return }
                 // restore each to its original task
                 for original in originals {

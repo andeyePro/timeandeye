@@ -2,6 +2,14 @@
 
 ## 2026-08-14
 
+- [x] **⌘⇧Z reaches review assigns and timeline edits (undo-redo batch 5)**
+  – the last conversion batch: `assignReview`, `applyTimelineEdit` and
+  `reassignTimelineSessions` all replay id-stably (id-keyed journal
+  writes, no session recreation — audit in the spec) and now carry
+  explicit redo closures, so undoing them arms ⌘⇧Z instead of dead-ending.
+  Deliberate boundaries kept: `replaceSession` (fresh piece ids) and
+  undo-group entries. Spec + TODO record the audit.
+
 - [x] **Menu-clock ↔ timeline elapsed desync audited and pinned** – Martin's
   2026-07-07 "2s vs 8min" sighting: the under-count direction is now
   structurally impossible (the menu takes max(open-slice elapsed,

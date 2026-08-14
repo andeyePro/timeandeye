@@ -301,10 +301,11 @@ call, not a mechanical fix:
   routing — spec docs/superpowers/specs/2026-08-13-undo-redo-core.md) and
   (b) undo TRANSPARENCY (every ⌘Z/⌘⇧Z banner names what it changed, and
   the banner now floats above the popover). Money already posted is
-  still never clawed back silently. Remaining conversion batches (3
-  billable marks, 4 forget family, 5 review/timeline audit) tracked in
-  the spec — unconverted steps are honest redo boundaries, never
-  silently skipped.
+  still never clawed back silently. All five conversion batches are now
+  in (3-4 on 2026-08-13, 5 — review assign / timeline edit / timeline
+  reassign — on 2026-08-14; audit trail in the spec). Deliberate
+  boundaries that remain: `replaceSession` (fresh piece ids) and whole
+  undo-GROUP entries — honest ⌘⇧Z stops, never silently skipped.
 - [x] `ingestAIResponse` applies N assignments as N undo steps (each fully
   undoable); grouping into one step means making the call async (UI ripple).
   DONE 2026-07-10 without the ripple: `UndoStack.groupSync` — a

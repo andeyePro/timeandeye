@@ -72,3 +72,14 @@ as boundaries.
    = re-run the forget with the same args.
 5. Review assign / timeline edits — audit id-stability per site before
    converting; recreation-based inverses stay boundaries.
+
+Batch status: 1-2 landed 2026-08-13 (9c78447, 0fbfbef), 3-4 landed
+2026-08-13 (8f8af4f). Batch 5 audited + landed 2026-08-14: `assignReview`
+(id-keyed journal.assign + Unknown re-points; teaches recompute),
+`applyTimelineEdit` (id-keyed update; sever/orphan-fill re-run as the
+original did) and `reassignTimelineSessions` (per-id sever + update, no
+recreation) all replay id-stably and carry explicit redo closures.
+`replaceSession` mints fresh piece ids — recreation, stays a boundary by
+this spec's own rule, as do whole undoGroup entries (a group's members
+fold into one snapshot-inverse entry; redo through groups would need
+member-level re-registration, deliberately not attempted).
