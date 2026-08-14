@@ -109,7 +109,9 @@ alerts can be switched off individually; a meeting already underway when
 andeye starts never flashes after the fact, tentative invites pulse but
 never flash, and all-day events never alert. The same matching runs over
 your calendar history for the Review queue, so an old row that overlaps a
-past meeting gets a one-click assign hint too. Corrections teach it a rule
+past meeting gets a one-click assign hint too - and when several events
+overlap, a real timed meeting from your main calendar is offered ahead of
+a long all-day span from a side calendar. Corrections teach it a rule
 the same way email does, and nothing calendar-derived ever leaves your Mac.
 
 ### Context rules: see why, un-learn in one click

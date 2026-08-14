@@ -16,9 +16,15 @@ package struct CalendarEvent: Equatable, Sendable {
     package let end: Date
     package let tentative: Bool
     package let allDay: Bool
+    /// True when the event lives in the user's PRIMARY calendar (the Mac
+    /// bridge maps EventKit's default-calendar-for-new-events). Selection
+    /// prefers primary over secondary — the week-long all-day span from a
+    /// subscribed side calendar must not outrank a real meeting.
+    package let primary: Bool
 
     package init(id: String, title: String, calendarName: String, attendees: [String],
-                start: Date, end: Date, tentative: Bool = false, allDay: Bool = false) {
+                start: Date, end: Date, tentative: Bool = false, allDay: Bool = false,
+                primary: Bool = false) {
         self.id = id
         self.title = title
         self.calendarName = calendarName
@@ -27,6 +33,73 @@ package struct CalendarEvent: Equatable, Sendable {
         self.end = end
         self.tentative = tentative
         self.allDay = allDay
+        self.primary = primary
+    }
+}
+
+/// Which event to OFFER when several overlap — the pure selection core for
+/// both the review drawer's hint chip (span form) and the live prior (point
+/// form). Until 2026-08-14 both consumers took whatever order EventKit
+/// returned, so a week-long all-day event from a secondary calendar could be
+/// offered as the candidate while a genuine 30-minute timed meeting from the
+/// primary calendar on the same day was never seen (Martin's report).
+///
+/// Nothing is EXCLUDED here — an all-day "Annual leave" is still a
+/// legitimate hint when it's all there is (spec §7); ranking just stops it
+/// beating a real meeting. Callers that must exclude all-day (the live
+/// prior) filter before ranking, as they always did.
+package enum CalendarSelection {
+    /// Rank order for candidates overlapping `span`, best first:
+    /// timed beats all-day, single-day all-day beats multi-day; primary
+    /// calendar beats secondary; more overlap with the span beats less;
+    /// then the shorter (more specific) event; then earlier start (stable).
+    package static func ranked(_ events: [CalendarEvent],
+                               overlapping span: (start: Date, end: Date)) -> [CalendarEvent] {
+        events.filter { $0.start < span.end && $0.end > span.start }
+            .sorted { a, b in
+                if tier(a) != tier(b) { return tier(a) < tier(b) }
+                if a.primary != b.primary { return a.primary }
+                let oa = overlap(a, span), ob = overlap(b, span)
+                if oa != ob { return oa > ob }
+                let da = duration(a), db = duration(b)
+                if da != db { return da < db }
+                return a.start < b.start
+            }
+    }
+
+    package static func best(_ events: [CalendarEvent],
+                             overlapping span: (start: Date, end: Date)) -> CalendarEvent? {
+        ranked(events, overlapping: span).first
+    }
+
+    /// Rank order for "what am I doing THIS minute" among events covering a
+    /// point: primary first, then the shortest (a 30-min meeting inside a
+    /// 3-hour block IS the current thing), then the most recently begun,
+    /// then title (deterministic).
+    package static func rankedLive(_ events: [CalendarEvent]) -> [CalendarEvent] {
+        events.sorted { a, b in
+            if a.primary != b.primary { return a.primary }
+            let da = duration(a), db = duration(b)
+            if da != db { return da < db }
+            if a.start != b.start { return a.start > b.start }
+            return a.title < b.title
+        }
+    }
+
+    /// Timed 0, all-day within one day 1, all-day spanning days 2. The
+    /// 26-hour bound keeps a timezone-skewed "one day" in tier 1.
+    private static func tier(_ e: CalendarEvent) -> Int {
+        guard e.allDay else { return 0 }
+        return duration(e) <= 26 * 3600 ? 1 : 2
+    }
+
+    private static func duration(_ e: CalendarEvent) -> TimeInterval {
+        e.end.timeIntervalSince(e.start)
+    }
+
+    private static func overlap(_ e: CalendarEvent,
+                                _ span: (start: Date, end: Date)) -> TimeInterval {
+        max(0, min(e.end, span.end).timeIntervalSince(max(e.start, span.start)))
     }
 }
 

@@ -147,6 +147,7 @@ var suites: [(String, (Checks) -> Void)] = [
     ("SiteFeatures", siteFeatureChecks),
     ("SiteLedger", siteLedgerChecks),
     ("CalendarMatch", calendarMatchChecks),
+    ("CalendarSelection", calendarSelectionChecks),
     ("CalendarRankerTerm", calendarRankerTermChecks),
     ("CalendarPrecedence", calendarPrecedenceChecks),
     ("CalendarAlerts", calendarAlertChecks),

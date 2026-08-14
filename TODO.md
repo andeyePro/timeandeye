@@ -559,12 +559,14 @@ and recorded rather than fixed blind:
   evidence card and window history), with no per-project or per-conversation
   breakdown. Add sensing that distinguishes individual projects and individual
   chats inside the desktop app. Not a flip blocker.
-- [ ] Calendar candidate selection picks the wrong events: a week-long all-day
+- [x] Calendar candidate selection picks the wrong events: a week-long all-day
   event from a secondary calendar is offered as an attribution candidate while
   a genuine short timed meeting from the primary calendar on the same day is
-  missed entirely. Fix selection/ranking — prefer timed events and the primary
-  calendar; deprioritise or exclude long multi-day all-day spans from secondary
-  calendars. Not a flip blocker.
+  missed entirely. FIXED 2026-08-14 (CHANGELOG): `CalendarSelection` ranks
+  candidates (timed > single-day all-day > multi-day; primary calendar
+  first; then overlap, then the shorter event) for both the hint chip and
+  the live prior; nothing excluded, so an all-day span still hints when
+  it's all there is. Needs Martin's real-calendar feel.
 - [ ] Restore the Xero "upgrade" link in Settings ▸ Pro connectors once the
   `/pro` page exists. Removed 2026-07-14 (pointed at a non-existent
   time.andeye.com/pro; dead link ahead of the public flip). The greyed Xero

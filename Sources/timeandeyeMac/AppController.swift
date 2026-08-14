@@ -1182,7 +1182,7 @@ public final class AppController: ObservableObject {
     /// the mismatch check below.
     private func recomputeCalendarMatch() {
         let now = Date()
-        let live = liveCalendarEvents(at: now, in: calendarEventWindow)
+        let live = CalendarSelection.rankedLive(liveCalendarEvents(at: now, in: calendarEventWindow))
         var match: (task: TaskRef, eventTitle: String, tentative: Bool)?
         for event in live {
             if let rule = CalendarMatcher.bestRule(rules: calendarRules, event: event,
@@ -1356,8 +1356,12 @@ public final class AppController: ObservableObject {
     /// though they never drive the live prior (§7 — "Annual leave"
     /// overlapping a queued day is still a legitimate allocation hint).
     package func calendarHint(for stack: ReviewStack) -> (eventTitle: String, target: TaskRef?)? {
-        guard let event = calendarLookbackEvents()
-            .first(where: { $0.start < stack.last && $0.end > stack.first }) else { return nil }
+        // Ranked, not first-in-fetch-order: a short timed primary-calendar
+        // meeting must beat a week-long all-day span from a side calendar
+        // (CalendarSelection — Core-checked).
+        guard let event = CalendarSelection.best(calendarLookbackEvents(),
+                                                 overlapping: (stack.first, stack.last))
+        else { return nil }
         let rule = CalendarMatcher.bestRule(rules: calendarRules, event: event,
                                             order: settings.calendarMatchOrder)
         return (event.title, rule?.target)

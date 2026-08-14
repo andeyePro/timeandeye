@@ -304,3 +304,75 @@ func calendarAlertChecks(_ c: Checks) {
                       "nothing ahead — no timer needed until the window refreshes")
     }
 }
+
+// MARK: - CalendarSelection (2026-08-14): which overlapping event gets OFFERED.
+// Martin's report: a week-long all-day event from a secondary calendar was
+// the hint while a real 30-min timed meeting from the primary calendar on
+// the same day was never seen (first-in-fetch-order selection).
+
+func calendarSelectionChecks(_ c: Checks) {
+    let t0 = Date(timeIntervalSince1970: 1_750_000_000)
+    func ev(_ title: String, from: TimeInterval, for duration: TimeInterval,
+            allDay: Bool = false, primary: Bool = false) -> CalendarEvent {
+        CalendarEvent(id: title, title: title, calendarName: primary ? "Work" : "Side",
+                      attendees: [], start: t0.addingTimeInterval(from),
+                      end: t0.addingTimeInterval(from + duration), allDay: allDay,
+                      primary: primary)
+    }
+    let day: TimeInterval = 86_400
+    let span = (start: t0.addingTimeInterval(3_600), end: t0.addingTimeInterval(7_200))
+
+    c.check("the incident case: short timed primary meeting beats week-long secondary all-day") {
+        let week = ev("Sprint 12", from: -2 * day, for: 7 * day, allDay: true)
+        let meeting = ev("Client review", from: 3_600, for: 1_800, primary: true)
+        try expectEq(CalendarSelection.best([week, meeting], overlapping: span)?.title,
+                     "Client review", "fetch order must not decide")
+        try expectEq(CalendarSelection.best([meeting, week], overlapping: span)?.title,
+                     "Client review")
+    }
+
+    c.check("timed beats all-day even from a secondary calendar; all-day still offered alone") {
+        let leave = ev("Annual leave", from: 0, for: day, allDay: true, primary: true)
+        let meeting = ev("Standup", from: 3_600, for: 900)
+        try expectEq(CalendarSelection.best([leave, meeting], overlapping: span)?.title, "Standup")
+        // Nothing else overlapping → the all-day hint is still legitimate (spec §7).
+        try expectEq(CalendarSelection.best([leave], overlapping: span)?.title, "Annual leave")
+    }
+
+    c.check("among all-day: single-day beats multi-day, then primary beats secondary") {
+        let multi = ev("Conference", from: -day, for: 3 * day, allDay: true, primary: true)
+        let single = ev("On site", from: 0, for: day, allDay: true)
+        let singlePrimary = ev("Studio day", from: 0, for: day, allDay: true, primary: true)
+        try expectEq(CalendarSelection.best([multi, single], overlapping: span)?.title, "On site")
+        try expectEq(CalendarSelection.best([single, singlePrimary], overlapping: span)?.title,
+                     "Studio day")
+    }
+
+    c.check("same tier + calendar: greater overlap with the span wins, then the shorter event") {
+        let brushes = ev("Brushes past", from: 0, for: 4_500)          // overlaps 15 min
+        let covers = ev("Covers it", from: 0, for: 10_800)             // overlaps the whole hour
+        try expectEq(CalendarSelection.best([brushes, covers], overlapping: span)?.title,
+                     "Covers it")
+        let sameOverlapLong = ev("Half day", from: 3_600, for: 14_400) // both cover the span
+        let sameOverlapShort = ev("Exact hour", from: 3_600, for: 3_600)
+        try expectEq(CalendarSelection.best([sameOverlapLong, sameOverlapShort],
+                                            overlapping: span)?.title, "Exact hour")
+    }
+
+    c.check("non-overlapping events are never offered") {
+        let before = ev("Earlier", from: 0, for: 1_800)
+        try expectNil(CalendarSelection.best([before], overlapping: span))
+    }
+
+    c.check("live ranking: primary first, then the shortest covering event, then most recent start") {
+        let block = ev("Deep work block", from: 0, for: 10_800, primary: true)
+        let meeting = ev("Standup", from: 3_600, for: 900, primary: true)
+        let side = ev("Side cal timer", from: 3_600, for: 600)
+        // The 15-min standup INSIDE the 3-h block is "what you're doing now";
+        // the side calendar's even shorter event still loses to primary.
+        try expectEq(CalendarSelection.rankedLive([block, side, meeting]).first?.title, "Standup")
+        let a = ev("Started earlier", from: 0, for: 7_200, primary: true)
+        let b = ev("Just began", from: 3_600, for: 7_200, primary: true)
+        try expectEq(CalendarSelection.rankedLive([a, b]).first?.title, "Just began")
+    }
+}

@@ -2,6 +2,20 @@
 
 ## 2026-08-14
 
+- [x] **Calendar candidates: real meetings beat week-long all-day spans** –
+  Martin's report: a week-long all-day event from a secondary calendar was
+  offered as the attribution candidate while a genuine short timed meeting
+  from the primary calendar on the same day was missed — both the review
+  hint chip and the live prior took events in EventKit fetch order. New
+  `CalendarSelection` (Core, 6 checks): timed beats all-day, single-day
+  all-day beats multi-day, the primary calendar (EventKit's default-for-
+  new-events) beats side calendars, then span overlap, then the shorter
+  event; the live prior additionally treats the shortest covering event as
+  "what you're doing this minute" (a standup inside a deep-work block).
+  Nothing is excluded — an all-day "Annual leave" still hints when it's
+  all there is. `CalendarEvent` gains a `primary` flag mapped by the
+  bridge. Manual (both) synced.
+
 - [x] **Away shadow evidence stops masquerading as real window detail** –
   the last Mac-half of the away-mode programme: rows recorded while
   "I'm leaving my desk" was pinned (`observedWhileAway`) are now

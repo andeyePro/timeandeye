@@ -129,6 +129,10 @@ package final class CalendarBridge {
             cal.type != .birthday && cal.type != .subscription && !excludedNames.contains(cal.title)
         }
         guard !calendars.isEmpty else { return [] }
+        // "Primary" = EventKit's default calendar for new events — the best
+        // available proxy for "the user's own main calendar" (there is no
+        // literal primary flag in EventKit). Selection prefers it.
+        let primaryID = store.defaultCalendarForNewEvents?.calendarIdentifier
         let predicate = store.predicateForEvents(withStart: from, end: to, calendars: calendars)
         return store.events(matching: predicate).compactMap { event -> CalendarEvent? in
             if !allDayIncluded, event.isAllDay { return nil }
@@ -140,7 +144,9 @@ package final class CalendarBridge {
                                  attendees: attendeeIdentities(event),
                                  start: event.startDate, end: event.endDate,
                                  tentative: isTentative(event),
-                                 allDay: event.isAllDay)
+                                 allDay: event.isAllDay,
+                                 primary: primaryID != nil
+                                     && event.calendar?.calendarIdentifier == primaryID)
         }
     }
 
