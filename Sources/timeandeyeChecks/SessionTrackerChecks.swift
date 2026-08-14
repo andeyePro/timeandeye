@@ -787,6 +787,14 @@ func sessionTrackerChecks(_ c: Checks) {
         try expectEq(sessions[0].task, TaskRef.op(1))
         try expectEq(sessions[0].start, t(0))
         try expectEq(sessions[0].end, t(540))
+        // Menu-clock ↔ timeline agreement (Martin's "2s vs 8min" desync,
+        // 2026-07-07): both read THIS pair after a reassign — the menu's
+        // displayedElapsed takes liveSliceStart when the shown task owns the
+        // open slice, and the timeline's live block starts there too. Owner
+        // + start pinned here so a reassign can never reset one clock and
+        // not the other.
+        try expectEq(tracker.liveSliceStart, t(540), "open slice starts at the stretch cut")
+        try expectEq(tracker.liveSliceOwner, Target.task(.op(2)), "the relabelled task owns it")
 
         tracker.stop(at: t(600))
         let op2 = sessions.filter { $0.task == .op(2) }

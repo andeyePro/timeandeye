@@ -2,6 +2,17 @@
 
 ## 2026-08-14
 
+- [x] **Menu-clock ↔ timeline elapsed desync audited and pinned** – Martin's
+  2026-07-07 "2s vs 8min" sighting: the under-count direction is now
+  structurally impossible (the menu takes max(open-slice elapsed,
+  banked+running) whenever the shown task owns the open slice, and the
+  timeline's live block reads the same `liveSliceStart`) — new asserts pin
+  owner + slice start at the scoped-relabel cut so a reassign always
+  resets both clocks together. Kept semantics: the menu may show MORE
+  than the live block when recovering the task's earlier banked visits
+  (clock continuity across excursions; those visits are on the timeline
+  as recorded slices). No behaviour change.
+
 - [x] **Audible playback counts as presence — no more idle-out mid-video** –
   watching a video with hands off the keyboard tripped the idle timeout
   and retro-trimmed the session to the last mouse move (Martin's

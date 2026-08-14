@@ -1207,14 +1207,18 @@ and recorded rather than fixed blind:
 
 ## Timeline/menu-bar issues from hardware test (2026-07-07, Opus, post-Fable)
 
-- [ ] Elapsed desync: menu bar and timeline agree on the TASK now but not
+- [x] Elapsed desync: menu bar and timeline agree on the TASK now but not
   the ELAPSED — Martin saw menu bar "2s and counting" vs timeline "8 min"
-  for the same task (a client project). Likely cause: a per-window
-  reassign (commitLiveSlice) banks the live run and resets targetSince to
-  now, so the menu clock restarts while the timeline live slice still spans
-  liveSliceStart (whole block). Decide the intended semantics (menu shows
-  whole-block total? or the timeline reflects the bank?) and make them
-  consistent. Opus job.
+  for the same task (a client project). AUDITED + PINNED 2026-08-14
+  (CHANGELOG): the under-count direction is structurally impossible now —
+  the menu's displayedElapsed takes max(open-slice elapsed, banked+running)
+  whenever the shown task OWNS the open slice (liveSliceOwner gate), and
+  the timeline's live block reads the same liveSliceStart, so a reassign
+  resets both clocks together (new asserts pin owner + start at the
+  scoped-relabel cut). Decided semantics, kept: the menu may legitimately
+  show MORE than the live block when it recovers this task's earlier
+  banked visits (clock continuity across excursions — the recorded slices
+  for those visits are on the timeline). fromClaude 10 informs Martin.
 - [ ] Time window over a full-screen app: today a regular Window opens in
   its own Space so it can't overlay a full-screen app. NOT impossible —
   mark the Time window as a floating auxiliary panel (NSWindow
