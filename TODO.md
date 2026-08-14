@@ -671,6 +671,19 @@ and recorded rather than fixed blind:
   app needs no extra permissions for bounds/PID, but wants care around
   multi-display, split view and edge cases — keep it simple and provable
   or don't ship it.
+  DESIGN ANALYSIS (2026-08-14, attempted and deliberately NOT shipped):
+  the exact-cover test (another PID's layer-0 window bounds == a display's
+  CGDisplayBounds) false-positives on a merely MAXIMISED window whenever
+  the Dock is also auto-hidden — common in exactly the auto-hide
+  population — and a false positive here means permanent float-over-
+  everything squatting, worse than today's plain-normal degrade. The
+  promising discriminator is the fullscreen-Space backdrop window the
+  Dock process owns (present only in real fullscreen Spaces; owner-name
+  needs no permission), but its layer value vs the always-present
+  wallpaper window needs verifying on a real session, which the headless
+  build account cannot do. Next step when Martin wants this: a one-off
+  CGWindowList dump on his Mac in desktop / maximised / fullscreen
+  states, then gate the detector on the verified discriminator.
 
 - [ ] Retire the com.andeye.mac transition shims once no pre-rename install
   remains on any Mac (transition began 2026-07-09): the LEGACY_BUNDLE_ID
@@ -1237,11 +1250,14 @@ and recorded rather than fixed blind:
   show MORE than the live block when it recovers this task's earlier
   banked visits (clock continuity across excursions — the recorded slices
   for those visits are on the timeline). fromClaude 10 informs Martin.
-- [ ] Time window over a full-screen app: today a regular Window opens in
-  its own Space so it can't overlay a full-screen app. NOT impossible —
-  mark the Time window as a floating auxiliary panel (NSWindow
-  collectionBehavior .fullScreenAuxiliary + .canJoinAllSpaces, or an
-  NSPanel .nonactivatingPanel) so it can float over full-screen. Opus job.
+- [x] Time window over a full-screen app: FOUND ALREADY BUILT on audit
+  2026-08-14 — this item went stale: both Time windows route through
+  SpaceJoiningView (RootScenes), which applies exactly the proposed pose
+  (canJoinAllSpaces + fullScreenAuxiliary + floating level, with an open
+  grace, popover hold and sticky settle — the FullscreenPose decision
+  matrix, Mac-checked). The one population it's disabled for is
+  menu-bar-auto-hide users — that's the separate "positive fullscreen
+  detector" item below, which now carries a design analysis.
 
 ## Deferred from the overnight review (2026-07-08, queued with context)
 - [ ] B7: Surface identity drops URL query/fragment for non-mail sites — one
