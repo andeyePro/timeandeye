@@ -1223,9 +1223,14 @@ and recorded rather than fixed blind:
   current selection has unselected twins (identity = app + title + tab URL,
   never the times); one click extends the selection to all of them; help
   text counts what it will add. Full build + suite green on the bridge.
-- [ ] [+similar] button (later, non-critical) — pressable repeatedly to
+- [x] [+similar] button (later, non-critical) — pressable repeatedly to
   accumulate windows similar to the current one; a paired [-similar] steps
-  the accumulation back so you can undo over-pressing. After [+all].
+  the accumulation back so you can undo over-pressing. DONE 2026-08-14
+  (CHANGELOG): a pure Core similarity ladder (twins → same app+title →
+  whole app, Linux-checked) drives stateless widen/narrow over the
+  selection itself — widen adds the first rung not fully selected, narrow
+  subtracts the highest fully-selected rung; the focused window always
+  stays selected. Manual synced.
 
 ## Comment-loss edge (2026-07-07, pre-existing, low priority)
 

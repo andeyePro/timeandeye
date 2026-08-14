@@ -2,6 +2,14 @@
 
 ## 2026-08-14
 
+- [x] **[+similar] / [−similar] join the Evidence Card** – the 2026-07-07
+  follow-on to "+ all": repeatable widen over a pure similarity ladder
+  (exact twins → same app + title → the whole app; `SpanSimilarity`,
+  Core-checked) with a paired narrow that steps the last widen back.
+  Stateless over the selection itself, so the buttons always describe
+  exactly what the next press adds or removes, and the focused window can
+  never deselect itself. Manual (both) synced.
+
 - [x] **Settings search finds this week's features; connector headings match
   the locked tiers** – ⌘F had drifted behind the app: Away rescue, the
   Billable items list and the Corrections ledger were unfindable (no

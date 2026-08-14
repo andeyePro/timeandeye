@@ -98,6 +98,11 @@ struct EvidenceCardView: View {
     /// with the same data. `count` = how many it would ADD; the button
     /// shows disabled at 0 so the affordance is always discoverable.
     var selectTwins: (count: Int, select: () -> Void)? = nil
+    /// The [+similar]/[-similar] pair (Martin, 2026-07-07): widen adds the
+    /// next similarity rung's windows (title-mates, then whole-app), narrow
+    /// steps the accumulation back. nil hosts (popover live card) hide it.
+    var similar: (widenCount: Int, widen: () -> Void,
+                  canNarrow: Bool, narrow: () -> Void)? = nil
 
     @State private var dataExpanded = false
     @State private var detailsExpanded = false
@@ -186,6 +191,25 @@ struct EvidenceCardView: View {
             .help(selectTwins.count == 0
                   ? "No other windows in this slice carry the same app + title"
                   : "Also select the \(selectTwins.count) other window\(selectTwins.count == 1 ? "" : "s") recorded with the same app + title")
+        }
+        if let similar {
+            Button(action: similar.widen) {
+                Text("+ similar").font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .disabled(similar.widenCount == 0)
+            .padding(.vertical, 6)
+            .help(similar.widenCount == 0
+                  ? "Nothing broader left to add for this window"
+                  : "Widen the selection by \(similar.widenCount) window\(similar.widenCount == 1 ? "" : "s") like this one (press again for broader still)")
+            Button(action: similar.narrow) {
+                Text("− similar").font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .disabled(!similar.canNarrow)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .help("Step the last widen back")
         }
     }
 

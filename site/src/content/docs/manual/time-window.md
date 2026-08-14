@@ -73,7 +73,10 @@ midnight. Day boundaries are marked with the date.
   rest stays as it was. Esc or clicking empty space clears the selection.
 - **Detail strip**: the windows inside the selected slice, with the "why" panel
   described in [Auto-tracking and attribution](/manual/auto-tracking-and-attribution/).
-  Move windows to another task to split/reassign and teach the learner.
+  Move windows to another task to split/reassign and teach the learner. The
+  card's **+ all** selects every window recorded with the same data;
+  **+ similar** widens step by step (same app and title, then the whole
+  app) and **− similar** steps the last widen back.
 
 ## Donut view
 

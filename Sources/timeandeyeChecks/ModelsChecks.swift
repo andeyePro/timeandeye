@@ -190,4 +190,34 @@ func modelsChecks(_ c: Checks) {
         try expectEq(signals[0].emailSubject, "Renewal", "a later subject fills the empty slot")
         try expectNil(signals[1].correspondents, "a plain surface reconstructs evidence-free")
     }
+
+    c.check("similarity ladder: each rung strictly widens (twins -> title-mates -> app)") {
+        let t = Date(timeIntervalSince1970: 1_750_000_000)
+        func sig(_ app: String, _ title: String?, _ url: String?) -> ActivitySignal {
+            ActivitySignal(app: app, windowTitle: title, tabURL: url, timestamp: t)
+        }
+        let base = sig("Chrome", "Docs", "https://x.example/1")
+        let twin = sig("Chrome", "Docs", "https://x.example/1")
+        let titleMate = sig("Chrome", "Docs", "https://x.example/2")
+        let appMate = sig("Chrome", "Inbox", nil)
+        let stranger = sig("Ghostty", "Docs", nil)
+        func matches(_ a: ActivitySignal, _ b: ActivitySignal,
+                     at level: SpanSimilarity.Level) -> Bool {
+            SpanSimilarity.key(a, at: level) == SpanSimilarity.key(b, at: level)
+        }
+        // Rung 0: only the exact twin.
+        try expect(matches(base, twin, at: .exact))
+        try expect(!matches(base, titleMate, at: .exact))
+        // Rung 1 admits the title-mate but not the app-mate.
+        try expect(matches(base, titleMate, at: .appTitle))
+        try expect(!matches(base, appMate, at: .appTitle))
+        // Rung 2 admits everything from the app, never another app.
+        try expect(matches(base, appMate, at: .app))
+        try expect(!matches(base, stranger, at: .app))
+        // Superset property: a match at rung N is a match at every rung above.
+        for level in SpanSimilarity.Level.allCases.dropFirst() {
+            try expect(matches(base, twin, at: level))
+        }
+        try expect(matches(base, titleMate, at: .app))
+    }
 }

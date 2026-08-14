@@ -422,7 +422,10 @@ midnight. Day boundaries are marked with the date.
   rest stays as it was. Esc or clicking empty space clears the selection.
 - **Detail strip**: the windows inside the selected slice, with the "why" panel
   described above. Move windows to another task to split/reassign and teach the
-  learner.
+  learner. The
+  card's **+ all** selects every window recorded with the same data;
+  **+ similar** widens step by step (same app and title, then the whole
+  app) and **− similar** steps the last widen back.
 
 ### Donut view
 

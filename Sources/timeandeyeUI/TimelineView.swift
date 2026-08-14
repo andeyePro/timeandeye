@@ -1948,6 +1948,30 @@ struct TimelineView: View {
                             })
                             return (count: twins.subtracting(selectedSpanIdx).count,
                                     select: { selectedSpanIdx.formUnion(twins) })
+                        }(),
+                        // [+similar]/[-similar] (2026-07-07 item): stateless
+                        // over the selection itself — widen adds the first
+                        // rung not fully selected (twins → title-mates →
+                        // whole app), narrow steps the highest fully-
+                        // selected rung back; the focused window always
+                        // stays selected (it IS rung 0).
+                        similar: {
+                            let sets = SpanSimilarity.Level.allCases.map { level in
+                                Set(spans.indices.filter {
+                                    SpanSimilarity.key(spans[$0].signal, at: level)
+                                        == SpanSimilarity.key(spans[i].signal, at: level)
+                                })
+                            }
+                            let widenSet = sets.first { !$0.subtracting(selectedSpanIdx).isEmpty }
+                            let highest = (0..<sets.count).last { sets[$0].isSubset(of: selectedSpanIdx) }
+                            return (widenCount: widenSet?.subtracting(selectedSpanIdx).count ?? 0,
+                                    widen: { if let w = widenSet { selectedSpanIdx.formUnion(w) } },
+                                    canNarrow: (highest ?? 0) > 0,
+                                    narrow: {
+                                        if let h = highest, h > 0 {
+                                            selectedSpanIdx.subtract(sets[h].subtracting(sets[h - 1]))
+                                        }
+                                    })
                         }())
                     }
                     .frame(width: 372)
