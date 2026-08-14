@@ -2,6 +2,15 @@
 
 ## 2026-08-14
 
+- [x] **Propagation picker: drag-sweep + auto-widen (reply 8 complete)** –
+  the two deliberate v1 cuts: a drag across the bar now SWEEPS candidates
+  (every candidate the swept range touches paints to one value — the
+  opposite of the first-touched candidate's state, so a sweep can't
+  half-toggle), and entering the pass widens the visible window back to
+  the first affected entry (right edge pinned; viewport clamp still
+  bounds it) so no candidate sits off-screen. Ordinary draw/range drags
+  are inert during the pass. Banner copy and manual (both) updated.
+
 - [x] **Light-mode highlight contrast + both-appearance agent eyes** – the
   shared highlight (`AndeyeTheme.Colours.highlight`, foreground text/
   glyphs) is now appearance-resolved: dark keeps the proven light blue,

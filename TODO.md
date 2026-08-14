@@ -55,12 +55,15 @@
   second forget on the same card unlocks "delete ALL learned experience
   for <task>" (counts + totals + primes toward it; pins/stickies/rules
   stay; one ⌘Z; ledger-journalled). Single-forget behaviour unchanged.
-- [ ] Correction-propagation UI (reply 8) — v1 SHIPPED 2026-08-13
+- [x] Correction-propagation UI (reply 8) — v1 SHIPPED 2026-08-13
   (CHANGELOG): correction gestures offer same-target contradictions on
   the timeline (dim + dashed candidates, click-toggle, one approve as
-  the user's word). REMAINING polish from his spec: click-DRAG range
-  select/deselect over candidates, and auto-widening the visible window
-  back to the first affected entry.
+  the user's word). Both v1 cuts CLOSED 2026-08-14 (CHANGELOG):
+  click-DRAG sweeps candidates (painted to one value, fixed by the
+  first candidate touched), and entering the pass auto-widens the
+  visible window back to the first affected entry (right edge pinned).
+  His reply-8 spec is now fully built; feel rides his next real
+  correction.
 - [ ] Settings restructure (reply 10): PARTLY DONE 2026-08-13 — Billing
   section landed (currency + Billable items list, label squish and
   garbled caption fixed, snapshot-verified; CHANGELOG). CLOSED 2026-08-13: the

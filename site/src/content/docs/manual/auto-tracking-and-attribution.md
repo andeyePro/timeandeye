@@ -74,10 +74,11 @@ The card shows, top to bottom:
   a tooltip saying where today's rules would file them; weaker
   contradictions appear as one "look mis-filed" row in Review with
   refile-all and dismiss. And when a correction YOU make could also move
-  other entries, the timeline offers them on the spot: everything
-  irrelevant dims, the candidates show dashed outlines (all selected),
-  click any to keep or drop it, and one approve moves the survivors -
-  your word, one ⌘Z. If something LEARNED
+  other entries, the timeline offers them on the spot: the view widens
+  back to the first affected entry, everything irrelevant dims, the
+  candidates show dashed outlines (all selected), click any - or drag
+  across a stretch - to keep or drop them, and one approve moves the
+  survivors - your word, one ⌘Z. If something LEARNED
   drove the decision, a **✕ forget** (or **✕ suppress** for a learned
   association, which can't be deleted outright, only counter-taught) removes
   exactly that - undoable (⌘Z) - and shows what would fire instead BEFORE you

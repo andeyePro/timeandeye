@@ -188,7 +188,7 @@ struct TimelineView: View {
             if let offer = controller.propagationOffer, editing == nil {
                 HStack(spacing: 8) {
                     if propagationActive {
-                        Text("Click entries to keep or drop them, then approve.")
+                        Text("Click entries — or drag across a stretch — to keep or drop them, then approve.")
                             .font(.caption)
                         Spacer()
                         Button("Move \(propagationSelection.count) to \(controller.name(of: .task(offer.target)))") {
@@ -212,6 +212,7 @@ struct TimelineView: View {
                         Button("Review them here") {
                             propagationActive = true
                             propagationSelection = Set(offer.findings.map(\.sessionID))
+                            widenToPropagation(offer)
                         }
                         .font(.caption)
                         Button("Not now") { controller.clearPropagationOffer() }
@@ -654,9 +655,50 @@ struct TimelineView: View {
     /// instead (a plain time RANGE, not snapped to any slice's edges). The
     /// mode is decided on the drag's first move so releasing shift mid-drag
     /// doesn't flip it underneath you.
+    /// Reply 8's second v1 cut: entering the pass widens the visible window
+    /// back to the FIRST affected entry, so no candidate sits off-screen
+    /// (the right edge stays put; `clampViewport` still bounds the span).
+    private func widenToPropagation(_ offer: AppController.PropagationOffer) {
+        guard let earliest = controller.earliestSessionStart(
+            of: offer.findings.map(\.sessionID)) else { return }
+        let end = viewStart.addingTimeInterval(viewSpan)
+        guard earliest < viewStart else { return }
+        let padded = earliest.addingTimeInterval(-0.03 * end.timeIntervalSince(earliest))
+        viewStart = padded
+        viewSpan = end.timeIntervalSince(padded)
+        clampViewport()
+    }
+
+    /// Drag-paint state for the propagation pass: the value the sweep is
+    /// painting (true = select), fixed by the first candidate the drag
+    /// touches so one sweep can't half-toggle a range. nil outside a sweep.
+    @State private var propagationPaint: Bool?
+
     private func drawGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
+                // Reply 8's first v1 cut: in the pass, a drag SWEEPS
+                // candidates instead of drawing/selecting — every candidate
+                // the swept range touches is set to one painted value
+                // (the opposite of the first-touched candidate's state).
+                if propagationActive, let offer = controller.propagationOffer {
+                    let a = dateFor(min(value.startLocation.x, value.location.x), width: width)
+                    let b = dateFor(max(value.startLocation.x, value.location.x), width: width)
+                    let ids = Set(offer.findings.map(\.sessionID))
+                    let hit = sessions.filter {
+                        ids.contains($0.id) && $0.start < b && $0.end > a
+                    }.map(\.id)
+                    guard let first = hit.first else { return }
+                    if propagationPaint == nil {
+                        propagationPaint = !propagationSelection.contains(first)
+                    }
+                    if propagationPaint == true {
+                        propagationSelection.formUnion(hit)
+                    } else {
+                        propagationSelection.subtract(hit)
+                    }
+                    return
+                }
                 if dragIsRange == nil { dragIsRange = NSEvent.modifierFlags.contains(.shift) }
                 let a = dateFor(min(value.startLocation.x, value.location.x), width: width)
                 let b = dateFor(max(value.startLocation.x, value.location.x), width: width)
@@ -671,6 +713,8 @@ struct TimelineView: View {
             }
             .onEnded { _ in
                 defer { dragIsRange = nil }
+                if propagationPaint != nil { propagationPaint = nil; return }
+                if propagationActive { return }   // an inert pass drag never draws
                 if dragIsRange == true {
                     guard let draft = rangeDraft else { return }
                     rangeDraft = nil

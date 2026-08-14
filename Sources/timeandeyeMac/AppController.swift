@@ -2924,6 +2924,13 @@ public final class AppController: ObservableObject {
 
     package func clearPropagationOffer() { propagationOffer = nil }
 
+    /// Earliest start among these journalled sessions — the propagation
+    /// pass's auto-widen anchor (findings carry only session ids, and the
+    /// timeline's own buffer may not reach the oldest candidate yet).
+    package func earliestSessionStart(of ids: [UUID]) -> Date? {
+        ids.compactMap { (try? journal.session(id: $0))??.start }.min()
+    }
+
     /// Apply the APPROVED subset as the user's word (humanWord certainty,
     /// TeachScope-gated teaching — the same lane as any bulk reassign);
     /// deselected candidates simply stay behind as ordinary suggestions.
