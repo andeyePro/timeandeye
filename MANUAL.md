@@ -539,8 +539,10 @@ in the Time Donut legend also offers **Shade tasks around this**.
   journal is normally tiny (see iCloud footprint above).
 - **Email → task matching** - your own addresses/domains (comma-separated),
   so andeye never mistakes you for the other party when a message's
-  correspondent decides the task. When a message matches several rules, the
-  most specific wins: mail system, then domain, then correspondent, then
+  correspondent decides the task. If a webmail redesign breaks reading a
+  mail site, a notice appears here naming it - correspondent matching
+  pauses there until a read works again. When a message matches several
+  rules, the most specific wins: mail system, then domain, then correspondent, then
   subject. See Auto-tracking and attribution above for the rules themselves.
 - **Calendar** - off by default; turning it on asks macOS for read-only
   calendar access once and reveals the rest of the section: the pre-meeting

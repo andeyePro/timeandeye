@@ -5618,6 +5618,17 @@ public final class AppController: ObservableObject {
         copyToClipboard(prompt)
     }
 
+    /// Mail systems whose validate-on-use health has crossed the unhealthy
+    /// threshold — Settings ▸ Email shows the notice (2026-08-14: a webmail
+    /// redesign used to end correspondent capture SILENTLY; the only trace
+    /// was one DebugLog line).
+    package func unhealthyEmailSystems() -> [String] {
+        sensors.emailRecipeHealth()
+            .filter { $0.value.isUnhealthy }
+            .map { $0.key.userLabel }
+            .sorted()
+    }
+
     /// Put a string on the general pasteboard (the AI-assist flows copy a prompt
     /// for the user to paste into the AI of their choice).
     package func copyToClipboard(_ text: String) {

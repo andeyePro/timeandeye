@@ -2,6 +2,15 @@
 
 ## 2026-08-14
 
+- [x] **Email-matching health is user-visible** – three failed
+  validate-on-use reads in a row (a webmail redesign) used to end
+  correspondent capture SILENTLY, with one debug-log line as the only
+  trace. Settings ▸ Email now shows an orange notice naming the broken
+  system(s) ("Email matching stopped working on Gmail — …"), quiet while
+  healthy; `EmailSystem.userLabel` supplies real names, ⌘F finds it
+  ("stopped", "not working"). The self-heal re-learn loop stays parked.
+  Manual (both) synced.
+
 - [x] **[+similar] / [−similar] join the Evidence Card** – the 2026-07-07
   follow-on to "+ all": repeatable widen over a pure similarity ladder
   (exact twins → same app + title → the whole app; `SpanSimilarity`,

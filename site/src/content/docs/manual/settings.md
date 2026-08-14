@@ -120,7 +120,9 @@ bound to the same value, so you can enter a figure directly.
 
 - **Email → task matching** - your own addresses/domains (comma-separated),
   so andeye never mistakes you for the other party when a message's
-  correspondent decides the task. When a message matches several rules, the
+  correspondent decides the task. If a webmail redesign breaks reading a
+  mail site, a notice appears here naming it - correspondent matching
+  pauses there until a read works again. When a message matches several rules, the
   most specific wins: mail system, then domain, then correspondent, then
   subject. See
   [Auto-tracking and attribution](/manual/auto-tracking-and-attribution/) for

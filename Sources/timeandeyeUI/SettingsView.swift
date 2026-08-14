@@ -1120,6 +1120,20 @@ struct SettingsView: View {
                     AndeyeWindows.activateOnceVisible(opened: "rules")
                 }
                 .help("Every learned + pinned email rule, with provenance (origin, created, fired, last fired) — forget any of them.")
+                // Recipe health: a webmail redesign used to end correspondent
+                // capture silently. Surface it exactly where a user comes to
+                // ask "why did email matching stop?" — quiet when healthy.
+                let unhealthy = controller.unhealthyEmailSystems()
+                if !unhealthy.isEmpty {
+                    Label {
+                        Text("Email matching stopped working on \(unhealthy.joined(separator: ", ")) — the page layout may have changed. Correspondent capture is withheld there until a read succeeds again; the Diagnostics probe shows the details.")
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
 
             Section("Calendar") {

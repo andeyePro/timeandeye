@@ -27,6 +27,19 @@ package enum EmailSystem: String, CaseIterable, Sendable {
     case fastmail
     case unknown
 
+    /// User-facing name for health notices ("Email matching stopped working
+    /// on Gmail") — raw values are code identifiers, not copy.
+    package var userLabel: String {
+        switch self {
+        case .gmail: return "Gmail"
+        case .outlookWeb: return "Outlook web"
+        case .proton: return "Proton Mail"
+        case .yahoo: return "Yahoo Mail"
+        case .fastmail: return "Fastmail"
+        case .unknown: return "an unrecognised mail site"
+        }
+    }
+
     /// Anchored host match: the domain itself or a true subdomain. A bare
     /// `hasSuffix` accepts lookalikes — "notmail.google.com" ends with
     /// "mail.google.com" — which matters now that every match carries a
