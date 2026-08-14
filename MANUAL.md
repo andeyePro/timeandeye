@@ -32,10 +32,12 @@ At the top:
   scope. Click it to adjust or remove the pin.
 - **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step
   away, ⌘⇧L), and **Stop** (⌘.). While Away is pinned, what's actually on
-  screen is still recorded as evidence (never billed, never taught) - so a
-  forgotten Away toggle is recoverable afterwards from Settings ▸
-  Maintenance ▸ **Away rescue**, which rebuilds that stretch's timeline
-  from the evidence for you to confirm.
+  screen is still recorded as evidence (never billed, never taught) - and
+  when the Away stretch ends with a few minutes or more of recorded
+  evidence, the popover offers to rebuild it on the spot (the Rebuild
+  button opens Settings ▸ Maintenance ▸ **Away rescue** with that stretch
+  already previewed; the same pane also rescues older stretches, for
+  about 30 days, for you to confirm).
 - **Note field** - type a comment and press ↵ to commit it (flashes green); a
   slice can carry several, each ↵ adding another. It accumulates onto the
   current time slice's own comment and, when Settings sends comments to the

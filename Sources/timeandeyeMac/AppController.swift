@@ -1451,7 +1451,13 @@ public final class AppController: ObservableObject {
     /// Keep tracking the current task no matter what (idle, app switches,
     /// sleep) until cleared. Optionally lock the Mac as you leave.
     package func setAway(_ on: Bool) {
-        guard case .tracking = trackerState else { away = false; tracker.away = false; return }
+        let wasAway = away
+        guard case .tracking = trackerState else {
+            away = false
+            tracker.away = false
+            if wasAway { offerAwayRescueIfDue() }
+            return
+        }
         away = on
         tracker.away = on
         DebugLog.write("away = \(on)")
@@ -1462,6 +1468,7 @@ public final class AppController: ObservableObject {
         } else {
             notifyContent(symbol: "figure.walk.motion", text: "Back — \(currentTaskName())",
                           sound: "Tink")
+            if wasAway { offerAwayRescueIfDue() }
         }
         refreshTitle(force: true)
     }
@@ -1962,7 +1969,7 @@ public final class AppController: ObservableObject {
     }
 
     package func userStopped() {
-        if away { away = false; tracker.away = false }
+        if away { away = false; tracker.away = false; offerAwayRescueIfDue() }
         scheduledStop = nil
         // Stop joins ⌘Z too (same call): ⌘Z after a stop resumes the stopped
         // task — the stop-to-undo gap stays untracked (nothing is invented);
@@ -5477,6 +5484,36 @@ public final class AppController: ObservableObject {
         package var start: Date
         package var end: Date
         package var evidenceSeconds: TimeInterval
+    }
+
+    /// The just-ended stretch offered unprompted (reply 2's more-auto half:
+    /// the rescue only helped a user who remembered Maintenance exists, and
+    /// the forgotten-toggle day is exactly when nobody remembers anything).
+    /// Set on every Away end whose stretch carries material evidence; the
+    /// popover shows the banner, "Rebuild…" hands it to Settings.
+    @Published package private(set) var awayRescueOffer: AwayStretch?
+    /// The stretch Settings should auto-scan/preview on next appearance —
+    /// consumed (nilled) by SettingsView once it lands on Away rescue.
+    @Published package var pendingRescueFocus: AwayStretch?
+
+    package func dismissAwayRescueOffer() { awayRescueOffer = nil }
+
+    /// The popover's "Rebuild…" click: stage the stretch for Settings (the
+    /// view opens the window — it owns the openWindow environment).
+    package func focusAwayRescue(_ stretch: AwayStretch) {
+        pendingRescueFocus = stretch
+        awayRescueOffer = nil
+    }
+
+    private func offerAwayRescueIfDue() {
+        guard let stretch = awayStretches(days: 1).first,
+              Date().timeIntervalSince(stretch.end) < 15 * 60,
+              AwayRescue.shouldOffer(evidenceSeconds: stretch.evidenceSeconds)
+        else { return }
+        awayRescueOffer = stretch
+        notifyContent(symbol: "clock.arrow.circlepath",
+                      text: "Recorded \(Int(stretch.evidenceSeconds / 60))m while you were away — the popover offers a rebuild",
+                      sound: "Tink")
     }
 
     /// Recent rescueable stretches, newest first. On-demand (the Settings

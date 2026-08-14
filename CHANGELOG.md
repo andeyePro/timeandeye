@@ -2,6 +2,19 @@
 
 ## 2026-08-14
 
+- [x] **Away rescue offers itself when Away ends** – the rescue flow only
+  helped a user who remembered Settings ▸ Maintenance exists, which the
+  forgotten-toggle day (the one that cost ~24 h of reconstruction) is
+  exactly when nobody does. Every Away end — the ⌘⇧L toggle, a scheduled
+  stop, a manual Stop while away — now checks the just-ended stretch and,
+  when it holds material recorded evidence (`AwayRescue.shouldOffer`,
+  5-minute floor, Core-checked), posts a quiet notification and a popover
+  banner: "Away 09:12–17:40 — rebuild what you did?" with Rebuild… landing
+  in Settings ▸ Away rescue with that stretch already scanned and
+  previewed (overlap-matched, so a merged scan still finds it). Dismiss
+  keeps it available in Maintenance as before. Manual (all three pages)
+  synced. +1 check.
+
 - [x] **Propagation picker: drag-sweep + auto-widen (reply 8 complete)** –
   the two deliberate v1 cuts: a drag across the bar now SWEEPS candidates
   (every candidate the swept range touches paints to one value — the

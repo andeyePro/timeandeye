@@ -84,6 +84,10 @@ struct SettingsView: View {
             .formStyle(.grouped)
             .textSelection(.enabled)   // every label copyable, to share text not screenshots
         }
+        // Away-end offer hand-off: the popover's "Rebuild…" staged a stretch;
+        // land on Away rescue with it scanned and previewed — no hunting.
+        .onAppear { consumePendingRescue() }
+        .onChange(of: controller.pendingRescueFocus) { _, _ in consumePendingRescue() }
         .frame(minWidth: 760, idealWidth: 860, minHeight: 500, idealHeight: 620)
         // Hidden ⌘F target — focuses the sidebar search from anywhere in the
         // window (the standard Settings idiom).
@@ -874,6 +878,21 @@ struct SettingsView: View {
     @State private var awayStretches: [AppController.AwayStretch] = []
     @State private var awayScanned = false
     @State private var awayPreview: (stretch: AppController.AwayStretch, plan: AwayRescue.Plan)?
+
+    /// The popover's staged away-end offer: jump to Maintenance, scan, and
+    /// open the ended stretch's preview in one motion (consumes the stage).
+    private func consumePendingRescue() {
+        guard let focus = controller.pendingRescueFocus else { return }
+        controller.pendingRescueFocus = nil
+        selectedCategory = .maintenance
+        awayStretches = controller.awayStretches()
+        awayScanned = true
+        // Match by overlap, not identity — the scan may have merged or
+        // extended the stretch since the offer was staged.
+        if let match = awayStretches.first(where: { $0.start < focus.end && $0.end > focus.start }) {
+            awayPreview = (match, controller.awayRescuePreview(match))
+        }
+    }
 
     private func rescueDuration(_ seconds: TimeInterval) -> String {
         let t = Int(seconds.rounded())

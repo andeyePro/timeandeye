@@ -99,4 +99,12 @@ func awayRescueChecks(_ c: Checks) {
         try expectClose(plan.proposals[0].certainty, 0.95)
         try expectEq(plan.proposals[0].provenance?.sourceRaw, "primedSurface")
     }
+
+    c.check("away-end offer fires only on material evidence (5-minute floor)") {
+        // The more-auto half: a coffee walk-away with barely anything
+        // recorded never nags; a forgotten-toggle day always offers.
+        try expect(!AwayRescue.shouldOffer(evidenceSeconds: 0))
+        try expect(!AwayRescue.shouldOffer(evidenceSeconds: AwayRescue.offerEvidenceFloor - 1))
+        try expect(AwayRescue.shouldOffer(evidenceSeconds: AwayRescue.offerEvidenceFloor))
+    }
 }

@@ -25,7 +25,10 @@ At the top:
 - **Pin chip** - when the surface is pinned you see a pin icon and the pinned
   scope. Click it to adjust or remove the pin.
 - **Pin button** (when not pinned, ⌘P), **Away** (keep tracking while you step
-  away, ⌘⇧L), and **Stop** (⌘.).
+  away, ⌘⇧L), and **Stop** (⌘.). While Away is pinned, what's on screen is
+  still recorded as evidence (never billed, never taught) - and when the
+  stretch ends with a few minutes or more recorded, the popover offers to
+  rebuild it on the spot (see Settings ▸ Maintenance ▸ Away rescue).
 - **Note field** - type a comment and press ↵ to commit it (flashes green); a
   slice can carry several, each ↵ adding another. It accumulates onto the
   current time slice's own comment and, when Settings sends comments to the

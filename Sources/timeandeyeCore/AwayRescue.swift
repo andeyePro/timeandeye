@@ -100,4 +100,15 @@ package enum AwayRescue {
         return Plan(proposals: proposals,
                     keptSeconds: max(0, total - coveredSeconds))
     }
+
+    /// The more-auto half of reply 2: whether ENDING an away stretch should
+    /// offer the rescue unprompted. Material evidence only — a coffee
+    /// walk-away with barely anything recorded must never nag; the
+    /// forgot-the-toggle day (the case that costs real hours) always
+    /// crosses this floor.
+    package static let offerEvidenceFloor: TimeInterval = 300
+
+    package static func shouldOffer(evidenceSeconds: TimeInterval) -> Bool {
+        evidenceSeconds >= offerEvidenceFloor
+    }
 }

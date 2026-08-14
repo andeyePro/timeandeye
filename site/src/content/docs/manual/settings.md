@@ -139,7 +139,10 @@ bound to the same value, so you can enter a figure directly.
   engine would rebuild from that evidence, and confirm: confident pieces
   re-file to their real tasks, uncertain ones come back red and queue for
   review, posted time is never touched, and one ⌘Z restores the lot.
-  Evidence is kept for about 30 days.
+  Evidence is kept for about 30 days. You rarely need to come here
+  yourself: when an Away stretch ends with a few minutes or more of
+  recorded evidence, the popover offers the rebuild on the spot and its
+  Rebuild button lands here with the stretch already previewed.
 - **Duplicate reconcile** - scans for OpenProject time entries logged twice
   against the same task and minute. Click a match to see every difference
   between its entries, then Apply: the richest entry survives (the others'

@@ -851,6 +851,33 @@ struct PopoverView: View {
             .padding(6)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
         }
+        // Away-end rescue offer (reply 2's more-auto half): ending Away with
+        // material recorded evidence offers the rebuild right here — the
+        // Maintenance flow alone only helped users who remembered it exists.
+        if let offer = controller.awayRescueOffer {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Text("Away \(offer.start.formatted(date: .omitted, time: .shortened))–\(offer.end.formatted(date: .omitted, time: .shortened)) — rebuild what you did?")
+                    .font(.caption).lineLimit(1)
+                Spacer(minLength: 0)
+                Button("Rebuild…") {
+                    controller.focusAwayRescue(offer)
+                    openWindow(id: "settings")
+                    AndeyeWindows.activateOnceVisible(opened: "settings")
+                }
+                .font(.caption).buttonStyle(.borderless)
+                Button {
+                    controller.dismissAwayRescueOffer()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .font(.caption2).buttonStyle(.borderless)
+                .help("Not now — the stretch stays under Settings ▸ Maintenance ▸ Away rescue")
+            }
+            .padding(6)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
         // Calendar-signal spec §6: the mismatch banner. Only shows once the
         // disagreement has held the settle window (controller.calendarMismatchActive) —
         // a brief walk-in never surfaces it.

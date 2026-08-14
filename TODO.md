@@ -50,7 +50,9 @@
   CHANGELOG; snapshot-verified). His end-time extension LANDED
   later same day (orphan-mode planner + applyTimelineEdit hook —
   CHANGELOG). The older away item's Mac-half span filters landed
-  2026-08-14 (below) — the whole away programme is now built.
+  2026-08-14 (below), and the flow now OFFERS ITSELF when Away ends
+  (popover banner + notification → Settings with the stretch previewed;
+  5-min evidence floor — CHANGELOG 2026-08-14). Whole programme built.
 - [x] Double-forget escalation (reply 4) — DONE 2026-08-13 (CHANGELOG):
   second forget on the same card unlocks "delete ALL learned experience
   for <task>" (counts + totals + primes toward it; pins/stickies/rules
