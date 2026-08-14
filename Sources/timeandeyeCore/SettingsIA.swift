@@ -172,6 +172,8 @@ package enum SettingsIA {
         Item("billing.currency", "Currency symbol",
              ["money", "locale", "billable", "pound", "dollar", "euro",
               "billing", "currency", "donut"], .billing),
+        Item("billing.items", "Billable items",
+             ["billable", "flagged", "override", "list", "task", "project"], .billing),
         Item("billing.mappings", "Billing mappings",
              ["xero", "finance", "map", "invoice", "bills to"], .billing),
         // Email & Calendar
@@ -179,6 +181,9 @@ package enum SettingsIA {
              ["own email", "me", "correspondent"], .emailCalendar),
         Item("email.rules", "Context rules",
              ["learned", "pinned", "forget", "provenance", "email rules"], .emailCalendar),
+        Item("email.corrections", "Corrections ledger",
+             ["corrections", "history", "taught", "reassigned", "what learned",
+              "ledger"], .emailCalendar),
         Item("calendar.enable", "Use my calendar",
              ["meetings", "events", "read-only"], .emailCalendar),
         Item("calendar.preAlert", "Alert before meetings",
@@ -188,6 +193,9 @@ package enum SettingsIA {
         Item("calendar.excluded", "Excluded calendars",
              ["ignore", "holidays", "birthdays"], .emailCalendar),
         // Maintenance
+        Item("maintenance.awayRescue", "Away rescue",
+             ["away", "rescue", "rebuild", "forgot", "recorded", "stretch",
+              "evidence"], .maintenance),
         Item("maintenance.duplicates", "Scan for duplicate OpenProject entries",
              ["duplicates", "reconcile", "merge", "clean up"], .maintenance),
         Item("maintenance.export", "Export timesheet",

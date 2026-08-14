@@ -183,7 +183,13 @@ struct SettingsView: View {
                 connectorHealth(named: "OpenProject")
             }
 
-            Section("Pro connectors") {
+            // "Standard connections", matching the tier vocabulary Martin
+            // locked 2026-07-23 (plus = ONE standard connection, pro = ALL,
+            // premium = premium connections) — the old "Pro connectors"
+            // heading contradicted Xero's own .plus requirement below. The
+            // registry-driven rendering refactor (headings from each
+            // connector's declared requirement) stays a TODO cleanup.
+            Section("Standard connections") {
                 // Xero ships with andeyePro; the Pro build registers it and
                 // this row goes live. In the community build it sits greyed
                 // behind the licence gate. The upgrade link is intentionally
@@ -203,7 +209,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Premium connectors") {
+            Section("Premium connections") {
                 Text("None yet.").font(.caption).foregroundStyle(.tertiary)
             }
     }

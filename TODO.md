@@ -579,11 +579,12 @@ and recorded rather than fixed blind:
   first; then overlap, then the shorter event) for both the hint chip and
   the live prior; nothing excluded, so an all-day span still hints when
   it's all there is. Needs Martin's real-calendar feel.
-- [ ] Restore the Xero "upgrade" link in Settings ▸ Pro connectors once the
-  `/pro` page exists. Removed 2026-07-14 (pointed at a non-existent
-  time.andeye.com/pro; dead link ahead of the public flip). The greyed Xero
-  row and its licence caption stay; only the link button was dropped
-  (SettingsView, "Pro connectors" section). Re-add pointing at the real page.
+- [ ] Restore the Xero "upgrade" link in Settings ▸ Standard connections
+  (renamed from "Pro connectors" 2026-08-14 — the heading contradicted
+  Xero's own .plus tier) once the `/pro` page exists. Removed 2026-07-14
+  (pointed at a non-existent time.andeye.com/pro; dead link ahead of the
+  public flip). The greyed Xero row and its licence caption stay; only
+  the link button was dropped. Re-add pointing at the real page.
 - [x] Pre-release review findings (2026-07-12) – all 15 actioned, plus
   follow-up fixes; details per-entry in CHANGELOG under
   2026-07-12. The publish steps themselves stay manual.
@@ -626,7 +627,8 @@ and recorded rather than fixed blind:
 - [ ] Non-blocking cleanups surfaced by the 2026-07-12 review (do after the
   flip, not before – each extra pre-release commit widens the review burden):
   TimelineView `selectTwins` O(N^2) per render; SettingsView connector panel
-  hardcodes tiers (registry-driven rendering, Xero mis-filed as Pro);
+  hardcodes tiers (registry-driven rendering still open; the Xero
+  mis-filed-as-Pro heading itself was fixed 2026-08-14);
   ColourEngineChecks pins real fixture names (synthesize the collision);
   EvidenceCardView `cardFactsAttributed` parallel fact renderer (one
   fact-model); extract a shared debounce helper (3 hand-rolled copies);

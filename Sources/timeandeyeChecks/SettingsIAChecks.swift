@@ -32,6 +32,15 @@ func settingsIAChecks(_ c: Checks) {
         }
     }
 
+    c.check("features shipped 2026-08 are findable (index kept current)") {
+        // The index drifted behind the app twice in one day (Away rescue,
+        // Billable items and the Corrections ledger were all unfindable by
+        // ⌘F) — pin the landing category for each.
+        try expectEq(SettingsIA.search("rescue").first?.category, .maintenance)
+        try expectEq(SettingsIA.search("billable").first?.category, .billing)
+        try expectEq(SettingsIA.search("corrections").first?.category, .emailCalendar)
+    }
+
     c.check("empty and whitespace queries return nothing") {
         try expectEq(SettingsIA.search("").count, 0)
         try expectEq(SettingsIA.search("   ").count, 0)

@@ -501,12 +501,13 @@ in the Time Donut legend also offers **Shade tasks around this**.
   Premium / Enterprise), who it is licensed to, and the renewal date appear
   - lifetime keys show "lifetime". If the key can't be used, the reason
   appears in red below the field.
-- **Connectors** - grouped Standard / Pro / Premium. Each connector's
+- **Connectors** - the community OpenProject connection, then Standard and
+  Premium connections. Each connector's
   plumbing (instance URL, API key, connect, default activity) folds behind
   a disclosure whose heading shows the at-a-glance state ("OpenProject -
   143 tasks · your name"); it opens itself only while unconnected. Xero
-  sits under Pro connectors, greyed with an upgrade link until your licence
-  covers it.
+  sits under Standard connections, greyed until your licence covers it
+  (Plus and up).
 - **Posting health** - appears under its connector only when something needs
   you: a count of entries stuck after repeated failures (with a one-click
   Retry) and a count of entries that disagree with your journal and can't be

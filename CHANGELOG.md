@@ -2,6 +2,17 @@
 
 ## 2026-08-14
 
+- [x] **Settings search finds this week's features; connector headings match
+  the locked tiers** – ⌘F had drifted behind the app: Away rescue, the
+  Billable items list and the Corrections ledger were unfindable (no
+  index entries). Added, with a check pinning each landing category so
+  the index can't silently drift again. And the "Pro connectors" heading
+  contradicted Xero's own Plus-tier requirement (the tiers Martin locked
+  2026-07-23: plus = one standard connection) — now "Standard
+  connections" / "Premium connections"; the registry-driven heading
+  refactor stays open in TODO. Manual (both) synced, including a stale
+  claim that the removed upgrade link still existed.
+
 - [x] **Popover mode label: click to vary, right-click to set the default**
   – Martin's 2026-07-17 call, verbatim: the "Reassign / Switch to" label
   was inert text and clicking the current task was the only discoverable
