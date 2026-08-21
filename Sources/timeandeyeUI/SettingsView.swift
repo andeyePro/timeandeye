@@ -800,6 +800,17 @@ struct SettingsView: View {
                 }
                 Toggle("Track leisure to local-only tasks (instead of stopping)",
                        isOn: $controller.settings.trackLeisureLocally)
+                // Login Items is the source of truth (nothing persisted in
+                // AndeyeSettings), so the binding goes through the controller,
+                // which re-reads the system's answer after every flip.
+                Toggle("Start Time&I automatically at login",
+                       isOn: Binding(get: { controller.launchAtLogin },
+                                     set: { controller.setLaunchAtLogin($0) }))
+                if let notice = controller.launchAtLoginNotice {
+                    Text(notice)
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
     }
 

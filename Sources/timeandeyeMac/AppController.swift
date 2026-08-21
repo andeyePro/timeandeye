@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Carbon.HIToolbox   // kVK_ANSI_L / cmdKey / shiftKey for the global Away hotkey
+import ServiceManagement  // SMAppService — the launch-at-login toggle
 import timeandeyeCore
 import timeandeyeTheme    // AndeyeLogo geometry for the menu-bar draw-in
 
@@ -188,6 +189,14 @@ public final class AppController: ObservableObject {
     /// survives auto-resume and stays offered for `idleBackfillWindowSeconds`.
     @Published package private(set) var pendingGap: IdleGap?
     @Published package private(set) var lastError: String?
+    /// Mirrors `SMAppService.mainApp.status` — macOS Login Items is the one
+    /// source of truth (nothing is persisted here), so a change made behind
+    /// our back in System Settings simply reads back on next launch instead
+    /// of being fought.
+    @Published package private(set) var launchAtLogin = false
+    /// Set when the last register/unregister needs the user's hand:
+    /// `.requiresApproval` or a thrown error. Cleared on success.
+    @Published package private(set) var launchAtLoginNotice: String?
     /// backendID → count of posted entries whose journal side has since
     /// moved (D4 detection; empty = books match the journal).
     @Published package private(set) var postingDivergences: [String: Int] = [:]
@@ -468,6 +477,29 @@ public final class AppController: ObservableObject {
         AppSupport.directory(under: base)
     }
 
+    /// Flip launch-at-login. Talks straight to SMAppService and then reads
+    /// the system's answer back — the published mirror only ever shows what
+    /// Login Items actually says, so a refused or approval-gated change
+    /// surfaces honestly instead of a lying toggle.
+    package func setLaunchAtLogin(_ wanted: Bool) {
+        do {
+            if wanted { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+            launchAtLoginNotice = nil
+        } catch {
+            launchAtLoginNotice = "Couldn't \(wanted ? "enable" : "disable") launch at login – \(error.localizedDescription)"
+        }
+        refreshLaunchAtLogin()
+    }
+
+    private func refreshLaunchAtLogin() {
+        let status = SMAppService.mainApp.status
+        launchAtLogin = status == .enabled
+        if status == .requiresApproval {
+            launchAtLoginNotice = "macOS wants your approval – allow Time&I in System Settings › General › Login Items."
+        }
+    }
+
     package init() {
         let dir = Self.supportDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -618,6 +650,9 @@ public final class AppController: ObservableObject {
                 await self.syncIfEnabled()
             }
         }
+
+        // Login Items is queried, never stored — see launchAtLogin above.
+        refreshLaunchAtLogin()
     }
 
     // MARK: - Menu-bar logo animation

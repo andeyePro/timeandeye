@@ -39,6 +39,10 @@ bound to the same value, so you can enter a figure directly.
 - **Donut button opens** - Timeline / Last viewed / Donut.
 - **System notifications**, **lock the Mac when you continue work away**
   (the popover's walk figure, ⌘⇧L), **track leisure to local tasks**.
+- **Start Time&I automatically at login** - adds Time&I to your macOS Login
+  Items so it opens itself after a restart. The switch always shows what
+  Login Items actually says; if macOS wants your approval first, a note
+  points you to System Settings › General › Login Items.
 - **Hide banners while presenting** - while your mic is live or a display is
   mirrored, banners that would name a task or contact stay hidden, so
   nothing about your work pops up on a shared screen (on by default).

@@ -447,6 +447,12 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [x] Launch at login (Martin, 2026-08-21): Settings ▸ Behaviour toggle
+  "Start Time&I automatically at login" via SMAppService. Login Items is
+  the single source of truth – nothing persisted in AndeyeSettings, the
+  toggle mirrors the system's answer after every flip, and
+  `.requiresApproval`/errors surface as an orange caption pointing at
+  System Settings › General › Login Items. See CHANGELOG 2026-08-21.
 - [x] `timeandeyePhone` now runs in the in-container Linux checks subset:
   `PhoneController`'s Combine use is `#if canImport(Combine)`-gated with an
   internal shim for `ObservableObject`/`@Published` on non-Apple platforms

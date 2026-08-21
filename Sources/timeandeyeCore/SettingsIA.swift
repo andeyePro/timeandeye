@@ -137,6 +137,9 @@ package enum SettingsIA {
              ["screen share", "privacy", "mirror", "mic", "banners", "quiet", "hide"], .behaviour),
         Item("behaviour.lockOnLeave", "Lock the Mac when I continue work away",
              ["lock screen", "leave desk", "away", "security"], .behaviour),
+        Item("behaviour.launchAtLogin", "Start Time&I automatically at login",
+             ["launch", "login", "boot", "startup", "auto start", "open at login",
+              "login items"], .behaviour),
         Item("behaviour.leisure", "Track leisure to local-only tasks",
              ["non-work", "personal", "stop", "catch-all"], .behaviour),
         // Menu bar

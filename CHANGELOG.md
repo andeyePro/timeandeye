@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-08-21
+
+- [x] **Launch at login** – new Settings ▸ Behaviour toggle "Start Time&I
+  automatically at login", backed by `SMAppService.mainApp`. The system's
+  Login Items list is the single source of truth: nothing is stored in
+  `AndeyeSettings`, `AppController` seeds the published mirror from
+  `SMAppService.status` at init and re-reads it after every
+  register/unregister, so a change made behind the app's back (or a
+  refused one) always shows honestly. `.requiresApproval` and errors
+  surface as an orange caption pointing at System Settings › General ›
+  Login Items. SettingsIA gained `behaviour.launchAtLogin` so ⌘F finds
+  it ("login items", "startup", "boot"). MANUAL.md + site manual
+  Behaviour sections updated in the same commit. Suite 979/0 on the Mac
+  bridge + `timeandeyeApp` product build green.
+
 ## 2026-08-14
 
 - [x] **Hot-path hardening: the last unbounded AX call + card-scan memo** –
