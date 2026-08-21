@@ -2,6 +2,34 @@
 
 ## 2026-08-21
 
+- [x] **One correction no longer re-points every query-routed page (B7)** –
+  surface identity dropped the URL query/fragment outside mail hosts, so
+  correcting one YouTube video taught ALL videos, one SPA route the whole
+  app (the web sibling of the Gmail RC2 collapse). Primes and day-
+  stickies now key on `Surface.primeKey`: host+path plus a curated
+  per-host identity-query table (youtube.com v/list, news.ycombinator.com
+  id, figma.com node-id – small and extendable) and one generic rule, a
+  route-shaped fragment (starts "/" or "!/" or contains "/") on any
+  non-mail host. Never folded in: tracking params (utm/gclid/fbclid),
+  unknown query keys, or anything credential/content-shaped
+  (token/auth/session/… words, @-values, over-long values) – primed.json
+  syncs, so over-excluding is the safe side (the prime just stays
+  coarse). Persisted keys unbroken: reads try the fine key then fall
+  back to the legacy coarse entry (which deliberately survives as the
+  fallback for uncorrected sibling pages), writes always go fine, and
+  forget removes the key that actually fired – fine or coarse twin, one
+  per gesture. The evidence card shows the extra grain (`?v=…`,
+  `#/route`) so it can't claim a coarser memory than the prime holds.
+  `Surface(signal:)` itself – slice continuity and the persisted-compat
+  key – and PinScope.identity (user-chosen pin prefixes) are
+  deliberately untouched. Six new PrimeKey checks pin the headline case,
+  route-vs-anchor, noise exclusion, secret exclusion, legacy fallback +
+  fine-beats-coarse, and forget-removes-what-fired; every pre-existing
+  surface/sticky check stays green. Suite 992/0 (Mac) + 838/0 (Linux
+  subset) + app build green. Note: this is the PRIME half only —
+  fromClaude 9 (learning grain a/b) still governs the learned-count
+  side and awaits Martin's answer.
+
 - [x] **Revert offer survives an excursion honestly** – the popover's
   one-click "← <previous task>" is bookkept by the pure
   `RevertOffer.previousTask` now: a switch that itself returns to where

@@ -100,6 +100,14 @@ package struct ContextIdentity: Sendable, Equatable {
                 segments = id.segments.enumerated().map { i, part in
                     Segment(kind: i == 0 ? .urlHost : .urlPath, value: part, display: part)
                 }
+                // The prime now keys on the URL's identity suffix (?v=…,
+                // #/route — B7), so the card must show that grain too: a
+                // card saying just "youtube.com/watch" while the memory is
+                // per-video would misreport what was learned.
+                let suffix = Surface.primeIdentitySuffix(tabURL: signal.tabURL)
+                if !suffix.isEmpty {
+                    segments.append(Segment(kind: .urlPath, value: suffix, display: suffix))
+                }
             case .app:
                 segments = id.segments.map { Segment(kind: .app, value: $0, display: $0) }
             }

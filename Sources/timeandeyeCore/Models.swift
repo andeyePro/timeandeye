@@ -263,6 +263,81 @@ package struct Surface: Hashable, Codable, Sendable {
         }
     }
 
+    // MARK: - Prime key (B7): identity beyond host+path, without re-keying
+
+    /// The finer surface the PRIME store keys on. `Surface(signal:)` stays the
+    /// continuity/persisted-compat key (host+path, mail fragment only) — this
+    /// adds the identity-bearing extra grain of the URL so one correction on
+    /// youtube.com?v=A no longer re-points every video on the host. Reads
+    /// fall back to the coarse key (legacy primed.json entries keep firing);
+    /// writes use this. Non-URL signals: identical to the coarse key.
+    package static func primeKey(signal: ActivitySignal) -> Surface {
+        var s = Surface(signal: signal)
+        let suffix = primeIdentitySuffix(tabURL: signal.tabURL)
+        if !suffix.isEmpty { s.detail += suffix }
+        return s
+    }
+
+    /// The identity suffix a URL earns beyond host+path, "" when none:
+    /// - query keys from the curated per-host table below (sorted by name so
+    ///   parameter order can't split an identity) — never a blanket query
+    ///   rule, which would fold utm/gclid/session noise into persisted keys;
+    /// - a ROUTE-shaped fragment on any non-mail host (starts with "/" or
+    ///   "!/", or contains "/") — SPA routes are path-like and never
+    ///   tracking noise; plain anchors ("#readme") stay out. Mail hosts keep
+    ///   their fragment in the COARSE key (persisted-compat) and add nothing
+    ///   here.
+    /// primed.json syncs, so nothing content-or-secret-shaped may fold in:
+    /// see `isSafeIdentityValue` / `isRouteFragment`.
+    package static func primeIdentitySuffix(tabURL: String?) -> String {
+        guard let raw = tabURL, let comps = URLComponents(string: raw),
+              let host = comps.host?.lowercased() else { return "" }
+        var suffix = ""
+        let tableHost = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        if let keys = Self.identityQueryKeys[tableHost] {
+            for item in (comps.queryItems ?? [])
+                .filter({ keys.contains($0.name) })
+                .sorted(by: { $0.name < $1.name }) {
+                guard let value = item.value, isSafeIdentityValue(value) else { continue }
+                suffix += "?\(item.name)=\(value)"
+            }
+        }
+        if EmailSystem.detect(urlHost: host) == .unknown,
+           let fragment = comps.fragment, isRouteFragment(fragment) {
+            suffix += "#" + fragment
+        }
+        return suffix
+    }
+
+    /// Curated host → identity-carrying query keys ("www." stripped before
+    /// lookup). Deliberately small: each entry names keys that carry ENTITY
+    /// identity on that host, extendable as sites turn up. The generic route
+    /// rule above covers SPA hosts without an entry.
+    static let identityQueryKeys: [String: Set<String>] = [
+        "youtube.com": ["v", "list"],
+        "m.youtube.com": ["v", "list"],
+        "news.ycombinator.com": ["id"],
+        "figma.com": ["node-id"],
+    ]
+
+    /// Words that mark a fragment/value as possibly credential- or
+    /// content-bearing — such a candidate never folds into a persisted key
+    /// (over-excluding is safe: the prime just falls back to the coarse key).
+    private static let unsafeIdentityWords =
+        ["token", "auth", "session", "sig", "password", "secret", "email", "key"]
+
+    static func isSafeIdentityValue(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 64
+            && !value.contains("@") && !value.contains("://")
+    }
+
+    static func isRouteFragment(_ fragment: String) -> Bool {
+        guard !fragment.isEmpty, fragment.count <= 128 else { return false }
+        let lower = fragment.lowercased()
+        guard !unsafeIdentityWords.contains(where: { lower.contains($0) }) else { return false }
+        return fragment.hasPrefix("/") || fragment.hasPrefix("!/") || fragment.contains("/")
+    }
+
     /// Title-keyed surface identity, minus the app's own trailing signature.
     /// Many apps stamp "<document> - <App Name> <version>" into the window
     /// title (Obsidian: "note - vault - Obsidian 1.13.4"), so a raw-title key

@@ -225,6 +225,18 @@ package final class Attributor {
     /// losing primed associations on relaunch dropped session certainty
     /// below the push threshold (found 2026-06-11).
     package var primedSurfaces: [Surface: TaskRef] = [:]
+
+    /// Fine-first prime lookup (B7): writes key on `Surface.primeKey`, but
+    /// legacy persisted entries are coarse — so reads try the fine key, then
+    /// fall back. Returns the key that actually HIT, so forget removes the
+    /// entry that really fired rather than a coarse twin.
+    private func primedHit(_ signal: ActivitySignal) -> (surface: Surface, task: TaskRef)? {
+        let fine = Surface.primeKey(signal: signal)
+        if let task = primedSurfaces[fine] { return (fine, task) }
+        let coarse = Surface(signal: signal)
+        if coarse != fine, let task = primedSurfaces[coarse] { return (coarse, task) }
+        return nil
+    }
     /// Explicit user pins. Within `attribute()` a pin is the only producer
     /// that returns `humanWord` (1.0): every inferred source caps at
     /// `inferredCeiling`, the ranked fallback at `rankedCeiling`. But 1.0 is
@@ -400,7 +412,7 @@ package final class Attributor {
                                provenance: .init(source: .siteRule,
                                                  detail: "\(rule.field): \(rule.value)"))
         }
-        let surface = Surface(signal: signal)
+        let surface = Surface.primeKey(signal: signal)
         var ranked = scored(signal, tasks: tasks, now: now)
         var primeSource: (target: Target, source: AttributionExplanation.Source)?
         if let pending = pendingPrime, pending.surface == surface,
@@ -408,14 +420,14 @@ package final class Attributor {
             ranked.removeAll { $0.target == .task(pending.task) }
             ranked.insert(Candidate(target: .task(pending.task), score: Self.pendingPrimeScore), at: 0)
             primeSource = (.task(pending.task), .pendingPrime)
-        } else if let primed = primedSurfaces[surface] {
+        } else if let hit = primedHit(signal) {
             if pendingPrime?.surface == surface { pendingPrime = nil }   // expired: dead hypothesis
-            ranked.removeAll { $0.target == .task(primed) }
+            ranked.removeAll { $0.target == .task(hit.task) }
             // A primed surface is a remembered correction — an inferred rule,
             // same rung as email/site rules, so the ceiling constant (not a
             // bare 0.95) keeps it moving in lockstep if that rung is retuned.
-            ranked.insert(Candidate(target: .task(primed), score: Self.inferredCeiling), at: 0)
-            primeSource = (.task(primed), .primedSurface)
+            ranked.insert(Candidate(target: .task(hit.task), score: Self.inferredCeiling), at: 0)
+            primeSource = (.task(hit.task), .primedSurface)
         }
         applyLiveAdjacency(&ranked, continuity: continuity, tasks: tasks, now: now)
         // Provenance names whatever actually ENDED UP on top: a prime if it
@@ -495,9 +507,10 @@ package final class Attributor {
         }
         guard let task = lastOpenedBackendTask else { return }
         lastOpenedBackendTask = nil
-        let surface = Surface(signal: signal)
-        if primedSurfaces[surface] != task {
-            pendingPrime = (surface, task, now)
+        // Fine key (B7): a standing prime — fine or legacy coarse — already
+        // saying this task makes the hypothesis redundant.
+        if primedHit(signal)?.task != task {
+            pendingPrime = (Surface.primeKey(signal: signal), task, now)
         }
     }
 
@@ -583,7 +596,11 @@ package final class Attributor {
                 return .correspondents(Set(ctx.correspondents))
             }
         }
-        return .surface(Surface(signal: signal))
+        // Fine key (B7), matching the mail-fragment precedent: today's direct
+        // word on ONE video/route must not stick to every sibling page the
+        // host serves. Stickies are day-bounded and in-memory, so no
+        // persisted-key compatibility applies here.
+        return .surface(Surface.primeKey(signal: signal))
     }
 
     /// Lowercase, trimmed, reply/forward prefixes stripped (repeatedly, so
@@ -753,7 +770,10 @@ package final class Attributor {
     /// prime for the same surface. The prime side of a correction; the count
     /// side goes through `LearningStore.correct` / `learn`.
     private func primeSurface(_ signal: ActivitySignal, to task: TaskRef) {
-        let surface = Surface(signal: signal)
+        // Writes always take the fine key (B7). A legacy coarse entry for the
+        // same URL family deliberately survives: it stays the fallback for
+        // sibling pages (?v=OTHER) the user hasn't corrected individually.
+        let surface = Surface.primeKey(signal: signal)
         primedSurfaces[surface] = task
         if pendingPrime?.surface == surface { pendingPrime = nil }
     }
@@ -805,11 +825,15 @@ package final class Attributor {
                        gesture: String = "assign") {
         let displaced = recordDisplaced(signal, by: target, tasks: tasks, now: now)
         recordSticky(signal, target: target, now: now)
-        let surface = Surface(signal: signal)
+        let surface = Surface.primeKey(signal: signal)
         if case .task(let t) = target {
             primedSurfaces[surface] = t
         } else {
+            // "Not a task here" must silence the LEGACY coarse entry too —
+            // clearing only the fine key would let the old prime re-fire on
+            // the very next signal (B7).
             primedSurfaces[surface] = nil
+            primedSurfaces[Surface(signal: signal)] = nil
         }
         if pendingPrime?.surface == surface { pendingPrime = nil }
         // One operator call: reinforce, subtract from the displaced belief
@@ -989,17 +1013,19 @@ package final class Attributor {
                          matchedSiteRule: rule)
         }
         let lines = scoredComponents(signal, tasks: tasks, now: now)
-        let surface = Surface(signal: signal)
+        let surface = Surface.primeKey(signal: signal)
         if let pending = pendingPrime, pending.surface == surface,
            now.timeIntervalSince(pending.at) <= Self.pendingPrimeTTL {
             return .init(source: .pendingPrime, chosen: .task(pending.task),
                          chosenScore: Self.pendingPrimeScore,
                          lines: lines, features: feats, matchedSurface: surface)
         }
-        if let primed = primedSurfaces[surface] {
-            return .init(source: .primedSurface, chosen: .task(primed),
+        if let hit = primedHit(signal) {
+            // matchedSurface carries the key that FIRED (fine or legacy
+            // coarse), so the card shows the real grain of the memory.
+            return .init(source: .primedSurface, chosen: .task(hit.task),
                          chosenScore: Self.inferredCeiling,
-                         lines: lines, features: feats, matchedSurface: surface)
+                         lines: lines, features: feats, matchedSurface: hit.surface)
         }
         return .init(source: lines.isEmpty ? .none : .ranked, chosen: lines.first?.target,
                      chosenScore: lines.first?.score ?? 0, lines: lines, features: feats,
@@ -1042,9 +1068,9 @@ package final class Attributor {
         where recognizer.taskRef(inTitle: text) != nil { return nil }
         if let rule = emailRuleMatch(signal) { return rule.pinned ? nil : .emailRule(rule) }
         if let rule = siteRuleMatch(signal) { return rule.pinned ? nil : .siteRule(rule) }
-        let surface = Surface(signal: signal)
-        if let pending = pendingPrime, pending.surface == surface { return nil }  // transient
-        if primedSurfaces[surface] != nil { return .primedSurface(surface) }
+        if let pending = pendingPrime,
+           pending.surface == Surface.primeKey(signal: signal) { return nil }  // transient
+        if let hit = primedHit(signal) { return .primedSurface(hit.surface) }
         // Ranked: forgettable only when learned weight is actually pulling on
         // this signal — a pure-prior winner has nothing to un-learn. The
         // dominant association (largest positive counts on the signal's
@@ -1078,8 +1104,7 @@ package final class Attributor {
                     return .rankedAssociation(target)
                 }
             case .primedSurface:
-                let surface = Surface(signal: signal)
-                if primedSurfaces[surface] != nil { return .primedSurface(surface) }
+                if let hit = primedHit(signal) { return .primedSurface(hit.surface) }
             case .emailRule:
                 if let rule = emailRuleMatch(signal), !rule.pinned { return .emailRule(rule) }
             case .siteRule:

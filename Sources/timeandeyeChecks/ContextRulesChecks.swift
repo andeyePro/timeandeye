@@ -423,6 +423,101 @@ func surfaceFragmentChecks(_ c: Checks) {
     }
 }
 
+// MARK: - Prime key grain (B7): identity beyond host+path
+
+private func chrome(_ url: String) -> ActivitySignal {
+    ActivitySignal(app: "Google Chrome", windowTitle: "page", tabURL: url, timestamp: t0)
+}
+
+func primeKeyChecks(_ c: Checks) {
+    let tasks = [WorkTask(ref: .op(1), subject: "GUT", status: "Now"),
+                 WorkTask(ref: .op(2), subject: "andeye", status: "Next")]
+
+    c.check("two videos differing only in ?v= prime independently (B7's headline case)") {
+        let a = Attributor(instanceHost: "op.example.com")
+        a.assign(chrome("https://www.youtube.com/watch?v=AAA"), target: .task(.op(1)), now: t0)
+        let other = a.attribute(chrome("https://www.youtube.com/watch?v=BBB"),
+                                tasks: tasks, now: t0)
+        try expect(other.best?.target != .task(.op(1)) || other.certainty < 0.95,
+                   "one correction must not re-point every video on the host")
+        let same = a.attribute(chrome("https://www.youtube.com/watch?v=AAA"),
+                               tasks: tasks, now: t0)
+        try expectEq(same.best?.target, .task(.op(1)), "the corrected video itself stays corrected")
+    }
+
+    c.check("SPA #/routes are distinct prime keys; plain anchors are not") {
+        let routeA = Surface.primeKey(signal: chrome("https://app.example.com/#/inbox/42"))
+        let routeB = Surface.primeKey(signal: chrome("https://app.example.com/#/reports"))
+        try expect(routeA != routeB, "two SPA routes must not collapse")
+        let anchor = Surface.primeKey(signal: chrome("https://github.com/a/b#readme"))
+        try expectEq(anchor.detail, "github.com/a/b", "a plain anchor adds no grain")
+    }
+
+    c.check("tracking noise and unknown query keys never widen a persisted key") {
+        for url in ["https://www.youtube.com/watch?v=AAA",
+                    "https://www.youtube.com/watch?v=AAA&utm_source=x&gclid=123&fbclid=45"] {
+            try expectEq(Surface.primeKey(signal: chrome(url)).detail,
+                         "www.youtube.com/watch?v=AAA", "only table keys fold in, sorted")
+        }
+        try expectEq(Surface.primeKey(signal: chrome("https://shop.example.com/item?sku=99")).detail,
+                     "shop.example.com/item", "a table-less host keeps the coarse key")
+    }
+
+    c.check("credential- or content-shaped candidates never fold into a key") {
+        try expectEq(Surface.primeKey(signal:
+            chrome("https://app.example.com/#/reset/token-abc123")).detail,
+            "app.example.com", "a token-bearing fragment stays out")
+        try expectEq(Surface.primeKey(signal:
+            chrome("https://www.youtube.com/watch?v=someone@example.com")).detail,
+            "www.youtube.com/watch", "an email-shaped value stays out")
+    }
+
+    c.check("a legacy coarse prime still fires; a fine prime beats it when both exist") {
+        let a = Attributor(instanceHost: "op.example.com")
+        // Simulate a pre-B7 primed.json entry: coarse key, host+path only.
+        a.primedSurfaces[Surface(app: "Google Chrome",
+                                 detail: "www.youtube.com/watch")] = .op(2)
+        let legacyHit = a.attribute(chrome("https://www.youtube.com/watch?v=AAA"),
+                                    tasks: tasks, now: t0)
+        try expectEq(legacyHit.best?.target, .task(.op(2)), "legacy entries keep firing")
+        // A fine PRIME on ONE video overrides the coarse fallback there…
+        // (learnSurface primes without laying a session sticky, so the check
+        // exercises the prime ladder itself, not the sticky above it.)
+        a.learnSurface(chrome("https://www.youtube.com/watch?v=AAA"), to: .op(1),
+                       weight: 4, now: t0)
+        try expectEq(a.attribute(chrome("https://www.youtube.com/watch?v=AAA"),
+                                 tasks: tasks, now: t0).best?.target, .task(.op(1)))
+        // …while sibling videos still fall back to the coarse prime.
+        try expectEq(a.attribute(chrome("https://www.youtube.com/watch?v=BBB"),
+                                 tasks: tasks, now: t0).best?.target, .task(.op(2)))
+    }
+
+    c.check("forget removes the key that actually fired — fine or legacy coarse") {
+        let a = Attributor(instanceHost: "op.example.com")
+        let coarse = Surface(app: "Google Chrome", detail: "www.youtube.com/watch")
+        a.primedSurfaces[coarse] = .op(2)
+        let sigA = chrome("https://www.youtube.com/watch?v=AAA")
+        a.learnSurface(sigA, to: .op(1), weight: 4, now: t0)   // prime, no sticky
+        // The fine entry fired for v=AAA — forgetting removes IT, and the
+        // legacy coarse twin takes over (a second forget then removes that).
+        guard case .primedSurface(let fired)? = a.forgettable(for: sigA, now: t0) else {
+            throw CheckFailure(description: "expected the fine prime to be the forgettable")
+        }
+        try expectEq(fired, Surface.primeKey(signal: sigA))
+        a.forget(.primedSurface(fired), signal: sigA, now: t0)
+        guard case .primedSurface(let second)? = a.forgettable(for: sigA, now: t0) else {
+            throw CheckFailure(description: "expected the coarse twin to surface next")
+        }
+        try expectEq(second, coarse)
+        a.forget(.primedSurface(second), signal: sigA, now: t0)
+        // Both prime entries are gone; whatever the ladder offers next (the
+        // learned counts learnSurface also wrote) is not a prime.
+        if case .primedSurface? = a.forgettable(for: sigA, now: t0) {
+            throw CheckFailure(description: "no prime entry should remain forgettable")
+        }
+    }
+}
+
 // MARK: - Correspondent features in the learner
 
 func correspondentFeatureChecks(_ c: Checks) {

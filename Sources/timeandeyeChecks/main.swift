@@ -100,6 +100,7 @@ var suites: [(String, (Checks) -> Void)] = [
     ("PinGrainMapping", pinGrainChecks),
     ("EmailRuleMetadata", emailRuleMetadataChecks),
     ("SurfaceFragment", surfaceFragmentChecks),
+    ("PrimeKey", primeKeyChecks),
     ("CorrespondentFeatures", correspondentFeatureChecks),
     ("Forget", forgetChecks),
     ("CardDefaultGrain", cardDefaultGrainChecks),

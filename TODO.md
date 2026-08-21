@@ -1303,10 +1303,16 @@ and recorded rather than fixed blind:
   detector" item below, which now carries a design analysis.
 
 ## Deferred from the overnight review (2026-07-08, queued with context)
-- [ ] B7: Surface identity drops URL query/fragment for non-mail sites — one
-  correction re-points ALL query-routed pages (?v=, ticket ids, SPA #/routes).
-  Needs the known-host recipe mechanism extended (mail-style) WITHOUT breaking
-  persisted primed.json keys. Design first.
+- [x] B7 — DONE 2026-08-21: primes (and day-stickies) now key on
+  `Surface.primeKey` — host+path plus a curated per-host identity-query
+  table (youtube v/list, HN id, figma node-id) and a generic route-shaped-
+  fragment rule (#/… on any non-mail host); tracking params, unknown keys
+  and credential/content-shaped candidates never fold in. Persisted
+  primed.json keys unbroken: reads try fine then fall back to the legacy
+  coarse key, writes go fine, forget removes the key that actually fired.
+  Evidence card shows the extra grain. `Surface(signal:)` (continuity +
+  persisted-compat) and PinScope.identity deliberately untouched. Six
+  PrimeKey checks + all legacy surface checks green. See CHANGELOG.
 - [x] B12 — DONE 2026-07-08 (window 2): render escapes quotes/backslashes,
   the tokenizer unescapes; unknown escapes pass through so old rules parse
   unchanged; round-trip check added.
