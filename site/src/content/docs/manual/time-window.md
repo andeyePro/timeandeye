@@ -42,9 +42,10 @@ midnight. Day boundaries are marked with the date.
   merge keep both comments, joined.
 - **Create**: drag on empty space to draw a slice, or click a gap to fill it.
 - **Overlaps**: editing an end over a neighbour offers two resolutions - **Snap
-  to windows** (↵, default) moves the boundary to the nearest tracked-window edge
-  so each window lands wholly on one task, or **Exact time** (space) keeps the
-  time you typed.
+  to windows** (↵, default) moves the boundary to the nearest tracked-window
+  edge within 10 minutes, so a window straddling it lands wholly on one task
+  (the button shows the times it would apply; farther than that your typed
+  time is kept), or **Exact time** (space) keeps the time you typed.
 - **Delete**: select slice(s) and press delete/backspace, or use the Delete
   button on the reassign bar. ⌘-click and ⇧⌘-click multi-select like Finder.
 - **Billable**: right-click a slice to mark just that entry billable or

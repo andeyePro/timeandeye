@@ -1495,19 +1495,28 @@ struct TimelineView: View {
                     .help(isNewEditing ? "Create the slice (↵)" : "Save changes (↵)")
                 } else {
                     // Overlap pending: two ways to resolve it. Enter (default) /
-                    // rightmost snaps the boundary to a whole-window edge so each
-                    // tracked window lands entirely in one task; Space / leftmost
-                    // keeps the exact time you typed.
+                    // rightmost snaps the boundary to a nearby window edge so a
+                    // tracked window straddling it lands entirely in one task;
+                    // Space / leftmost keeps the exact time you typed. The snap
+                    // button SHOWS the times it would apply whenever they differ
+                    // from what was typed — a snap the user can't see coming is
+                    // how a deliberate edit silently reverts (2026-08-18).
+                    let snappedStart = snapToWindowEdge(editStart)
+                    let snappedEnd = snapToWindowEdge(editEnd)
+                    let snapMoves = snappedStart != editStart || snappedEnd != editEnd
                     Button { resolveOverlap(session, snapWindows: false) } label: {
                         Label("Exact time", systemImage: "clock")
                     }
                     .keyboardShortcut(.space, modifiers: [])
                     .help("Keep the exact time you typed (space)")
                     Button { resolveOverlap(session, snapWindows: true) } label: {
-                        Label("Snap to windows", systemImage: "rectangle.split.2x1")
+                        Label(snapMoves
+                              ? "Snap to windows (\(snappedStart.formatted(date: .omitted, time: .shortened)) – \(snappedEnd.formatted(date: .omitted, time: .shortened)))"
+                              : "Snap to windows",
+                              systemImage: "rectangle.split.2x1")
                     }
                     .keyboardShortcut(.defaultAction)
-                    .help("Move the boundary to the nearest tracked-window edge (↵)")
+                    .help("Move each boundary to the nearest tracked-window edge within 10 minutes – beyond that your typed time is kept (↵)")
                 }
                 if !isNewEditing, !isLive {
                     Button {
@@ -1592,12 +1601,19 @@ struct TimelineView: View {
         attemptSave(session)   // conflicts already set → applies with these times
     }
 
-    /// Nearest tracked-window edge to `date` (within ±30 min), or `date` itself
-    /// when there are no windows nearby.
+    /// How far "Snap to windows" may move a typed boundary. Farther than this
+    /// and the snap stops tidying and starts REWRITING the edit (the 28-min
+    /// silent revert of 2026-08-18), so beyond it the typed time wins.
+    private static let windowSnapTolerance: TimeInterval = 600
+
+    /// Nearest tracked-window edge to `date` (within ±10 min), or `date`
+    /// itself when there is no edge that close.
     private func snapToWindowEdge(_ date: Date) -> Date {
-        let edges = controller.windowBoundaries(from: date.addingTimeInterval(-1800),
-                                                to: date.addingTimeInterval(1800))
-        return edges.min { abs($0.timeIntervalSince(date)) < abs($1.timeIntervalSince(date)) } ?? date
+        let edges = controller.windowBoundaries(
+            from: date.addingTimeInterval(-Self.windowSnapTolerance),
+            to: date.addingTimeInterval(Self.windowSnapTolerance))
+        return TimelineMath.nearestEdge(to: date, in: edges,
+                                        tolerance: Self.windowSnapTolerance)
     }
 
     private func attemptSave(_ session: Session) {
@@ -1664,7 +1680,7 @@ struct TimelineView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            Text("Snap to windows (↵) keeps each tracked window whole on one task; Exact time (space) uses the time you typed. Or adjust the times.")
+            Text("Snap to windows (↵) moves each boundary to the nearest tracked-window edge within 10 minutes, so a window straddling it stays whole; Exact time (space) uses the time you typed. Or adjust the times.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }

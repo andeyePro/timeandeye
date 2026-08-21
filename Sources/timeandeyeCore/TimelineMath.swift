@@ -21,6 +21,25 @@ public enum TimelineMath {
         return best
     }
 
+    /// Nearest of `edges` within `tolerance`, else `time` unchanged. The
+    /// conflict resolver's "Snap to windows" goes through this: unbounded, a
+    /// snap can move a boundary so far it lands back on the edge the user
+    /// deliberately edited AWAY from, which reads as "the save did nothing"
+    /// (Martin, 2026-08-18 — 10:07 silently rewritten to 10:35).
+    public static func nearestEdge(to time: Date, in edges: [Date],
+                                   tolerance: TimeInterval) -> Date {
+        var best = time
+        var bestDistance = tolerance
+        for edge in edges {
+            let distance = abs(edge.timeIntervalSince(time))
+            if distance < bestDistance {
+                bestDistance = distance
+                best = edge
+            }
+        }
+        return best
+    }
+
     /// The free gap around a point: bounded by the neighbouring sessions and
     /// the given range. nil when the point falls inside a session.
     public static func gap(at point: Date, in sessions: [Session],

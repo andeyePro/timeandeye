@@ -16,6 +16,24 @@ func timelineMathChecks(_ c: Checks) {
         try expectEq(TimelineMath.snap(t(8), to: sessions, tolerance: 10), t(0))
     }
 
+    c.check("window-edge snap is bounded: a distant edge never rewrites the typed time") {
+        // Martin's 2026-08-18 report: start edited 10:35 -> 10:07 (28 min);
+        // the only window edge nearby sat at the ORIGINAL 10:35 boundary, and
+        // the old unbounded snap (nearest edge within a +-30 min scan) moved
+        // his deliberate edit straight back — indistinguishable from "the
+        // save did nothing". Beyond tolerance the typed time must win.
+        let edges = [t(28 * 60)]                        // one edge, 28 min away
+        try expectEq(TimelineMath.nearestEdge(to: t(0), in: edges, tolerance: 600), t(0))
+        // Within tolerance it still tidies to the edge…
+        try expectEq(TimelineMath.nearestEdge(to: t(28 * 60 - 300), in: edges,
+                                              tolerance: 600), t(28 * 60))
+        // …choosing the NEAREST of several edges…
+        try expectEq(TimelineMath.nearestEdge(to: t(100), in: [t(0), t(360)],
+                                              tolerance: 600), t(0))
+        // …and no edges at all leaves the time untouched.
+        try expectEq(TimelineMath.nearestEdge(to: t(0), in: [], tolerance: 600), t(0))
+    }
+
     c.check("keyboard nav: empty list -> nil") {
         try expectNil(TimelineMath.keyboardMove(in: [], anchor: nil, focus: nil,
                                                 forward: true, extend: false))

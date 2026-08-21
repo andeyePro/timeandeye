@@ -447,6 +447,21 @@ and recorded rather than fixed blind:
 
 ## Open
 
+- [x] Timeline start-time-edit silent revert (Martin's 18 Aug report,
+  archived in brain2 Time&I-Q&A-archive 2026-08-21): "Snap to windows"
+  had NO distance bound – the nearest window edge within a ±30-min scan
+  could rewrite a deliberate 28-min start edit straight back to the
+  boundary it was moved away from, reading as "the save did nothing".
+  Now bounded at 10 min via TimelineMath.nearestEdge (pinned by check);
+  the snap button previews the exact times it would apply whenever they
+  differ from what was typed. See CHANGELOG 2026-08-21.
+- [ ] WATCH (same 18 Aug report, mechanisms not yet reproduced): (a) a
+  10:35-10:36 remnant slice showing "Planning" after the edit tangle –
+  possibly a trim/coalesce intermediate or a refile; (b) popover task
+  label briefly disagreeing with the menu bar (both read trackerState,
+  so likely a transient during a grace-delayed switch). Neither is
+  reproducible from the report alone; re-open if either recurs now the
+  silent snap revert is gone.
 - [x] Launch at login (Martin, 2026-08-21): Settings ▸ Behaviour toggle
   "Start Time&I automatically at login" via SMAppService. Login Items is
   the single source of truth – nothing persisted in AndeyeSettings, the

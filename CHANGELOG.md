@@ -2,6 +2,20 @@
 
 ## 2026-08-21
 
+- [x] **Timeline edit: "Snap to windows" bounded at 10 minutes** – the
+  overlap resolver's snap scanned ±30 min for the nearest tracked-window
+  edge with no distance cap, so editing a start 28 minutes earlier could
+  silently land back on the very boundary being moved (Martin's 18 Aug
+  report: 10:07 rewritten to 10:35, indistinguishable from a no-op save
+  – and Enter, the natural save key, IS the snap button once a conflict
+  is pending). The snap now goes through `TimelineMath.nearestEdge`
+  (pure, pinned by a check reproducing the 28-min case): edges beyond
+  10 minutes never move a typed time. The snap button also previews the
+  exact times it would apply whenever they differ from what was typed.
+  Manuals updated. Two residual symptoms from the same report (a 1-min
+  "Planning" remnant, a transient popover/menu-bar label disagreement)
+  are unreproduced – parked as a WATCH item in TODO.md.
+
 - [x] **Launch at login** – new Settings ▸ Behaviour toggle "Start Time&I
   automatically at login", backed by `SMAppService.mainApp`. The system's
   Login Items list is the single source of truth: nothing is stored in
