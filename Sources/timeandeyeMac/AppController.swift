@@ -2189,20 +2189,29 @@ public final class AppController: ObservableObject {
     package func commitComment(_ text: String) {
         guard case .tracking(let target, _) = trackerState,
               case .task(let ref) = target else { return }
-        let priorNotes = manualNotes[ref]
-        manualNotes[ref, default: []].append((text: text, at: Date()))
+        let stamp = Date()
+        manualNotes[ref, default: []].append((text: text, at: stamp))
         // The timeline's cached fetch composes the live slice's comment from
         // these notes: bump the revision so an open timeline shows the comment
         // the moment it's committed, not on the next 30 s reload.
         journalRevision &+= 1
-        // ⌘Z takes the note back out of the in-flight slice. Once the slice
-        // has FLUSHED the note lives on a journal row (edit it there); and a
-        // copy already posted to the task's activity feed stays posted — an
-        // undo never silently rewrites a backend's history.
+        // ⌘Z takes THIS note back out — from the in-flight slice while it is
+        // still pending, or off the journal row it rode to once the slice has
+        // FLUSHED (2026-07-09 audit's remaining non-undoable). Removing the
+        // exact entry (not restoring a snapshot) means an undo after a flush
+        // can never resurrect OTHER already-consumed notes. A row already
+        // posted, and a copy on the task's activity feed, stay as they are —
+        // an undo never silently rewrites a backend's history.
         registerUndo("comment \(name(of: target))") { [weak self] in
             guard let self else { return }
-            self.manualNotes[ref] = priorNotes
-            self.journalRevision &+= 1
+            if var entries = self.manualNotes[ref],
+               let i = entries.firstIndex(where: { $0.at == stamp && $0.text == text }) {
+                entries.remove(at: i)
+                self.manualNotes[ref] = entries.isEmpty ? nil : entries
+                self.journalRevision &+= 1
+            } else {
+                self.retractFlushedComment(text, task: ref, at: stamp)
+            }
         }
         // A commented visit is work by attestation: pin it so its slice
         // surfaces however short (Martin, 2026-07-09 — three quick test
@@ -2212,6 +2221,28 @@ public final class AppController: ObservableObject {
                                                         toTask: settings.commentToTask)
         else { return }
         Task { await self.postTaskComment(ref: ref, note: taskNote) }
+    }
+
+    /// The flushed half of a comment's ⌘Z: the note already rode onto a
+    /// journal row (`wireTracker` consumed it), so take it off THAT row —
+    /// matched by task, by the note's timestamp falling inside the row's
+    /// span (±5 s, the flush consume grace), and by the row actually still
+    /// carrying the text. A row already pushed to a backend is left alone:
+    /// undo never silently rewrites a backend's history (edit it on the
+    /// timeline instead, where the change goes through the posting ledger).
+    private func retractFlushedComment(_ text: String, task ref: TaskRef, at stamp: Date) {
+        let rows = (try? journal.sessions(from: stamp.addingTimeInterval(-86_400),
+                                          to: stamp.addingTimeInterval(86_400))) ?? []
+        guard var row = rows.first(where: {
+            $0.task == ref && !$0.pushedToOP
+                && $0.start.addingTimeInterval(-5) <= stamp
+                && stamp <= $0.end.addingTimeInterval(5)
+                && CommentRouting.removingComment(text, from: $0.comment) != $0.comment
+        }) else { return }
+        row.comment = CommentRouting.removingComment(text, from: row.comment)
+        do { try journal.update(row) }
+        catch { lastError = "Couldn't undo the comment — \(error)." }
+        updateJournalSummary()
     }
 
     /// Post a note to the task's activity feed (OP work-package comment), so

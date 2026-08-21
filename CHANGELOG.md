@@ -2,6 +2,22 @@
 
 ## 2026-08-21
 
+- [x] **Comment ⌘Z now reaches the flushed row** – the 2026-07-09 undo
+  audit's remaining non-undoable: undoing a comment after its slice
+  flushed only cleared the (already-consumed) in-flight copy, so the
+  journal row kept the note. The undo closure now removes exactly the
+  committed note wherever it lives: the pending entry, or the flushed
+  row it rode to (matched by task, timestamp within the row's span ±5 s
+  flush grace, and the row still carrying the text; removal is the pure
+  `CommentRouting.removingComment`, check-pinned – exact component-run
+  match, so a note containing "; " comes off whole and a substring never
+  tears a longer comment apart). Rows already pushed and posted
+  task-feed copies stay untouched – undo still never rewrites a
+  backend's history. Also fixed en route: the old undo restored a
+  whole-map snapshot of pending notes, which after a flush could
+  resurrect OTHER already-consumed notes into a duplicate next flush.
+  Suite 984/0 + app build green on the bridge.
+
 - [x] **Timeline edit: "Snap to windows" bounded at 10 minutes** – the
   overlap resolver's snap scanned ±30 min for the nearest tracked-window
   edge with no distance cap, so editing a start 28 minutes earlier could

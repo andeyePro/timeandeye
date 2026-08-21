@@ -76,4 +76,38 @@ func commentRoutingChecks(_ c: Checks) {
         try expectEq(CommentRouting.accumulateComment(existing: "first", adding: ""),
                      "first")
     }
+
+    // Undo of a comment whose slice already FLUSHED (2026-07-09 audit's
+    // remaining non-undoable): the note must come OFF the journal row's
+    // accumulated comment, exactly once, wherever it sits in the join.
+    c.check("removingComment: strips one occurrence, wherever it sits") {
+        try expectEq(CommentRouting.removingComment("second", from: "first; second; third"),
+                     "first; third")
+        try expectEq(CommentRouting.removingComment("first", from: "first; second"),
+                     "second")
+        try expectEq(CommentRouting.removingComment("second", from: "first; second"),
+                     "first")
+    }
+
+    c.check("removingComment: the sole comment removed leaves nil, not empty") {
+        try expectNil(CommentRouting.removingComment("only", from: "only"))
+    }
+
+    c.check("removingComment: a note containing the separator is removed whole") {
+        // A single committed note can itself contain "; " — it must be
+        // matched as a component RUN, never as a content regex, and only
+        // the exact run goes.
+        try expectEq(CommentRouting.removingComment("a; b", from: "x; a; b; y"),
+                     "x; y")
+    }
+
+    c.check("removingComment: absent note / nil comment leave things untouched") {
+        try expectEq(CommentRouting.removingComment("gone", from: "first; second"),
+                     "first; second")
+        try expectNil(CommentRouting.removingComment("anything", from: nil))
+        // Only an exact component matches — a substring of a longer comment
+        // must never tear that comment apart.
+        try expectEq(CommentRouting.removingComment("fir", from: "first; second"),
+                     "first; second")
+    }
 }

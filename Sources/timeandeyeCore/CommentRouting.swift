@@ -37,6 +37,29 @@ package enum CommentRouting {
     /// uniformly.
     package static let commentSeparator = "; "
 
+    /// Remove one committed note from an accumulated comment — the undo half
+    /// for a note whose slice already flushed (the in-flight copy is gone by
+    /// then; the journal row is the only place left holding it). The note is
+    /// matched as an exact run of separator-joined components, so a note that
+    /// itself contains the separator comes off whole and a substring never
+    /// tears a longer comment apart. First occurrence only; nil when nothing
+    /// remains; an absent note leaves the comment untouched.
+    package static func removingComment(_ note: String, from comment: String?) -> String? {
+        guard let comment else { return nil }
+        let noteParts = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: commentSeparator)
+        guard noteParts != [""] else { return comment }
+        let parts = comment.components(separatedBy: commentSeparator)
+        guard parts.count >= noteParts.count else { return comment }
+        for i in 0...(parts.count - noteParts.count)
+            where Array(parts[i..<(i + noteParts.count)]) == noteParts {
+            var rest = parts
+            rest.removeSubrange(i..<(i + noteParts.count))
+            return rest.isEmpty ? nil : rest.joined(separator: commentSeparator)
+        }
+        return comment
+    }
+
     /// Accumulate a freshly-entered comment onto the running comment for the
     /// CURRENT slice. One slice can carry several comments: distinct ones are
     /// joined with `commentSeparator`; a new comment IDENTICAL to the

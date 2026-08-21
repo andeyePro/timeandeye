@@ -66,7 +66,9 @@
   visible window back to the first affected entry (right edge pinned).
   His reply-8 spec is now fully built; feel rides his next real
   correction.
-- [ ] Settings restructure (reply 10): PARTLY DONE 2026-08-13 — Billing
+- [x] (marker staled — every sub-part below is recorded closed; marked
+  done in the 2026-08-21 staleness audit, nothing rebuilt)
+  Settings restructure (reply 10): PARTLY DONE 2026-08-13 — Billing
   section landed (currency + Billable items list, label squish and
   garbled caption fixed, snapshot-verified; CHANGELOG). CLOSED 2026-08-13: the
   mis-filed notice now also shows in Review, and the timeline marks each
@@ -82,7 +84,11 @@
   Monochrome now sits directly under the colour pickers with a caption
   contrasting the two; manual (site + MANUAL.md) synced. Suite 933/0 on
   the bridge.
-- [ ] Billable visibility + redo (reply 12): badge half DONE 2026-08-13
+- [x] (marker staled — both REMAINING halves shipped 13-14 Aug: ⌘⇧Z redo
+  via the undo-redo spec batches, and the notice floats above the
+  popover per the AppController window-level fix; verified in-code
+  2026-08-21, nothing rebuilt)
+  Billable visibility + redo (reply 12): badge half DONE 2026-08-13
   (currency mark on billable timeline slices; "billable" capsule on donut
   legend task rows incl. inherited — CHANGELOG; landed in be829e4, TODO
   note followed one commit late). REMAINING: ⌘⇧Z REDO (raises the
@@ -317,10 +323,16 @@ call, not a mechanical fix:
   DONE 2026-07-10 without the ripple: `UndoStack.groupSync` — a
   synchronous grouping flavour — bundles the batch into ONE ⌘Z step from
   inside the existing sync call; no UI signature changed.
-- [ ] A comment undone AFTER its slice flushed only clears the in-flight
-  copy; the flushed row keeps it (editable in the timeline). A posted
-  task-feed comment is never retracted — undo must not rewrite a backend's
-  history silently.
+- [x] A comment undone AFTER its slice flushed only clears the in-flight
+  copy; the flushed row keeps it — DONE 2026-08-21: the comment's ⌘Z now
+  removes exactly the committed note wherever it lives — the pending
+  in-flight entry, or the flushed journal row it rode to (matched by
+  task + timestamp-in-span + still-carrying-the-text; pure removal in
+  CommentRouting.removingComment, check-pinned). Rows already pushed,
+  and posted task-feed copies, stay untouched — undo still never
+  rewrites a backend's history. Bonus fix: the old undo restored a
+  whole-map snapshot, which after a flush could resurrect other
+  already-consumed notes into a duplicate flush. See CHANGELOG.
 
 ## Time-window polish (Martin, 2026-06-27)
 
