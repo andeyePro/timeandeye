@@ -1079,7 +1079,17 @@ public final class AppController: ObservableObject {
                         self.bankedElapsed[old, default: 0] += now.timeIntervalSince(since)
                     }
                     if case .task(let oldRef) = self.currentTarget, .task(oldRef) != target {
-                        self.previousTask = oldRef
+                        if case .task(let newRef) = target {
+                            // Round trip A→B→A: arriving back where the last
+                            // switch started leaves NOTHING to revert to —
+                            // "← flit" here misfiled the resumed slice one
+                            // click later (RevertOffer, check-pinned).
+                            self.previousTask = RevertOffer.previousTask(
+                                leaving: oldRef, arrivingAt: newRef,
+                                lastPrevious: self.previousTask)
+                        } else {
+                            self.previousTask = oldRef
+                        }
                     }
                     self.currentTarget = target
                     self.targetSince = now

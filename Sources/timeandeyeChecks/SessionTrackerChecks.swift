@@ -1491,4 +1491,29 @@ func sessionTrackerChecks(_ c: Checks) {
                        "overlapping sessions emitted: \(sorted[i-1].task)/\(sorted[i].task)")
         }
     }
+
+    // "← previous" offer bookkeeping across display switches. The 2026-08-14
+    // freshness guard fixed the across-a-stop staleness; this pins the OTHER
+    // stale case: an excursion-and-return (A → brief flit to B → back to A)
+    // used to leave "← B" on offer while happily tracking A — one click
+    // folded the running A slice onto the unrelated flit task.
+    c.check("revert offer: a round trip A→B→A leaves nothing to revert to") {
+        let a = TaskRef.op(1), b = TaskRef.op(2)
+        let afterAB = RevertOffer.previousTask(leaving: a, arrivingAt: b, lastPrevious: nil)
+        try expectEq(afterAB, a, "a genuine switch offers the task it left")
+        let afterReturn = RevertOffer.previousTask(leaving: b, arrivingAt: a, lastPrevious: afterAB)
+        try expectNil(afterReturn, "returning to where the switch started closes the story")
+    }
+
+    c.check("revert offer: onward and repeat journeys still offer the task left") {
+        let a = TaskRef.op(1), b = TaskRef.op(2), cRef = TaskRef.op(3)
+        // A→B→C: C is a fresh switch away from B — "← B" is the honest offer.
+        try expectEq(RevertOffer.previousTask(leaving: b, arrivingAt: cRef, lastPrevious: a),
+                     b)
+        // A→B→A→B: the round trip cleared the offer; the SECOND A→B is a
+        // genuine switch again and must offer "← A" — the round-trip rule
+        // must not silently kill the feature.
+        try expectEq(RevertOffer.previousTask(leaving: a, arrivingAt: b, lastPrevious: nil),
+                     a)
+    }
 }

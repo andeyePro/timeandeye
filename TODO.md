@@ -411,8 +411,11 @@ formatter/dominant-span dedupe, KeychainStore→APIKeyStore. Remaining ranks:
 - [ ] #1 follow-on — weight controls SHIPPED 2026-06-28 (boost/always on the why
   panel); STILL OPEN: use the explain
   data to chase the live mis-attribution bugs (tracking as the andeyeTT task while on
-  Chrome; the revert button offering a stale task — `revertTargetTask` returns
-  `previousTask`, which can be wrong; now diagnosable via the explain panel).
+  Chrome; now diagnosable via the explain panel). The stale-revert half is
+  DONE: across-a-stop cleared + 15-min freshness (2026-08-14), and the
+  excursion-and-return case (A→B→A left "← B" on offer against the resumed
+  A slice) closed 2026-08-21 via pure `RevertOffer` (check-pinned; a real
+  A→B switch still offers "← A"). See CHANGELOG 2026-08-21.
 - [x] #5 — combined Timeline/Pie view: DONE (CHANGELOG 2026-06-27). Now ONE Time
   window, views flipped in place by clicking a preview; ⌃/right-click a preview
   opens the other view in a 2nd window. Footer launcher is a live today mini-pie;

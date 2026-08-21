@@ -1240,3 +1240,19 @@ package final class SessionTracker {
         return top.isEmpty ? nil : top.joined(separator: "; ")
     }
 }
+
+/// Bookkeeping for the popover's one-click "← <previous task>" offer. Pure so
+/// the stale-offer cases are checkable: the offer means "the switch that put
+/// me HERE was wrong", so a switch that ITSELF returns to where the last
+/// switch started (a round trip A → B → A) closes that story — leaving the
+/// flit on offer would misfile the resumed task's running slice one click
+/// later (the excursion half of the 2026-08-14 stale-revert guard, which
+/// covered only the across-a-stop case).
+public enum RevertOffer {
+    /// The `previousTask` to hold after a display switch `old` → `new`,
+    /// given what was on offer before the switch.
+    public static func previousTask(leaving old: TaskRef, arrivingAt new: TaskRef,
+                                    lastPrevious: TaskRef?) -> TaskRef? {
+        new == lastPrevious ? nil : old
+    }
+}

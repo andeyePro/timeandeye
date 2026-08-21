@@ -2,6 +2,18 @@
 
 ## 2026-08-21
 
+- [x] **Revert offer survives an excursion honestly** – the popover's
+  one-click "← <previous task>" is bookkept by the pure
+  `RevertOffer.previousTask` now: a switch that itself returns to where
+  the last switch started (a round trip A → brief flit to B → back to A)
+  clears the offer, because "that switch was wrong" has nothing left to
+  point at – the old code left "← B" standing against the resumed A
+  slice, and one click folded the running slice onto the unrelated flit
+  task. Checks pin both halves: the round trip offers nothing, and a
+  genuine A→B switch (including a repeat after a round trip) still
+  offers "← A". Completes the 2026-08-14 stale-revert guard, which
+  covered only the across-a-stop case. Suite 986/0 + app build green.
+
 - [x] **Comment ⌘Z now reaches the flushed row** – the 2026-07-09 undo
   audit's remaining non-undoable: undoing a comment after its slice
   flushed only cleared the (already-consumed) in-flight copy, so the
