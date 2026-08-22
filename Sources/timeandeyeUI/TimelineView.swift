@@ -1501,9 +1501,8 @@ struct TimelineView: View {
                     // button SHOWS the times it would apply whenever they differ
                     // from what was typed — a snap the user can't see coming is
                     // how a deliberate edit silently reverts (2026-08-18).
-                    let snappedStart = snapToWindowEdge(editStart)
-                    let snappedEnd = snapToWindowEdge(editEnd)
-                    let snapMoves = snappedStart != editStart || snappedEnd != editEnd
+                    let snapped = snappedEditTimes()
+                    let snapMoves = snapped.start != editStart || snapped.end != editEnd
                     Button { resolveOverlap(session, snapWindows: false) } label: {
                         Label("Exact time", systemImage: "clock")
                     }
@@ -1511,7 +1510,7 @@ struct TimelineView: View {
                     .help("Keep the exact time you typed (space)")
                     Button { resolveOverlap(session, snapWindows: true) } label: {
                         Label(snapMoves
-                              ? "Snap to windows (\(snappedStart.formatted(date: .omitted, time: .shortened)) – \(snappedEnd.formatted(date: .omitted, time: .shortened)))"
+                              ? "Snap to windows (\(snapped.start.formatted(date: .omitted, time: .shortened)) – \(snapped.end.formatted(date: .omitted, time: .shortened)))"
                               : "Snap to windows",
                               systemImage: "rectangle.split.2x1")
                     }
@@ -1595,8 +1594,9 @@ struct TimelineView: View {
     /// the user typed. Either way the existing trim path then applies it.
     private func resolveOverlap(_ session: Session, snapWindows: Bool) {
         if snapWindows {
-            editStart = snapToWindowEdge(editStart)
-            editEnd = snapToWindowEdge(editEnd)
+            let snapped = snappedEditTimes()
+            editStart = snapped.start
+            editEnd = snapped.end
         }
         attemptSave(session)   // conflicts already set → applies with these times
     }
@@ -1606,14 +1606,19 @@ struct TimelineView: View {
     /// silent revert of 2026-08-18), so beyond it the typed time wins.
     private static let windowSnapTolerance: TimeInterval = 600
 
-    /// Nearest tracked-window edge to `date` (within ±10 min), or `date`
-    /// itself when there is no edge that close.
-    private func snapToWindowEdge(_ date: Date) -> Date {
+    /// Both edited boundaries snapped to the nearest tracked-window edge
+    /// within ±10 min (each keeping its typed time when nothing is that
+    /// close). ONE spans query covers both: the button label recomputes this
+    /// on every body evaluation of the conflict editor — i.e. on every
+    /// keystroke in the time fields — so a per-boundary query would put two
+    /// SQLite reads on that path.
+    private func snappedEditTimes() -> (start: Date, end: Date) {
+        let tolerance = Self.windowSnapTolerance
         let edges = controller.windowBoundaries(
-            from: date.addingTimeInterval(-Self.windowSnapTolerance),
-            to: date.addingTimeInterval(Self.windowSnapTolerance))
-        return TimelineMath.nearestEdge(to: date, in: edges,
-                                        tolerance: Self.windowSnapTolerance)
+            from: min(editStart, editEnd).addingTimeInterval(-tolerance),
+            to: max(editStart, editEnd).addingTimeInterval(tolerance))
+        return (TimelineMath.nearestEdge(to: editStart, in: edges, tolerance: tolerance),
+                TimelineMath.nearestEdge(to: editEnd, in: edges, tolerance: tolerance))
     }
 
     private func attemptSave(_ session: Session) {

@@ -470,6 +470,23 @@ func primeKeyChecks(_ c: Checks) {
         try expectEq(Surface.primeKey(signal:
             chrome("https://www.youtube.com/watch?v=someone@example.com")).detail,
             "www.youtube.com/watch", "an email-shaped value stays out")
+        // primed.json syncs, so the ROUTE path needs the same content test as
+        // the query path — an address is no safer inside "#/…" than "?v=…".
+        try expectEq(Surface.primeKey(signal:
+            chrome("https://app.example.com/#/contacts/someone@example.com")).detail,
+            "app.example.com", "an address in a route stays out too")
+    }
+
+    c.check("everyday routes are not mistaken for credentials") {
+        // The exclusion words match as bare substrings, so anything spelled
+        // loosely enough ("sig") silently switches the whole fine key off on
+        // ordinary routes. These must still earn their grain.
+        // ("authors" still loses its grain to the "auth" word — over-exclusion
+        // is safe by design, and "auth" earns its place on credential routes.)
+        for route in ["#/design/4", "#/assign/42", "#/reports/9"] {
+            let key = Surface.primeKey(signal: chrome("https://app.example.com/" + route))
+            try expectEq(key.detail, "app.example.com" + route, "\(route) is a plain route")
+        }
     }
 
     c.check("a legacy coarse prime still fires; a fine prime beats it when both exist") {

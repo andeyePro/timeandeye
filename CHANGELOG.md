@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-22
+
+- [x] **Code review of the 2026-08-21 session – seven fixes** – an
+  independent high-effort review of the six commits since the previous
+  session audit found, and this commit fixes, three behavioural faults
+  and four smaller ones. (1) The B7 fine prime key was also being
+  appended as an Evidence Card grain row, but that ladder is the card's
+  rule/pin selector and every row must map onto `PinScope.identity`,
+  which stops at host+path: on an SPA URL the card opened on a row
+  "Always" could only express as the WHOLE HOST, and "Remember" matched
+  no branch and silently did nothing. The row is gone; the fine key is
+  still reported honestly by the card's matched-surface line. (2) The
+  route-fragment path skipped the content test the query path gets, so
+  `#/contacts/someone@example.com` folded a personal address into the
+  cloud-synced `primed.json`; both paths now share one
+  `isUnsafeIdentityText`. (3) `"sig"` matched as a bare substring also
+  matched `design` and `assign`, switching the fine key off on ordinary
+  routes – now `sig=`/`signature`. (4) Launch at login could fail
+  WITHOUT throwing (status `.notFound`), springing the toggle back with
+  no explanation; a failed unregister could likewise be swallowed by the
+  read-back. Both now leave a notice saying what to do. (5) The Login
+  Items mirror was read only at startup, so after the user granted the
+  approval macOS asked for the switch stayed stale and the next click
+  threw – the Behaviour section re-reads on appear. (6) The "Snap to
+  windows" button label ran two `journal.spans` queries per re-render,
+  i.e. per keystroke in the conflict editor's time fields; one query
+  over the union range now serves both boundaries. Checks 838 → 839.
+
 ## 2026-08-21
 
 - [x] **One correction no longer re-points every query-routed page (B7)** –

@@ -482,21 +482,46 @@ public final class AppController: ObservableObject {
     /// Login Items actually says, so a refused or approval-gated change
     /// surfaces honestly instead of a lying toggle.
     package func setLaunchAtLogin(_ wanted: Bool) {
+        var failure: String?
         do {
             if wanted { try SMAppService.mainApp.register() }
             else { try SMAppService.mainApp.unregister() }
             launchAtLoginNotice = nil
         } catch {
-            launchAtLoginNotice = "Couldn't \(wanted ? "enable" : "disable") launch at login – \(error.localizedDescription)"
+            failure = "Couldn't \(wanted ? "enable" : "disable") launch at login – \(error.localizedDescription)"
+            launchAtLoginNotice = failure
         }
         refreshLaunchAtLogin()
+        if let failure {
+            // The read-back clears the notice on `.enabled`, which is right
+            // when it runs on its own but would swallow a failed UNregister —
+            // that path throws while the service is, correctly, still enabled.
+            launchAtLoginNotice = failure
+            return
+        }
+        // A register/unregister can also FAIL WITHOUT THROWING (status comes
+        // back .notFound when the bundle isn't somewhere macOS will launch
+        // it from). Without this the toggle just springs back with the notice
+        // cleared — exactly the lying toggle the read-back exists to prevent.
+        if launchAtLogin != wanted, launchAtLoginNotice == nil {
+            launchAtLoginNotice = wanted
+                ? "macOS didn't add Time&I to Login Items – move Time&I.app into Applications and try again."
+                : "macOS still lists Time&I in Login Items – remove it in System Settings › General › Login Items."
+        }
     }
 
-    private func refreshLaunchAtLogin() {
+    /// Re-read Login Items. Called at startup AND whenever the Behaviour
+    /// settings appear: the first enable normally lands on `.requiresApproval`,
+    /// and once the user approves in System Settings nothing tells us — a
+    /// mirror refreshed only at launch would show "off" and send the next
+    /// click into `register()` on an already-registered service, which throws.
+    package func refreshLaunchAtLogin() {
         let status = SMAppService.mainApp.status
         launchAtLogin = status == .enabled
         if status == .requiresApproval {
             launchAtLoginNotice = "macOS wants your approval – allow Time&I in System Settings › General › Login Items."
+        } else if status == .enabled {
+            launchAtLoginNotice = nil
         }
     }
 

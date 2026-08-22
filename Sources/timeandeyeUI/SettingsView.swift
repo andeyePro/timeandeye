@@ -812,6 +812,10 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            // Login Items can change behind our back — most often when the
+            // user grants the approval macOS asked for. Re-read on appear so
+            // the switch isn't stale for the rest of the run.
+            .onAppear { controller.refreshLaunchAtLogin() }
     }
 
     @ViewBuilder private var billingSections: some View {

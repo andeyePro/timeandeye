@@ -323,18 +323,31 @@ package struct Surface: Hashable, Codable, Sendable {
     /// Words that mark a fragment/value as possibly credential- or
     /// content-bearing — such a candidate never folds into a persisted key
     /// (over-excluding is safe: the prime just falls back to the coarse key).
+    /// "sig" is deliberately spelled out: as a bare substring it also matches
+    /// perfectly ordinary routes ("#/design/4", "#/assign/42"), which would
+    /// silently switch the whole fine-key feature off on those hosts.
     private static let unsafeIdentityWords =
-        ["token", "auth", "session", "sig", "password", "secret", "email", "key"]
+        ["token", "auth", "session", "sig=", "signature", "password", "secret",
+         "email", "key"]
+
+    /// The CONTENT half of the safety test, shared by query values and route
+    /// fragments alike: an address or a credential is no safer for arriving
+    /// inside a "#/…" route than inside "?v=…", and primed.json syncs either
+    /// way. Length is the caller's own concern (a route is legitimately
+    /// longer than a single value).
+    private static func isUnsafeIdentityText(_ text: String) -> Bool {
+        if text.contains("@") || text.contains("://") { return true }
+        let lower = text.lowercased()
+        return unsafeIdentityWords.contains { lower.contains($0) }
+    }
 
     static func isSafeIdentityValue(_ value: String) -> Bool {
-        !value.isEmpty && value.count <= 64
-            && !value.contains("@") && !value.contains("://")
+        !value.isEmpty && value.count <= 64 && !isUnsafeIdentityText(value)
     }
 
     static func isRouteFragment(_ fragment: String) -> Bool {
-        guard !fragment.isEmpty, fragment.count <= 128 else { return false }
-        let lower = fragment.lowercased()
-        guard !unsafeIdentityWords.contains(where: { lower.contains($0) }) else { return false }
+        guard !fragment.isEmpty, fragment.count <= 128,
+              !isUnsafeIdentityText(fragment) else { return false }
         return fragment.hasPrefix("/") || fragment.hasPrefix("!/") || fragment.contains("/")
     }
 
